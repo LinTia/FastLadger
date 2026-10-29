@@ -2,6 +2,36 @@
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.3] - 2026-10-29
+
+### 背景
+处理 GPT 独立评审（`gpt/`，R01–R18）中 v1.2 未覆盖的全部 11 项，**全部采纳、无误判**。明细见 `workbuddy/v1.3-修复说明.md`。与 v1.1→v1.2 教训一致，所有改动均同步到开发者实际照敲的《新手开发完整指南》骨架。
+
+### 修复（同步：R04/R07/R10）
+- **R04 幂等**：新增 `idempotency_records` 表（`UNIQUE(book_id,uid,client_uuid)` + request_hash/result_ids），`AddTransaction` 在事务内查回执→相同返回/不同冲突/不存在占位，唯一索引兜底竞态；新增 `requestHash`。
+- **R07 游标/快照**：WS 事件只通知、不直接推进游标；`Pull` 在同一只读事务（一致快照）内定水位并读取所有实体，新增 `SyncBatch`；分页不拆同一版本，缓冲溢出要求全量重同步。
+- **R10 恢复世代**：新增独立于数据库、不随备份恢复的 `restore_epoch`（`data/instance.meta`）；恢复时递增，客户端发现世代不符即全量重建并核对离线队列。
+
+### 修复（写入校验：R11/R13）
+- **R11**：`AddHolding` 的 decimal 错误必须返回、校验非负，事务内校验账户/标的归属同账本并接版本号；`holdings` 补 `book_id/sync_version/deleted`。
+- **R13 预算**：按 budget_type 分支，分类预算汇总"大类+全部小类"，总预算去掉分类谓词；半开区间；聚合改用 `SumInt`。
+
+### 修复（安全：R14/R15）
+- **R14 CSV 注入**：新增 `sanitizeCSVCell`，对以 `= + - @ \t \r` 开头的用户可控文本前置单引号；区分表格安全 CSV 与原始 JSON。
+- **R15 OCR 千分位**：金额正则支持千分位，先全角规范化，整数方式转分（不用 double）；补普通/千分位/退款/多金额/异常样例。
+
+### 修复（契约/范围/并发：R12/R16/R17/R18）
+- **R12**：统一字段 `password_hash`/`members_can_view_others`（User 显式列映射）；WS 统一 `/api/v1/ws`、订阅 `books`、点号事件名、均带 version。
+- **R16**：PRAGMA 改用 go-sqlite3 DSN（每连接生效）+ `SetMaxOpenConns(1)` + 启动校验；修正示例 API 编译错误。
+- **R17**：统一 MVP 为 PRD 基线——v0.1 含基础报表（月度收支/分类占比）与 CSV/JSON 导出；高级图表/完整预算后置。
+- **R18**：固定锁顺序 `Hub.mu→Client.mu`，清理恰好一次，`Send` 永不关闭，写循环加 ping，建议 race detector 验证。
+
+### 函数签名变更
+- `AddHolding` 增加 `uid, bookID` 首参；新增 `Pull(bookID, afterVersion) (*SyncBatch, error)`、`requestHash`、`sanitizeCSVCell`、模型 `IdempotencyRecord`。
+
+### 说明
+- 仍为 Markdown 设计与代码骨架，未跑真实 Go/Flutter 编译；`go test -race`、DSN 实际行为、Excel 重存等运行时验证待执行，未声称已验证。
+
 ## [1.2] - 2026-10-29
 
 ### 背景
