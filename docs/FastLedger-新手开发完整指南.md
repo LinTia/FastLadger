@@ -999,6 +999,9 @@ func AddTransaction(uid, bookID int64, tx *models.Transaction) error {
 	tx.BookId = bookID   // 账本归属由服务端决定（R01）
 	tx.CreatorUid = uid
 
+	// 契约（R04）：所有经 handler 进入的【写请求】必须携带 client_uuid；
+	// 未携带则退化为非幂等（仅允许服务端内部直接调用）。端侧离线补传/重试务必带 client_uuid。
+
 	sess := database.Engine.NewSession()
 	defer sess.Close()
 	if err := sess.Begin(); err != nil {
@@ -1129,7 +1132,8 @@ func signedBalanceDelta(category int, txType int, amount int64) int64 {
 
 ```go
 // Transfer 成对、对敲转账。bookID 来自可信路径；两侧账户必须同属该账本（R01）。
-func Transfer(uid, bookID, fromId, toId, amount int64) error {
+// 与 §13.1 同文件 internal/services/transaction.go，复用其 import 与 nextBookVersion/transferHash。
+func Transfer(uid, bookID, fromId, toId, amount int64, clientUuid string) error {
 	if amount <= 0 {
 		return errors.New("转账金额必须为正整数（分）")
 	}
@@ -1137,6 +1141,25 @@ func Transfer(uid, bookID, fromId, toId, amount int64) error {
 	defer sess.Close()
 	if err := sess.Begin(); err != nil {
 		return err
+	}
+
+	// 0) 幂等（R04）：clientUuid 非空时，先查操作回执（ResultType=2 标记转账）
+	if clientUuid != "" {
+		rec := &models.IdempotencyRecord{}
+		has, _ := sess.Where("book_id=? AND uid=? AND client_uuid=?", bookID, uid, clientUuid).Get(rec)
+		if has {
+			if rec.RequestHash != transferHash(fromId, toId, amount) {
+				sess.Rollback(); return errors.New("同一 client_uuid 对应了不同请求内容")
+			}
+			return sess.Commit() // 重试，原业务已生效，返回成功（不产生第二笔）
+		}
+		rec = &models.IdempotencyRecord{
+			BookId: bookID, Uid: uid, ClientUuid: clientUuid,
+			RequestHash: transferHash(fromId, toId, amount), ResultType: 2, CreatedAt: time.Now().Unix(),
+		}
+		if _, err := sess.Insert(rec); err != nil {
+			sess.Rollback(); return nil // 撞唯一约束 = 并发重试，返回其结果
+		}
 	}
 
 	// 校验两侧账户均属同一账本（R01）
@@ -1180,7 +1203,21 @@ func Transfer(uid, bookID, fromId, toId, amount int64) error {
 		sess.Rollback(); return err
 	}
 
+	// 回写幂等回执的结果 id（两条交易的 id，供后续重试返回，R04）
+	if clientUuid != "" {
+		sess.Exec("UPDATE idempotency_records SET result_ids=? WHERE book_id=? AND uid=? AND client_uuid=?",
+			fmt.Sprintf("%d,%d", out.Id, in.Id), bookID, uid, clientUuid)
+	}
+
 	return sess.Commit()
+}
+
+// transferHash 对转账关键内容做摘要（R04）：from|to|amount。
+// 与 AddTransaction 的 requestHash 分离，避免不同类型互相误判为冲突。
+func transferHash(fromId, toId, amount int64) string {
+	raw := fmt.Sprintf("%d|%d|%d", fromId, toId, amount)
+	sum := sha256.Sum256([]byte(raw))
+	return hex.EncodeToString(sum[:16])
 }
 ```
 
@@ -1874,19 +1911,15 @@ class BillRules {
 
 ### 22.1 版本号怎么来的（一定要在写事务里做）
 
-每个账本在 `book_versions` 表有一个全局版本号，任何增/改/删都在**同一个事务**里：
+每个账本在 `book_versions` 表有一个全局版本号，任何增/改/删都在**同一个事务**里：**先调用 `nextBookVersion`（见 §13.1）取到 `newVersion`，再写进本次变更实体的 `sync_version`**。
+
+> ⚠️ **统一入口**：版本号递增逻辑**只在 `nextBookVersion`（§13.1）实现一份**。此处及任何写路径都**禁止再手写** `INSERT...ON CONFLICT(book_id)` 的 upsert，否则会出现两份实现、日后必漂移。
 
 ```go
-// 1) 版本号 +1（SQLite 原子 upsert）
-_, err := sess.Exec(`
-  INSERT INTO book_versions(book_id, version, updated_at) VALUES(?, 1, ?)
-  ON CONFLICT(book_id) DO UPDATE SET version = version + 1, updated_at = excluded.updated_at`,
-  bookID, time.Now().Unix())
-// 2) 查出新版本号
-bv := &models.BookVersion{}
-sess.Where("book_id=?", bookID).Get(bv)
-// 3) 把 bv.Version 写进本次变更实体的 sync_version
-tx.SyncVersion = bv.Version
+// 写事务内：版本号 +1 并取回 newVersion（统一调用 §13.1 的 nextBookVersion）
+newVersion, err := nextBookVersion(sess, bookID)
+if err != nil { /* 回滚并返回错误 */ }
+tx.SyncVersion = newVersion // 写进本次变更实体的 sync_version
 ```
 
 ### 22.2 增量拉取（必须在一致快照中，R07）

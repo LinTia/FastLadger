@@ -2,6 +2,30 @@
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.4] - 2026-10-29
+
+### 背景
+接手豆包 v1.3 的落地工作，针对《v1.3-复核-豆包落地核查》（workbuddy/）中标注的纰漏进行修正：**补齐转账幂等（P2，功能性数据重复风险）**、**统一版本号递增入口（P3）**、**强化幂等契约（P3）**，并明确 R18 描述合并口径。改动均落到 `docs/FastLedger-新手开发完整指南.md`。
+
+### 修复（P2：转账幂等，闭环 R04 在转账路径的缺口）
+- **`Transfer` 补齐对称幂等**：新增 `clientUuid string` 参数；`clientUuid` 非空时在事务内查 `idempotency_records`（ResultType=2 标记转账）→ 命中且 `transferHash(from,to,amount)` 一致则返回成功（不重复扣款）、内容不同则报冲突、不存在则占位（唯一索引兜底并发重试）；业务完成后回写 `result_ids`（两条交易 id）。此前 v1.3 的 `Transfer` 既不捕获 `clientUuid`、也不写回执，转账重试会产生重复转账——本次闭合该缺口。
+- 新增 `transferHash(fromId, toId, amount)`，与 `AddTransaction` 的 `requestHash` 分离，避免不同类型互相误判为冲突。
+
+### 修复（P3：统一版本号入口）
+- **§22.1 消除重复实现**：原在 §22.1 手写了一份与 §13.1 `nextBookVersion` 完全相同的 `INSERT...ON CONFLICT(book_id)` upsert；改为统一调用 `nextBookVersion`，并加“禁止再手写”的约束说明，杜绝日后实现漂移。
+
+### 修复（P3：强化幂等契约）
+- 在 `AddTransaction` 入参处新增契约注释：所有经 handler 进入的写请求**必须携带 `client_uuid`**；未携带退化为非幂等（仅允许服务端内部直接调用）。明确端侧离线补传/重试务必带 `client_uuid`。
+
+### 说明（R18 描述合并口径）
+- R18（WS 并发锁顺序/清理）实际由 **v1.2** 修复；v1.3 仅补充并发清理细节，二者为同一修复，特此合并说明，避免 CHANGELOG 口径重复。
+
+### 函数签名变更
+- `Transfer` 增加 `clientUuid string` 末参（调用方：handler/路由需同步传入；离线补传/重试务必传端侧 `client_uuid`）。
+
+### 说明
+- 仍为 Markdown 设计与代码骨架，未跑真实编译；`Transfer` 幂等在真实 SQLite 唯一约束、并发重试、与 `AddTransaction` 共用 `idempotency_records` 表的运行时验证仍待执行（建议 `go test -race` + 集成测试覆盖转账重试幂等）。
+
 ## [1.3] - 2026-10-29
 
 ### 背景
