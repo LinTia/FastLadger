@@ -912,7 +912,8 @@ func Register(c *gin.Context) {
 		Password string `json:"password"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "参数错误"})
+		// 与 Login / ParseText 统一文案：绑定失败一律"请求格式错误"
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "请求格式错误"})
 		return
 	}
 	user, err := services.Register(req.Username, req.Password)
@@ -2241,7 +2242,10 @@ type SyncBatch struct {
 
 // Pull 在同一个只读事务（一致快照）内确定水位并读取所有实体，
 // 杜绝"先读交易→别人提交 V6→再读账户看到 V6、却漏了交易 V6"的跨表交错。
-const maxSyncBatch = 500 // 单批实体上限，防止全量加载 OOM（内存预算 < 150MB）
+// 单批【目标规模】（非硬上限），防止"多版本"场景一次性全量加载 OOM（内存预算 < 150MB）。
+// 注意：同一 sync_version 的行必须整批返回（不能拆版本），因此【单个】版本若含海量行，
+// 仍会整批加载。故写路径须限制单事务变更条数（建议 ≤ 500），读路径无法对此兜底。
+const maxSyncBatch = 500
 
 // Pull 不信任调用方：成员资格校验下沉到服务入口（读路径也不能漏校验，
 // 含关闭互看的私账）；limit 控制批次大小。闭合 D-R06。
@@ -2311,14 +2315,24 @@ func Pull(uid, bookID, afterVersion int64, limit int) (*SyncBatch, error) {
 		OrderBy("sync_version ASC").Find(&batch.Transactions); err != nil {
 		return nil, err
 	}
-	sess.Where(cond, bookID, afterVersion, safeVersion).Find(&batch.Accounts)
-	sess.Where(cond, bookID, afterVersion, safeVersion).Find(&batch.Categories)
-	sess.Where(cond, bookID, afterVersion, safeVersion).Find(&batch.Holdings)
+	// 三类实体的错误必须检查：若查询失败却静默返回空集，客户端会照常把游标推进到
+	// safeVersion，导致账户/分类/持仓变更永久丢失且不再重试。出错即整批失败、游标不推进。
+	if err := sess.Where(cond, bookID, afterVersion, safeVersion).Find(&batch.Accounts); err != nil {
+		return nil, err
+	}
+	if err := sess.Where(cond, bookID, afterVersion, safeVersion).Find(&batch.Categories); err != nil {
+		return nil, err
+	}
+	if err := sess.Where(cond, bookID, afterVersion, safeVersion).Find(&batch.Holdings); err != nil {
+		return nil, err
+	}
 	return batch, nil
 }
 ```
 
-> 分页规则（上面已实现）：① 以**版本边界**分页，`safeVersion` 回扩保证同一 `sync_version` 的多表/多行不拆到两批；② 客户端只有在**完整应用整批**后，才把本地游标推进到返回的 `HighVersion`，再用它作为下一次 `afterVersion`；③ WS 发送缓冲溢出时必须要求客户端全量重同步，不能静默丢弃后继续推进。
+> 分页规则（上面已实现）：① 以**版本边界**分页，`safeVersion` 回扩保证同一 `sync_version` 的多表/多行不拆到两批；② 客户端只有在**完整应用整批**后，才把本地游标推进到返回的 `HighVersion`，再用它作为下一次 `afterVersion`；③ WS 发送缓冲溢出时必须要求客户端全量重同步，不能静默丢弃后继续推进；④ `limit` 是**目标规模而非硬上限**——同一版本必须整批返回，故**写路径**须限制单事务变更条数（建议 ≤ `maxSyncBatch`），读路径无法对"单版本超大批次"兜底。
+>
+> 另：账户 / 分类 / 持仓的读取同样**必须检查错误**——查询失败时若静默返回空集，客户端会照常推进游标，导致这三类变更永久丢失。上面已按此实现。
 
 ### 22.3 冲突处理
 

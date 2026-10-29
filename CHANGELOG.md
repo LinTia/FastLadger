@@ -2,6 +2,19 @@
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.17] - 2026-10-30
+
+### 复核 D 的 [1.16] 修复：确认正确，并修订 3 处残留
+
+**复核结论（D 的两个修复均属实且正确）**：
+- Login 吞绑定错误已改为显式返 400；全仓 `_ = c.ShouldBindJSON` 残留 **0**（Register / Login / ParseText 三处均显式处理）。
+- Pull 的 `safeVersion` 版本边界分页**可证正确**：反例 3×v1 + 3×v2 + 3×v3、`limit=5` → 前 5 行 `MAX=2` → 按 `(afterVersion, 2]` 读 6 行，第 3 个 v2 行（第 6 行）被区间纳入，**同版本未被拆到两批**。
+
+**本次修订**：
+- **P2 / 已修订**：`Pull` 中 accounts / categories / holdings 三个 `Find` **未检查错误**——查询失败会静默返回空集，而客户端照常把游标推进到 `safeVersion`，导致这三类变更**永久丢失且不再重试**（transactions 的 Find 有检查，不一致）。改为出错即 `return nil, err`，整批失败、游标不推进。改动 `docs/FastLedger-新手开发完整指南.md` §22.2。
+- **P3 / 已修订**：`maxSyncBatch` 注释与分页规则补充说明——`limit` 是**目标规模而非硬上限**（同一 `sync_version` 必须整批返回，不能拆版本），故**写路径须限制单事务变更条数（建议 ≤ 500）**，读路径无法对"单版本超大批次"兜底。
+- **P3 / 已修订**：Register 绑定失败文案由"参数错误"统一为"**请求格式错误**"，与 Login / ParseText 保持一致。
+
 ## [1.16] - 2026-10-30
 
 ### D 复核 [1.15] 修复 + 两个 P3 收尾
