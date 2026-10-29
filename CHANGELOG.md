@@ -2,6 +2,14 @@
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.8] - 2026-10-29
+
+### 新增独立审阅者 C 文档评审（workbuddy/FastLedger-文档评审-C.md）
+- 按《多 AI 对齐规范》§1 以"第三个 AI（C）"身份提交独立评审，10 项发现 C-R01~C-R10（6×P2 + 4×P3，均待确认）。
+- 覆盖：PRD/落地方案/新手指南/枚举字典/转账裁决/README/CHANGELOG 的跨文档一致性、版本号双轨冲突、权限矩阵矛盾、环境变量前缀不一致、`synchronous=NORMAL` 断电持久性待确认未闭合等。
+- 未采纳/未裁决：10 项均 `待确认`，等待 owner 裁定；未重提既有 GPT R01–R23 与 WB 各项。
+- 报告全文见 `workbuddy/FastLedger-文档评审-C.md`。
+
 ## [1.7] - 2026-10-29
 
 ### README 补公网交互原型入口（WorkBuddy）
