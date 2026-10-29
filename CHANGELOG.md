@@ -2,6 +2,19 @@
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.14] - 2026-10-30
+
+### 新增独立审阅者 D 评审（workbuddy/FastLedger-文档评审-D.md）
+- 第四个 AI（代号 D）以基线 `a403d13` 完成工程实现层独立评审，产出 **6 条 D-R01–D-R06（2×P1 + 4×P2，无 P0/P3）**，均按规范 §2 十三字段、附文件/章节/行号/原文，全部 `待确认`。
+- 已去重 GPT R01–R23、C-R01–C-R10、WB 各轮，不重复已裁决项。
+- **D-R01（P1）**：删除/恢复/审计已决策（[1.10]、WBS 0.4/4.3），但主文档 DDL 无 `audit_logs`、骨架无 Delete/Restore、接口无回收站/恢复/审计。
+- **D-R02（P1）**：版本化数据库迁移仅 `db migrate` 名称与 WBS 一行，缺版本表/脚本规范/事务/SQLite ALTER 重建范式。
+- **D-R03（P2）**：WS 有 ping 但缺 SetReadDeadline/SetPongHandler/SetReadLimit（R18 建议未落地增量），半开连接泄漏。
+- **D-R04（P2）**：OCR parse-text 吞绑定错误、无空/超长校验、LLM 调用无 ctx/超时。
+- **D-R05（P2）**：Flutter ApiClient 无超时、不判 HTTP 状态码、连接不复用、409 无法三选一。
+- **D-R06（P2）**：Pull 读路径缺成员校验（越权）与批次上限（OOM）。
+- 状态：等待 owner 裁决；若误判/重复将按规范收回。
+
 ## [1.13] - 2026-10-30
 
 ### 更新《多 AI 对齐规范》（为下一个独立评审 AI 对齐颗粒度）
