@@ -1,0 +1,61 @@
+<!doctype html><html lang="en"><head><script src="assets/polyfills.js"></script><script>window.appId = "app_17gymqzafpr";
+    window.userId = "";
+    window.tenantId = "5372888482";
+    window.userName = "";
+    window.csrfToken = "";
+    window.ENVIRONMENT = "online";
+    window.__BASENAME__ = "/";
+    const appInfo = {
+      name: "家庭智能记账",
+      avatar: "assets/icon.png",
+      description: "支持手动记账截图识别入账，同步管理家庭收支账户投资资产，生成收支统计报表，帮全家人轻松掌握家庭财务状况。",
+    };
+    if (appInfo.name) {
+      window._appInfo = appInfo;
+    }</script><script>const slardarScript = document.createElement('script');
+    slardarScript.src = 'https://lf3-short.ibytedapm.com/slardar/fe/sdk-web/browser.cn.js?bid=apaas_miaoda&globalName=KSlardarWeb';
+    slardarScript.crossOrigin = 'anonymous';
+    slardarScript.onload = function() {
+      if (window.KSlardarWeb) {
+        window.KSlardarWeb('context.merge', {
+          tenantId: window.tenantId ?? '',
+          appId: window.appId ?? '',
+          stack_version: "0.1.0",
+          app_type: 6,
+          arch_type: 2,
+        });
+        window.KSlardarWeb('init', {
+          bid: 'apaas_miaoda',
+          env: window.ENVIRONMENT || 'online',
+          userId: window.userId ?? '',
+        });
+        window.KSlardarWeb('start');
+        // Flush errors captured before the SDK finished loading
+        var buf = window.__slardarErrBuf || [];
+        window.__slardarErrBuf = [];
+        buf.forEach(function(err) {
+          window.KSlardarWeb('captureException', err instanceof Error ? err : new Error(String(err)), { source: 'pre-sdk-error', referrer: document.referrer || '' });
+        });
+      }
+    };
+    slardarScript.onerror = function() {
+      console.warn('Failed to load Slardar script');
+    };
+    document.head.appendChild(slardarScript);</script><script>(function (win, export_obj) {
+    win['LogAnalyticsObject'] = export_obj;
+    if (!win[export_obj]) {
+      function _collect() { _collect.q.push(arguments); }
+      _collect.q = _collect.q || [];
+      win[export_obj] = _collect;
+    }
+    win[export_obj].l = +new Date();
+  })(window, 'collectEvent');
+
+  const teaScript = document.createElement('script');
+  teaScript.src = 'https://lf3-cdn-tos.bytescm.com/obj/static/log-sdk/collect/5.1/collect.js';
+  teaScript.crossOrigin = 'anonymous';
+  teaScript.async = true;
+  teaScript.onerror = function() {
+    console.warn('Failed to load Tea script');
+  };
+  document.head.appendChild(teaScript);</script><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>家庭智能记账</title><script type="module" crossorigin src="assets/index-DNvhksAn.js"></script><link rel="modulepreload" crossorigin href="assets/rolldown-runtime-B0Z9INg1.js"><link rel="modulepreload" crossorigin href="assets/radix-BUbIaR49.js"><link rel="modulepreload" crossorigin href="assets/toolkit-BzP8JQh1.js"><link rel="stylesheet" crossorigin href="assets/index-VjxVMuh2.css"><meta property="og:title" content="家庭智能记账"><meta property="og:description" content="支持手动记账截图识别入账，同步管理家庭收支账户投资资产，生成收支统计报表，帮全家人轻松掌握家庭财务状况。"><meta property="og:image" content="assets/icon.png"><meta name="description" content="支持手动记账截图识别入账，同步管理家庭收支账户投资资产，生成收支统计报表，帮全家人轻松掌握家庭财务状况。"><link rel="icon" href="assets/icon.png"></head><body><div id="root"></div></body></html>
