@@ -323,18 +323,20 @@ CREATE TABLE book_versions (
   updated_at  INTEGER
 );
 
--- 幂等操作回执（R04：替代"先查后插"，消除竞态；单条交易与转账统一处理）
+-- 幂等操作回执：由唯一 Create 与业务变更在同一事务写入
 CREATE TABLE idempotency_records (
-  id           INTEGER PRIMARY KEY,
-  book_id      INTEGER NOT NULL,
-  uid          INTEGER NOT NULL,
-  client_uuid  VARCHAR(64) NOT NULL,
-  request_hash VARCHAR(64) DEFAULT '',   -- 请求摘要：同一 client_uuid 但内容不同 → 检测为冲突
-  result_type  TINYINT DEFAULT 0,        -- 1=单条交易 2=转账
-  result_ids   VARCHAR(128) DEFAULT '',  -- 结果实体 id（转账含两条，逗号分隔）
-  created_at   INTEGER,
-  UNIQUE(book_id, uid, client_uuid)      -- 作用域精确到"账本+用户+客户端UUID"
+  id             INTEGER PRIMARY KEY,
+  book_id        INTEGER NOT NULL,
+  uid            INTEGER NOT NULL,
+  client_uuid    VARCHAR(64) NOT NULL CHECK(length(trim(client_uuid)) BETWEEN 1 AND 64),
+  request_hash   VARCHAR(64) NOT NULL,       -- SHA-256：域标签 + 规范化完整业务命令
+  result_type    TINYINT NOT NULL CHECK(result_type IN (1,2)), -- 枚举字典：1=单笔 2=转账
+  result_ids     VARCHAR(128) NOT NULL DEFAULT '', -- 单笔一个；转账按 outID,inID 排列
+  result_version INTEGER NOT NULL DEFAULT 0,      -- 完成后必须为创建时的正版本号
+  created_at     INTEGER,
+  UNIQUE(book_id, uid, client_uuid)
 );
+-- 空 result_ids/0 result_version 仅允许作为当前事务内的占位；不允许提交不完整回执。
 
 -- 账本成员（多对多：一个用户可加入多个账本，一个账本有多个成员）
 CREATE TABLE book_members (
@@ -492,6 +494,9 @@ CREATE INDEX idx_members_book ON book_members(book_id);
   { "code": 0, "msg": "ok", "data": { } }
   ```
   出错时 `code` 为错误码，HTTP 状态码语义化（400 参数错 / 401 未登录 / 403 无权限 / 404 不存在 / 422 校验失败 / 500 服务器错）。
+
+
+交易创建接线契约：JSON 字段 `clientUuid` 必填（数据库名 `client_uuid`）；Handler 绑定后先校验，再调用唯一 `TxService.Create(ctx, uid, bookID, req)`。转账仍为同一个 POST，`txType=3`、`accountId` 为转出、`toAccountId` 为转入。`sync/push` 的每个离线创建项使用相同命令和稳定键。缺键不得退化为非幂等成功，详见 §13 与转账入口裁决。
 
 ### 7.2 完整接口清单
 
@@ -969,259 +974,400 @@ func GetMemberRole(bookId, uid int64) (int, error) {
 
 这是后端最核心的业务逻辑，**必须用数据库事务**，保证余额和交易同时成功或同时失败。
 
-### 13.1 新增支出/收入 `internal/services/transaction.go`
+### 13.1 唯一交易创建入口 `internal/services/transaction.go`
+
+**裁决已确定：收入、支出、转账统一进入 `TxService.Create`。** 手动 HTTP 创建和 `sync/push` 的每个离线创建命令都调用同一入口；不再保留可独立提交的 `AddTransaction` 或 `Transfer`。完整理由与边界见 [转账入口裁决](FastLedger-转账入口裁决.md)。
+
+- 一次业务命令只占位一次幂等回执、只开启一个事务、只递增一次账本版本。转账作为内部 `createTransferInTx` 分支生成两条记录，不得通过调用两次普通记账来实现。
+- Handler 校验 `clientUuid` 必填，Service 再校验空值/全空白/长度。数据库列名仍为 `client_uuid`；不提供空键绕过公开路径的例外。内部批处理也需稳定的操作键。
+- 依赖的 `VersionSource` 由《落地方案》§6.1 的 `VersionRepo.Next` 实现；下列代码不另写版本递增 SQL。`models.Account` 须含 `Currency string` 并映射 `currency`；其他模型与 §6.4 保持一致。
+- 以下为本轮修订的可执行参考骨架；隔离验证工具从本段抽取源代码编译测试。它仍不是完整生产后端，认证/HTTP 适配、真实 WS 与部署须在正式工程验收。
 
 ```go
 package services
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
+	"strconv"
+	"strings"
 	"time"
+	"unicode/utf8"
 
-	"fastledger/internal/database"
 	"fastledger/internal/models"
-
 	"xorm.io/xorm"
 )
 
-// AddTransaction 记一笔交易（支出/收入/转账）。bookID 必须来自可信路径（handler 解析），禁止客户端覆盖。
-func AddTransaction(uid, bookID int64, tx *models.Transaction) error {
-	// 0) 入参校验（不信任客户端）：金额、类型
-	if tx.Amount <= 0 {
-		return errors.New("金额必须为正整数（单位：分）")
-	}
-	if tx.TxType < 1 || tx.TxType > 3 {
-		return errors.New("非法交易类型")
-	}
-	tx.BookId = bookID   // 账本归属由服务端决定（R01）
-	tx.CreatorUid = uid
+var (
+	ErrInvalidCreate     = errors.New("invalid transaction create request")
+	ErrCreateConflict    = errors.New("clientUuid reused with a different operation")
+	ErrCreateForbidden   = errors.New("not a member of the active book")
+	ErrIncompleteReceipt = errors.New("committed idempotency receipt is incomplete")
+)
 
-	// 契约（R04）：所有经 handler 进入的【写请求】必须携带 client_uuid；
-	// 未携带则退化为非幂等（仅允许服务端内部直接调用）。端侧离线补传/重试务必带 client_uuid。
+// JSON uses clientUuid; the database column is client_uuid. The same command
+// is used for manual creation and for each item in an offline sync/push batch.
+type CreateRequest struct {
+	ClientUUID     string `json:"clientUuid" binding:"required"`
+	TxType         int    `json:"txType"`
+	AccountID      int64  `json:"accountId"`
+	ToAccountID    int64  `json:"toAccountId"`
+	Amount         int64  `json:"amount"`
+	CategoryID     int64  `json:"categoryId"`
+	PaymentChannel int    `json:"paymentChannel"`
+	TxTime         int64  `json:"txTime"`
+	TimezoneOffset int    `json:"timezoneOffset"`
+	Comment        string `json:"comment"`
+	Source         int    `json:"source"`
+}
 
-	sess := database.Engine.NewSession()
+type CreateResult struct {
+	ResultType     int     `json:"resultType"`     // 1=single, 2=transfer
+	TransactionIDs []int64 `json:"transactionIds"` // transfer: [outID,inID]
+	Version        int64   `json:"version"`
+	Replayed       bool    `json:"replayed"`
+}
+
+// The implementation is VersionRepo.Next in the plan, section 6.1. No second
+// INSERT/ON CONFLICT implementation belongs in this file or in sync/push.
+type VersionSource interface {
+	Next(*xorm.Session, int64) (int64, error)
+}
+type TxService struct {
+	db       *xorm.Engine
+	versions VersionSource
+}
+
+func NewTxService(db *xorm.Engine, versions VersionSource) *TxService {
+	return &TxService{db: db, versions: versions}
+}
+
+func validateCreate(uid, bookID int64, r CreateRequest) error {
+	if uid <= 0 || bookID <= 0 || strings.TrimSpace(r.ClientUUID) == "" || len(r.ClientUUID) > 64 ||
+		r.Amount <= 0 || r.AccountID <= 0 || r.TxTime <= 0 || r.TxType < 1 || r.TxType > 3 ||
+		r.PaymentChannel < 0 || r.PaymentChannel > 5 || r.Source < 0 || r.Source > 1 ||
+		r.TimezoneOffset < -840 || r.TimezoneOffset > 840 || !utf8.ValidString(r.Comment) || utf8.RuneCountInString(r.Comment) > 255 {
+		return ErrInvalidCreate
+	}
+	if r.TxType == 3 {
+		if r.ToAccountID <= 0 || r.ToAccountID == r.AccountID || r.CategoryID != 0 {
+			return ErrInvalidCreate
+		}
+	} else if r.ToAccountID != 0 || r.CategoryID <= 0 {
+		return ErrInvalidCreate
+	}
+	return nil
+}
+
+func createRequestHash(r CreateRequest) (string, error) {
+	// A typed value gives deterministic field order. Normalization above is
+	// stable across retries; time/defaults must not change on every retry.
+	payload := struct {
+		Domain  string        `json:"domain"`
+		Request CreateRequest `json:"request"`
+	}{
+		Domain: "transaction.create/v1", Request: r,
+	}
+	// The key scopes the receipt and is not part of business identity.
+	payload.Request.ClientUUID = ""
+	b, err := json.Marshal(payload)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:]), nil
+}
+
+// Create is the only public domain entry point and owns the sole transaction,
+// receipt and version increment. Helpers never Begin/Commit or claim receipts.
+func (s *TxService) Create(ctx context.Context, uid, bookID int64, r CreateRequest) (*CreateResult, error) {
+	if err := validateCreate(uid, bookID, r); err != nil {
+		return nil, err
+	}
+	hash, err := createRequestHash(r)
+	if err != nil {
+		return nil, err
+	}
+	kind := 1
+	if r.TxType == 3 {
+		kind = 2
+	}
+	sess := s.db.NewSession()
 	defer sess.Close()
-	if err := sess.Begin(); err != nil {
+	sess.Context(ctx)
+	if err = sess.Begin(); err != nil {
+		return nil, err
+	}
+	defer sess.Rollback() // harmless after successful Commit; releases every failure path
+
+	var member struct{ Role int }
+	has, err := sess.SQL(`SELECT m.role FROM book_members m JOIN books b ON b.id=m.book_id
+        WHERE m.book_id=? AND m.uid=? AND b.deleted=0`, bookID, uid).Get(&member)
+	if err != nil {
+		return nil, err
+	}
+	if !has || member.Role < 1 || member.Role > 3 {
+		return nil, ErrCreateForbidden
+	}
+
+	// Ignore only the explicitly targeted key collision. BUSY, FULL, IOERR,
+	// trigger failures and other constraint failures remain errors.
+	res, err := sess.Exec(`INSERT INTO idempotency_records
+        (book_id,uid,client_uuid,request_hash,result_type,result_ids,result_version,created_at)
+        VALUES(?,?,?,?,?,'',0,?)
+        ON CONFLICT(book_id,uid,client_uuid) DO NOTHING`, bookID, uid, r.ClientUUID, hash, kind, time.Now().Unix())
+	if err != nil {
+		return nil, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return nil, err
+	}
+	if n == 0 {
+		var rec struct {
+			RequestHash   string
+			ResultType    int
+			ResultIds     string
+			ResultVersion int64
+		}
+		has, err := sess.Table("idempotency_records").Where("book_id=? AND uid=? AND client_uuid=?", bookID, uid, r.ClientUUID).Get(&rec)
+		if err != nil {
+			return nil, err
+		}
+		if !has {
+			return nil, ErrIncompleteReceipt
+		}
+		if rec.RequestHash != hash || rec.ResultType != kind {
+			return nil, ErrCreateConflict
+		}
+		ids, err := decodeResultIDs(rec.ResultIds, kind)
+		if err != nil || rec.ResultVersion <= 0 {
+			return nil, ErrIncompleteReceipt
+		}
+		if err = sess.Commit(); err != nil {
+			return nil, err
+		}
+		return &CreateResult{ResultType: kind, TransactionIDs: ids, Version: rec.ResultVersion, Replayed: true}, nil
+	}
+	if n != 1 {
+		return nil, ErrIncompleteReceipt
+	}
+
+	account, err := createAccount(sess, bookID, r.AccountID)
+	if err != nil {
+		return nil, err
+	}
+	var other *models.Account
+	if r.TxType == 3 {
+		other, err = createAccount(sess, bookID, r.ToAccountID)
+		if err != nil {
+			return nil, err
+		}
+		if account.Currency != other.Currency {
+			return nil, ErrInvalidCreate
+		} // MVP: no implicit FX
+	} else {
+		var category struct{ CatType int }
+		has, err := sess.Table("categories").Where("id=? AND book_id=? AND deleted=0", r.CategoryID, bookID).Get(&category)
+		if err != nil {
+			return nil, err
+		}
+		if !has || category.CatType != r.TxType {
+			return nil, ErrInvalidCreate
+		}
+	}
+	version, err := s.versions.Next(sess, bookID)
+	if err != nil {
+		return nil, err
+	}
+	if version <= 0 {
+		return nil, ErrIncompleteReceipt
+	}
+	var ids []int64
+	if r.TxType == 3 {
+		ids, err = s.createTransferInTx(sess, uid, bookID, r, account, other, version)
+	} else {
+		var id int64
+		id, err = s.createSingleInTx(sess, uid, bookID, r, account, version)
+		ids = []int64{id}
+	}
+	if err != nil {
+		return nil, err
+	}
+	encoded := make([]string, len(ids))
+	for i, id := range ids {
+		encoded[i] = strconv.FormatInt(id, 10)
+	}
+	res, err = sess.Exec(`UPDATE idempotency_records SET result_ids=?,result_version=?
+        WHERE book_id=? AND uid=? AND client_uuid=? AND request_hash=? AND result_type=?`,
+		strings.Join(encoded, ","), version, bookID, uid, r.ClientUUID, hash, kind)
+	if err != nil {
+		return nil, err
+	}
+	n, err = res.RowsAffected()
+	if err != nil {
+		return nil, err
+	}
+	if n != 1 {
+		return nil, ErrIncompleteReceipt
+	}
+	if err = sess.Commit(); err != nil {
+		return nil, err
+	}
+	// A caller may now publish an invalidation notice. Notification failure
+	// cannot change this committed outcome; pull remains the authoritative feed.
+	return &CreateResult{ResultType: kind, TransactionIDs: ids, Version: version}, nil
+}
+
+func decodeResultIDs(value string, kind int) ([]int64, error) {
+	parts := strings.Split(value, ",")
+	want := 1
+	if kind == 2 {
+		want = 2
+	}
+	if len(parts) != want {
+		return nil, ErrIncompleteReceipt
+	}
+	ids := make([]int64, want)
+	for i, p := range parts {
+		v, e := strconv.ParseInt(p, 10, 64)
+		if e != nil || v <= 0 {
+			return nil, ErrIncompleteReceipt
+		}
+		ids[i] = v
+	}
+	if want == 2 && ids[0] == ids[1] {
+		return nil, ErrIncompleteReceipt
+	}
+	return ids, nil
+}
+func createAccount(sess *xorm.Session, bookID, id int64) (*models.Account, error) {
+	a := &models.Account{}
+	has, err := sess.Where("id=? AND book_id=? AND deleted=0", id, bookID).Get(a)
+	if err != nil {
+		return nil, err
+	}
+	if !has || a.Category < 1 || a.Category > 15 || a.Currency != "CNY" {
+		return nil, ErrInvalidCreate
+	}
+	return a, nil
+}
+
+// flow is signed cash flow: outflow negative, inflow positive. Debt uses
+// positive outstanding amounts, so its stored balance delta is reversed.
+func createBalanceDelta(category int, flow int64) int64 {
+	if category >= 10 {
+		return -flow
+	}
+	return flow
+}
+func createChangeBalance(sess *xorm.Session, bookID int64, a *models.Account, delta, version int64) error {
+	low, high := int64(math.MinInt64), int64(math.MaxInt64)
+	if delta > 0 {
+		high -= delta
+	}
+	if delta < 0 {
+		low -= delta
+	}
+	result, err := sess.Exec(`UPDATE accounts SET balance=balance+?,sync_version=?,updated_at=?
+        WHERE id=? AND book_id=? AND deleted=0 AND balance BETWEEN ? AND ?`,
+		delta, version, time.Now().Unix(), a.Id, bookID, low, high)
+	if err != nil {
 		return err
 	}
-
-	// 1) 幂等（R04）：client_uuid 非空时，先查操作回执
-	if tx.ClientUuid != "" {
-		rec := &models.IdempotencyRecord{}
-		has, _ := sess.Where("book_id=? AND uid=? AND client_uuid=?", bookID, uid, tx.ClientUuid).Get(rec)
-		if has {
-			// 已处理过：内容相同 → 直接返回原结果（不重复执行）；内容不同 → 冲突
-			if rec.RequestHash != requestHash(tx) {
-				sess.Rollback(); return errors.New("同一 client_uuid 对应了不同请求内容")
-			}
-			return sess.Commit() // 重试，原业务已生效，返回成功（不产生第二笔）
-		}
-		// 不存在 → 先占位（唯一索引兜底两个并发请求的竞态）
-		rec = &models.IdempotencyRecord{
-			BookId: bookID, Uid: uid, ClientUuid: tx.ClientUuid,
-			RequestHash: requestHash(tx), ResultType: 1, CreatedAt: time.Now().Unix(),
-		}
-		if _, err := sess.Insert(rec); err != nil {
-			// 撞唯一约束 = 并发的另一请求已占位 → 本次为重试，返回其结果
-			sess.Rollback(); return nil
-		}
-	}
-
-	// 2) 校验资金账户归属同一账本（R01：防止跨账本改余额/孤儿行）
-	account := &models.Account{}
-	has, err := sess.Where("id=? AND book_id=? AND deleted=0", tx.AccountId, bookID).Get(account)
+	n, err := result.RowsAffected()
 	if err != nil {
-		sess.Rollback(); return err
-	}
-	if !has {
-		sess.Rollback(); return errors.New("账户不存在或不属于该账本")
-	}
-
-	// 3) 账本级全局版本号 +1，拿到 newVersion（与事务同生共死，R06）
-	newVersion, err := nextBookVersion(sess, bookID)
-	if err != nil {
-		sess.Rollback(); return err
-	}
-	tx.SyncVersion = newVersion
-
-	// 4) 插入交易
-	if _, err := sess.Insert(tx); err != nil {
-		sess.Rollback(); return err
-	}
-
-	// 5) 原子改余额（单条 UPDATE + 行锁，不先读后写；检查影响行数，零行即回滚，R02/R01）
-	delta := signedBalanceDelta(account.Category, tx.TxType, tx.Amount) // R03 负债符号
-	res, err := sess.Exec(
-		"UPDATE accounts SET balance = balance + ?, updated_at = ? WHERE id = ? AND book_id = ? AND deleted = 0",
-		delta, time.Now().Unix(), account.Id, bookID)
-	if err != nil {
-		sess.Rollback(); return err
-	}
-	if n, _ := res.RowsAffected(); n != 1 {
-		sess.Rollback(); return errors.New("余额更新失败")
-	}
-
-	// 6) 回写幂等回执的结果 id（供后续重试返回）
-	if tx.ClientUuid != "" {
-		sess.Exec("UPDATE idempotency_records SET result_ids=? WHERE book_id=? AND uid=? AND client_uuid=?",
-			fmt.Sprintf("%d", tx.Id), bookID, uid, tx.ClientUuid)
-	}
-
-	return sess.Commit()
-}
-
-// requestHash 对请求关键内容做摘要，用于检测"同一 client_uuid 但内容不同"
-func requestHash(tx *models.Transaction) string {
-	raw := fmt.Sprintf("%d|%d|%d|%d|%s", tx.TxType, tx.AccountId, tx.Amount, tx.TxTime, tx.Comment)
-	sum := sha256.Sum256([]byte(raw))
-	return hex.EncodeToString(sum[:16])
-}
-
-// nextBookVersion 在事务内对 book_versions 原子 +1 并取回 newVersion（见落地方案 §3.5）
-func nextBookVersion(sess *xorm.Session, bookID int64) (int64, error) {
-	now := time.Now().Unix()
-	if _, err := sess.Exec(
-		`INSERT INTO book_versions(book_id, version, updated_at) VALUES(?, 1, ?)
-		 ON CONFLICT(book_id) DO UPDATE SET version = version + 1, updated_at = excluded.updated_at`,
-		bookID, now); err != nil {
-		return 0, err
-	}
-	var v models.BookVersion
-	if _, err := sess.Where("book_id = ?", bookID).Get(&v); err != nil {
-		return 0, err
-	}
-	return v.Version, nil
-}
-
-// signedBalanceDelta 计算余额增量（分）。
-// 资产账户(1~9)：支出减、收入加；负债账户(10~15，枚举字典约定“正=欠款”)：
-//   支出=刷卡消费→欠更多(balance+amount)，还款(转账入账)→欠更少(balance-amount)。（R03）
-func signedBalanceDelta(category int, txType int, amount int64) int64 {
-	isLiability := category >= 10
-	switch txType {
-	case 2: // 支出
-		if isLiability { return +amount }
-		return -amount
-	case 1: // 收入/退款
-		if isLiability { return -amount }
-		return +amount
-	default:
-		return 0
-	}
-}
-```
-
-> 配套模型 `internal/models/idempotency.go`（字段与 §6.4 建表一一对应）：
-> ```go
-> type IdempotencyRecord struct {
-> 	Id           int64  `xorm:"pk autoincr"`
-> 	BookId       int64  `xorm:"notnull"`
-> 	Uid          int64  `xorm:"notnull"`
-> 	ClientUuid   string `xorm:"varchar(64) notnull"`
-> 	RequestHash  string `xorm:"varchar(64)"`
-> 	ResultType   int    `xorm:"tinyint"`
-> 	ResultIds    string `xorm:"varchar(128)"`
-> 	CreatedAt    int64  `xorm:"created"`
-> }
-> ```
-
-### 13.2 转账（成对、对敲）
-
-```go
-// Transfer 成对、对敲转账。bookID 来自可信路径；两侧账户必须同属该账本（R01）。
-// 与 §13.1 同文件 internal/services/transaction.go，复用其 import 与 nextBookVersion/transferHash。
-func Transfer(uid, bookID, fromId, toId, amount int64, clientUuid string) error {
-	if amount <= 0 {
-		return errors.New("转账金额必须为正整数（分）")
-	}
-	sess := database.Engine.NewSession()
-	defer sess.Close()
-	if err := sess.Begin(); err != nil {
 		return err
 	}
-
-	// 0) 幂等（R04）：clientUuid 非空时，先查操作回执（ResultType=2 标记转账）
-	if clientUuid != "" {
-		rec := &models.IdempotencyRecord{}
-		has, _ := sess.Where("book_id=? AND uid=? AND client_uuid=?", bookID, uid, clientUuid).Get(rec)
-		if has {
-			if rec.RequestHash != transferHash(fromId, toId, amount) {
-				sess.Rollback(); return errors.New("同一 client_uuid 对应了不同请求内容")
-			}
-			return sess.Commit() // 重试，原业务已生效，返回成功（不产生第二笔）
-		}
-		rec = &models.IdempotencyRecord{
-			BookId: bookID, Uid: uid, ClientUuid: clientUuid,
-			RequestHash: transferHash(fromId, toId, amount), ResultType: 2, CreatedAt: time.Now().Unix(),
-		}
-		if _, err := sess.Insert(rec); err != nil {
-			sess.Rollback(); return nil // 撞唯一约束 = 并发重试，返回其结果
-		}
+	if n != 1 {
+		return fmt.Errorf("account update failed or would overflow: %w", ErrInvalidCreate)
 	}
-
-	// 校验两侧账户均属同一账本（R01）
-	for _, aid := range []int64{fromId, toId} {
-		ok, _ := sess.Where("id=? AND book_id=? AND deleted=0", aid, bookID).Exist(&models.Account{})
-		if !ok {
-			sess.Rollback(); return errors.New("账户不存在或不属于该账本")
-		}
+	return nil
+}
+func createRow(uid, bookID int64, r CreateRequest, version int64) *models.Transaction {
+	return &models.Transaction{BookId: bookID, CreatorUid: uid, TxType: r.TxType, AccountId: r.AccountID,
+		CategoryId: r.CategoryID, Amount: r.Amount, PaymentChannel: r.PaymentChannel, TxTime: r.TxTime,
+		TimezoneOffset: r.TimezoneOffset, Comment: r.Comment, Source: r.Source, ClientUuid: r.ClientUUID, SyncVersion: version}
+}
+func createInsertRow(sess *xorm.Session, row *models.Transaction) error {
+	n, err := sess.Insert(row)
+	if err != nil { return err }
+	if n != 1 || row.Id <= 0 { return ErrIncompleteReceipt }
+	return nil
+}
+func (s *TxService) createSingleInTx(sess *xorm.Session, uid, bookID int64, r CreateRequest, a *models.Account, version int64) (int64, error) {
+	flow := r.Amount
+	if r.TxType == 2 {
+		flow = -flow
 	}
-
-	// 账本级版本号 +1（一次转账两侧共享同一 newVersion，R06）
-	newVersion, err := nextBookVersion(sess, bookID)
-	if err != nil {
-		sess.Rollback(); return err
+	if err := createChangeBalance(sess, bookID, a, createBalanceDelta(a.Category, flow), version); err != nil {
+		return 0, err
 	}
-
-	// 原子改两侧余额（先减后加，金额相等，净变化为 0；检查影响行数，R02）
-	if res, e := sess.Exec("UPDATE accounts SET balance=balance-? WHERE id=? AND book_id=? AND deleted=0", amount, fromId, bookID); e != nil {
-		sess.Rollback(); return e
-	} else if n, _ := res.RowsAffected(); n != 1 {
-		sess.Rollback(); return errors.New("转出账户更新失败")
+	row := createRow(uid, bookID, r, version)
+	if err := createInsertRow(sess, row); err != nil {
+		return 0, err
 	}
-	if res, e := sess.Exec("UPDATE accounts SET balance=balance+? WHERE id=? AND book_id=? AND deleted=0", amount, toId, bookID); e != nil {
-		sess.Rollback(); return e
-	} else if n, _ := res.RowsAffected(); n != 1 {
-		sess.Rollback(); return errors.New("转入账户更新失败")
+	return row.Id, nil
+}
+func (s *TxService) createTransferInTx(sess *xorm.Session, uid, bookID int64, r CreateRequest, from, to *models.Account, version int64) ([]int64, error) {
+	if err := createChangeBalance(sess, bookID, from, createBalanceDelta(from.Category, -r.Amount), version); err != nil {
+		return nil, err
 	}
-
-	// 两条交易记录（related_id 互相关联），都带 newVersion / bookID（R06）
-	out := &models.Transaction{BookId: bookID, TxType: 3, AccountId: fromId, RelatedAccountId: toId, Amount: amount, CreatorUid: uid, SyncVersion: newVersion}
-	in  := &models.Transaction{BookId: bookID, TxType: 3, AccountId: toId, RelatedAccountId: fromId, Amount: amount, CreatorUid: uid, SyncVersion: newVersion}
-	if _, err := sess.Insert(out); err != nil {
-		sess.Rollback(); return err
+	if err := createChangeBalance(sess, bookID, to, createBalanceDelta(to.Category, r.Amount), version); err != nil {
+		return nil, err
+	}
+	out, in := createRow(uid, bookID, r, version), createRow(uid, bookID, r, version)
+	out.RelatedAccountId = to.Id
+	out.RelatedAmount = r.Amount
+	in.AccountId = to.Id
+	in.RelatedAccountId = from.Id
+	in.RelatedAmount = r.Amount
+	if err := createInsertRow(sess, out); err != nil {
+		return nil, err
 	}
 	in.RelatedId = out.Id
-	if _, err := sess.Insert(in); err != nil {
-		sess.Rollback(); return err
+	if err := createInsertRow(sess, in); err != nil {
+		return nil, err
 	}
-	out.RelatedId = in.Id
-	if _, err := sess.ID(out.Id).Update(out); err != nil {
-		sess.Rollback(); return err
+	result, err := sess.Exec("UPDATE transactions SET related_id=? WHERE id=? AND book_id=?", in.Id, out.Id, bookID)
+	if err != nil {
+		return nil, err
 	}
-
-	// 回写幂等回执的结果 id（两条交易的 id，供后续重试返回，R04）
-	if clientUuid != "" {
-		sess.Exec("UPDATE idempotency_records SET result_ids=? WHERE book_id=? AND uid=? AND client_uuid=?",
-			fmt.Sprintf("%d,%d", out.Id, in.Id), bookID, uid, clientUuid)
+	n, err := result.RowsAffected()
+	if err != nil {
+		return nil, err
 	}
-
-	return sess.Commit()
-}
-
-// transferHash 对转账关键内容做摘要（R04）：from|to|amount。
-// 与 AddTransaction 的 requestHash 分离，避免不同类型互相误判为冲突。
-func transferHash(fromId, toId, amount int64) string {
-	raw := fmt.Sprintf("%d|%d|%d", fromId, toId, amount)
-	sum := sha256.Sum256([]byte(raw))
-	return hex.EncodeToString(sum[:16])
+	if n != 1 {
+		return nil, ErrIncompleteReceipt
+	}
+	return []int64{out.Id, in.Id}, nil
 }
 ```
 
-> 信用卡还款就走这个转账（储蓄卡→信用卡）：储蓄卡（资产）余额减、信用卡（负债）余额减（欠更少），净资产不变，不产生支出。负债符号规则见 `signedBalanceDelta` 与《枚举字典》§2。
+`CreateResult.TransactionIDs` 对单笔返回一个 ID，对转账按 `[转出记录ID,转入记录ID]` 返回；回放必须返回同一组 ID 与原 `Version`，不能只返回空成功。回执的 `result_version` 保存创建时水位，不从后来可能已编辑的交易行倒推。
+
+### 13.2 转账分支、幂等及接线约束
+
+| 层次 | 唯一入口/职责 | 不允许的替代 |
+|---|---|---|
+| HTTP | `POST /api/v1/books/:id/transactions`，绑定 `CreateRequest` 后调用 `TxService.Create` | 新增独立 `/transfer` 事务入口 |
+| 离线同步 | `sync/push` 的每条创建命令携带稳定 `clientUuid`，调用同一个 `Create` | 给两条镜像记录分别提交普通记账 |
+| 领域 Service | `Create` 拥有事务、授权复查、幂等、版本与提交 | 兼有另一份可独立提交的 `Transfer` |
+| 转账内部 | `createTransferInTx(sess,...,version)`，两侧余额与记录同生共死 | 内部再 `Begin/Commit`、再占位/加版本 |
+| 通知 | 仅在 `Create` 成功提交后发送失效通知，客户端经授权 pull | 通知失败改变已提交账务的结果 |
+
+信用卡以正数记欠款，因此储蓄卡还信用卡时两边存储余额都减少；资产→资产是一减一增。这里保证的是两侧**净资产贡献相抵**，不是无条件要求两个原始余额一减一增。账本账户/两条记录一起写同一版本，时间来自命令，不能落成 Unix 0。
+
+幂等处理必须区分：① 同键同内容且回执完整，返回原结果；② 同键不同类型或内容，409；③ BUSY/IOERR/FULL/触发器等数据库错误，返回错误并回滚，不能当成重试成功。占位和结果回写均检查错误与影响行数。SQLite 瞬时锁冲突需要调用方按同键重试整个命令，不能吞错或从业务中途续跑。
+
+HTTP 映射：缺键/非法命令为 400，幂等键冲突为 409，无成员权限为 403；存储错误使用统一 5xx/可重试响应，不外露原始 SQL。该映射还需正式 Gin handler 集成测试；本轮隔离测试不冒称验证了线上 HTTP。
+
+> 签名迁移：旧 `AddTransaction(uid,bookID,tx)` 与 `Transfer(uid,bookID,from,to,amount,clientUuid)` 退出有效骨架，调用方统一构造 `CreateRequest`。旧函数只在审阅基线和 `gpt/v1.4/verification/source/` 的反例快照保留，不能复制成第二条写路径。转账方向的长期存储/删除恢复协议仍需正式工程覆盖，本轮不重写删除与恢复服务。
 
 ---
 
@@ -1318,18 +1464,20 @@ func (h *Hub) BroadcastToBook(bookId int64, msg []byte, sensitiveMsg []byte) {
 4. **读写循环共用一个取消上下文，清理恰好一次**：`ServeWS` 主 defer 中 `cancel()` + `Unregister()` + `conn.Close()` 各执行一次；读循环 goroutine 只 `cancel()`，不重复 `Unregister`。`conn.Close()` 会让阻塞的 `ReadMessage` 退出。
 5. **通知丢失最终一致**：客户端保证 ① 收到任意事件触发一次（去抖）pull；② 周期性心跳 pull（如每 60s）；③ 重连必 pull。数据以 pull 的一致快照为准，故单个 WS 通知丢失不会造成永久不一致。
 
-### 14.2 在交易成功后推送
+### 14.2 在交易成功提交后推送
 
 ```go
-// AddTransaction 提交成功后
-msg, _ := json.Marshal(map[string]any{
-	"event": "transaction_created", "bookId": tx.BookId, "data": tx,
+// 位于 HTTP/同步适配层：Create 内部不导入 ws，避免 services ↔ ws 循环依赖。
+result, err := txService.Create(c.Request.Context(), uid, bookID, req)
+if err != nil { /* 按 §13.2 映射 HTTP/同步错误，结束本次请求 */ return }
+notice, err := json.Marshal(map[string]any{
+    "event": "transaction.created", "bookId": bookID, "version": result.Version,
 })
-// 脱敏通知：关闭互看时只告知“有更新”，不含交易明细（R05）
-sensitiveMsg, _ := json.Marshal(map[string]any{
-	"event": "transaction_created", "bookId": tx.BookId,
-})
-ws.DefaultHub.BroadcastToBook(tx.BookId, msg, sensitiveMsg)
+if err == nil {
+    // WS 只通知有更新，不携带交易明细；真正数据走授权 pull。
+    ws.DefaultHub.BroadcastToBook(bookID, notice, notice)
+}
+// 通知失败记录日志/由后续 pull 兜底；不能把已提交命令改为失败或重做。
 ```
 
 ### 14.3 WS handler（接收连接、读写循环）
@@ -1444,7 +1592,7 @@ func ParseText(c *gin.Context) {
 ```go
 // AddHolding 新增持仓。bookID 来自可信路径；持仓随账本同步（R11/R06）。
 func AddHolding(uid, bookID, accountId, instrumentId int64,
-	quantity string, costAmount int64, currentPrice string) (*models.Holding, error) {
+	quantity string, costAmount int64, currentPrice string, versions VersionSource) (*models.Holding, error) {
 
 	// 1) 校验数量/价格（R11：decimal 解析错误必须返回，不能像旧代码那样丢弃）
 	qty, err := decimal.NewFromString(quantity)
@@ -1473,7 +1621,7 @@ func AddHolding(uid, bookID, accountId, instrumentId int64,
 	if !has { sess.Rollback(); return nil, errors.New("标的不存在或不属于该账本") }
 
 	// 3) 版本号 +1
-	newVersion, err := nextBookVersion(sess, bookID)
+	newVersion, err := versions.Next(sess, bookID)
 	if err != nil { sess.Rollback(); return nil, err }
 
 	// 4) 市值 = 数量 × 最新价（decimal 精确），换算成分
@@ -1911,13 +2059,13 @@ class BillRules {
 
 ### 22.1 版本号怎么来的（一定要在写事务里做）
 
-每个账本在 `book_versions` 表有一个全局版本号，任何增/改/删都在**同一个事务**里：**先调用 `nextBookVersion`（见 §13.1）取到 `newVersion`，再写进本次变更实体的 `sync_version`**。
+每个账本在 `book_versions` 表有一个全局版本号，任何增/改/删都在**同一个事务**里：**先调用共享 `VersionSource.Next` 取到 `newVersion`，再写进所有变更实体的 `sync_version`**。
 
-> ⚠️ **统一入口**：版本号递增逻辑**只在 `nextBookVersion`（§13.1）实现一份**。此处及任何写路径都**禁止再手写** `INSERT...ON CONFLICT(book_id)` 的 upsert，否则会出现两份实现、日后必漂移。
+> **唯一实现**：《落地方案》§6.1 的 `VersionRepo.Next`。`TxService`、持仓写入和同步只依赖其 `VersionSource` 接口；旧 `nextBookVersion` 名称退出有效骨架。§3.5 的 SQL 仅解释算法，不是第三个可调用实现。任何写路径不得复制 upsert。
 
 ```go
-// 写事务内：版本号 +1 并取回 newVersion（统一调用 §13.1 的 nextBookVersion）
-newVersion, err := nextBookVersion(sess, bookID)
+// 写事务内：注入的 versions 由共享 VersionRepo 实现（落地方案 §6.1）
+newVersion, err := versions.Next(sess, bookID)
 if err != nil { /* 回滚并返回错误 */ }
 tx.SyncVersion = newVersion // 写进本次变更实体的 sync_version
 ```
@@ -1989,12 +2137,12 @@ func initDB() *xorm.Engine {
 	// SQLite 同时只允许一个写连接。MVP 最稳妥：全局连接数限制为 1（完全串行，
 	// 家庭负载极小，无锁竞争）。如要发挥 WAL 的多读能力，可另建一个只读引擎
 	// （SetMaxOpenConns 放宽），写引擎保持 1，由代码按读写路由。
-	db, _ := engine.DB()
+	db := engine.DB()
 	db.SetMaxOpenConns(1)
 
 	// 启动后校验一次，确认 PRAGMA 真的生效（而不是"执行了没报错"）
 	var fk int
-	if err := engine.QueryRow("PRAGMA foreign_keys").Scan(&fk); err != nil || fk != 1 {
+	if err := db.QueryRow("PRAGMA foreign_keys").Scan(&fk); err != nil || fk != 1 {
 		log.Fatalf("foreign_keys 未生效（fk=%d, err=%v）", fk, err)
 	}
 	return engine

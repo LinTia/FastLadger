@@ -1,0 +1,68 @@
+package models
+
+// Test-only bridge models. TableName methods map to the verbatim plural DDL.
+// These definitions supply the models absent from the design-only repository;
+// no business statement in the extracted service/Hub is changed.
+type Transaction struct {
+ Id int64 `xorm:"pk autoincr"`
+ BookId int64
+ CreatorUid int64
+ TxType int
+ CategoryId int64
+ AccountId int64
+ PaymentChannel int
+ Amount int64
+ TxTime int64
+ TimezoneOffset int
+ RelatedId int64
+ RelatedAccountId int64
+ RelatedAmount int64
+ Comment string
+ ClientUuid string
+ SyncVersion int64
+ Source int
+ Deleted bool
+ CreatedAt int64
+ UpdatedAt int64
+ DeletedAt int64
+}
+func (Transaction) TableName() string { return "transactions" }
+type Account struct {
+ Id int64 `xorm:"pk autoincr"`
+ BookId int64
+ Category int
+ Name string
+ Currency string
+ Balance int64
+ SyncVersion int64
+ Deleted bool
+}
+func (Account) TableName() string { return "accounts" }
+type BookVersion struct { BookId int64 `xorm:"pk"`; Version int64; UpdatedAt int64 }
+func (BookVersion) TableName() string { return "book_versions" }
+type IdempotencyRecord struct {
+ Id int64 `xorm:"pk autoincr"`
+ BookId int64
+ Uid int64
+ ClientUuid string
+ RequestHash string
+ ResultType int
+ ResultIds string
+ CreatedAt int64
+}
+func (IdempotencyRecord) TableName() string { return "idempotency_records" }
+type Instrument struct {Id int64 `xorm:"pk autoincr"`;BookId int64;Deleted bool}
+func (Instrument) TableName() string{return "instruments"}
+type Holding struct{
+ Id int64 `xorm:"pk autoincr"`
+ BookId int64
+ AccountId int64
+ InstrumentId int64
+ Quantity string
+ CostAmount int64
+ CurrentPrice string
+ MarketValue int64
+ SyncVersion int64
+ Deleted bool
+}
+func (Holding) TableName()string{return "holdings"}

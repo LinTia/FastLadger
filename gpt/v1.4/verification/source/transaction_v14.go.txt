@@ -1,0 +1,229 @@
+package services
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"time"
+
+	"fastledger/internal/database"
+	"fastledger/internal/models"
+
+	"xorm.io/xorm"
+)
+
+// AddTransaction 记一笔交易（支出/收入/转账）。bookID 必须来自可信路径（handler 解析），禁止客户端覆盖。
+func AddTransaction(uid, bookID int64, tx *models.Transaction) error {
+	// 0) 入参校验（不信任客户端）：金额、类型
+	if tx.Amount <= 0 {
+		return errors.New("金额必须为正整数（单位：分）")
+	}
+	if tx.TxType < 1 || tx.TxType > 3 {
+		return errors.New("非法交易类型")
+	}
+	tx.BookId = bookID   // 账本归属由服务端决定（R01）
+	tx.CreatorUid = uid
+
+	// 契约（R04）：所有经 handler 进入的【写请求】必须携带 client_uuid；
+	// 未携带则退化为非幂等（仅允许服务端内部直接调用）。端侧离线补传/重试务必带 client_uuid。
+
+	sess := database.Engine.NewSession()
+	defer sess.Close()
+	if err := sess.Begin(); err != nil {
+		return err
+	}
+
+	// 1) 幂等（R04）：client_uuid 非空时，先查操作回执
+	if tx.ClientUuid != "" {
+		rec := &models.IdempotencyRecord{}
+		has, _ := sess.Where("book_id=? AND uid=? AND client_uuid=?", bookID, uid, tx.ClientUuid).Get(rec)
+		if has {
+			// 已处理过：内容相同 → 直接返回原结果（不重复执行）；内容不同 → 冲突
+			if rec.RequestHash != requestHash(tx) {
+				sess.Rollback(); return errors.New("同一 client_uuid 对应了不同请求内容")
+			}
+			return sess.Commit() // 重试，原业务已生效，返回成功（不产生第二笔）
+		}
+		// 不存在 → 先占位（唯一索引兜底两个并发请求的竞态）
+		rec = &models.IdempotencyRecord{
+			BookId: bookID, Uid: uid, ClientUuid: tx.ClientUuid,
+			RequestHash: requestHash(tx), ResultType: 1, CreatedAt: time.Now().Unix(),
+		}
+		if _, err := sess.Insert(rec); err != nil {
+			// 撞唯一约束 = 并发的另一请求已占位 → 本次为重试，返回其结果
+			sess.Rollback(); return nil
+		}
+	}
+
+	// 2) 校验资金账户归属同一账本（R01：防止跨账本改余额/孤儿行）
+	account := &models.Account{}
+	has, err := sess.Where("id=? AND book_id=? AND deleted=0", tx.AccountId, bookID).Get(account)
+	if err != nil {
+		sess.Rollback(); return err
+	}
+	if !has {
+		sess.Rollback(); return errors.New("账户不存在或不属于该账本")
+	}
+
+	// 3) 账本级全局版本号 +1，拿到 newVersion（与事务同生共死，R06）
+	newVersion, err := nextBookVersion(sess, bookID)
+	if err != nil {
+		sess.Rollback(); return err
+	}
+	tx.SyncVersion = newVersion
+
+	// 4) 插入交易
+	if _, err := sess.Insert(tx); err != nil {
+		sess.Rollback(); return err
+	}
+
+	// 5) 原子改余额（单条 UPDATE + 行锁，不先读后写；检查影响行数，零行即回滚，R02/R01）
+	delta := signedBalanceDelta(account.Category, tx.TxType, tx.Amount) // R03 负债符号
+	res, err := sess.Exec(
+		"UPDATE accounts SET balance = balance + ?, updated_at = ? WHERE id = ? AND book_id = ? AND deleted = 0",
+		delta, time.Now().Unix(), account.Id, bookID)
+	if err != nil {
+		sess.Rollback(); return err
+	}
+	if n, _ := res.RowsAffected(); n != 1 {
+		sess.Rollback(); return errors.New("余额更新失败")
+	}
+
+	// 6) 回写幂等回执的结果 id（供后续重试返回）
+	if tx.ClientUuid != "" {
+		sess.Exec("UPDATE idempotency_records SET result_ids=? WHERE book_id=? AND uid=? AND client_uuid=?",
+			fmt.Sprintf("%d", tx.Id), bookID, uid, tx.ClientUuid)
+	}
+
+	return sess.Commit()
+}
+
+// requestHash 对请求关键内容做摘要，用于检测"同一 client_uuid 但内容不同"
+func requestHash(tx *models.Transaction) string {
+	raw := fmt.Sprintf("%d|%d|%d|%d|%s", tx.TxType, tx.AccountId, tx.Amount, tx.TxTime, tx.Comment)
+	sum := sha256.Sum256([]byte(raw))
+	return hex.EncodeToString(sum[:16])
+}
+
+// nextBookVersion 在事务内对 book_versions 原子 +1 并取回 newVersion（见落地方案 §3.5）
+func nextBookVersion(sess *xorm.Session, bookID int64) (int64, error) {
+	now := time.Now().Unix()
+	if _, err := sess.Exec(
+		`INSERT INTO book_versions(book_id, version, updated_at) VALUES(?, 1, ?)
+		 ON CONFLICT(book_id) DO UPDATE SET version = version + 1, updated_at = excluded.updated_at`,
+		bookID, now); err != nil {
+		return 0, err
+	}
+	var v models.BookVersion
+	if _, err := sess.Where("book_id = ?", bookID).Get(&v); err != nil {
+		return 0, err
+	}
+	return v.Version, nil
+}
+
+// signedBalanceDelta 计算余额增量（分）。
+// 资产账户(1~9)：支出减、收入加；负债账户(10~15，枚举字典约定“正=欠款”)：
+//   支出=刷卡消费→欠更多(balance+amount)，还款(转账入账)→欠更少(balance-amount)。（R03）
+func signedBalanceDelta(category int, txType int, amount int64) int64 {
+	isLiability := category >= 10
+	switch txType {
+	case 2: // 支出
+		if isLiability { return +amount }
+		return -amount
+	case 1: // 收入/退款
+		if isLiability { return -amount }
+		return +amount
+	default:
+		return 0
+	}
+}
+
+// Transfer 成对、对敲转账。bookID 来自可信路径；两侧账户必须同属该账本（R01）。
+// 与 §13.1 同文件 internal/services/transaction.go，复用其 import 与 nextBookVersion/transferHash。
+func Transfer(uid, bookID, fromId, toId, amount int64, clientUuid string) error {
+	if amount <= 0 {
+		return errors.New("转账金额必须为正整数（分）")
+	}
+	sess := database.Engine.NewSession()
+	defer sess.Close()
+	if err := sess.Begin(); err != nil {
+		return err
+	}
+
+	// 0) 幂等（R04）：clientUuid 非空时，先查操作回执（ResultType=2 标记转账）
+	if clientUuid != "" {
+		rec := &models.IdempotencyRecord{}
+		has, _ := sess.Where("book_id=? AND uid=? AND client_uuid=?", bookID, uid, clientUuid).Get(rec)
+		if has {
+			if rec.RequestHash != transferHash(fromId, toId, amount) {
+				sess.Rollback(); return errors.New("同一 client_uuid 对应了不同请求内容")
+			}
+			return sess.Commit() // 重试，原业务已生效，返回成功（不产生第二笔）
+		}
+		rec = &models.IdempotencyRecord{
+			BookId: bookID, Uid: uid, ClientUuid: clientUuid,
+			RequestHash: transferHash(fromId, toId, amount), ResultType: 2, CreatedAt: time.Now().Unix(),
+		}
+		if _, err := sess.Insert(rec); err != nil {
+			sess.Rollback(); return nil // 撞唯一约束 = 并发重试，返回其结果
+		}
+	}
+
+	// 校验两侧账户均属同一账本（R01）
+	for _, aid := range []int64{fromId, toId} {
+		ok, _ := sess.Where("id=? AND book_id=? AND deleted=0", aid, bookID).Exist(&models.Account{})
+		if !ok {
+			sess.Rollback(); return errors.New("账户不存在或不属于该账本")
+		}
+	}
+
+	// 账本级版本号 +1（一次转账两侧共享同一 newVersion，R06）
+	newVersion, err := nextBookVersion(sess, bookID)
+	if err != nil {
+		sess.Rollback(); return err
+	}
+
+	// 原子改两侧余额（先减后加，金额相等，净变化为 0；检查影响行数，R02）
+	if res, e := sess.Exec("UPDATE accounts SET balance=balance-? WHERE id=? AND book_id=? AND deleted=0", amount, fromId, bookID); e != nil {
+		sess.Rollback(); return e
+	} else if n, _ := res.RowsAffected(); n != 1 {
+		sess.Rollback(); return errors.New("转出账户更新失败")
+	}
+	if res, e := sess.Exec("UPDATE accounts SET balance=balance+? WHERE id=? AND book_id=? AND deleted=0", amount, toId, bookID); e != nil {
+		sess.Rollback(); return e
+	} else if n, _ := res.RowsAffected(); n != 1 {
+		sess.Rollback(); return errors.New("转入账户更新失败")
+	}
+
+	// 两条交易记录（related_id 互相关联），都带 newVersion / bookID（R06）
+	out := &models.Transaction{BookId: bookID, TxType: 3, AccountId: fromId, RelatedAccountId: toId, Amount: amount, CreatorUid: uid, SyncVersion: newVersion}
+	in  := &models.Transaction{BookId: bookID, TxType: 3, AccountId: toId, RelatedAccountId: fromId, Amount: amount, CreatorUid: uid, SyncVersion: newVersion}
+	if _, err := sess.Insert(out); err != nil {
+		sess.Rollback(); return err
+	}
+	in.RelatedId = out.Id
+	if _, err := sess.Insert(in); err != nil {
+		sess.Rollback(); return err
+	}
+	out.RelatedId = in.Id
+	if _, err := sess.ID(out.Id).Update(out); err != nil {
+		sess.Rollback(); return err
+	}
+
+	// 回写幂等回执的结果 id（两条交易的 id，供后续重试返回，R04）
+	if clientUuid != "" {
+		sess.Exec("UPDATE idempotency_records SET result_ids=? WHERE book_id=? AND uid=? AND client_uuid=?",
+			fmt.Sprintf("%d,%d", out.Id, in.Id), bookID, uid, clientUuid)
+	}
+
+	return sess.Commit()
+}
+
+// transferHash 对转账关键内容做摘要（R04）：from|to|amount。
+// 与 AddTransaction 的 requestHash 分离，避免不同类型互相误判为冲突。
+func transferHash(fromId, toId, amount int64) string {
+	raw := fmt.Sprintf("%d|%d|%d", fromId, toId, amount)
+	sum := sha256.Sum256([]byte(raw))
+	return hex.EncodeToString(sum[:16])
+}

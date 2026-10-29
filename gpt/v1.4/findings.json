@@ -1,0 +1,146 @@
+[
+  {
+    "id": "GPT-R19",
+    "title": "幂等占位/回写错误被吞，返回了未成立的成功",
+    "severity": "P1",
+    "location": "docs/FastLedger-新手开发完整指南.md §13.1 L1014/L1027–1029/L1069–1070；§13.2 L1149/L1160–1161/L1208–1209",
+    "quote": "\t\tif _, err := sess.Insert(rec); err != nil {\n\t\t\tsess.Rollback(); return nil // 撞唯一约束 = 并发重试，返回其结果\n\t\t}",
+    "problem": "把任何 Insert 错误都当成唯一键竞争；回执 Get 的错误被丢弃，结果回写 Exec 的错误和行数也没检查。唯一键约束不是“另一请求已成功”的证明。",
+    "reproduce": [
+      "用真实 SQLite 触发器让 idempotency_records 的 INSERT 报 ABORT，调用 Transfer。",
+      "再让回执 UPDATE 报 ABORT，重新执行一笔转账，查询业务行和 result_ids。"
+    ],
+    "actual": "插入回执失败：Transfer 返回 nil，实际 0 条交易。回写失败：返回 nil 且提交 2 条交易，回执 result_ids 仍为空。两者均由原文 Go 函数实际运行复现。",
+    "expected": "只针对指定唯一键处理冲突；重读完整回执并核对类型/摘要/结果。其他数据库错误返回失败，回执结果回写失败时业务一起回滚。",
+    "impact": "客户端可能把未入账操作从离线队列删除；成功账务与操作结果脱节，无法可靠恢复本地临时 ID。",
+    "suggestion": "统一 Create 使用 ON CONFLICT(book_id,uid,client_uuid) DO NOTHING，并检查所有错误和影响行数；保存 result_ids/result_version，命中时返回原结果。修订在指南 §13.1；不再保留独立 Transfer 的错误分支。",
+    "status": "已修复",
+    "evidence": "GPT 核实：原片段两项故障注入均出现反例；修订骨架的 ReceiptInsertErrorDoesNotAcknowledge、FinalizationFailureRollsBackAndRetryRuns、IncompleteCommittedReceiptIsNotSuccess 回归通过。修复指文档参考骨架，正式 HTTP 接线未验收。"
+  },
+  {
+    "id": "GPT-R20",
+    "title": "requestHash 遗漏分类、渠道等已接受业务字段",
+    "severity": "P1",
+    "location": "docs/FastLedger-新手开发完整指南.md §13.1 L1017/L1076–1080",
+    "quote": "func requestHash(tx *models.Transaction) string {\n\traw := fmt.Sprintf(\"%d|%d|%d|%d|%s\", tx.TxType, tx.AccountId, tx.Amount, tx.TxTime, tx.Comment)\n\tsum := sha256.Sum256([]byte(raw))\n\treturn hex.EncodeToString(sum[:16])",
+    "problem": "同键请求身份只取类型、账户、金额、时间和备注；CategoryId、PaymentChannel 等不参与比较。两个 hash 函数分开命名并不能补齐业务身份。",
+    "reproduce": [
+      "用 client_uuid=same-key 创建支出，CategoryId=10、PaymentChannel=1。",
+      "同键改为 CategoryId=20、PaymentChannel=2，其他字段不变，再调用 AddTransaction。"
+    ],
+    "actual": "两个摘要相等；第二次返回 nil，仍只有原交易，第二个请求对象 Id=0，既未报冲突也未提供原结果 ID。",
+    "expected": "同键任何已接受的业务内容改变都冲突；完全相同则返回可关联的原结果。",
+    "impact": "客户端把改分类/改渠道后的内容误认为已接受，服务端仍是旧值，造成数据理解不一致。",
+    "suggestion": "以 typed CreateRequest 的确定性编码生成一个带 transaction.create/v1 域标签的摘要，覆盖所有接受的业务字段；同时显式核对 result_type。不要把“必须有两个函数”当作安全要求。",
+    "status": "已修复",
+    "evidence": "GPT 核实：ChangedCategoryAndChannelReuseSameHash 反例成立；统一 Create 的 ChangedPayloadAndKindConflict 回归通过。"
+  },
+  {
+    "id": "GPT-R21",
+    "title": "client_uuid 必填仍只是注释约定",
+    "severity": "P2",
+    "location": "docs/FastLedger-新手开发完整指南.md §7.1 L487–494；§13.1 L1002–1012；§13.2 L1146–1147",
+    "quote": "\t// 契约（R04）：所有经 handler 进入的【写请求】必须携带 client_uuid；\n\t// 未携带则退化为非幂等（仅允许服务端内部直接调用）。端侧离线补传/重试务必带 client_uuid。",
+    "problem": "v1.4 将“必须携带”加在注释中，公开/内部调用仍共用允许空键的 Service。当前没有完整交易 handler 代码，不能据此断言线上接口已经强制该契约。",
+    "reproduce": [
+      "直接执行两次 Transfer(..., clientUuid=\"\")。",
+      "核对 docs/ 中交易 handler 的实际绑定/校验示例与 Transfer 调用点。"
+    ],
+    "actual": "Service 接受两次调用，生成 4 条交易、0 条回执。docs/ 没有已实现的交易 handler 调用代码可证明对外做了必填校验；没有证据表明存在已写错的旧签名调用点。",
+    "expected": "客户端创建交易、转账及离线创建项必须带稳定键；Handler 与 Service 都校验，缺键不进入写事务。",
+    "impact": "约定与实际覆盖率脱节，弱网重试可重复生成交易。这里确认的是 Service 行为及契约缺口，不冒充 HTTP 越权实测。",
+    "suggestion": "统一 DTO 使用 JSON clientUuid（DB client_uuid），Handler 绑定 required；Service 强制拒绝空/全空白/过长键。取消创建路径的空键内部例外。正式 Gin handler 的 400/409 映射还需接线测试。",
+    "status": "已采纳",
+    "evidence": "GPT 核实：EmptyUUIDDisablesIdempotency 原片段反例成立；修订 Create 的 RejectsMissingKeyAndInvalidCommands 通过。Service 约束已落骨架，Handler 契约已写入方案/指南/裁决，HTTP 集成仍待实施。"
+  },
+  {
+    "id": "GPT-R22",
+    "title": "版本号入口仅在指南内部统一，另一实现仍在落地方案",
+    "severity": "P2",
+    "location": "docs/FastLedger-落地方案.md §6.1 L992–1004；docs/FastLedger-新手开发完整指南.md §13.1 L1084–1096、§22.1 L1914–1922；workbuddy/v1.4-修复说明.md §3.2/§4",
+    "quote": "func (r *VersionRepo) Next(sess *xorm.Session, bookID int64) (int64, error) {\n    now := time.Now().Unix()\n    if _, err := sess.Exec(`\n        INSERT INTO book_versions(book_id, version, updated_at) VALUES(?, 1, ?)\n        ON CONFLICT(book_id) DO UPDATE SET version = version + 1, updated_at = excluded.updated_at`,\n        bookID, now); err != nil {",
+    "problem": "§22.1 的复制已删除，但 Next/nextBookVersion 在两份有效文档各有一份可调用实现；“全仓仅一份”的结论扩大了验证范围。",
+    "reproduce": [
+      "在基线 docs/ 搜索 func (r *VersionRepo) Next 与 func nextBookVersion。",
+      "区分可调用函数与落地方案 §3.5 的解释性 SQL，不把解释性 SQL 错计成第三个函数。"
+    ],
+    "actual": "可调用实现有两份：方案 VersionRepo.Next、指南 nextBookVersion；指南 §22.1 确实已改为调用，属于局部修复完成。",
+    "expected": "确定一个可调用实现，其余章节和持仓写入只引用/注入它。",
+    "impact": "将来不同 AI 修改版本算法时可再次分叉，且无法以 grep 一份文档证明跨文档闭合。",
+    "suggestion": "按技术权威保留 VersionRepo.Next，Create 与 AddHolding 依赖 VersionSource；删除有效指南中的 nextBookVersion 函数，§22.1 仅示范调用。AddHolding 新增 versions 末参，防止移除 helper 后调用断裂。",
+    "status": "已修复",
+    "evidence": "GPT 核实：活跃 docs/ 仅保留 VersionRepo.Next 函数实现；指南服务和持仓调用同一接口，HoldingVersionSignaturePropagated 编译及真实 SQLite 路径通过。"
+  },
+  {
+    "id": "GPT-R23",
+    "title": "双创建入口允许转账绕过双边实现，需作唯一入口裁决",
+    "severity": "P1",
+    "location": "docs/FastLedger-落地方案.md §6.1 L958–979；docs/FastLedger-新手开发完整指南.md §13.1 L990–998/L1050–1056/L1111–1112、§13.2 L1136；workbuddy/v1.4-修复说明.md §5.4",
+    "quote": "// AddTransaction 记一笔交易（支出/收入/转账）。bookID 必须来自可信路径（handler 解析），禁止客户端覆盖。\nfunc AddTransaction(uid, bookID int64, tx *models.Transaction) error {\n\t// 0) 入参校验（不信任客户端）：金额、类型\n\tif tx.Amount <= 0 {\n\t\treturn errors.New(\"金额必须为正整数（单位：分）\")\n\t}\n\tif tx.TxType < 1 || tx.TxType > 3 {\n\t\treturn errors.New(\"非法交易类型\")\n\t}",
+    "problem": "方案由 Create 分派转账，而指南 AddTransaction 接受 TxType=3 却只插一条且余额增量为 0；独立 Transfer 才有双边。该分歧已有待裁决记录，本轮新增了实际入口反例并给出最终决定。",
+    "reproduce": [
+      "调用 AddTransaction(uid=1, bookID=1, txType=3, accountId=1, relatedAccountId=2, amount=1000)。",
+      "查看交易数、两侧余额，与独立 Transfer 的预期比较。"
+    ],
+    "actual": "调用成功，仅 1 条转账记录，源余额 100000 分、目标 0 分均未变化。",
+    "expected": "所有来源只能走同一个 Create；转账必须原子写两侧余额和两条关联记录，幂等和版本只做一次。",
+    "impact": "不同 AI 选择不同入口会生成不同账务结果；只给独立 Transfer 补幂等无法覆盖另一条入口。",
+    "suggestion": "裁决 GPT-ADR01：保留 TxService.Create 为唯一公开领域入口，内部 createTransferInTx 接收已有事务/版本；HTTP 与 sync/push 复用它。撤销独立公开 AddTransaction/Transfer 与模糊 createRelatedTransfer 分支。落地方案、指南、PRD 与裁决文档同步。",
+    "status": "已修复",
+    "evidence": "GPT 核实：AddTransactionAcceptsTransferWithoutPair 反例成立；新 Create 的 TransferReplayReturnsSameIDsAndVersion、AllAssetLiabilityDirectionsPreserveNetAssets、ConcurrentRetriesReturnOneResult 等回归通过。指当前文档参考骨架，非正式应用上线。"
+  },
+  {
+    "id": "GPT-R03",
+    "title": "历史复核：信用卡还款分支仍把欠款加大",
+    "severity": "P1",
+    "location": "docs/FastLedger-新手开发完整指南.md §13.2 L1179–1185/L1224；docs/FastLedger-枚举字典.md §2 L43",
+    "quote": "\t// 原子改两侧余额（先减后加，金额相等，净变化为 0；检查影响行数，R02）\n\tif res, e := sess.Exec(\"UPDATE accounts SET balance=balance-? WHERE id=? AND book_id=? AND deleted=0\", amount, fromId, bookID); e != nil {\n\t\tsess.Rollback(); return e\n\t} else if n, _ := res.RowsAffected(); n != 1 {\n\t\tsess.Rollback(); return errors.New(\"转出账户更新失败\")\n\t}\n\tif res, e := sess.Exec(\"UPDATE accounts SET balance=balance+? WHERE id=? AND book_id=? AND deleted=0\", amount, toId, bookID); e != nil {",
+    "problem": "R03 的收入/支出 signedBalanceDelta 已修正，但 Transfer 仍无条件对转入账户加余额，与正欠款约定相反。沿用原编号补证据。",
+    "reproduce": [
+      "初始储蓄 100000 分、信用卡正欠款 10000 分。",
+      "从储蓄卡还款 10000 分，计算还款前后净资产。"
+    ],
+    "actual": "净资产由 90000 分变为 70000 分；信用卡欠款升至 20000 分。",
+    "expected": "还款后储蓄 90000 分、欠款 0，净资产仍为 90000 分。",
+    "impact": "转账无收入支出却改变净资产，账务失真。",
+    "suggestion": "由统一 Create 的转账 helper 根据账户分类反转负债余额增量；同步 PRD 的“一减一增”表述。",
+    "status": "已修复",
+    "evidence": "GPT 核实：CreditRepaymentStillAddsDebt 实际运行反例成立；本轮四种资产/负债方向的净资产守恒回归通过。只关闭本次创建/还款分支，删除恢复另需验收。"
+  },
+  {
+    "id": "GPT-R06",
+    "title": "历史复核：转账账户版本和发生时间仍未落全",
+    "severity": "P1",
+    "location": "docs/FastLedger-新手开发完整指南.md §13.2 L1180–1193；docs/FastLedger-落地方案.md §3.5 L305–310",
+    "quote": "\t// 两条交易记录（related_id 互相关联），都带 newVersion / bookID（R06）\n\tout := &models.Transaction{BookId: bookID, TxType: 3, AccountId: fromId, RelatedAccountId: toId, Amount: amount, CreatorUid: uid, SyncVersion: newVersion}\n\tin  := &models.Transaction{BookId: bookID, TxType: 3, AccountId: toId, RelatedAccountId: fromId, Amount: amount, CreatorUid: uid, SyncVersion: newVersion}",
+    "problem": "两条交易有 SyncVersion/BookId，但账户 UPDATE 未回写版本，Transfer 构造也不设置发生时间。已有修复只覆盖一部分写实体。",
+    "reproduce": [
+      "执行一次 Transfer 后按 sync_version>0 拉账户。",
+      "查看两条交易的 tx_time 与账本当前版本。"
+    ],
+    "actual": "账本版本为 1、交易两条版本为 1，账户变更结果为 0 条；两条交易 tx_time=0。",
+    "expected": "两侧账户、两条交易一起带同一正版本，时间由创建命令传入。",
+    "impact": "增量客户端拿不到余额变化，交易可能落在 1970 年时间段。",
+    "suggestion": "统一 Create 写两侧账户 sync_version 与更新时间，将请求发生时间写入每条交易；全实体同步仍需正式工程另行复核。",
+    "status": "已采纳",
+    "evidence": "GPT 核实：TransferAccountVersionsAndTimesRemainZero 反例成立；修订创建路径回归验证了 2 个账户与 2 条交易同版本且时间正确。未据此宣布 R06 的全实体/全同步链路已完全关闭。"
+  },
+  {
+    "id": "GPT-R16",
+    "title": "历史复核：数据库示例仍有三处真实编译阻断",
+    "severity": "P2",
+    "location": "docs/FastLedger-新手开发完整指南.md §22.4 L1992–1997；docs/FastLedger-落地方案.md §6.1 L1018–1022",
+    "quote": "\tdb, _ := engine.DB()\n\tdb.SetMaxOpenConns(1)\n\n\t// 启动后校验一次，确认 PRAGMA 真的生效（而不是\"执行了没报错\"）\n\tvar fk int\n\tif err := engine.QueryRow(\"PRAGMA foreign_keys\").Scan(&fk); err != nil || fk != 1 {",
+    "problem": "DB() 被当作双返回值、QueryRow 被直接调用在 xorm Engine 上；方案仍给外包 xorm.Engine 声明方法。前轮仅静态核对，本轮实际调用编译器。",
+    "reproduce": [
+      "将原文 initDB 与 pragmas 提取进最小编译包，补齐 import 后 go test。",
+      "对修正后的 initDB 编译并启动，查询 DSN/连接池设置。"
+    ],
+    "actual": "编译器报告 assignment mismatch、engine.QueryRow undefined、cannot define new methods on non-local type。",
+    "expected": "真实 API 调用可编译，DSN 生效并接受测试。",
+    "impact": "开发者照敲无法运行，无法以“已打开 PRAGMA”的文字当作可执行初始化。",
+    "suggestion": "改用 db := engine.DB()、db.QueryRow(...).Scan；方案不再复制非法接收者方法，引用指南唯一初始化示例。",
+    "status": "已采纳",
+    "evidence": "GPT 核实：原始编译包得到上述 3 个错误；修订 initDB 在真实驱动下编译、运行通过，foreign_keys=1、WAL、连接池=1。R16 其他代码片段/完整应用构建不在本次全域验收范围。"
+  }
+]

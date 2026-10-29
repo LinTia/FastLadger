@@ -1,0 +1,18 @@
+package ws
+
+import ("sync";"testing")
+
+func TestV14_HubConcurrentSubscribeBroadcastUnregister(t *testing.T){
+ h:=&Hub{clients:make(map[*Client]bool)}
+ clients:=make([]*Client,12)
+ for i:=range clients{clients[i]=&Client{BookIds:make(map[int64]bool),Send:make(chan []byte,8)};h.Register(clients[i])}
+ var wg sync.WaitGroup
+ for _,c:=range clients{
+  wg.Add(1);go func(c *Client){defer wg.Done();for i:=0;i<100;i++{h.Subscribe(c,[]int64{1,2},1)}}(c)
+ }
+ for j:=0;j<4;j++{wg.Add(1);go func(){defer wg.Done();for i:=0;i<200;i++{h.BroadcastToBook(1,[]byte("notice"),[]byte("redacted"))}}()}
+ wg.Wait()
+ for _,c:=range clients{h.Unregister(c)}
+ if len(h.clients)!=0{t.Fatal("clients remain")}
+ t.Log("OBSERVATION Hub core only; authorization uses stubs; real WS read/write lifecycle not exercised")
+}

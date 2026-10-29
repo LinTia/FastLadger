@@ -2,6 +2,33 @@
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.5] - 2026-10-29
+
+### 性质与审查基线
+- 按项目方请求，审核 `v1.4-修复说明.md` §6，并按 `多AI对齐规范.md` 的 13 个字段交付。基线 `9a3a2e38a6476450b04fea59c9cb49eb5dba7416`；本版本为**审核、跨文档裁决与可执行参考骨架修订**，不是完整生产应用发布。
+
+### 裁决与函数签名（GPT-R23 / GPT-ADR01，已采纳；有效骨架已统一）
+- 唯一公开领域入口：`TxService.Create(ctx context.Context, uid, bookID int64, req CreateRequest) (*CreateResult,error)`。HTTP 创建和 `sync/push` 每个离线创建项复用同一入口；内部 `createTransferInTx` 使用已有 session/version，不另开事务、占位或加版本。
+- 旧 `AddTransaction`、独立可提交 `Transfer` 和模糊 `createRelatedTransfer` 退出有效骨架；历史记录/反例快照保留。规范见 `docs/FastLedger-转账入口裁决.md`，参考实现见指南 §13.1，方案 §5.1/§6.1、PRD §4.3.1 同步。
+- 版本唯一实现为 `VersionRepo.Next`；创建与持仓使用 `VersionSource`。`AddHolding` 增加 `versions VersionSource` 末参，其调用和编译/真实数据库路径已验证。
+
+### 新发现处理（GPT-R19–GPT-R23）
+- **GPT-R19 / P1 / 已修复（参考骨架）**：回执占位、查询、结果回写不得吞错误；只对指定唯一键 `ON CONFLICT DO NOTHING`，重读后核对完整回执。结果回写失败整笔回滚。位置：指南 §13.1、裁决 §3。
+- **GPT-R20 / P1 / 已修复（参考骨架）**：摘要统一为带域标签的完整 CreateRequest，覆盖分类/渠道等字段；回放显式核对 result_type，返回原 ID 和创建版本。位置：指南 §13.1、裁决 §3。
+- **GPT-R21 / P2 / 已采纳**：创建键改为 DTO 必填与 Service 强制检查；JSON `clientUuid` / DB `client_uuid` 口径明确。Service 回归已通过，正式 Gin handler 的 400/409 接线仍待验收。位置：指南 §7.1/§13、裁决 §2。
+- **GPT-R22 / P2 / 已修复（有效文档入口）**：指南的 nextBookVersion 实现删除，统一依赖方案 VersionRepo.Next，持仓与同步调用已传播。§3.5 SQL 仍是解释性算法，不是另一可调用实现。
+- **GPT-R23 / P1 / 已修复（参考骨架）**：原 AddTransaction 接受 txType=3 却只插一条且不改余额的绕行反例已复现；当前所有创建类型只经 Create，转账一次写双边。
+
+### 历史编号复核（不新增重复编号）
+- **GPT-R03**：原信用卡还款分支仍给负债账户加余额，净资产 90000→70000 分的反例成立。统一分支按正欠款反转负债增量；四种资产/负债转账方向净资产守恒的隔离回归通过。此处关闭创建/还款分支，不宣称删除恢复已验收。
+- **GPT-R06**：原转账账户版本未更新、交易 tx_time=0；本轮创建路径已将两侧账户、两条记录写同一版本和请求时间。全实体/端到端同步保持已采纳、待正式工程验证，不能据局部测试宣布全域关闭。
+- **GPT-R16**：原初始化在实际编译器下出现 DB 返回值、Engine.QueryRow、外包接收者三处错误；本轮修正指南 §22.4，并让方案引用唯一初始化示例。修订 initDB 编译运行通过，验证 foreign_keys/WAL/连接池；整个工程构建仍待完成。
+
+### 契约与验证材料
+- 两份 DDL 同步 `idempotency_records` 与 `result_version`；枚举字典新增 result_type 和恢复世代字段契约。v1.4 说明加后续复核标记；多 AI 规范修正“18 项全 P1”和负欠款示例的文字错误，并更新进度范围。
+- 完整 13 字段意见、原片段快照/摘要、真实 Go/xorm/SQLite 故障注入、修订回归、Hub 核心 race 与旧/新编译输出位于 `gpt/v1.4/`。测试数量及结果以 `verification/runtime-results.json` 为准。
+- 验证使用最小表映射和 Hub 权限桩；不等同于正式 HTTP/WS/Flutter 或全应用端到端验收。已有试验库升级时须迁移回执新字段，不得删除旧回执以“解决”重试。
+
 ## [1.4] - 2026-10-29
 
 ### 背景

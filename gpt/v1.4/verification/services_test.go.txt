@@ -1,0 +1,125 @@
+package services
+
+import (
+ "encoding/json"
+ "os"
+ "path/filepath"
+ "sync"
+ "testing"
+
+ "fastledger/internal/database"
+ "fastledger/internal/models"
+ _ "github.com/mattn/go-sqlite3"
+ "xorm.io/xorm"
+)
+
+func setup(t *testing.T) *xorm.Engine {
+ t.Helper()
+ path:=filepath.Join(t.TempDir(),"case.db")
+ e,err:=xorm.NewEngine("sqlite3","file:"+path+"?_journal_mode=WAL&_foreign_keys=on&_busy_timeout=100&_synchronous=NORMAL")
+ if err!=nil {t.Fatal(err)}
+ e.SetMaxOpenConns(1)
+ raw,err:=os.ReadFile("../../schema.sql");if err!=nil {t.Fatal(err)}
+ if _,err=e.Exec(string(raw));err!=nil {t.Fatal(err)}
+ database.Engine=e
+ t.Cleanup(func(){e.Close()})
+ for _,q:=range []string{
+  "INSERT INTO accounts(id,book_id,category,name,balance,sync_version) VALUES(1,1,1,'cash',100000,0)",
+  "INSERT INTO accounts(id,book_id,category,name,balance,sync_version) VALUES(2,1,1,'wallet',0,0)",
+ } {if _,err=e.Exec(q);err!=nil{t.Fatal(err)}}
+ return e
+}
+func scalar(t *testing.T,e *xorm.Engine,q string) int64 {
+ t.Helper();var n int64
+ if err:=e.DB().QueryRow(q).Scan(&n);err!=nil{t.Fatal(err)}
+ return n
+}
+func observation(t *testing.T,v any){t.Helper();b,_:=json.Marshal(v);t.Log("OBSERVATION",string(b))}
+
+func TestV14_ReceiptInsertFailureAcknowledgedAsSuccess(t *testing.T){
+ e:=setup(t)
+ _,err:=e.Exec("CREATE TRIGGER fail_receipt BEFORE INSERT ON idempotency_records BEGIN SELECT RAISE(ABORT,'synthetic receipt failure'); END")
+ if err!=nil{t.Fatal(err)}
+ err=Transfer(1,1,1,2,1000,"receipt-fault")
+ n:=scalar(t,e,"SELECT COUNT(*) FROM transactions")
+ if err!=nil||n!=0{t.Fatalf("expected documented false acknowledgement; err=%v rows=%d",err,n)}
+ observation(t,map[string]any{"error":nil,"transactions":n,"balance":scalar(t,e,"SELECT balance FROM accounts WHERE id=1")})
+}
+
+func TestV14_ReceiptFinalizationFailureStillCommitsBusiness(t *testing.T){
+ e:=setup(t)
+ _,err:=e.Exec("CREATE TRIGGER fail_finalize BEFORE UPDATE ON idempotency_records BEGIN SELECT RAISE(ABORT,'synthetic receipt finalization failure'); END")
+ if err!=nil{t.Fatal(err)}
+ err=Transfer(1,1,1,2,1000,"finalize-fault")
+ n:=scalar(t,e,"SELECT COUNT(*) FROM transactions")
+ empty:=scalar(t,e,"SELECT COUNT(*) FROM idempotency_records WHERE result_ids=''")
+ if err!=nil||n!=2||empty!=1{t.Fatalf("err=%v tx=%d empty=%d",err,n,empty)}
+ observation(t,map[string]any{"error":nil,"transactions":n,"empty_receipt_results":empty})
+}
+
+func TestV14_ChangedCategoryAndChannelReuseSameHash(t *testing.T){
+ e:=setup(t)
+ a:=&models.Transaction{AccountId:1,TxType:2,Amount:1000,TxTime:100,CategoryId:10,PaymentChannel:1,ClientUuid:"same-key"}
+ b:=&models.Transaction{AccountId:1,TxType:2,Amount:1000,TxTime:100,CategoryId:20,PaymentChannel:2,ClientUuid:"same-key"}
+ if requestHash(a)!=requestHash(b){t.Fatal("reviewed hash has changed")}
+ if err:=AddTransaction(1,1,a);err!=nil{t.Fatal(err)}
+ if err:=AddTransaction(1,1,b);err!=nil{t.Fatal(err)}
+ if scalar(t,e,"SELECT COUNT(*) FROM transactions")!=1||b.Id!=0{t.Fatal("expected ignored changed payload and absent replay result")}
+ observation(t,map[string]any{"hashes_equal":true,"changed_payload_accepted":true,"replayed_request_id":b.Id})
+}
+
+func TestV14_RollbackThenRetryRunsOnce(t *testing.T){
+ e:=setup(t)
+ _,err:=e.Exec("CREATE TRIGGER fail_second_leg BEFORE INSERT ON transactions WHEN NEW.account_id=2 BEGIN SELECT RAISE(ABORT,'synthetic second-leg failure'); END")
+ if err!=nil{t.Fatal(err)}
+ if err=Transfer(1,1,1,2,1000,"rollback-key");err==nil{t.Fatal("injected business error must surface")}
+ if scalar(t,e,"SELECT COUNT(*) FROM idempotency_records")!=0||scalar(t,e,"SELECT COUNT(*) FROM transactions")!=0||scalar(t,e,"SELECT COUNT(*) FROM book_versions")!=0{t.Fatal("rollback left rows")}
+ if scalar(t,e,"SELECT balance FROM accounts WHERE id=1")!=100000{t.Fatal("rollback changed balance")}
+ if _,err=e.Exec("DROP TRIGGER fail_second_leg");err!=nil{t.Fatal(err)}
+ if err=Transfer(1,1,1,2,1000,"rollback-key");err!=nil{t.Fatal(err)}
+ if err=Transfer(1,1,1,2,1000,"rollback-key");err!=nil{t.Fatal(err)}
+ if scalar(t,e,"SELECT COUNT(*) FROM transactions")!=2||scalar(t,e,"SELECT version FROM book_versions WHERE book_id=1")!=1{t.Fatal("retry duplicated work")}
+ observation(t,map[string]any{"rollback_clears_receipt":true,"retry_and_replay_transactions":2,"version":1})
+}
+
+func TestV14_ConcurrentSameKeyWithSingleConnection(t *testing.T){
+ e:=setup(t);var wg sync.WaitGroup;errs:=make(chan error,16)
+ for i:=0;i<16;i++{wg.Add(1);go func(){defer wg.Done();errs<-Transfer(1,1,1,2,1000,"concurrent-key")}()}
+ wg.Wait();close(errs);for err:=range errs{if err!=nil{t.Fatal(err)}}
+ if scalar(t,e,"SELECT COUNT(*) FROM transactions")!=2||scalar(t,e,"SELECT COUNT(*) FROM idempotency_records")!=1{t.Fatal("duplicate business")}
+ observation(t,map[string]any{"callers":16,"transactions":2,"receipts":1,"max_open_connections":1})
+}
+
+func TestV14_EmptyUUIDDisablesIdempotency(t *testing.T){
+ e:=setup(t)
+ for i:=0;i<2;i++{if err:=Transfer(1,1,1,2,1000,"");err!=nil{t.Fatal(err)}}
+ if scalar(t,e,"SELECT COUNT(*) FROM transactions")!=4||scalar(t,e,"SELECT COUNT(*) FROM idempotency_records")!=0{t.Fatal("reviewed blank-key behavior changed")}
+ observation(t,map[string]any{"transactions":4,"receipts":0,"scope":"service only; no HTTP handler implemented"})
+}
+
+func TestV14_AddTransactionAcceptsTransferWithoutPair(t *testing.T){
+ e:=setup(t)
+ tx:=&models.Transaction{TxType:3,AccountId:1,RelatedAccountId:2,Amount:1000,TxTime:100,ClientUuid:"one-leg"}
+ if err:=AddTransaction(1,1,tx);err!=nil{t.Fatal(err)}
+ if scalar(t,e,"SELECT COUNT(*) FROM transactions")!=1||scalar(t,e,"SELECT balance FROM accounts WHERE id=1")!=100000||scalar(t,e,"SELECT balance FROM accounts WHERE id=2")!=0{t.Fatal("reviewed bypass changed")}
+ observation(t,map[string]any{"transactions":1,"source_balance":100000,"target_balance":0})
+}
+
+func TestV14_CreditRepaymentStillAddsDebt(t *testing.T){
+ e:=setup(t)
+ if _,err:=e.Exec("UPDATE accounts SET category=10,balance=10000 WHERE id=2");err!=nil{t.Fatal(err)}
+ before:=scalar(t,e,"SELECT balance FROM accounts WHERE id=1")-scalar(t,e,"SELECT balance FROM accounts WHERE id=2")
+ if err:=Transfer(1,1,1,2,10000,"credit-payment");err!=nil{t.Fatal(err)}
+ after:=scalar(t,e,"SELECT balance FROM accounts WHERE id=1")-scalar(t,e,"SELECT balance FROM accounts WHERE id=2")
+ if before!=90000||after!=70000{t.Fatalf("reviewed counterexample changed: before=%d after=%d",before,after)}
+ observation(t,map[string]any{"historical_finding":"R03","net_before":before,"net_after":after,"expected_net_after":90000})
+}
+
+func TestV14_TransferAccountVersionsAndTimesRemainZero(t *testing.T){
+ e:=setup(t)
+ if err:=Transfer(1,1,1,2,1000,"version-and-time");err!=nil{t.Fatal(err)}
+ changed:=scalar(t,e,"SELECT COUNT(*) FROM accounts WHERE sync_version>0")
+ epoch:=scalar(t,e,"SELECT COUNT(*) FROM transactions WHERE tx_time=0")
+ if changed!=0||epoch!=2{t.Fatal("reviewed omission changed")}
+ observation(t,map[string]any{"historical_finding":"R06","versioned_accounts":changed,"epoch_transactions":epoch})
+}

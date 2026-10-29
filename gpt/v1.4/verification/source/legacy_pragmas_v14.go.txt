@@ -1,0 +1,6 @@
+func (db *xorm.Engine) pragmas() {
+    db.DB().Exec("PRAGMA journal_mode=WAL;")       // 读写并发不互锁，大幅降低 SQLITE_BUSY
+    db.DB().Exec("PRAGMA busy_timeout=5000;")      // 遇锁等待 5s 自动重试，而非立刻报错
+    db.DB().Exec("PRAGMA foreign_keys=ON;")        // 开启外键约束（SQLite 默认关闭）
+    db.DB().Exec("PRAGMA synchronous=NORMAL;")     // WAL 下安全且更快
+}

@@ -1,0 +1,188 @@
+{
+  "source_commit": "9a3a2e38a6476450b04fea59c9cb49eb5dba7416",
+  "go_version": "go version go1.27.3 linux/amd64",
+  "dependencies": {
+    "xorm.io/xorm": "v1.4.3",
+    "github.com/mattn/go-sqlite3": "v1.14.52",
+    "github.com/shopspring/decimal": "v1.6.0"
+  },
+  "scope": "Extracted v1.4 transaction functions and Hub core with model/database/authz test bridges. Not the full app, real HTTP/WS or Flutter.",
+  "counterexample_suite_exit_code": 0,
+  "current_create_source_sha256": "63bf8df7b2ead8efb339b1c697a140b4d55f5f1f70a5539105cc6ad308f009fc",
+  "current_guide_schema_sha256": "113e59490cc18c242c3a6a686651bf836d5b87616126936d2d35ba773c2181ec",
+  "test_failure_output": "",
+  "tests": [
+    {
+      "package": "fastledger/internal/ws",
+      "test": "TestV14_HubConcurrentSubscribeBroadcastUnregister",
+      "action": "pass"
+    },
+    {
+      "package": "fastledger/internal/services",
+      "test": "TestUnified_TransferReplayReturnsSameIDsAndVersion",
+      "action": "pass"
+    },
+    {
+      "package": "fastledger/internal/services",
+      "test": "TestUnified_ChangedPayloadAndKindConflict",
+      "action": "pass"
+    },
+    {
+      "package": "fastledger/internal/services",
+      "test": "TestUnified_RejectsMissingKeyAndInvalidCommands",
+      "action": "pass"
+    },
+    {
+      "package": "fastledger/internal/services",
+      "test": "TestUnified_ReceiptInsertErrorDoesNotAcknowledge",
+      "action": "pass"
+    },
+    {
+      "package": "fastledger/internal/services",
+      "test": "TestUnified_FinalizationFailureRollsBackAndRetryRuns",
+      "action": "pass"
+    },
+    {
+      "package": "fastledger/internal/services",
+      "test": "TestUnified_SecondLegFailureRollsBackBothAccounts",
+      "action": "pass"
+    },
+    {
+      "package": "fastledger/internal/services",
+      "test": "TestUnified_AllAssetLiabilityDirectionsPreserveNetAssets/BB",
+      "action": "pass"
+    },
+    {
+      "package": "fastledger/internal/services",
+      "test": "TestUnified_AllAssetLiabilityDirectionsPreserveNetAssets/BK",
+      "action": "pass"
+    },
+    {
+      "package": "fastledger/internal/services",
+      "test": "TestUnified_AllAssetLiabilityDirectionsPreserveNetAssets/KB",
+      "action": "pass"
+    },
+    {
+      "package": "fastledger/internal/services",
+      "test": "TestUnified_AllAssetLiabilityDirectionsPreserveNetAssets/KK",
+      "action": "pass"
+    },
+    {
+      "package": "fastledger/internal/services",
+      "test": "TestUnified_AllAssetLiabilityDirectionsPreserveNetAssets",
+      "action": "pass"
+    },
+    {
+      "package": "fastledger/internal/services",
+      "test": "TestUnified_MemberAndAccountBoundaries",
+      "action": "pass"
+    },
+    {
+      "package": "fastledger/internal/services",
+      "test": "TestUnified_OverflowIsRejectedAtomically",
+      "action": "pass"
+    },
+    {
+      "package": "fastledger/internal/services",
+      "test": "TestUnified_IncompleteCommittedReceiptIsNotSuccess",
+      "action": "pass"
+    },
+    {
+      "package": "fastledger/internal/services",
+      "test": "TestUnified_ConcurrentRetriesReturnOneResult",
+      "action": "pass"
+    },
+    {
+      "package": "fastledger/internal/services",
+      "test": "TestUnified_IncomeExpenseUseSameEntry",
+      "action": "pass"
+    },
+    {
+      "package": "fastledger/internal/services",
+      "test": "TestUnified_HoldingVersionSignaturePropagated",
+      "action": "pass"
+    },
+    {
+      "package": "fastledger/internal/services",
+      "test": "TestUnified_IgnoredInsertCannotCommitEmptyTransfer",
+      "action": "pass"
+    },
+    {
+      "package": "fastledger/internal/services",
+      "test": "TestUnified_CurrentFreshDDLMatchesCreate",
+      "action": "pass"
+    },
+    {
+      "package": "fastledger/internal/services",
+      "test": "TestV14_ReceiptInsertFailureAcknowledgedAsSuccess",
+      "action": "pass"
+    },
+    {
+      "package": "fastledger/internal/services",
+      "test": "TestV14_ReceiptFinalizationFailureStillCommitsBusiness",
+      "action": "pass"
+    },
+    {
+      "package": "fastledger/internal/services",
+      "test": "TestV14_ChangedCategoryAndChannelReuseSameHash",
+      "action": "pass"
+    },
+    {
+      "package": "fastledger/internal/services",
+      "test": "TestV14_RollbackThenRetryRunsOnce",
+      "action": "pass"
+    },
+    {
+      "package": "fastledger/internal/services",
+      "test": "TestV14_ConcurrentSameKeyWithSingleConnection",
+      "action": "pass"
+    },
+    {
+      "package": "fastledger/internal/services",
+      "test": "TestV14_EmptyUUIDDisablesIdempotency",
+      "action": "pass"
+    },
+    {
+      "package": "fastledger/internal/services",
+      "test": "TestV14_AddTransactionAcceptsTransferWithoutPair",
+      "action": "pass"
+    },
+    {
+      "package": "fastledger/internal/services",
+      "test": "TestV14_CreditRepaymentStillAddsDebt",
+      "action": "pass"
+    },
+    {
+      "package": "fastledger/internal/services",
+      "test": "TestV14_TransferAccountVersionsAndTimesRemainZero",
+      "action": "pass"
+    },
+    {
+      "package": "fastledger/compilecheckfixed",
+      "test": "TestUnified_CurrentDSNAndAPI",
+      "action": "pass"
+    }
+  ],
+  "observations": [
+    "hub_test.go:17: OBSERVATION Hub core only; authorization uses stubs; real WS read/write lifecycle not exercised",
+    "transaction_test.go:46: OBSERVATION {\"balance\":100000,\"error\":null,\"transactions\":0}",
+    "transaction_test.go:57: OBSERVATION {\"empty_receipt_results\":1,\"error\":null,\"transactions\":2}",
+    "transaction_test.go:68: OBSERVATION {\"changed_payload_accepted\":true,\"hashes_equal\":true,\"replayed_request_id\":0}",
+    "transaction_test.go:82: OBSERVATION {\"retry_and_replay_transactions\":2,\"rollback_clears_receipt\":true,\"version\":1}",
+    "transaction_test.go:90: OBSERVATION {\"callers\":16,\"max_open_connections\":1,\"receipts\":1,\"transactions\":2}",
+    "transaction_test.go:97: OBSERVATION {\"receipts\":0,\"scope\":\"service only; no HTTP handler implemented\",\"transactions\":4}",
+    "transaction_test.go:105: OBSERVATION {\"source_balance\":100000,\"target_balance\":0,\"transactions\":1}",
+    "transaction_test.go:115: OBSERVATION {\"expected_net_after\":90000,\"historical_finding\":\"R03\",\"net_after\":70000,\"net_before\":90000}",
+    "transaction_test.go:124: OBSERVATION {\"epoch_transactions\":2,\"historical_finding\":\"R06\",\"versioned_accounts\":0}",
+    "db_test.go:11: OBSERVATION Current DSN verified: foreign_keys=1, journal_mode=wal, pool=1, SQLite=3.53.4"
+  ],
+  "compile_check": {
+    "expected": "fail for unchanged v1.4 API/receiver errors",
+    "exit_code": 1,
+    "output": "# fastledger/compilecheck\ncompilecheck/db.go:20:11: assignment mismatch: 2 variables but engine.DB returns 1 value\ncompilecheck/db.go:25:19: engine.QueryRow undefined (type *xorm.Engine has no field or method QueryRow)\ncompilecheck/pragmas.go:3:11: cannot define new methods on non-local type xorm.Engine\nFAIL\tfastledger/compilecheck [build failed]\nFAIL\n"
+  },
+  "limitations": [
+    "Counterexample tests assert defects are reproducible; passing does not mean the implementation is correct.",
+    "Race coverage is Hub core only; authorization is stubbed; no end-to-end WS/session validation."
+  ]
+}

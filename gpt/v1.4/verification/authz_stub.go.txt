@@ -1,0 +1,4 @@
+package services
+// Test stubs only: Hub races/cleanup are tested, real authorization is not.
+func CanSubscribe(uid, bookID int64) bool { return uid > 0 && bookID > 0 }
+func CanViewDetail(uid, bookID int64) bool { return uid > 0 && bookID > 0 }

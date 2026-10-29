@@ -126,6 +126,23 @@
 
 ---
 
+## 12. 幂等结果类型 IdempotencyResultType（`idempotency_records.result_type`）
+
+| 值 | 名称 | 说明 |
+|---|---|---|
+| 1 | SingleTransaction | 收入或支出；result_ids 包含一个交易 ID |
+| 2 | Transfer | 转账；result_ids 按转出、转入顺序包含两个交易 ID |
+
+0 不是已完成结果类型，不能用它判定重试成功。唯一键仍为 `(book_id,uid,client_uuid)`，不把 result_type 加入唯一键，否则同键跨类型会重复执行。回放必须同时核对 result_type、完整请求摘要及非空结果。
+
+`result_version` 是创建时的账本版本，完成回执必须为正；`result_ids` 与该版本在同一事务回写。该字段是水位，不是新增交易类型枚举。
+
+## 13. 恢复世代字段契约（非枚举）
+
+`instance_id` 为实例固定标识；`restore_epoch` 为每次恢复时递增的正整数，存放于独立的实例元数据，不随旧数据库备份回退。客户端以 `(instance_id,restore_epoch,book_id)` 区分游标世代，不能将 restore_epoch 当作交易 sync_version 或预设枚举值。
+
+---
+
 ## 维护规则
 
 1. 新增枚举：在对应表末尾追加，**不复用、不插队**，并在本文档注明启用版本。

@@ -615,6 +615,21 @@ CREATE TABLE book_versions (
   updated_at  INTEGER
 );
 
+-- 幂等操作回执：由唯一 Create 与业务变更在同一事务写入
+CREATE TABLE idempotency_records (
+  id             INTEGER PRIMARY KEY,
+  book_id        INTEGER NOT NULL,
+  uid            INTEGER NOT NULL,
+  client_uuid    VARCHAR(64) NOT NULL CHECK(length(trim(client_uuid)) BETWEEN 1 AND 64),
+  request_hash   VARCHAR(64) NOT NULL,       -- SHA-256：域标签 + 规范化完整业务命令
+  result_type    TINYINT NOT NULL CHECK(result_type IN (1,2)), -- 枚举字典：1=单笔 2=转账
+  result_ids     VARCHAR(128) NOT NULL DEFAULT '', -- 单笔一个；转账按 outID,inID 排列
+  result_version INTEGER NOT NULL DEFAULT 0,      -- 完成后必须为创建时的正版本号
+  created_at     INTEGER,
+  UNIQUE(book_id, uid, client_uuid)
+);
+-- 空 result_ids/0 result_version 仅允许作为当前事务内的占位；不允许提交不完整回执。
+
 -- 账本成员
 CREATE TABLE book_members (
   id            INTEGER PRIMARY KEY,
@@ -800,7 +815,7 @@ CREATE INDEX idx_budget_book ON budgets(book_id, deleted);
 |  | POST/PUT/DELETE `/books/{id}/categories...` | 分类管理（大类/小类） |
 | 交易 | GET `/books/{id}/transactions` | 交易列表（分页/过滤，参数：maxTime,minTime,type,accountId,categoryId,keyword,page,count） |
 |  | GET `/books/{id}/transactions/{txId}` | 详情 |
-|  | POST `/books/{id}/transactions` | 新增（支持单条/批量） |
+|  | POST `/books/{id}/transactions` | 统一 Create：收入/支出/转账，必传 clientUuid；批量按每条命令去重 |
 |  | PUT `/books/{id}/transactions/{txId}` | 修改 |
 |  | DELETE `/books/{id}/transactions/{txId}` | 软删除 |
 | 导出 | GET `/books/{id}/transactions/export` | **导出账单**：参数 format=csv/json、startTime/endTime/accountId/categoryId/type；返回文件流（CSV 带 BOM） |
@@ -819,7 +834,7 @@ CREATE INDEX idx_budget_book ON budgets(book_id, deleted);
 |  | PUT `/books/{id}/budgets/{bid}` | 修改 |
 |  | DELETE `/books/{id}/budgets/{bid}` | 删除 |
 | 同步 | GET `/books/{id}/sync/pull` | 拉取增量（参数：afterVersion） |
-|  | POST `/books/{id}/sync/push` | 推送离线队列（幂等 client_uuid） |
+|  | POST `/books/{id}/sync/push` | 每个离线创建项调用同一个 TxService.Create，携带稳定 clientUuid |
 
 **统一响应包**：
 
@@ -953,42 +968,20 @@ var embedFS embed.FS
 ```
 > Web 前端构建产物输出到 `webassets/`，编译时一起打进二进制；部署仍是单文件、单镜像。
 
-**Service 事务（递增版本号 + 新增交易 + 原子改余额 + 转账对侧）**：
-```go
-func (s *TxService) Create(c core.Context, bookID int64, req *models.Transaction) error {
-    return s.repo.Tx(c, func(sess *xorm.Session) error {
-        // 1) 账本级全局版本号 +1，拿到 newVersion（与本事务同生共死）
-        newVersion, err := s.version.Next(sess, bookID)
-        if err != nil {
-            return err
-        }
-        req.SyncVersion = newVersion
+**Service 事务裁决（唯一公开入口）**：
 
-        // 2) 插入交易
-        if _, err := sess.Insert(req); err != nil {
-            return err
-        }
-        // 3) 原子更新账户余额（单条 UPDATE，不先读后写，避免并发丢更新）
-        if err := s.account.ChangeBalance(sess, req.AccountID, signedAmount(req)); err != nil {
-            return err
-        }
-        // 4) 转账：生成对侧交易（同样带 newVersion）
-        if req.TxType == models.TxTransfer {
-            if err := s.createRelatedTransfer(sess, req, newVersion); err != nil {
-                return err
-            }
-        }
-        // 5) WS 广播（带版本号，放在事务提交后执行更稳妥）
-        return s.ws.PublishAfterCommit(bookID, "transaction.created", req, newVersion)
-    })
-}
-```
+依据 [转账入口裁决](FastLedger-转账入口裁决.md)，`TxService.Create(ctx,uid,bookID,CreateRequest) (*CreateResult,error)` 是唯一交易创建入口，包含收入、支出和转账。HTTP 创建与离线 push 共用它。有效参考实现只放在《新手开发完整指南》§13.1，并由隔离 Go/xorm/SQLite 测试抽取验证。
 
-> **`signedAmount(req)` 负债符号约定（对应评审 R03）**：必须按《枚举字典》§2 实现——负债账户（category 10~15，如信用卡）的 `balance` 以“正数=欠款”存储，故刷卡消费使余额**增加**（欠更多）、还款（转账入账）使余额**减少**；资产账户反之。不要在 `signedAmount` 里对负债用“负余额”，否则会与该约定及 §16.2 的 `净资产 = 资产 − 负债` 冲突，导致消费虚增净资产。`ChangeBalance` 只负责 `balance ± delta` 的原子执行，`delta` 的符号由 `signedAmount` 决定。
+唯一调用链：Handler/同步适配 → `TxService.Create`（校验、唯一事务、回执）→ `VersionRepo.Next`（一次版本）→ `createSingleInTx` 或 `createTransferInTx` → 完整回执 → Commit → 返回原结果/通知。
+
+- 转账分支负责两侧账户与两条关联记录，禁止先走通用单笔入账再追加另一个独立事务。
+- 旧 `createRelatedTransfer` 仅生成对侧的模糊调用与指南独立 `Transfer` 同时退出有效骨架；内部只保留带现有 session/version 的 `createTransferInTx`。
+- 正欠款符号、同账本引用、完整版本回写与请求发生时间均由同一条已验证骨架处理；不再保留另一套不检查账本/影响行数的余额 helper。
+- 通知只在提交后发送；通知失败不反转已提交结果。新发现及处理边界见 `gpt/v1.4/`，隔离验证不等于正式应用已通过端到端测试。
 
 **版本号递增 + 原子改余额（关键实现）**：
 ```go
-// 账本级全局版本号 +1
+// 唯一可调用的账本版本递增实现；各写服务通过 VersionSource 依赖它。
 func (r *VersionRepo) Next(sess *xorm.Session, bookID int64) (int64, error) {
     now := time.Now().Unix()
     if _, err := sess.Exec(`
@@ -1004,24 +997,12 @@ func (r *VersionRepo) Next(sess *xorm.Session, bookID int64) (int64, error) {
     return v.Version, nil
 }
 
-// 账户余额：单条原子 UPDATE，数据库行锁保证不丢更新（禁止先 SELECT 再回写）
-func (r *AccountRepo) ChangeBalance(sess *xorm.Session, accountID int64, deltaCents int64) error {
-    _, err := sess.Exec(
-        "UPDATE accounts SET balance = balance + ?, updated_at = ? WHERE id = ? AND deleted = 0",
-        deltaCents, time.Now().Unix(), accountID)
-    return err
-}
+// 余额原子更新统一采用指南 §13.1 的 createChangeBalance（账本/版本/溢出/行数检查）。
 ```
 
-**SQLite 连接初始化（建连时执行，务必打开）**：
-```go
-func (db *xorm.Engine) pragmas() {
-    db.DB().Exec("PRAGMA journal_mode=WAL;")       // 读写并发不互锁，大幅降低 SQLITE_BUSY
-    db.DB().Exec("PRAGMA busy_timeout=5000;")      // 遇锁等待 5s 自动重试，而非立刻报错
-    db.DB().Exec("PRAGMA foreign_keys=ON;")        // 开启外键约束（SQLite 默认关闭）
-    db.DB().Exec("PRAGMA synchronous=NORMAL;")     // WAL 下安全且更快
-}
-```
+**SQLite 连接初始化（唯一示例）**：
+
+统一引用《新手开发完整指南》§22.4 的 `initDB`：DSN 逐连接设置 WAL/foreign_keys/busy_timeout，`db := engine.DB()`，再用 `db.QueryRow(...)` 校验。旧的外包接收者 `func (db *xorm.Engine) pragmas()` 已移除。真实 DSN 与编译核验的范围见 `gpt/v1.4/verification/`。
 
 **首个 owner 初始化（不依赖公开注册）**：
 - 首次启动检测到 `users` 表为空时，进入**初始化向导**（网页/客户端显示"创建管理员账户"），或用命令行创建：
@@ -1103,7 +1084,7 @@ final text = await platform.invokeMethod('ocr', {'path': imagePath});
 3. **人工确认底线**：
    - Given 识别结果；Then 必须用户点确认才入库，不存在自动入库路径。
 4. **转账一致性**：
-   - When 新增一笔转账；Then 两账户余额反向变动、对侧交易生成；删除任一条则两条都失效。
+   - When 新增一笔转账；Then 按资产/负债符号更新两侧余额、两侧净资产贡献相抵，生成同版本的两条关联记录；还信用卡时储蓄余额与欠款都减少。删除任一条的正式实现须同时回滚双边并让两条都失效。
 5. **实时同步**：
    - When A 新增交易；Then 在线的 B 在 1 秒内收到事件并刷新。
 6. **离线补同步**：

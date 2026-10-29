@@ -1,0 +1,78 @@
+package ws
+
+import (
+	"context"
+	"sync"
+
+	"fastledger/internal/services" // CanSubscribe / CanViewDetail（见落地方案权限矩阵 §5.5）
+)
+
+// Client 一个客户端连接
+type Client struct {
+	mu      sync.Mutex
+	BookIds map[int64]bool // 仅保存“已通过服务端校验”的订阅账本
+	Send    chan []byte    // 约定：永不 close（多广播者并发发送，关闭易 panic），靠 Unregister 回收
+	Dropped int64          // Send 满导致丢弃的通知数（c.mu 下维护）
+	UID     int64          // 连接绑定认证用户（R05）
+}
+
+type Hub struct {
+	mu      sync.RWMutex
+	clients map[*Client]bool
+}
+
+var DefaultHub = &Hub{clients: make(map[*Client]bool)}
+
+func (h *Hub) Register(c *Client) {
+	h.mu.Lock()
+	h.clients[c] = true
+	h.mu.Unlock()
+}
+
+func (h *Hub) Unregister(c *Client) {
+	h.mu.Lock()
+	delete(h.clients, c)
+	h.mu.Unlock()
+}
+
+// Subscribe 经 Hub 受锁更新订阅（R18：所有订阅写都走同一把锁），
+// 且每个 bookId 都先由服务端校验成员资格（R05），不信任客户端上报的账本 ID。
+func (h *Hub) Subscribe(c *Client, bookIDs []int64, uid int64) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for _, b := range bookIDs {
+		if services.CanSubscribe(uid, b) { // 校验 uid 是否为该账本成员
+			c.mu.Lock()
+			c.BookIds[b] = true
+			c.mu.Unlock()
+		}
+	}
+	c.UID = uid
+}
+
+// BroadcastToBook 给“有权看到该账本”的在线成员推消息。
+// R05：广播前按接收者权限过滤；关闭互看时不发金额/账户/备注等敏感字段，
+// 仅发脱敏通知（sensitiveMsg 含 {event, bookId}），由客户端再走授权接口拉取明细。
+func (h *Hub) BroadcastToBook(bookId int64, msg []byte, sensitiveMsg []byte) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	for c := range h.clients {
+		c.mu.Lock()
+		sub := c.BookIds[bookId]
+		c.mu.Unlock()
+		if !sub {
+			continue
+		}
+		payload := msg
+		if !services.CanViewDetail(c.UID, bookId) {
+			payload = sensitiveMsg // 无权看他人明细：只通知“有更新”
+		}
+		// 非阻塞投递：Send 满不阻塞广播。WS 只是"尽力通知"，不是数据通道，
+		// 丢一个通知由客户端的周期性 pull 兜底（见下方 R18 约定与 §14.3 心跳）。
+		select {
+		case c.Send <- payload:
+		default:
+			c.mu.Lock(); c.Dropped++; c.mu.Unlock()
+		}
+	}
+}

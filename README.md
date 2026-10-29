@@ -23,6 +23,8 @@
 | [`docs/FastLedger-新手开发完整指南.md`](docs/FastLedger-新手开发完整指南.md) | 新手开发完整指南（含可照敲代码骨架） | 应届生照着做即可开发 |
 | [`docs/FastLedger-枚举字典.md`](docs/FastLedger-枚举字典.md) | 统一枚举字典（唯一权威来源） | 各端枚举值对齐 |
 | [`docs/ezbookkeeping-代码导读.md`](docs/ezbookkeeping-代码导读.md) | 开源参考项目 ezbookkeeping 代码导读 | 可借鉴的设计与实现 |
+| [`gpt/v1.4/`](gpt/v1.4/) | GPT 定向审核与真实运行核验 | v1.4 §6 复核、规范字段意见及入口裁决 |
+| [`docs/FastLedger-转账入口裁决.md`](docs/FastLedger-转账入口裁决.md) | 唯一 Create / 转账事务边界 | API、幂等、版本与接线的统一规则 |
 | [`CHANGELOG.md`](CHANGELOG.md) | 更新日志 | 各版本变更记录 |
 | [`workbuddy/第三方审阅者导读.md`](workbuddy/第三方审阅者导读.md) | 第三方审阅者导读 | **新来审阅 / 提意见者的对齐入口**（背景、迭代史、审阅约定） |
 

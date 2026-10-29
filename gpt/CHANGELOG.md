@@ -1,5 +1,11 @@
 # GPT 审查意见处理记录
 
+## 2026-10-29 · v1.4 定向复核 / 文档 v1.5
+
+新增 GPT-R19–GPT-R23，回填 GPT-R03/GPT-R06/GPT-R16 原编号证据。唯一创建入口裁决和修订参考骨架已同步 docs/；完整处理状态与范围以根 [CHANGELOG](../CHANGELOG.md) 最新节和 [逐条意见](v1.4/findings.json) 为准。
+
+真实验证工具及原/新结果位于 [v1.4/verification](v1.4/verification/README.md)。以下首轮记录为历史快照，不用旧“待确认”表覆盖最新处理结论。
+
 ## 2026-10-29 · 首次交付
 
 审查基线：`b8741465afa98a89ed99796c9e2c4a841b15a361`。

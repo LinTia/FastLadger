@@ -1,0 +1,27 @@
+func initDB() *xorm.Engine {
+	// 用 DSN 参数让 PRAGMA 对连接池中的【每一个】连接生效（R16）。
+	// 不能用 db.Exec("PRAGMA ...")：那只作用于当时拿到的某一个连接，
+	// 池里其他连接仍是默认值（实测 foreign_keys 会出现 [1,0] 混用）。
+	dsn := "file:./data/fastledger.db?" +
+		"_journal_mode=WAL&" +       // 读写不互锁
+		"_busy_timeout=5000&" +      // 遇锁等 5s 自动重试
+		"_foreign_keys=on&" +        // 外键约束每连接生效
+		"_synchronous=NORMAL"        // WAL 下安全且更快
+	engine, err := xorm.NewEngine("sqlite3", dsn)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// SQLite 同时只允许一个写连接。MVP 最稳妥：全局连接数限制为 1（完全串行，
+	// 家庭负载极小，无锁竞争）。如要发挥 WAL 的多读能力，可另建一个只读引擎
+	// （SetMaxOpenConns 放宽），写引擎保持 1，由代码按读写路由。
+	db, _ := engine.DB()
+	db.SetMaxOpenConns(1)
+
+	// 启动后校验一次，确认 PRAGMA 真的生效（而不是"执行了没报错"）
+	var fk int
+	if err := engine.QueryRow("PRAGMA foreign_keys").Scan(&fk); err != nil || fk != 1 {
+		log.Fatalf("foreign_keys 未生效（fk=%d, err=%v）", fk, err)
+	}
+	return engine
+}
