@@ -17,7 +17,7 @@
 
 | 路径 | 内容 | 用途 |
 |---|---|---|
-| [`prototype/`](prototype/) | 完整可交互原型（13 个核心页面，**零外部请求、可离线**） | 看产品长什么样、怎么交互，**可直接在浏览器运行** |
+| [`prototype/`](prototype/) | 完整可交互原型（13 个核心页面，**零外部请求、可离线**） | 看产品长什么样、怎么交互，**可直接在浏览器运行**；**公网在线版：[点此直接体验](https://a38ce1ad4e917321e.app.workbuddy.host/?sharecode=BPE6OFTPKE)**（由 WorkBuddy 托管，无需本地构建） |
 | [`docs/FastLedger-产品需求文档-PRD.md`](docs/FastLedger-产品需求文档-PRD.md) | 产品需求文档（PRD） | 做什么、为什么、范围与验收 |
 | [`docs/FastLedger-落地方案.md`](docs/FastLedger-落地方案.md) | 软件开发 8 环节落地方案 | 整体技术方案、数据模型、API、版本规划 |
 | [`docs/FastLedger-新手开发完整指南.md`](docs/FastLedger-新手开发完整指南.md) | 新手开发完整指南（含可照敲代码骨架） | 应届生照着做即可开发 |
@@ -41,6 +41,8 @@
 > 规则：需求/范围以 **PRD** 为准；技术选型以**落地方案**为准；枚举值以**枚举字典**为准。三份文档冲突时，按此优先级，并在 CHANGELOG 记录。
 
 ## 快速开始（运行原型）
+
+> **想直接体验，不用本地搭环境？** 打开公网在线版 👉 [https://a38ce1ad4e917321e.app.workbuddy.host/?sharecode=BPE6OFTPKE](https://a38ce1ad4e917321e.app.workbuddy.host/?sharecode=BPE6OFTPKE)（由 WorkBuddy 托管，含全部交互页面，演示账号已预填）。
 
 原型是纯前端应用，无需后端：
 

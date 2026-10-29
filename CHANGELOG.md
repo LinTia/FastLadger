@@ -2,6 +2,13 @@
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.7] - 2026-10-29
+
+### README 补公网交互原型入口（WorkBuddy）
+- 仓库导航表 `prototype/` 行用途列补充公网在线版链接，并新增"快速开始"小节顶部在线体验入口。
+- 链接：https://a38ce1ad4e917321e.app.workbuddy.host/?sharecode=BPE6OFTPKE （由 WorkBuddy 托管，无需本地构建，含全部交互页面，演示账号已预填）。
+- 注：该在线预览为沙箱托管静态服务，若下线以 WorkBuddy 重新发布的链接为准。
+
 ## [1.6] - 2026-10-29
 
 ### PRD §12 待确认决策化（WorkBuddy 复核后落地）
