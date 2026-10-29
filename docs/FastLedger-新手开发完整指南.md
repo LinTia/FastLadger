@@ -295,14 +295,15 @@ git init
 CREATE TABLE users (
   id          INTEGER PRIMARY KEY,
   username    VARCHAR(64) NOT NULL UNIQUE,
-  password    VARCHAR(128) NOT NULL,        -- 存 bcrypt 哈希，不存明文
+  password    VARCHAR(128) NOT NULL,        -- 存 bcrypt 哈希（已内含盐，无需 salt 列），不存明文
   nickname    VARCHAR(64) DEFAULT '',
-  email       VARCHAR(128) DEFAULT '',
+  email       VARCHAR(128) DEFAULT NULL,   -- 可选：自托管常无 SMTP，无邮箱用 NULL
   deleted     BOOLEAN DEFAULT 0,
   created_at  INTEGER,
   updated_at  INTEGER,
   deleted_at  INTEGER
 );
+CREATE UNIQUE INDEX idx_users_email ON users(email) WHERE email IS NOT NULL;
 
 -- 账本
 CREATE TABLE books (
@@ -310,9 +311,16 @@ CREATE TABLE books (
   name            VARCHAR(64) NOT NULL,
   owner_uid       INTEGER NOT NULL,
   default_currency VARCHAR(3) DEFAULT 'CNY',
-  members_visible BOOLEAN DEFAULT 1,        -- 成员是否默认互看
+  members_visible BOOLEAN DEFAULT 1,        -- 成员是否默认互看（账本级开关）
   deleted         BOOLEAN DEFAULT 0,
   created_at      INTEGER, updated_at INTEGER, deleted_at INTEGER
+);
+
+-- 账本级全局版本计数器（增量同步核心：每个账本一行，写事务内原子 +1）
+CREATE TABLE book_versions (
+  book_id     INTEGER PRIMARY KEY,
+  version     INTEGER NOT NULL DEFAULT 0,
+  updated_at  INTEGER
 );
 
 -- 账本成员（多对多：一个用户可加入多个账本，一个账本有多个成员）
@@ -330,13 +338,15 @@ CREATE TABLE book_members (
 CREATE TABLE accounts (
   id          INTEGER PRIMARY KEY,
   book_id     INTEGER NOT NULL,
-  category    TINYINT NOT NULL,             -- 见 6.2 账户分类
+  parent_id   INTEGER DEFAULT 0,            -- 仅用于 UI 分组（0=顶级），不参与余额计算，MVP 可先不启用
+  category    TINYINT NOT NULL,             -- 见 6.2 账户分类（1~15）
   name        VARCHAR(64) NOT NULL,
   currency    VARCHAR(3) DEFAULT 'CNY',
   balance     BIGINT DEFAULT 0,             -- 余额（分）；投资账户=现金部分，实物资产=估值
   icon        VARCHAR(64) DEFAULT '',
   sort_order  INTEGER DEFAULT 0,
   hidden      BOOLEAN DEFAULT 0,
+  sync_version INTEGER DEFAULT 0,          -- 账本级全局版本号（见 book_versions）
   deleted     BOOLEAN DEFAULT 0,
   created_at  INTEGER, updated_at INTEGER, deleted_at INTEGER
 );
@@ -352,6 +362,7 @@ CREATE TABLE categories (
   color       VARCHAR(8) DEFAULT '',
   sort_order  INTEGER DEFAULT 0,
   hidden      BOOLEAN DEFAULT 0,
+  sync_version INTEGER DEFAULT 0,           -- 账本级全局版本号
   deleted     BOOLEAN DEFAULT 0,
   created_at  INTEGER, updated_at INTEGER, deleted_at INTEGER
 );
@@ -373,7 +384,7 @@ CREATE TABLE transactions (
   related_amount    BIGINT DEFAULT 0,
   comment           VARCHAR(255) DEFAULT '',
   client_uuid       VARCHAR(64) DEFAULT '',  -- 端侧幂等去重
-  version           INTEGER DEFAULT 1,       -- 同步版本
+  sync_version      INTEGER DEFAULT 0,       -- 该行最后变更时的账本级全局版本号（见 book_versions）
   source            TINYINT DEFAULT 0,       -- 0=手动 1=识别 2=导入
   deleted           BOOLEAN DEFAULT 0,
   created_at        INTEGER, updated_at INTEGER, deleted_at INTEGER
@@ -698,8 +709,9 @@ import "time"
 type User struct {
 	Id        int64     `xorm:"pk autoincr"`
 	Username  string    `xorm:"varchar(64) notnull unique"`
-	Password  string    `xorm:"varchar(128) notnull"` // bcrypt 哈希
+	Password  string    `xorm:"varchar(128) notnull"` // bcrypt 哈希（自带盐）
 	Nickname  string    `xorm:"varchar(64)"`
+	Email     string    `xorm:"varchar(128) null"`    // 可选，无邮箱留空（NULL）
 	Deleted   bool      `xorm:"default 0"`
 	CreatedAt time.Time `xorm:"created"`
 	UpdatedAt time.Time `xorm:"updated"`
@@ -1480,9 +1492,64 @@ class BillRules {
 
 ## 22. 实时同步
 
-- 用 `web_socket_channel` 连接，收到 `transaction_created` 就刷新列表/首页；
-- 维护一个离线队列：本地记的账先存库，连上网络后按 `client_uuid` 补传；
+- 用 `web_socket_channel` 连接，收到 `transaction_created`（带版本号）就刷新列表/首页，并推进本地版本；
+- 维护一个离线队列：本地记的账先存库，连上网络后按 `client_uuid` 补传（重复提交不产生第二笔）；
 - App 启动和 WS 重连时，调 `sync/pull?afterVersion=本地最新版本` 拉增量。
+
+### 22.1 版本号怎么来的（一定要在写事务里做）
+
+每个账本在 `book_versions` 表有一个全局版本号，任何增/改/删都在**同一个事务**里：
+
+```go
+// 1) 版本号 +1（SQLite 原子 upsert）
+_, err := sess.Exec(`
+  INSERT INTO book_versions(book_id, version, updated_at) VALUES(?, 1, ?)
+  ON CONFLICT(book_id) DO UPDATE SET version = version + 1, updated_at = excluded.updated_at`,
+  bookID, time.Now().Unix())
+// 2) 查出新版本号
+bv := &models.BookVersion{}
+sess.Where("book_id=?", bookID).Get(bv)
+// 3) 把 bv.Version 写进本次变更实体的 sync_version
+tx.SyncVersion = bv.Version
+```
+
+### 22.2 增量拉取
+
+```go
+// 拉取 sync_version > afterVersion 的交易（账户/分类同理，按 sync_version 合并）
+txs, _ := sess.Where("book_id=? AND sync_version>?", bookID, afterVersion).
+  OrderBy("sync_version ASC").Find(&[]models.Transaction{})
+```
+
+### 22.3 冲突处理
+
+端侧 push 时若该实体在服务端的 `sync_version` 已比端侧基准大（被别人改过），返回 409，让用户选"覆盖 / 放弃 / 另存副本"。
+
+### 22.4 数据库连接务必开 WAL（否则并发读写容易报 SQLITE_BUSY）
+
+```go
+func initDB() *xorm.Engine {
+	engine, err := xorm.NewEngine("sqlite3", "./data/fastledger.db")
+	if err != nil {
+		log.Fatal(err)
+	}
+	db, _ := engine.DB()
+	db.Exec("PRAGMA journal_mode=WAL;")      // 读写不互锁
+	db.Exec("PRAGMA busy_timeout=5000;")    // 遇锁等 5s 自动重试
+	db.Exec("PRAGMA foreign_keys=ON;")
+	return engine
+}
+```
+
+### 22.5 第一个管理员怎么来（不靠公开注册）
+
+首次启动且 `users` 表为空时，用命令行创建（或首启向导）：
+
+```bash
+./fastledger user create --username admin --owner
+```
+
+建好后该入口失效；`ENABLE_REGISTER=false` 不影响它。
 
 ---
 ---

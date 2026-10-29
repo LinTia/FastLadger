@@ -29,7 +29,7 @@
 ## 1.1 产品定位
 
 - **自用 + 家庭共享**的私有记账系统，不做公开 SaaS、不做运营、不做商业化。
-- 核心价值：**记账动作足够快**（一键截图识别，3 秒内完成一笔），且**数据完全在自己手里**。
+- 核心价值：**记账动作足够快**（一键截图后识别结果 3 秒内弹出，含人工确认的完整一笔目标 15 秒内），且**数据完全在自己手里**。两个口径的区分见 §1.5。
 
 ## 1.2 目标用户与角色
 
@@ -83,10 +83,13 @@
 
 ## 1.5 非功能性需求
 
-- **性能**：单账本查询列表 P95 < 300ms（SQLite，家庭数据量）；端侧 OCR 单张 < 3 秒。
+- **性能**：
+  - 交易列表查询 P95 < 300ms（SQLite，家庭数据量）；
+  - **端侧 OCR 单张 < 3 秒**（截图到确认弹窗弹出，这是设计目标，不含人工操作）；
+  - **完整一笔（含人工确认）≤ 15 秒**（这是验收阈值，从触发到入账）。
 - **资源**：后端常驻内存 < 150MB（Go）；N100/N150 无压力。
-- **隐私**：原图不离开设备；默认只传结构化数据；云端识别仅传文本。
-- **安全**：全链路 HTTPS；JWT 鉴权；登录限流；密码加盐哈希。
+- **隐私**：原图不离开设备；默认只传结构化数据；云端识别仅传文本；**不做 GPS 定位采集**（交易表无经纬度字段）。
+- **安全**：全链路 HTTPS；JWT 鉴权；登录限流；密码用 bcrypt/argon2 哈希（算法自带盐，不另设 salt 列）。
 - **可用性**：数据每日备份（SQLite 单文件）；误删可恢复（软删除）。
 
 ---
@@ -295,9 +298,33 @@ lib/
 
 ## 3.5 实时同步与离线
 
-- **WebSocket**：客户端连接后按 `book_id` 订阅房间；后端把交易变更广播给同账本在线成员。
-- **离线**：Flutter 本地 Drift 库记录"待同步队列"，每条带 `clientUuid`（幂等）+ `version`；联网后按队列提交，服务端用 `clientUuid` 去重。
-- **冲突策略**：以"最后修改 + 版本号"为准，同版本冲突时以后提交覆盖并提示（家庭场景概率极低，不做复杂 CRDT）。
+### 全局版本号机制（增量同步的基石）
+
+每个账本在 `book_versions` 表维护一个**单调递增的全局版本号**，规则：
+
+1. **任何写事务**（新增/修改/删除 交易、账户、分类、标签、持仓等）在同一个数据库事务内：
+   - 先对 `book_versions` 做**原子递增**并拿到新版本号 `newVersion`；
+   - 再把 `newVersion` 写入本次变更实体的 `sync_version` 字段。
+2. 客户端本地记录"我已同步到的版本号" `lastSyncVersion`；调 `GET /sync/pull?afterVersion={lastSyncVersion}`：
+   - 服务端分别查各实体表 `WHERE book_id=? AND sync_version > ?`，按 `sync_version` 升序合并返回；
+   - 客户端应用后更新本地 `lastSyncVersion` 为返回的最大值。
+3. 版本号在**账本级**递增（不按用户/设备），保证同一账本所有成员看到一致的变更顺序。
+
+SQLite 原子递增（在事务内，配合 `busy_timeout` 自动重试）：
+```sql
+INSERT INTO book_versions(book_id, version, updated_at) VALUES(?, 1, ?)
+  ON CONFLICT(book_id) DO UPDATE SET version = version + 1, updated_at = excluded.updated_at;
+SELECT version FROM book_versions WHERE book_id = ?;   -- 取 newVersion 回写到实体
+```
+
+> 为什么不用实体自增 id 做增量：自增 id 只在"新增"时变大，**修改/删除不会变**，且离线端可能先建了临时 id，无法靠它判断"我缺了哪些变更"。全局版本号 + 实体 `sync_version` 才能覆盖增、改、删。
+
+### 实时推送与离线
+
+- **WebSocket**：客户端连接后按 `book_id` 订阅房间；后端把每次变更（含 `newVersion`）广播给同账本在线成员，在线成员收到即更新并推进 `lastSyncVersion`。
+- **离线**：Flutter 本地 Drift 库记录"待同步队列"，每条带 `clientUuid`（幂等）；联网后按队列调 `POST /sync/push`，服务端用 `clientUuid` 去重（重复提交不产生第二笔）。
+- **断线重连**：重连后先 `sync/pull` 补齐离线期间错过的变更，再走 WS。
+- **冲突策略（已确定）**：以"最后修改 + 版本号"为准——服务端是权威版本，端侧 push 时若该实体服务端版本已更新（`sync_version` 更大），返回冲突，让用户选择"覆盖 / 放弃 / 另存副本"（家庭场景概率极低，不做复杂 CRDT）。
 
 ---
 
@@ -545,20 +572,21 @@ users ──< book_members >── books
 CREATE TABLE users (
   id              INTEGER PRIMARY KEY,
   username        VARCHAR(32)  NOT NULL UNIQUE,
-  email           VARCHAR(100) NOT NULL UNIQUE,
-  password_hash   VARCHAR(128) NOT NULL,
-  salt            VARCHAR(16)  NOT NULL,
+  email           VARCHAR(100) DEFAULT NULL,   -- 可选：家庭自托管常无 SMTP，不强制邮箱
+  password_hash   VARCHAR(128) NOT NULL,        -- bcrypt/argon2 哈希，算法已内含随机盐，无需独立 salt 列
   nickname        VARCHAR(64)  NOT NULL,
   avatar_type     TINYINT      DEFAULT 0,
   language        VARCHAR(10)  DEFAULT 'zh-CN',
   disabled        BOOLEAN      DEFAULT 0,
   deleted         BOOLEAN      DEFAULT 0,
-  email_verified  BOOLEAN      DEFAULT 0,
+  email_verified  BOOLEAN      DEFAULT 0,       -- 仅在配置了 SMTP 时才启用验证
   created_at      INTEGER,
   updated_at      INTEGER,
   deleted_at      INTEGER,
   last_login_at   INTEGER
 );
+-- 仅对非空邮箱做唯一约束（SQLite 中多个 NULL 不冲突，多个 '' 会冲突，故无邮箱用 NULL）
+CREATE UNIQUE INDEX idx_users_email ON users(email) WHERE email IS NOT NULL;
 
 -- 账本
 CREATE TABLE books (
@@ -578,6 +606,13 @@ CREATE TABLE books (
   deleted_at       INTEGER
 );
 
+-- 账本级全局版本计数器（增量同步的核心：每个账本一行，任何写事务内原子 +1）
+CREATE TABLE book_versions (
+  book_id     INTEGER PRIMARY KEY,
+  version     INTEGER NOT NULL DEFAULT 0,   -- 该账本当前全局版本号，单调递增
+  updated_at  INTEGER
+);
+
 -- 账本成员
 CREATE TABLE book_members (
   id            INTEGER PRIMARY KEY,
@@ -594,8 +629,8 @@ CREATE INDEX idx_book_members_uid ON book_members(uid);
 CREATE TABLE accounts (
   id            INTEGER PRIMARY KEY,
   book_id       INTEGER NOT NULL,
-  parent_id     INTEGER DEFAULT 0,          -- 两级账户
-  category      TINYINT NOT NULL,           -- 现金/储蓄/信用/资产/负债
+  parent_id     INTEGER DEFAULT 0,          -- 仅用于 UI 分组（如"信用卡组"下挂多张卡），0=顶级；不参与余额计算，MVP 可先不启用
+  category      TINYINT NOT NULL,           -- 账户分类，见 AccountCategory 枚举（1~15）
   type          TINYINT DEFAULT 0,          -- 0=系统预置 1=自定义
   name          VARCHAR(64) NOT NULL,
   currency      VARCHAR(3) DEFAULT 'CNY',
@@ -604,6 +639,7 @@ CREATE TABLE accounts (
   color         VARCHAR(8) DEFAULT '',
   sort_order    INTEGER DEFAULT 0,
   hidden        BOOLEAN DEFAULT 0,
+  sync_version  INTEGER DEFAULT 0,          -- 账本级全局版本号（见 book_versions）
   deleted       BOOLEAN DEFAULT 0,
   created_at    INTEGER,
   updated_at    INTEGER,
@@ -615,13 +651,14 @@ CREATE INDEX idx_accounts_book ON accounts(book_id, deleted, parent_id, sort_ord
 CREATE TABLE categories (
   id          INTEGER PRIMARY KEY,
   book_id     INTEGER NOT NULL,
-  parent_id   INTEGER DEFAULT 0,
+  parent_id   INTEGER DEFAULT 0,            -- 0=大类，否则为所属大类 id；骨架支持未来多级
   cat_type    TINYINT NOT NULL,             -- 1=收入 2=支出
   name        VARCHAR(64) NOT NULL,
   icon        VARCHAR(64) DEFAULT '',
   color       VARCHAR(8) DEFAULT '',
   sort_order  INTEGER DEFAULT 0,
   hidden      BOOLEAN DEFAULT 0,
+  sync_version INTEGER DEFAULT 0,           -- 账本级全局版本号（见 book_versions）
   deleted     BOOLEAN DEFAULT 0,
   created_at  INTEGER,
   updated_at  INTEGER,
@@ -645,10 +682,8 @@ CREATE TABLE transactions (
   related_account_id INTEGER DEFAULT 0,
   related_amount    BIGINT DEFAULT 0,
   comment           VARCHAR(255) DEFAULT '',
-  geo_lng           REAL,
-  geo_lat           REAL,
   client_uuid       VARCHAR(64) DEFAULT '',  -- 端侧幂等去重
-  version           INTEGER DEFAULT 1,       -- 同步版本
+  sync_version      INTEGER DEFAULT 0,       -- 该行最后变更时的账本级全局版本号（见 book_versions），用于增量同步
   source            TINYINT DEFAULT 0,       -- 0=手动 1=识别 2=导入(预留)
   scheduled         BOOLEAN DEFAULT 0,       -- 定时交易预留
   deleted           BOOLEAN DEFAULT 0,
@@ -697,8 +732,10 @@ CREATE TABLE instruments (
 CREATE TABLE holdings (
   id INTEGER PRIMARY KEY, book_id INTEGER NOT NULL,
   account_id INTEGER NOT NULL, instrument_id INTEGER NOT NULL,
+  -- quantity/current_price 用字符串存高精度十进制；Go 内部必须用 shopspring/decimal 运算，
+  -- 严禁 float32/64（股票/基金份额会出现精度误差）；写入前校验为合法十进制字符串
   quantity VARCHAR(48) NOT NULL, cost_amount BIGINT DEFAULT 0,
-  current_price VARCHAR(48) DEFAULT '', market_value BIGINT DEFAULT 0,
+  current_price VARCHAR(48) DEFAULT '0', market_value BIGINT DEFAULT 0,
   updated_at INTEGER, UNIQUE(account_id, instrument_id)
 );
 CREATE TABLE instrument_prices (
@@ -914,27 +951,80 @@ var embedFS embed.FS
 ```
 > Web 前端构建产物输出到 `webassets/`，编译时一起打进二进制；部署仍是单文件、单镜像。
 
-**Service 事务（新增交易 + 余额 + 转账对侧）**：
+**Service 事务（递增版本号 + 新增交易 + 原子改余额 + 转账对侧）**：
 ```go
 func (s *TxService) Create(c core.Context, bookID int64, req *models.Transaction) error {
     return s.repo.Tx(c, func(sess *xorm.Session) error {
+        // 1) 账本级全局版本号 +1，拿到 newVersion（与本事务同生共死）
+        newVersion, err := s.version.Next(sess, bookID)
+        if err != nil {
+            return err
+        }
+        req.SyncVersion = newVersion
+
+        // 2) 插入交易
         if _, err := sess.Insert(req); err != nil {
             return err
         }
-        // 更新账户余额
+        // 3) 原子更新账户余额（单条 UPDATE，不先读后写，避免并发丢更新）
         if err := s.account.ChangeBalance(sess, req.AccountID, signedAmount(req)); err != nil {
             return err
         }
-        // 转账：生成对侧交易
+        // 4) 转账：生成对侧交易（同样带 newVersion）
         if req.TxType == models.TxTransfer {
-            if err := s.createRelatedTransfer(sess, req); err != nil {
+            if err := s.createRelatedTransfer(sess, req, newVersion); err != nil {
                 return err
             }
         }
-        return s.ws.Publish(bookID, "transaction.created", req)
+        // 5) WS 广播（带版本号，放在事务提交后执行更稳妥）
+        return s.ws.PublishAfterCommit(bookID, "transaction.created", req, newVersion)
     })
 }
 ```
+
+**版本号递增 + 原子改余额（关键实现）**：
+```go
+// 账本级全局版本号 +1
+func (r *VersionRepo) Next(sess *xorm.Session, bookID int64) (int64, error) {
+    now := time.Now().Unix()
+    if _, err := sess.Exec(`
+        INSERT INTO book_versions(book_id, version, updated_at) VALUES(?, 1, ?)
+        ON CONFLICT(book_id) DO UPDATE SET version = version + 1, updated_at = excluded.updated_at`,
+        bookID, now); err != nil {
+        return 0, err
+    }
+    var v models.BookVersion
+    if _, err := sess.Where("book_id = ?", bookID).Get(&v); err != nil {
+        return 0, err
+    }
+    return v.Version, nil
+}
+
+// 账户余额：单条原子 UPDATE，数据库行锁保证不丢更新（禁止先 SELECT 再回写）
+func (r *AccountRepo) ChangeBalance(sess *xorm.Session, accountID int64, deltaCents int64) error {
+    _, err := sess.Exec(
+        "UPDATE accounts SET balance = balance + ?, updated_at = ? WHERE id = ? AND deleted = 0",
+        deltaCents, time.Now().Unix(), accountID)
+    return err
+}
+```
+
+**SQLite 连接初始化（建连时执行，务必打开）**：
+```go
+func (db *xorm.Engine) pragmas() {
+    db.DB().Exec("PRAGMA journal_mode=WAL;")       // 读写并发不互锁，大幅降低 SQLITE_BUSY
+    db.DB().Exec("PRAGMA busy_timeout=5000;")      // 遇锁等待 5s 自动重试，而非立刻报错
+    db.DB().Exec("PRAGMA foreign_keys=ON;")        // 开启外键约束（SQLite 默认关闭）
+    db.DB().Exec("PRAGMA synchronous=NORMAL;")     // WAL 下安全且更快
+}
+```
+
+**首个 owner 初始化（不依赖公开注册）**：
+- 首次启动检测到 `users` 表为空时，进入**初始化向导**（网页/客户端显示"创建管理员账户"），或用命令行创建：
+  ```bash
+  docker exec -it fastledger /app/fastledger user create --username admin --owner
+  ```
+- 该流程只在"无任何用户"时可用，建好后自动失效；`EBK_ENABLE_REGISTER=false` 不影响它。
 
 ## 6.2 关键代码骨架（Flutter）
 
