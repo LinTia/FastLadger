@@ -2,6 +2,14 @@
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.10] - 2026-10-30
+
+### owner 裁决：删除恢复审计转【决策】+ 断电持久性运维加固
+- **§12.1「删除恢复与审计」由【待确认】转【决策】**：采纳 C 的设计建议（owner 确认：回收站 30 天、审计保留 1 年）。改动 `docs/FastLedger-产品需求文档-PRD.md` §12.1，含回收站与保留期、转账双边整笔删除/恢复、审计日志表 append-only、旧离线数据回流、恢复演练验收、统一 `TxService.Delete/Restore` 入口。
+- **§8.5 部署与运维新增 4 条加固**：备份原子包含 WAL、优雅关机 checkpoint（`stop_grace_period`）、FULL 不替代备份且须恢复演练、恢复后递增 `restore_epoch`。
+- **§10 新增 10.9 备份恢复与审计验收**（恢复演练、转账双边删除/恢复、审计可追溯）。
+- **同步技术方案（遵循"设计改→方案同步"纪律）**：`docs/FastLedger-落地方案.md` §8.1 docker-compose 增 `stop_grace_period: 30s`；§8.3 备份与恢复增"恢复演练（必做）"与 WAL 注意事项。
+
 ## [1.9] - 2026-10-29
 
 ### owner 裁决：采纳 C-R03 / C-R05 / C-R06

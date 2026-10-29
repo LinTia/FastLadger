@@ -1115,6 +1115,7 @@ services:
     image: fastledger:latest
     container_name: fastledger
     restart: unless-stopped
+    stop_grace_period: 30s              # 处理 SIGTERM → 关闭引擎触发 WAL checkpoint，勿直接 SIGKILL
     environment:
       - EBK_HTTP_PORT=8080
       - EBK_JWT_SECRET=请改成随机长字符串
@@ -1164,6 +1165,8 @@ ledger.your-domain.com {
 - 配置和 Caddy 数据一并备份。
 - 恢复：停容器 → 替换 db 文件 → **递增 `data/instance.meta` 的 `restore_epoch`（该文件不随备份恢复，详见指南 §26.1）** → 启动。
 - 客户端发现 `restore_epoch` 变化后停止旧游标增量同步，全量重建本地库，并逐条核对离线队列（R10），避免恢复后被旧缓存覆盖或重复。
+- **恢复演练（必做）**：备份未经验证等于没有备份。建议每月一次：新实例恢复最近备份 → 校验记录数与关键汇总（净资产、本月收支）→ 递增 `restore_epoch` → 客户端全量重建后抽查读写。演练结果记入运维记录（对应 PRD §10.9）。
+- **WAL 注意事项**：若用文件复制而非 `.backup`/`VACUUM INTO`，须先 `PRAGMA wal_checkpoint(TRUNCATE)` 或停容器，否则 `-wal` 中尚未 checkpoint 的事务会丢失。
 
 ## 8.4 监控与安全
 
