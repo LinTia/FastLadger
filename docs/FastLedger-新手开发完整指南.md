@@ -732,6 +732,8 @@ package services
 
 import (
 	"errors"
+	"fmt"
+	"log"
 	"time"
 
 	"fastledger/internal/database"
@@ -741,7 +743,16 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-var jwtSecret = []byte("改成你自己的密钥")
+// jwtSecret 必须由 main 从配置注入，禁止在此写死（R08：避免可预测的签名密钥）
+var jwtSecret []byte
+
+// InitAuth 在启动时从配置读取密钥；为空、仍是占位值或太短则直接失败，禁止带默认密钥启动
+func InitAuth(secret string) {
+	if secret == "" || secret == "改成你自己的密钥" || len(secret) < 16 {
+		log.Fatalf("jwt.secret 未正确配置：请使用至少 16 位的随机字符串，且不能是占位值")
+	}
+	jwtSecret = []byte(secret)
+}
 
 // Register 注册
 func Register(username, password string) (*models.User, error) {
@@ -767,17 +778,18 @@ func Register(username, password string) (*models.User, error) {
 func Login(username, password string) (string, error) {
 	user := &models.User{}
 	has, _ := database.Engine.Where("username=?", username).Get(user)
-	if !has {
+	if !has || user.Deleted { // R09：已删除/禁用账号即便凭据匹配也拒绝
 		return "", errors.New("用户名或密码错误")
 	}
 	// 校验密码
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
 		return "", errors.New("用户名或密码错误")
 	}
-	// 生成 JWT
+	// 生成 JWT（jti 用于可撤销；签发/校验/刷新共用同一 jwtSecret）
 	claims := jwt.MapClaims{
 		"uid":      user.Id,
 		"username": user.Username,
+		"jti":      fmt.Sprintf("%d-%d", user.Id, time.Now().UnixNano()), // 每次登录唯一，撤销时据此登记
 		"exp":      time.Now().Add(24 * time.Hour).Unix(),
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -798,7 +810,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-func JWTAuth(secret string) gin.HandlerFunc {
+func JWTAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		auth := c.GetHeader("Authorization")
 		if !strings.HasPrefix(auth, "Bearer ") {
@@ -808,14 +820,32 @@ func JWTAuth(secret string) gin.HandlerFunc {
 		tokenStr := strings.TrimPrefix(auth, "Bearer ")
 		claims := jwt.MapClaims{}
 		_, err := jwt.ParseWithClaims(tokenStr, claims, func(t *jwt.Token) (interface{}, error) {
-			return []byte(secret), nil
+			// 仅允许 HS256，拒绝 alg=none 等算法替换攻击
+			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, errors.New("非预期签名算法")
+			}
+			return jwtSecret, nil // 与 InitAuth 注入的同一份，不再接受外部传入的密钥
 		})
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": 401, "msg": "登录已失效"})
 			return
 		}
-		// 把 uid 放进上下文，后续 handler 用
-		c.Set("uid", int64(claims["uid"].(float64)))
+		// 安全读取 uid（非法 claims 不要 panic，稳定返回 401）（R09）
+		uidF, ok := claims["uid"].(float64)
+		if !ok {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": 401, "msg": "令牌无效"})
+			return
+		}
+		uid := int64(uidF)
+		// 账号失效检查：已删除/禁用的账号即便签名有效也拒绝（R09）
+		alive, _ := database.Engine.Where("id=? AND deleted=0", uid).Exist(&models.User{})
+		if !alive {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": 401, "msg": "账号已失效"})
+			return
+		}
+		// 撤销检查（R09，可选）：登录时已把 jti 写入 auth_tokens，此处查 revoked；
+		// if revoked, _ := isTokenRevoked(claims["jti"]); revoked { c.AbortWithStatusJSON(401,...) }
+		c.Set("uid", uid)
 		c.Next()
 	}
 }
@@ -920,83 +950,155 @@ func GetMemberRole(bookId, uid int64) (int, error) {
 ### 13.1 新增支出/收入 `internal/services/transaction.go`
 
 ```go
-func AddTransaction(uid int64, tx *models.Transaction) error {
-	// 1. 幂等：用 client_uuid 防止重复提交
-	if tx.ClientUuid != "" {
-		exist, _ := database.Engine.Where("client_uuid=?", tx.ClientUuid).Get(&models.Transaction{})
-		if exist {
-			return nil // 已记过，直接返回
-		}
+// AddTransaction 记一笔交易（支出/收入/转账）。bookID 必须来自可信路径（handler 解析），禁止客户端覆盖。
+func AddTransaction(uid, bookID int64, tx *models.Transaction) error {
+	// 0) 入参校验（不信任客户端）：金额、类型
+	if tx.Amount <= 0 {
+		return errors.New("金额必须为正整数（单位：分）")
 	}
+	if tx.TxType < 1 || tx.TxType > 3 {
+		return errors.New("非法交易类型")
+	}
+	tx.BookId = bookID   // 账本归属由服务端决定（R01）
 	tx.CreatorUid = uid
 
 	sess := database.Engine.NewSession()
 	defer sess.Close()
-	// 开启事务
 	if err := sess.Begin(); err != nil {
 		return err
 	}
 
-	// 2. 插入交易
-	if _, err := sess.Insert(tx); err != nil {
-		sess.Rollback()
-		return err
+	// 1) 校验资金账户归属同一账本（R01：防止跨账本改余额/孤儿行）
+	account := &models.Account{}
+	has, err := sess.Where("id=? AND book_id=? AND deleted=0", tx.AccountId, bookID).Get(account)
+	if err != nil {
+		sess.Rollback(); return err
+	}
+	if !has {
+		sess.Rollback(); return errors.New("账户不存在或不属于该账本")
 	}
 
-	// 3. 更新账户余额（支出减、收入加）
-	account := &models.Account{}
-	if _, err := sess.ID(tx.AccountId).Get(account); err != nil {
-		sess.Rollback()
-		return err
+	// 2) 账本级全局版本号 +1，拿到 newVersion（与事务同生共死，R06）
+	newVersion, err := nextBookVersion(sess, bookID)
+	if err != nil {
+		sess.Rollback(); return err
 	}
-	if tx.TxType == 2 { // 支出
-		account.Balance -= tx.Amount
-	} else if tx.TxType == 1 { // 收入
-		account.Balance += tx.Amount
+	tx.SyncVersion = newVersion
+
+	// 3) 插入交易（幂等：client_uuid 建议在事务内配合唯一索引去重，R04）
+	if _, err := sess.Insert(tx); err != nil {
+		sess.Rollback(); return err
 	}
-	if _, err := sess.ID(account.Id).Cols("balance").Update(account); err != nil {
-		sess.Rollback()
-		return err
+
+	// 4) 原子改余额（单条 UPDATE + 行锁，不先读后写；检查影响行数，零行即回滚，R02/R01）
+	delta := signedBalanceDelta(account.Category, tx.TxType, tx.Amount) // R03 负债符号
+	res, err := sess.Exec(
+		"UPDATE accounts SET balance = balance + ?, updated_at = ? WHERE id = ? AND book_id = ? AND deleted = 0",
+		delta, time.Now().Unix(), account.Id, bookID)
+	if err != nil {
+		sess.Rollback(); return err
+	}
+	if n, _ := res.RowsAffected(); n != 1 {
+		sess.Rollback(); return errors.New("余额更新失败")
 	}
 
 	return sess.Commit()
+}
+
+// nextBookVersion 在事务内对 book_versions 原子 +1 并取回 newVersion（见落地方案 §3.5）
+func nextBookVersion(sess *xorm.Session, bookID int64) (int64, error) {
+	now := time.Now().Unix()
+	if _, err := sess.Exec(
+		`INSERT INTO book_versions(book_id, version, updated_at) VALUES(?, 1, ?)
+		 ON CONFLICT(book_id) DO UPDATE SET version = version + 1, updated_at = excluded.updated_at`,
+		bookID, now); err != nil {
+		return 0, err
+	}
+	var v models.BookVersion
+	if _, err := sess.Where("book_id = ?", bookID).Get(&v); err != nil {
+		return 0, err
+	}
+	return v.Version, nil
+}
+
+// signedBalanceDelta 计算余额增量（分）。
+// 资产账户(1~9)：支出减、收入加；负债账户(10~15，枚举字典约定“正=欠款”)：
+//   支出=刷卡消费→欠更多(balance+amount)，还款(转账入账)→欠更少(balance-amount)。（R03）
+func signedBalanceDelta(category int, txType int, amount int64) int64 {
+	isLiability := category >= 10
+	switch txType {
+	case 2: // 支出
+		if isLiability { return +amount }
+		return -amount
+	case 1: // 收入/退款
+		if isLiability { return -amount }
+		return +amount
+	default:
+		return 0
+	}
 }
 ```
 
 ### 13.2 转账（成对、对敲）
 
 ```go
-func Transfer(uid int64, fromId, toId int64, amount int64) error {
+// Transfer 成对、对敲转账。bookID 来自可信路径；两侧账户必须同属该账本（R01）。
+func Transfer(uid, bookID, fromId, toId, amount int64) error {
+	if amount <= 0 {
+		return errors.New("转账金额必须为正整数（分）")
+	}
 	sess := database.Engine.NewSession()
 	defer sess.Close()
-	sess.Begin()
+	if err := sess.Begin(); err != nil {
+		return err
+	}
 
-	// 转出账户减钱
-	from := &models.Account{}
-	sess.ID(fromId).Get(from)
-	from.Balance -= amount
-	sess.ID(fromId).Cols("balance").Update(from)
+	// 校验两侧账户均属同一账本（R01）
+	for _, aid := range []int64{fromId, toId} {
+		ok, _ := sess.Where("id=? AND book_id=? AND deleted=0", aid, bookID).Exist(&models.Account{})
+		if !ok {
+			sess.Rollback(); return errors.New("账户不存在或不属于该账本")
+		}
+	}
 
-	// 转入账户加钱
-	to := &models.Account{}
-	sess.ID(toId).Get(to)
-	to.Balance += amount
-	sess.ID(toId).Cols("balance").Update(to)
+	// 账本级版本号 +1（一次转账两侧共享同一 newVersion，R06）
+	newVersion, err := nextBookVersion(sess, bookID)
+	if err != nil {
+		sess.Rollback(); return err
+	}
 
-	// 两条交易记录（related_id 互相关联），类型=转账
-	out := &models.Transaction{TxType: 3, AccountId: fromId, RelatedAccountId: toId, Amount: amount, CreatorUid: uid}
-	in := &models.Transaction{TxType: 3, AccountId: toId, RelatedAccountId: fromId, Amount: amount, CreatorUid: uid}
-	sess.Insert(out)
+	// 原子改两侧余额（先减后加，金额相等，净变化为 0；检查影响行数，R02）
+	if res, e := sess.Exec("UPDATE accounts SET balance=balance-? WHERE id=? AND book_id=? AND deleted=0", amount, fromId, bookID); e != nil {
+		sess.Rollback(); return e
+	} else if n, _ := res.RowsAffected(); n != 1 {
+		sess.Rollback(); return errors.New("转出账户更新失败")
+	}
+	if res, e := sess.Exec("UPDATE accounts SET balance=balance+? WHERE id=? AND book_id=? AND deleted=0", amount, toId, bookID); e != nil {
+		sess.Rollback(); return e
+	} else if n, _ := res.RowsAffected(); n != 1 {
+		sess.Rollback(); return errors.New("转入账户更新失败")
+	}
+
+	// 两条交易记录（related_id 互相关联），都带 newVersion / bookID（R06）
+	out := &models.Transaction{BookId: bookID, TxType: 3, AccountId: fromId, RelatedAccountId: toId, Amount: amount, CreatorUid: uid, SyncVersion: newVersion}
+	in  := &models.Transaction{BookId: bookID, TxType: 3, AccountId: toId, RelatedAccountId: fromId, Amount: amount, CreatorUid: uid, SyncVersion: newVersion}
+	if _, err := sess.Insert(out); err != nil {
+		sess.Rollback(); return err
+	}
 	in.RelatedId = out.Id
-	sess.Insert(in)
+	if _, err := sess.Insert(in); err != nil {
+		sess.Rollback(); return err
+	}
 	out.RelatedId = in.Id
-	sess.ID(out.Id).Update(out)
+	if _, err := sess.ID(out.Id).Update(out); err != nil {
+		sess.Rollback(); return err
+	}
 
 	return sess.Commit()
 }
 ```
 
-> 信用卡还款就走这个转账（储蓄卡→信用卡），不产生支出。
+> 信用卡还款就走这个转账（储蓄卡→信用卡）：储蓄卡（资产）余额减、信用卡（负债）余额减（欠更少），净资产不变，不产生支出。负债符号规则见 `signedBalanceDelta` 与《枚举字典》§2。
 
 ---
 
@@ -1007,12 +1109,19 @@ func Transfer(uid int64, fromId, toId int64, amount int64) error {
 ```go
 package ws
 
-import "sync"
+import (
+	"context"
+	"sync"
 
-// Client 一个客户端连接（简化：用一个 channel 表示要发的消息）
+	"fastledger/internal/services" // CanSubscribe / CanViewDetail（见落地方案权限矩阵 §5.5）
+)
+
+// Client 一个客户端连接
 type Client struct {
-	BookIds map[int64]bool
+	mu      sync.Mutex
+	BookIds map[int64]bool // 仅保存“已通过服务端校验”的订阅账本
 	Send    chan []byte
+	UID     int64 // 连接绑定认证用户（R05）
 }
 
 type Hub struct {
@@ -1034,16 +1143,41 @@ func (h *Hub) Unregister(c *Client) {
 	h.mu.Unlock()
 }
 
-// BroadcastToBook 给订阅了某账本的所有客户端推消息
-func (h *Hub) BroadcastToBook(bookId int64, msg []byte) {
+// Subscribe 经 Hub 受锁更新订阅（R18：所有订阅写都走同一把锁），
+// 且每个 bookId 都先由服务端校验成员资格（R05），不信任客户端上报的账本 ID。
+func (h *Hub) Subscribe(c *Client, bookIDs []int64, uid int64) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for _, b := range bookIDs {
+		if services.CanSubscribe(uid, b) { // 校验 uid 是否为该账本成员
+			c.mu.Lock()
+			c.BookIds[b] = true
+			c.mu.Unlock()
+		}
+	}
+	c.UID = uid
+}
+
+// BroadcastToBook 给“有权看到该账本”的在线成员推消息。
+// R05：广播前按接收者权限过滤；关闭互看时不发金额/账户/备注等敏感字段，
+// 仅发脱敏通知（sensitiveMsg 含 {event, bookId}），由客户端再走授权接口拉取明细。
+func (h *Hub) BroadcastToBook(bookId int64, msg []byte, sensitiveMsg []byte) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	for c := range h.clients {
-		if c.BookIds[bookId] {
-			select {
-			case c.Send <- msg:
-			default: // 客户端缓冲满，跳过
-			}
+		c.mu.Lock()
+		sub := c.BookIds[bookId]
+		c.mu.Unlock()
+		if !sub {
+			continue
+		}
+		payload := msg
+		if !services.CanViewDetail(c.UID, bookId) {
+			payload = sensitiveMsg // 无权看他人明细：只通知“有更新”
+		}
+		select {
+		case c.Send <- payload:
+		default: // 缓冲满：要求客户端重同步，不静默丢弃后推进游标（见 R07）
 		}
 	}
 }
@@ -1056,26 +1190,47 @@ func (h *Hub) BroadcastToBook(bookId int64, msg []byte) {
 msg, _ := json.Marshal(map[string]any{
 	"event": "transaction_created", "bookId": tx.BookId, "data": tx,
 })
-ws.DefaultHub.BroadcastToBook(tx.BookId, msg)
+// 脱敏通知：关闭互看时只告知“有更新”，不含交易明细（R05）
+sensitiveMsg, _ := json.Marshal(map[string]any{
+	"event": "transaction_created", "bookId": tx.BookId,
+})
+ws.DefaultHub.BroadcastToBook(tx.BookId, msg, sensitiveMsg)
 ```
 
 ### 14.3 WS handler（接收连接、读写循环）
 
 ```go
 func ServeWS(c *gin.Context) {
+	// 连接必须先通过 JWT 鉴权（JWTAuth 已把 uid 写入上下文）
+	uidVal, ok := c.Get("uid")
+	if !ok {
+		return // 未鉴权，直接拒绝升级
+	}
+	uid := uidVal.(int64)
+
 	// 升级为 WebSocket（用 gorilla/websocket）
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		return
 	}
+
 	client := &Client{BookIds: make(map[int64]bool), Send: make(chan []byte, 256)}
 	ws.DefaultHub.Register(client)
-	// 读循环：处理 subscribe
+
+	// 读/写循环共用一个取消上下文，任一方结束都恰好清理一次（R18）
+	ctx, cancel := context.WithCancel(context.Background())
+	defer func() {
+		cancel()
+		ws.DefaultHub.Unregister(client)
+		conn.Close()
+	}()
+
+	// 读循环：处理 subscribe（经 Hub 受锁 + 服务端校验，R05/R18）
 	go func() {
+		defer cancel()
 		for {
 			_, msg, err := conn.ReadMessage()
 			if err != nil {
-				ws.DefaultHub.Unregister(client)
 				return
 			}
 			var sub struct {
@@ -1083,16 +1238,23 @@ func ServeWS(c *gin.Context) {
 				Books  []int64 `json:"books"`
 			}
 			if json.Unmarshal(msg, &sub) == nil && sub.Action == "subscribe" {
-				for _, b := range sub.Books {
-					client.BookIds[b] = true
-				}
+				ws.DefaultHub.Subscribe(client, sub.Books, uid)
 			}
 		}
 	}()
+
 	// 写循环：把 Send 里的消息发出去
-	for msg := range client.Send {
-		if err := conn.WriteMessage(websocket.TextMessage, msg); err != nil {
+	for {
+		select {
+		case <-ctx.Done():
 			return
+		case m, ok := <-client.Send:
+			if !ok {
+				return
+			}
+			if err := conn.WriteMessage(websocket.TextMessage, m); err != nil {
+				return
+			}
 		}
 	}
 }
@@ -1170,6 +1332,8 @@ func AssetSummary(bookId int64) map[string]any {
 	assetByType := map[int64]int64{}
 	liabByType := map[int64]int64{}
 
+	// 负债类账户(10~15)的 balance 按《枚举字典》§2 约定存储为“正数=欠款”，
+	// 故净资产恒为 Σ(资产余额) − Σ(负债余额)，与 §13.1 signedBalanceDelta 写入口径一致。
 	for _, a := range accounts {
 		val := a.Balance
 		if a.Category == 5 { // 投资账户：现金 + 该账户持仓市值

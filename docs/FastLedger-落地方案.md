@@ -982,6 +982,8 @@ func (s *TxService) Create(c core.Context, bookID int64, req *models.Transaction
 }
 ```
 
+> **`signedAmount(req)` 负债符号约定（对应评审 R03）**：必须按《枚举字典》§2 实现——负债账户（category 10~15，如信用卡）的 `balance` 以“正数=欠款”存储，故刷卡消费使余额**增加**（欠更多）、还款（转账入账）使余额**减少**；资产账户反之。不要在 `signedAmount` 里对负债用“负余额”，否则会与该约定及 §16.2 的 `净资产 = 资产 − 负债` 冲突，导致消费虚增净资产。`ChangeBalance` 只负责 `balance ± delta` 的原子执行，`delta` 的符号由 `signedAmount` 决定。
+
 **版本号递增 + 原子改余额（关键实现）**：
 ```go
 // 账本级全局版本号 +1
