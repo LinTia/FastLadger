@@ -2,6 +2,23 @@
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.18] - 2026-10-30
+
+### 阶段 0：真实 Go 工程骨架落地（`server/`）
+
+- **新增 `server/` Go module**（module `fastledger`，go 1.22；直接依赖 gin v1.10.0 / xorm v1.3.9 / mattn/go-sqlite3 v1.14.22，`go.sum` 已生成）。
+- **`internal/config`**：统一 `EBK_` 前缀环境变量；`EBK_JWT_SECRET` 空值 / 占位值 / <32 位**启动即失败**（fail-fast，R08）；新增 `EBK_RECYCLE_TTL_DAYS=30`、`EBK_INVITE_TTL_DAYS=7`（PRD §12.1）。
+- **`internal/database`**：`initDB` 用 **DSN 逐连接**设置 `WAL / busy_timeout=5000 / foreign_keys=on / synchronous=FULL`（禁止 `db.Exec("PRAGMA ...")`）；写引擎 `MaxOpenConns=1`；**启动校验三项 PRAGMA 真的生效**，不通过即退出。
+- **`internal/migrate` + `migrations/0001_init.up.sql`**：版本化迁移——`schema_migrations` 版本表、按序 `NNNN_*.up.sql`（embed）、每个脚本**事务内执行**失败即回滚；默认**仅 CLI `db migrate`**，服务启动只检查版本、**绝不静默改表**；初始 DDL **15 张表**，含 `audit_logs`、`idempotency_records`、`book_versions`。
+- **`cmd/server/main.go`**：启动 HTTP（当前仅 `/healthz`）与 `db migrate` 子命令；优雅关机（配合部署 `stop_grace_period ≥ 30s`）。
+- **构建注意（重要）**：`mattn/go-sqlite3` 依赖 **CGO**。无 gcc 时 Go 会自动 `CGO_ENABLED=0`，此时**能编译、能链接，但数据库不可用**，运行会报 `go-sqlite3 requires cgo to work. This is a stub`——启动 PRAGMA 校验会**快速失败**并明确提示。已写入 `server/README.md` 排错段。
+
+**本次验证边界（按规范 §4 如实记录）**：
+
+- ✅ 已验证：`gofmt` 全量通过；`go build ./...` 与 `go vet ./...` 无错；链接出 11MB 可执行；运行后配置加载与启动校验按预期生效（CGO 缺失时被 fail-fast 捕获）；初始 DDL 经 sqlite3 **真实执行**建出 15 张表（含审计表/幂等表/版本表）；三项 PRAGMA 期望值核对正确（`journal_mode=wal`、`synchronous=2 (FULL)`、`foreign_keys=1`）。
+- ❌ **未验证**：本机无 gcc（MinGW 下载超时失败），**CGO 开启下的 `db migrate` 实跑与 `/healthz` 返回仍待在有 gcc 的环境补验**。请在有 gcc 的机器上执行：`go env -w CGO_ENABLED=1 && go run ./cmd/server db migrate && go run ./cmd/server`。
+- 注：编码期已由真实编译捕获并修复一处类型错误——`engine.DB()` 返回 `*core.DB`（内嵌 `*sql.DB`），传给标准库需用 `engine.DB().DB`。
+
 ## [1.17] - 2026-10-30
 
 ### 复核 D 的 [1.16] 修复：确认正确，并修订 3 处残留
