@@ -775,6 +775,21 @@ CREATE TABLE budgets (
   deleted BOOLEAN DEFAULT 0, created_at INTEGER, updated_at INTEGER, deleted_at INTEGER
 );
 CREATE INDEX idx_budget_book ON budgets(book_id, deleted);
+
+-- 审计日志（append-only；PRD §12.1【决策】，保留 1 年；仓库层只暴露 Insert）
+CREATE TABLE audit_logs (
+  id INTEGER PRIMARY KEY,
+  book_id INTEGER NOT NULL,
+  actor_uid INTEGER NOT NULL,                -- 操作者
+  action VARCHAR(32) NOT NULL,               -- create/update/delete/restore/login/permission_change/config_change/backup_restore
+  entity_type VARCHAR(32) NOT NULL,          -- transaction/account/category/holding/member/book
+  entity_id INTEGER NOT NULL DEFAULT 0,
+  before_json TEXT,                          -- 变更前状态（软删回答不了"删前是什么"）
+  at INTEGER NOT NULL,
+  source VARCHAR(16)                         -- web/flutter/ios/cli
+);
+CREATE INDEX idx_audit_book_at ON audit_logs(book_id, at);
+CREATE INDEX idx_audit_entity ON audit_logs(entity_type, entity_id);
 ```
 
 ## 4.6 扩展能力设计说明
@@ -784,6 +799,18 @@ CREATE INDEX idx_budget_book ON budgets(book_id, deleted);
 - **标签/预算/定时/图片**：表已建或字段已留，后期启用不改核心表。
 - **可见性双粒度**：账本级开关 + 成员级覆盖字段，支持复杂权限演进。
 - **同步幂等**：`client_uuid` + `version` 支撑离线和多端，不依赖自增 ID 做同步。
+
+## 4.7 数据库迁移机制（版本化升级）
+
+> 闭合 D-R02。自托管软件必然跨版本升级，迁移是**可部署性的前置硬门槛**。
+
+1. **版本表**：`schema_migrations(version INTEGER PRIMARY KEY, applied_at INTEGER, name VARCHAR(128))`，记录已应用的迁移；启动时据此判断当前库处于哪个版本。
+2. **脚本组织**：`migrations/` 下按序编号，如 `0001_init.up.sql` / `0001_init.down.sql`（down 可选但建议提供）；每个脚本在**事务内**执行，失败即整体回滚并记录。
+3. **执行时机**：默认**仅 CLI 手动执行**（`fastledger db migrate`）；服务启动只做**版本检查**——库版本与程序期望不符即拒绝启动并提示，**绝不静默自动改表**。
+4. **SQLite 限制与重建表范式**：早期 SQLite 不支持 `DROP COLUMN` / `RENAME COLUMN`，`ALTER TABLE` 能力有限。需改列 / 删列 / 加约束时走：
+   `建新表(_new) → 拷贝数据 → 删除旧表 → 重命名新表`，全程在同一事务内完成。
+5. **老库升级红线**：**不得删除旧回执**（`idempotency_records`），否则离线重试会产生重复账；新增 `result_version` 等字段用 `ALTER TABLE ADD COLUMN` 追加。
+6. **迁移后校验**：校验关键 PRAGMA（`foreign_keys` / `journal_mode`）与表结构，异常即中止并提示恢复备份。
 
 ---
 
@@ -833,8 +860,12 @@ CREATE INDEX idx_budget_book ON budgets(book_id, deleted);
 |  | POST `/books/{id}/budgets` | 新增预算（分类预算/总预算、周期、金额） |
 |  | PUT `/books/{id}/budgets/{bid}` | 修改 |
 |  | DELETE `/books/{id}/budgets/{bid}` | 删除 |
-| 同步 | GET `/books/{id}/sync/pull` | 拉取增量（参数：afterVersion） |
+| 同步 | GET `/books/{id}/sync/pull` | 拉取增量（参数：afterVersion、limit；服务端校验成员资格） |
 |  | POST `/books/{id}/sync/push` | 每个离线创建项调用同一个 TxService.Create，携带稳定 clientUuid |
+| 删除恢复 | GET `/books/{id}/recycle` | 回收站列表（软删实体，`EBK_RECYCLE_TTL_DAYS` 默认 30 天内可恢复） |
+|  | POST `/books/{id}/recycle/{entityType}/{entityId}/restore` | 恢复（转账**整笔**恢复，两侧余额同时回滚，禁止单边） |
+|  | DELETE `/books/{id}/recycle/{entityType}/{entityId}` | 硬清除（立即，跳过保留期） |
+| 审计 | GET `/books/{id}/audit-logs` | 审计查询（参数：actorUid、action、entityType、startTime、endTime、page、count） |
 
 **统一响应包**：
 

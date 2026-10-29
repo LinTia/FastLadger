@@ -2,6 +2,21 @@
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.15] - 2026-10-30
+
+### owner 裁决：D-R01–D-R06 复核全部属实，已采纳并修复
+
+**复核结论**：6 条**全部属实**，无一条误判，也无与历史 finding 重复。逐条 grep 实测证据：指南 `CREATE TABLE` 15 张且 `audit_logs` 命中 **0**、`func Delete/Restore` **0**；方案迁移设计命中 **0**（仅 L250 `db migrate` 名称）；`PingMessage` 1 处而 `SetReadDeadline|SetPongHandler|SetReadLimit` **0**；L1576 `_ = c.ShouldBindJSON`、L1565 `ParseBill(text string)` 无 ctx；L1862 每次 `http.Client().send`；L2087 `Pull` 无成员校验与批次上限。
+
+- **D-R01 / P1 / 已采纳并修复**：两文档 DDL 补 `audit_logs`（append-only，含 `before_json`；仓库层只暴露 Insert，不暴露 Update/Delete）；指南新增 **§13.3 `TxService.Delete/Restore`**（与 `Create` 对称：转账按 `related_id` 整笔、**禁单边**，同一事务内版本 +1、两侧余额回滚、审计必写）；方案 §5.1 补**回收站列表 / 恢复 / 硬清除 / 审计查询** 4 个接口。
+- **D-R02 / P1 / 已采纳并修复**：方案新增 **§4.7 数据库迁移机制**——`schema_migrations` 版本表、按序编号的 up/down 脚本、默认**仅 CLI 手动迁移**（启动只做版本检查，绝不静默自动改表）、SQLite 不支持改列时走**重建表范式**（建新表→拷数据→删旧表→改名）、老库升级**不得删旧回执**、迁移后校验 PRAGMA。
+- **D-R03 / P2 / 已采纳并修复**：指南 §14.3 `ServeWS` 增 `SetReadLimit(64KB)` + 初始 `SetReadDeadline(60s)` + `SetPongHandler` 续期；并显式定义 `upgrader`（含 `CheckOrigin`，避免不同入口默认行为不一致）。
+- **D-R04 / P2 / 已采纳并修复**：`LLMProvider.ParseBill` 改为 `ParseBill(ctx, text)`；`ParseText` 处理绑定错误返 400、校验文本非空且 ≤2000 字符、`context.WithTimeout(10s)` 可随客户端断开取消，错误不外露内部信息。
+- **D-R05 / P2 / 已采纳并修复**：指南 §19.3 `ApiClient` 重构——持久且可 `close()` 的 client、统一 `timeout`、**先按 HTTP 状态码分支**（401 跳登录 / 5xx 可重试）再解析 body、新增 `ApiException`（409 携带 `conflict` 供"覆盖/放弃/另存"三选一）。
+- **D-R06 / P2 / 已采纳并修复**：指南 §22.2 `Pull` 签名改为 `Pull(uid, bookID, afterVersion, limit)`——**成员资格校验下沉到服务入口**（非成员 403，不信任 handler）、`afterVersion<0` 按全量处理、批次上限 `maxSyncBatch = 500` 防全量加载 OOM。
+
+> ⚠️ **函数签名变更**：`Pull(bookID, afterVersion)` → `Pull(uid, bookID, afterVersion, limit)`，调用方（handler / 同步适配）需同步传入 `uid` 与 `limit`；`LLMProvider.ParseBill` 增加 `ctx` 首参。
+
 ## [1.14] - 2026-10-30
 
 ### 新增独立审阅者 D 评审（workbuddy/FastLedger-文档评审-D.md）

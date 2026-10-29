@@ -471,6 +471,21 @@ CREATE TABLE budgets (
   deleted BOOLEAN DEFAULT 0, created_at INTEGER, updated_at INTEGER, deleted_at INTEGER
 );
 CREATE INDEX idx_budget_book ON budgets(book_id, deleted);
+
+-- 审计日志（append-only；PRD §12.1 【决策】，保留 1 年；仓库层只暴露 Insert）
+CREATE TABLE audit_logs (
+  id INTEGER PRIMARY KEY,
+  book_id INTEGER NOT NULL,
+  actor_uid INTEGER NOT NULL,                -- 操作者
+  action VARCHAR(32) NOT NULL,               -- create/update/delete/restore/login/permission_change/config_change/backup_restore
+  entity_type VARCHAR(32) NOT NULL,          -- transaction/account/category/holding/member/book
+  entity_id INTEGER NOT NULL DEFAULT 0,
+  before_json TEXT,                          -- 变更前状态（软删回答不了"删前是什么"，靠它）
+  at INTEGER NOT NULL,                       -- 操作时间
+  source VARCHAR(16)                         -- web/flutter/ios/cli
+);
+CREATE INDEX idx_audit_book_at ON audit_logs(book_id, at);
+CREATE INDEX idx_audit_entity ON audit_logs(entity_type, entity_id);
 ```
 
 ### 6.5 常用索引（查询慢了就加）
@@ -1371,6 +1386,72 @@ HTTP 映射：缺键/非法命令为 400，幂等键冲突为 409，无成员权
 
 ---
 
+### 13.3 统一删除 / 恢复入口（与 Create 对称）
+
+> 依据 PRD §12.1 【决策】（回收站 30 天 / 审计保留 1 年）与 WBS 阶段 4；闭合 D-R01。
+
+```go
+// internal/services/transaction.go
+// 删除/恢复复用 VersionSource + 幂等回执 + 单一事务边界，
+// 避免重蹈"双入口"覆辙（参见《转账入口裁决》GPT-ADR01）。
+func (s *TxService) Delete(ctx context.Context, uid, bookID int64, r DeleteRequest) error {
+	return s.setDeleted(ctx, uid, bookID, r, true)
+}
+
+func (s *TxService) Restore(ctx context.Context, uid, bookID int64, r DeleteRequest) error {
+	return s.setDeleted(ctx, uid, bookID, r, false)
+}
+
+// 整笔为单位 + 单一事务 + 版本 +1 + 审计必写
+func (s *TxService) setDeleted(ctx context.Context, uid, bookID int64,
+	r DeleteRequest, deleted bool) error {
+
+	sess := database.Engine.NewSession()
+	defer sess.Close()
+	if err := sess.Begin(); err != nil {
+		return err
+	}
+	defer sess.Rollback()
+
+	// 1) 成员资格与权限校验（服务端判定；admin 依据落地方案 §5.5 修订版）
+	if _, err := requireMember(sess, bookID, uid); err != nil {
+		return err // 非成员/无权限 → 403
+	}
+
+	// 2) 转账以整笔为单位：按 related_id 取配对的两条，禁止只处理单边
+	ids := []int64{r.EntityID}
+	if r.EntityType == "transaction" {
+		pair, err := findTransferPair(sess, bookID, r.EntityID) // 用 related_id 配对
+		if err != nil {
+			return err
+		}
+		ids = pair // 一定是两条
+	}
+
+	// 3) 同一事务内：置 deleted_at（或还原）→ 版本 +1 → sync_version
+	//    → 两侧余额按资产/负债符号回滚（或还原）→ 写 audit_logs
+	v, err := s.versions.Next(sess, bookID)
+	if err != nil {
+		return err
+	}
+	for _, id := range ids {
+		if err := applyDeleted(sess, bookID, id, deleted, v); err != nil {
+			return err // 任一步失败整笔回滚
+		}
+	}
+	if err := insertAudit(sess, uid, bookID, actionOf(deleted), r.EntityType, r.EntityID); err != nil {
+		return err
+	}
+	return sess.Commit()
+}
+```
+
+要点：
+- **转账禁止单边**：删除 / 恢复以 `related_id` 配对的整笔为单位，两侧余额同时回滚，版本号统一 +1。
+- **审计必写**：`audit_logs` 记录 `actor_uid`、action、entity 与 `before_json`。
+- **仓库层封装**：`audit_logs` 只暴露 Insert，不暴露 Update / Delete（append-only）。
+- **保留期**：到期硬清除走独立定时任务，配置项 `EBK_RECYCLE_TTL_DAYS`（默认 30）。
+
 ## 14. WebSocket 实时推送
 
 ### 14.1 连接管理 `internal/ws/hub.go`
@@ -1483,6 +1564,16 @@ if err == nil {
 ### 14.3 WS handler（接收连接、读写循环）
 
 ```go
+// 显式定义 upgrader，避免不同入口下默认行为不一致（CheckOrigin 按需收紧）
+var upgrader = websocket.Upgrader{
+	ReadBufferSize:  1024,
+	WriteBufferSize: 1024,
+	CheckOrigin: func(r *http.Request) bool {
+		// 自托管场景先放宽；生产部署建议改为 Origin 白名单校验
+		return true
+	},
+}
+
 func ServeWS(c *gin.Context) {
 	// 连接必须先通过 JWT 鉴权（JWTAuth 已把 uid 写入上下文）
 	uidVal, ok := c.Get("uid")
@@ -1496,6 +1587,14 @@ func ServeWS(c *gin.Context) {
 	if err != nil {
 		return
 	}
+
+	// 半开连接防护（D-R03）：读大小限制 + 初始读截止 + 收到 pong 后续期。
+	// 只有 ping 而无 pong / 读截止时，对端静默丢弃会让连接与 goroutine 长期挂住。
+	conn.SetReadLimit(64 * 1024) // 单条消息上限 64KB
+	conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+	conn.SetPongHandler(func(string) error {
+		return conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+	})
 
 	client := &Client{BookIds: make(map[int64]bool), Send: make(chan []byte, 256)}
 	ws.DefaultHub.Register(client)
@@ -1561,8 +1660,8 @@ func ServeWS(c *gin.Context) {
 
 ```go
 type LLMProvider interface {
-	// 把账单文本解析成结构化结果
-	ParseBill(text string) (BillResult, error)
+	// 把账单文本解析成结构化结果；ctx 用于超时与客户端断开时取消（D-R04）
+	ParseBill(ctx context.Context, text string) (BillResult, error)
 }
 ```
 - 用一个固定的提示词（prompt）要求模型只返回 JSON：金额、类型、商户、时间、支付渠道；
@@ -1573,9 +1672,24 @@ type LLMProvider interface {
 ```go
 func ParseText(c *gin.Context) {
 	var req struct{ Text string `json:"text"` }
-	_ = c.ShouldBindJSON(&req)
-	result, err := llm.ParseBill(req.Text)
+	// 绑定错误必须处理：非法 JSON 直接 400，不能 `_ =` 吞掉后继续（D-R04）
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(400, gin.H{"code": 400, "msg": "请求格式错误"})
+		return
+	}
+	// 输入校验：非空且限长，避免空文本白调 LLM、超长文本撑爆上下文或产生意外费用
+	const maxTextLen = 2000
+	if req.Text == "" || len([]rune(req.Text)) > maxTextLen {
+		c.JSON(400, gin.H{"code": 400, "msg": "文本为空或超长"})
+		return
+	}
+	// 超时 + 随客户端断开取消，避免 LLM 挂起长时间占用 goroutine 与连接
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
+	defer cancel()
+
+	result, err := llm.ParseBill(ctx, req.Text)
 	if err != nil {
+		// 不外露原始错误（避免泄露 Key/端点等内部信息）
 		c.JSON(500, gin.H{"code": 500, "msg": "识别失败"})
 		return
 	}
@@ -1851,30 +1965,69 @@ lib/
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
-class ApiClient {
-  String baseUrl;
-  String? token;
-  ApiClient(this.baseUrl);
+// 统一错误类型：页面据此分支处理（409 冲突需"覆盖/放弃/另存"三选一）
+class ApiException implements Exception {
+  final int status;
+  final int code;
+  final String msg;
+  final Map<String, dynamic>? conflict; // 409 时携带冲突实体
+  ApiException(this.status, this.code, this.msg, {this.conflict});
+  bool get isUnauthorized => status == 401;
+  bool get isConflict => status == 409;
+}
 
-  // 统一请求方法
+class ApiClient {
+  final String baseUrl;
+  String? token;
+  final Duration timeout;
+  // 持久 client：连接复用 + 可统一关闭（不要每次请求 new）
+  final http.Client _http = http.Client();
+
+  ApiClient(this.baseUrl, {this.timeout = const Duration(seconds: 15)});
+
   Future<Map<String, dynamic>> request(
     String method, String path, {Map<String, dynamic>? body}) async {
-    final resp = await http.Client().send(
-      http.Request(method, Uri.parse('$baseUrl$path'))
-        ..headers.addAll({
-          'Content-Type': 'application/json',
-          if (token != null) 'Authorization': 'Bearer $token',
-        })
-        ..body = jsonEncode(body ?? {}),
-    );
-    final data = jsonDecode(await resp.stream.bytesToString());
-    if (data['code'] != 0) throw Exception(data['msg']);
-    return data['data'];
+    final req = http.Request(method, Uri.parse('$baseUrl$path'))
+      ..headers.addAll({
+        'Content-Type': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+      })
+      ..body = jsonEncode(body ?? {});
+
+    http.StreamedResponse resp;
+    try {
+      resp = await _http.send(req).timeout(timeout); // 弱网不无限等待
+    } catch (_) {
+      throw ApiException(0, -1, '网络超时或不可达');
+    }
+
+    final text = await resp.stream.bytesToString();
+    // 先按 HTTP 状态码分支，再解析业务 body；
+    // 否则网关返回非 JSON（如 Caddy 502 HTML）会直接抛格式异常，401 也无法统一跳登录。
+    if (resp.statusCode == 401) throw ApiException(401, -1, '登录已失效');
+    if (resp.statusCode >= 500) throw ApiException(resp.statusCode, -1, '服务暂不可用，可重试');
+
+    Map<String, dynamic> data;
+    try {
+      data = jsonDecode(text) as Map<String, dynamic>;
+    } catch (_) {
+      throw ApiException(resp.statusCode, -1, '响应格式异常');
+    }
+
+    final code = data['code'] ?? -1;
+    if (resp.statusCode == 409 || code == 409) {
+      throw ApiException(409, code, data['msg'] ?? '冲突',
+          conflict: data['data'] as Map<String, dynamic>?);
+    }
+    if (code != 0) throw ApiException(resp.statusCode, code, data['msg'] ?? '请求失败');
+    return data['data'] as Map<String, dynamic>? ?? {};
   }
 
   Future<Map<String, dynamic>> get(String p) => request('GET', p);
   Future<Map<String, dynamic>> post(String p, Map<String, dynamic> b) =>
       request('POST', p, body: b);
+
+  void close() => _http.close(); // 统一关闭，避免连接泄漏
 }
 ```
 
@@ -2084,13 +2237,29 @@ type SyncBatch struct {
 
 // Pull 在同一个只读事务（一致快照）内确定水位并读取所有实体，
 // 杜绝"先读交易→别人提交 V6→再读账户看到 V6、却漏了交易 V6"的跨表交错。
-func Pull(bookID, afterVersion int64) (*SyncBatch, error) {
+const maxSyncBatch = 500 // 单批实体上限，防止全量加载 OOM（内存预算 < 150MB）
+
+// Pull 不信任调用方：成员资格校验下沉到服务入口（读路径也不能漏校验，
+// 含关闭互看的私账）；limit 控制批次大小。闭合 D-R06。
+func Pull(uid, bookID, afterVersion int64, limit int) (*SyncBatch, error) {
+	if afterVersion < 0 {
+		afterVersion = 0 // 非法游标按全量处理并记录
+	}
+	if limit <= 0 || limit > maxSyncBatch {
+		limit = maxSyncBatch
+	}
 	sess := database.Engine.NewSession()
 	defer sess.Close()
 	if err := sess.Begin(); err != nil {
 		return nil, err
 	}
 	defer sess.Rollback() // 只读事务，提交/回滚均可释放快照
+
+	// 0) 成员资格校验下沉到服务入口：非成员/已退出直接 403，
+	//    避免某个 handler 漏校验时构成越权读取（含关闭互看的私账）。
+	if _, err := requireMember(sess, bookID, uid); err != nil {
+		return nil, err
+	}
 
 	// 1) 在快照内确定本次水位
 	var bv models.BookVersion
@@ -2101,7 +2270,7 @@ func Pull(bookID, afterVersion int64) (*SyncBatch, error) {
 	// 2) 同一快照内读取所有实体（同一版本的多表/多行一定一起可见）
 	batch := &SyncBatch{HighVersion: bv.Version}
 	if err := sess.Where("book_id=? AND sync_version>?", bookID, afterVersion).
-		OrderBy("sync_version ASC").Find(&batch.Transactions); err != nil {
+		OrderBy("sync_version ASC").Limit(limit).Find(&batch.Transactions); err != nil {
 		return nil, err
 	}
 	sess.Where("book_id=? AND sync_version>?", bookID, afterVersion).Find(&batch.Accounts)
