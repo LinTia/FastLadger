@@ -1,0 +1,184 @@
+{
+  "review_commit": "b8741465afa98a89ed99796c9e2c4a841b15a361",
+  "sqlite_runtime": "3.53.1",
+  "limitation": "Schema/SQL execution and documented-algorithm counterexamples; not Go/Flutter compilation or deployed API security testing.",
+  "cases": [
+    {
+      "case": "cross_book_account",
+      "evidence": "verbatim DDL + ChangeBalance SQL",
+      "actual": {
+        "account_book": 2,
+        "balance": 9000
+      },
+      "expected": "Reject book 1 write referencing book 2 account; no mutation"
+    },
+    {
+      "case": "missing_account_zero_affected",
+      "evidence": "verbatim DDL + ChangeBalance SQL",
+      "actual": {
+        "affected": 0,
+        "orphan_transaction": true
+      },
+      "expected": "Reject missing/deleted account and roll back transaction"
+    },
+    {
+      "case": "credit_card_sign",
+      "evidence": "replay of guide 13.1, 13.2 and 16.2 arithmetic",
+      "actual": {
+        "net_after_purchase": 110000,
+        "net_after_repayment": 90000
+      },
+      "expected": {
+        "net_after_purchase": 90000,
+        "net_after_repayment": 90000
+      }
+    },
+    {
+      "case": "transfer_ignored_insert_errors",
+      "evidence": "SQLite fault injection reproducing guide 13.2 statement/control-flow semantics",
+      "actual": {
+        "commit": "succeeded",
+        "balances": [
+          8000,
+          2000
+        ],
+        "transaction_rows": 0,
+        "ignored_errors": [
+          "synthetic insert failure",
+          "synthetic insert failure"
+        ]
+      },
+      "expected": "Return error; balances remain [10000,0]; no partial financial mutation"
+    },
+    {
+      "case": "idempotency_check_then_insert",
+      "evidence": "two SQLite connections; exact pre-check/write ordering",
+      "actual": {
+        "rows": 2,
+        "balance": 8000
+      },
+      "expected": {
+        "rows": 1,
+        "balance": 9000
+      }
+    },
+    {
+      "case": "idempotency_scope",
+      "evidence": "verbatim guide pre-check predicate",
+      "actual": {
+        "book_2_request_would_return_success_without_insert": true
+      },
+      "expected": "Scope operation receipt to authenticated user/book and return original result"
+    },
+    {
+      "case": "balance_without_sync_version",
+      "evidence": "verbatim version + balance SQL and documented pull predicate",
+      "actual": {
+        "book_version": 6,
+        "balance": 9000,
+        "account_changes_returned": []
+      },
+      "expected": "Changed account is returned with sync_version 6 in the same transaction"
+    },
+    {
+      "case": "ws_drop_then_advance",
+      "evidence": "protocol counterexample; bounded queue/drop and cursor rules from guide 14 + plan 3.5",
+      "actual": {
+        "dropped": 257,
+        "cursor": 258,
+        "pull_returned": []
+      },
+      "expected": "A dropped event triggers catch-up from the last complete pull cursor"
+    },
+    {
+      "case": "pull_cross_table_snapshot",
+      "evidence": "SQLite interleaving counterexample to unbounded separate entity reads",
+      "actual": {
+        "first_tx_read": [],
+        "later_account_read": [
+          [
+            101,
+            6
+          ]
+        ],
+        "next_cursor": 6,
+        "next_pull_transactions": []
+      },
+      "expected": "One consistent read snapshot / safe watermark covers every entity before cursor advances"
+    },
+    {
+      "case": "restore_rewinds_sync_counter",
+      "evidence": "SQLite backup/restore + documented afterVersion query",
+      "actual": {
+        "restored_new_version": 6,
+        "client_cursor": 10,
+        "pull_returned": []
+      },
+      "expected": "Restore epoch/reset tells clients to rebuild caches and reconcile offline operations"
+    },
+    {
+      "case": "budget_descendants_and_total",
+      "evidence": "verbatim BudgetProgress SQL",
+      "actual": {
+        "parent_used": 0,
+        "total_used": 0
+      },
+      "expected": {
+        "parent_used": 12000,
+        "total_used": 12000
+      }
+    },
+    {
+      "case": "schema_contract_drift",
+      "evidence": "both verbatim DDL blocks",
+      "actual": {
+        "errors": [
+          "no such column: password",
+          "no such column: members_can_view_others"
+        ]
+      },
+      "expected": "One canonical model/DDL naming contract; tutorial SQL and models match the plan"
+    },
+    {
+      "case": "pragma_connection_scope",
+      "evidence": "two real SQLite connections",
+      "actual": {
+        "foreign_keys": [
+          1,
+          0
+        ],
+        "declared_transaction_fks": []
+      },
+      "expected": "Set required PRAGMAs on each pooled connection; enforce required references in service/DDL"
+    },
+    {
+      "case": "ocr_thousands_separator",
+      "evidence": "replay of the guide's exact regex on synthetic OCR text",
+      "actual": {
+        "matched": "1",
+        "amount_cents": 100
+      },
+      "expected": {
+        "amount_cents": 123456
+      }
+    },
+    {
+      "case": "csv_formula_unneutralized",
+      "evidence": "raw CSV field preservation; no Excel execution claimed",
+      "actual": {
+        "exported_text_cell": "=1+1"
+      },
+      "expected": "Export untrusted text in a spreadsheet-safe text representation; test target spreadsheet import/reopen"
+    },
+    {
+      "case": "invalid_transaction_values",
+      "evidence": "DDL + replay of guide expense/unsupported-type branches",
+      "actual": {
+        "negative_expense_increases_balance_to": 11000,
+        "unknown_type_inserted": true
+      },
+      "expected": "Reject negative/zero/overflow amounts and unsupported tx_type before any write"
+    }
+  ],
+  "counterexamples_reproduced": 16
+}
