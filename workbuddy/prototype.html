@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FastLedger 低保真原型 · 家庭智能记账</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #e9ecf1; color: #1f2430;
+    display: flex; justify-content: center; align-items: flex-start;
+    min-height: 100vh; padding: 24px 12px;
+  }
+  /* 手机外壳 */
+  .phone {
+    width: 380px; background: #fff; border-radius: 28px;
+    box-shadow: 0 12px 40px rgba(0,0,0,.18);
+    overflow: hidden; position: relative; border: 10px solid #11131a;
+  }
+  .statusbar {
+    height: 28px; background: #11131a; color: #fff;
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 0 14px; font-size: 12px;
+  }
+  .appbar {
+    background: #2d3340; color: #fff; padding: 12px 16px;
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 15px; font-weight: 600;
+  }
+  .appbar small { font-weight: 400; opacity: .8; font-size: 12px; }
+  .screen { display: none; min-height: 560px; padding: 16px; background: #f5f6f8; }
+  .screen.active { display: block; }
+  .card { background: #fff; border: 1px solid #e3e6ec; border-radius: 12px; padding: 14px; margin-bottom: 12px; }
+  .row { display: flex; justify-content: space-between; align-items: center; }
+  .muted { color: #8a90a0; font-size: 12px; }
+  .big { font-size: 26px; font-weight: 700; }
+  .label { font-size: 12px; color: #8a90a0; }
+  h3.section { font-size: 14px; margin: 4px 2px 10px; color: #4a5160; }
+
+  /* 资产总览 */
+  .hero-asset { background: #2d3340; color: #fff; border-radius: 16px; padding: 18px; margin-bottom: 14px; }
+  .hero-asset .big { font-size: 30px; }
+  .online-dot { width: 8px; height: 8px; border-radius: 50%; background: #3ddc84; display: inline-block; margin-right: 5px; }
+  .fam { display: flex; gap: 8px; margin-top: 10px; }
+  .fam .av { width: 30px; height: 30px; border-radius: 50%; background: #4a5160; color:#fff;
+    display:flex; align-items:center; justify-content:center; font-size:12px; }
+  .fam .av.on { background: #3a7afe; }
+  .fam .av.pulse { animation: pulse 1s ease; }
+  @keyframes pulse { 0%{transform:scale(1);box-shadow:0 0 0 0 rgba(58,122,254,.6)} 100%{transform:scale(1);box-shadow:0 0 0 12px rgba(58,122,254,0)} }
+
+  .acct { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px dashed #eef0f4; }
+  .acct:last-child { border-bottom: none; }
+
+  /* 记一笔 按钮 */
+  .record-btn {
+    position: fixed; left: 50%; transform: translateX(-50%);
+    bottom: 86px; width: 64px; height: 64px; border-radius: 50%;
+    background: #3a7afe; color: #fff; font-size: 30px; border: none;
+    box-shadow: 0 8px 20px rgba(58,122,254,.45); cursor: pointer; z-index: 20;
+  }
+  .record-btn:active { transform: translateX(-50%) scale(.94); }
+
+  /* 底部 tab */
+  .tabbar { position: absolute; bottom: 0; left: 0; right: 0; height: 60px;
+    background: #fff; border-top: 1px solid #e3e6ec; display: flex; }
+  .tabbar button { flex: 1; border: none; background: none; padding-top: 8px;
+    font-size: 11px; color: #8a90a0; cursor: pointer; }
+  .tabbar button .ic { font-size: 20px; display: block; margin-bottom: 2px; }
+  .tabbar button.on { color: #3a7afe; }
+
+  /* 交易列表 */
+  .tx { display: flex; align-items: center; padding: 10px 0; border-bottom: 1px solid #eef0f4; }
+  .tx .ic { width: 36px; height: 36px; border-radius: 9px; background: #eef1f6; display:flex; align-items:center; justify-content:center; margin-right: 10px; }
+  .tx .amt { font-weight: 600; }
+  .tx .amt.out { color: #e2554f; }
+  .tx .amt.in { color: #2bae66; }
+
+  /* 弹层 截图识别 */
+  .overlay { position: fixed; inset: 0; background: rgba(17,19,26,.55);
+    display: none; align-items: flex-end; justify-content: center; z-index: 50; }
+  .overlay.active { display: flex; }
+  .sheet { background: #fff; width: 380px; border-radius: 18px 18px 0 0; padding: 18px; }
+  .sheet h4 { font-size: 15px; margin-bottom: 12px; }
+  .shotbox { border: 2px dashed #c7ccd6; border-radius: 12px; height: 170px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    color: #8a90a0; gap: 8px; margin-bottom: 14px; cursor: pointer; background:#fafbfc;}
+  .shotbox .mockbill { font-size: 12px; line-height: 1.7; color:#5a6172; text-align:center;}
+  .field { margin-bottom: 10px; }
+  .field label { font-size: 12px; color: #8a90a0; display: block; margin-bottom: 4px; }
+  .field input, .field select { width: 100%; padding: 9px 10px; border: 1px solid #d7dbe3;
+    border-radius: 8px; font-size: 14px; }
+  .btnrow { display: flex; gap: 10px; margin-top: 6px; }
+  .btn { flex: 1; padding: 11px; border-radius: 9px; border: none; font-size: 14px; cursor: pointer; }
+  .btn.ghost { background: #eef1f6; color: #4a5160; }
+  .btn.primary { background: #3a7afe; color: #fff; }
+  .btn.primary:disabled { background: #b9cdf7; }
+  .spinner { width: 22px; height: 22px; border: 3px solid #d7dbe3; border-top-color: #3a7afe;
+    border-radius: 50%; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .toast { position: fixed; top: 64px; left: 50%; transform: translateX(-50%);
+    background: #1f2430; color: #fff; padding: 10px 16px; border-radius: 10px; font-size: 13px;
+    opacity: 0; transition: opacity .3s; z-index: 60; max-width: 320px; text-align:center;}
+  .toast.show { opacity: .96; }
+
+  .tip { font-size: 11px; color: #b0b6c2; margin-top: 6px; }
+  .pill { display:inline-block; background:#eef1f6; border-radius:20px; padding:3px 10px; font-size:11px; color:#5a6172; margin-right:6px;}
+  .note { font-size: 11px; color: #8a90a0; background:#fff8e6; border:1px solid #ffe2a8; border-radius:8px; padding:8px 10px; margin-top:8px;}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="statusbar"><span>9:41</span><span>FastLedger · 自托管</span><span>100%</span></div>
+  <div class="appbar"><span id="appTitle">家庭账本</span><small id="syncState">已同步</small></div>
+
+  <!-- 首页：资产总览 -->
+  <div class="screen active" id="s_home">
+    <div class="hero-asset">
+      <div class="label" style="color:#aab">家庭净资产（含投资）</div>
+      <div class="big" id="netAsset">¥ 128,650.50</div>
+      <div class="row" style="margin-top:10px">
+        <span class="muted" style="color:#cfd">本月支出 ¥3,240.00</span>
+        <span><span class="online-dot"></span><span class="muted" style="color:#cfd">3 人在线</span></span>
+      </div>
+      <div class="fam" id="famHome">
+        <div class="av on" title="我">我</div>
+        <div class="av on" title="妈妈">妈</div>
+        <div class="av on" title="爸爸">爸</div>
+        <div class="av" title="妹妹(离线)">妹</div>
+      </div>
+    </div>
+
+    <h3 class="section">资金账户</h3>
+    <div class="card" id="acctCard"></div>
+
+    <h3 class="section">最近流水</h3>
+    <div class="card" id="recentCard"></div>
+    <div class="note">本原型为低保真演示：点击右下角蓝色「＋」体验核心闭环（截图识别 → 确认 → 实时同步给家人）。数据不出本机，仅在识别失败时把账单文字发往你配置的模型。</div>
+  </div>
+
+  <!-- 明细 -->
+  <div class="screen" id="s_tx">
+    <h3 class="section">全部流水</h3>
+    <div class="card" id="txList"></div>
+  </div>
+
+  <!-- 投资 -->
+  <div class="screen" id="s_inv">
+    <h3 class="section">投资持仓</h3>
+    <div class="card" id="invCard"></div>
+    <div class="note">投资模块（v0.2+）：标的/持仓/行情/资产合计。行情默认走外网或本地配置，需在 PRD 中确认数据源与频率。</div>
+  </div>
+
+  <!-- 我的 -->
+  <div class="screen" id="s_me">
+    <h3 class="section">账本成员</h3>
+    <div class="card" id="memberCard"></div>
+    <div class="note">邀请成员跨公网的安全机制（邀请码有效期、最大人数）为待确认项，见 PRD 第 10 节。</div>
+  </div>
+
+  <button class="record-btn" id="recordBtn" title="记一笔">＋</button>
+
+  <div class="tabbar">
+    <button class="on" data-go="home"><span class="ic">🏠</span>首页</button>
+    <button data-go="tx"><span class="ic">📋</span>明细</button>
+    <button data-go="inv"><span class="ic">📈</span>投资</button>
+    <button data-go="me"><span class="ic">👤</span>我的</button>
+  </div>
+</div>
+
+<!-- 截图识别 弹层 -->
+<div class="overlay" id="ovl">
+  <div class="sheet">
+    <h4 id="sheetTitle">① 选择付款截图</h4>
+    <div class="shotbox" id="shotbox">
+      <div style="font-size:30px">📷</div>
+      <div>点击选择 / 截取付款截图</div>
+      <div class="mockbill" id="mockbill" style="display:none">
+        ┌─ 微信支付 ─┐<br>收款方：盒马鲜生<br>金额：<b>￥128.50</b><br>时间：2026-10-29 12:18
+      </div>
+    </div>
+
+    <!-- 确认卡片（识别后显示） -->
+    <div id="confirmArea" style="display:none">
+      <div class="field">
+        <label>金额（元）</label>
+        <input id="fAmt" type="number" step="0.01" value="128.50">
+      </div>
+      <div class="field">
+        <label>商户 / 备注</label>
+        <input id="fMer" type="text" value="盒马鲜生">
+      </div>
+      <div class="field">
+        <label>分类</label>
+        <select id="fCat">
+          <option>餐饮</option><option>居家</option><option>交通</option>
+          <option>购物</option><option>娱乐</option><option>其他支出</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>付款账户</label>
+        <select id="fAcct">
+          <option value="wx">微信零钱</option><option value="zs">招商储蓄卡</option>
+          <option value="zfb">支付宝</option><option value="cash">现金</option>
+        </select>
+      </div>
+      <div class="tip" id="recogTip">端侧识别成功 · 图片未出本机</div>
+    </div>
+
+    <div class="btnrow" id="stepBtns">
+      <button class="btn ghost" id="cancelBtn">取消</button>
+      <button class="btn primary" id="nextBtn">选择截图</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  // ---------- 状态 ----------
+  const accounts = {
+    wx:   { name: "微信零钱", balance: 3200.00 },
+    zs:   { name: "招商储蓄卡", balance: 58200.00 },
+    zfb:  { name: "支付宝", balance: 12450.50 },
+    cash: { name: "现金", balance: 800.00 },
+  };
+  const holdings = [
+    { name: "沪深300ETF", qty: 1000, price: 3.82, cost: 3.50 },
+    { name: "黄金ETF", qty: 200, price: 5.10, cost: 4.80 },
+    { name: "房产(估值)", qty: 1, price: 480000, cost: 450000, real: true },
+  ];
+  let txs = [
+    { t: "妈妈", mer: "物业费", cat: "居家", acct: "zs", amt: -860.00, time: "10-29 09:12" },
+    { t: "我",   mer: "工资入账", cat: "收入", acct: "zs", amt: 12000.00, time: "10-28 18:00" },
+    { t: "爸爸", mer: "加油", cat: "交通", acct: "zfb", amt: -300.00, time: "10-28 12:40" },
+  ];
+  const members = [
+    { name: "我", on: true }, { name: "妈妈", on: true },
+    { name: "爸爸", on: true }, { name: "妹妹", on: false },
+  ];
+
+  const fmt = n => (n<0?"-":"") + "¥ " + Math.abs(n).toLocaleString("zh-CN",{minimumFractionDigits:2,maximumFractionDigits:2});
+  const acctName = k => accounts[k] ? accounts[k].name : k;
+
+  // ---------- 渲染 ----------
+  function render() {
+    const total = Object.values(accounts).reduce((s,a)=>s+a.balance,0);
+    const invVal = holdings.reduce((s,h)=>s+h.qty*h.price,0);
+    document.getElementById("netAsset").textContent = fmt(total + invVal);
+    document.getElementById("acctCard").innerHTML = Object.entries(accounts).map(([k,a])=>
+      `<div class="acct"><span>${a.name}</span><span class="amt" style="font-weight:600">${fmt(a.balance)}</span></div>`).join("");
+    const recent = [...txs].slice(0,4);
+    document.getElementById("recentCard").innerHTML = recent.map(t=>txRow(t)).join("") || '<div class="muted">暂无流水</div>';
+    document.getElementById("txList").innerHTML = [...txs].map(t=>txRow(t)).join("");
+    document.getElementById("invCard").innerHTML = holdings.map(h=>{
+      const val=h.qty*h.price, pl=(h.price-h.cost)*h.qty;
+      return `<div class="acct"><div><div>${h.name}</div><div class="muted">${h.real?"估值":"持仓 "+h.qty}</div></div>
+        <div style="text-align:right"><div class="amt" style="font-weight:600">${fmt(val)}</div>
+        <div class="muted" style="color:${pl>=0?'#2bae66':'#e2554f'}">${pl>=0?'+':'-'}${Math.abs(pl).toFixed(0)}</div></div></div>`;
+    }).join("") + `<div class="acct" style="border-top:2px solid #e3e6ec;margin-top:6px;padding-top:10px"><b>投资合计</b><b>${fmt(invVal)}</b></div>`;
+    document.getElementById("memberCard").innerHTML = members.map(m=>
+      `<div class="acct"><span><span class="online-dot" style="background:${m.on?'#3ddc84':'#c7ccd6'}"></span>${m.name}</span>
+       <span class="muted">${m.on?'在线':'离线'}</span></div>`).join("");
+  }
+  function txRow(t){
+    const cls = t.amt<0 ? "out" : "in";
+    const sign = t.amt<0 ? "-" : "+";
+    return `<div class="tx"><div class="ic">${t.amt<0?'💸':'💰'}</div>
+      <div style="flex:1"><div style="font-size:13px">${t.mer}</div>
+      <div class="muted">${t.cat} · ${acctName(t.acct)} · ${t.time} · ${t.t}</div></div>
+      <div class="amt ${cls}">${sign}${Math.abs(t.amt).toFixed(2)}</div></div>`;
+  }
+  render();
+
+  // ---------- 导航 ----------
+  document.querySelectorAll(".tabbar button").forEach(b=>{
+    b.onclick = () => {
+      document.querySelectorAll(".tabbar button").forEach(x=>x.classList.remove("on"));
+      b.classList.add("on");
+      const go = b.dataset.go;
+      document.querySelectorAll(".screen").forEach(s=>s.classList.remove("active"));
+      document.getElementById("s_"+go).classList.add("active");
+      const titles = {home:"家庭账本",tx:"明细",inv:"投资资产",me:"我的"};
+      document.getElementById("appTitle").textContent = titles[go];
+    };
+  });
+
+  // ---------- 记一笔 闭环 ----------
+  const ovl = document.getElementById("ovl");
+  const shotbox = document.getElementById("shotbox");
+  const mockbill = document.getElementById("mockbill");
+  const confirmArea = document.getElementById("confirmArea");
+  const stepBtns = document.getElementById("stepBtns");
+  const sheetTitle = document.getElementById("sheetTitle");
+  const nextBtn = document.getElementById("nextBtn");
+  const cancelBtn = document.getElementById("cancelBtn");
+  let step = 0; // 0 选截图, 1 识别中, 2 确认
+
+  document.getElementById("recordBtn").onclick = () => {
+    step = 0; resetSheet(); ovl.classList.add("active");
+  };
+  cancelBtn.onclick = () => ovl.classList.remove("active");
+  shotbox.onclick = () => {
+    if (step!==0) return;
+    shotbox.querySelector("div:nth-child(2)").style.display="none";
+    mockbill.style.display="block";
+    step = 1; sheetTitle.textContent = "② 识别中…";
+    nextBtn.disabled = true; nextBtn.textContent = "识别中";
+    const sp = document.createElement("div"); sp.className="spinner"; sp.style.margin="8px auto";
+    shotbox.appendChild(sp);
+    setTimeout(()=>{ // 模拟端侧识别
+      step = 2; sheetTitle.textContent = "③ 确认入账";
+      confirmArea.style.display="block";
+      nextBtn.disabled = false; nextBtn.textContent = "确认入账 ¥128.50";
+      document.getElementById("recogTip").textContent = "端侧识别成功 · 图片未出本机";
+    }, 1300);
+  };
+  nextBtn.onclick = () => {
+    if (step!==2) return;
+    const amt = parseFloat(document.getElementById("fAmt").value) || 0;
+    const mer = document.getElementById("fMer").value || "未命名";
+    const cat = document.getElementById("fCat").value;
+    const acct = document.getElementById("fAcct").value;
+    // 入账：扣减账户余额
+    accounts[acct].balance -= amt;
+    txs.unshift({ t:"我", mer, cat, acct, amt: -amt, time: nowStr() });
+    render();
+    ovl.classList.remove("active");
+    showToast("已入账 "+fmt(-amt)+" · 实时同步给家人");
+    simulateSync();
+  };
+  function resetSheet(){
+    mockbill.style.display="none";
+    shotbox.querySelector("div:nth-child(2)").style.display="block";
+    [...shotbox.querySelectorAll(".spinner")].forEach(s=>s.remove());
+    confirmArea.style.display="none";
+    sheetTitle.textContent="① 选择付款截图";
+    nextBtn.disabled=false; nextBtn.textContent="选择截图";
+  }
+  function nowStr(){ const d=new Date(); return `${d.getMonth()+1}-${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; }
+
+  // ---------- 实时同步 演示 ----------
+  function simulateSync(){
+    const fam = document.getElementById("famHome");
+    const mom = fam.children[1];
+    mom.classList.add("pulse");
+    setTimeout(()=>mom.classList.remove("pulse"), 1000);
+    document.getElementById("syncState").textContent = "同步中…";
+    setTimeout(()=>document.getElementById("syncState").textContent = "已同步", 900);
+  }
+  function showToast(msg){
+    const t = document.getElementById("toast");
+    t.textContent = msg; t.classList.add("show");
+    setTimeout(()=>t.classList.remove("show"), 2200);
+  }
+  // 模拟：妈妈也在记账 -> 我的页面实时刷新
+  setInterval(()=>{
+    if (Math.random()<0.5) return;
+    const moms = ["午餐 AA","买菜","打车"];
+    txs.unshift({ t:"妈妈", mer: moms[Math.floor(Math.random()*moms.length)], cat:"餐饮", acct:"wx", amt:-(Math.random()*60+10), time: nowStr() });
+    render();
+    document.getElementById("syncState").textContent="收到妈妈的新账目";
+    setTimeout(()=>document.getElementById("syncState").textContent="已同步", 1500);
+  }, 9000);
+</script>
+</body>
+</html>
