@@ -2,6 +2,14 @@
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.9] - 2026-10-29
+
+### owner 裁决：采纳 C-R03 / C-R05 / C-R06
+- **C-R03 / P2 / 已采纳**：admin 改/删他人交易以 PRD §12 决策#2 为准。改动 `docs/FastLedger-落地方案.md` §5.5 权限矩阵：admin 列由"可配置"改为"✅"，并加注引用 §12 决策#2；member 列"默认不可"维持（与 PRD §7.2 member=✗ 一致）。
+- **C-R05 / P2 / 已采纳**：全仓统一 `EBK_` 环境变量前缀。改动 `docs/FastLedger-新手开发完整指南.md` §22.5：`ENABLE_REGISTER=false` → `EBK_ENABLE_REGISTER=false`（与落地方案 §6.1、PRD §12.1 一致）。
+- **C-R06 / P2 / 已采纳**：断电持久性定为 `synchronous=FULL`，不采用"书面豁免"。改动：指南 §22.4 initDB DSN `_synchronous=NORMAL`→`FULL`；落地方案 §6.1 补 `synchronous=FULL` 说明；PRD §12.1 该项由【待确认】转为【决策】。
+- **§12.1 其余技术待确认**（权限变化缓存重建、实例管理员边界、关闭注册后入户、删除恢复审计）：维持【待确认】，待 owner 后续裁决。
+
 ## [1.8] - 2026-10-29
 
 ### 新增独立审阅者 C 文档评审（workbuddy/FastLedger-文档评审-C.md）

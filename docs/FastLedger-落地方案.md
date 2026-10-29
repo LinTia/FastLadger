@@ -922,9 +922,11 @@ GET /books/{id}/assets/summary
 | 邀请/移除成员、改角色 | ✅ | ✅（不能动 owner） | ❌ |
 | 增删改自己的交易 | ✅ | ✅ | ✅ |
 | 查看他人交易 | 受账本开关控制（默认可见） | 同左 | 同左 |
-| 改/删他人交易 | ✅ | 可配置 | 默认不可 |
+| 改/删他人交易 | ✅ | ✅ | 默认不可 |
 | 管理标的/持仓/资产 | ✅ | ✅ | 自己的持仓 |
 | 查看家庭资产合计 | ✅ | ✅ | 受账本开关控制 |
+
+> admin 的"改/删他人交易"以 PRD §12 决策#2 为准（owner 与 admin 可管理本账本全部记录）；member 仅可编辑/删除本人记录（与 PRD §7.2 member=✗ 一致）。原表 admin 列写作"可配置"与 PRD 冲突，已在 [1.9] 裁决对齐。
 
 ---
 
@@ -1002,7 +1004,7 @@ func (r *VersionRepo) Next(sess *xorm.Session, bookID int64) (int64, error) {
 
 **SQLite 连接初始化（唯一示例）**：
 
-统一引用《新手开发完整指南》§22.4 的 `initDB`：DSN 逐连接设置 WAL/foreign_keys/busy_timeout，`db := engine.DB()`，再用 `db.QueryRow(...)` 校验。旧的外包接收者 `func (db *xorm.Engine) pragmas()` 已移除。真实 DSN 与编译核验的范围见 `gpt/v1.4/verification/`。
+统一引用《新手开发完整指南》§22.4 的 `initDB`：DSN 逐连接设置 WAL/foreign_keys/busy_timeout/synchronous=FULL，`db := engine.DB()`，再用 `db.QueryRow(...)` 校验。旧的外包接收者 `func (db *xorm.Engine) pragmas()` 已移除。真实 DSN 与编译核验的范围见 `gpt/v1.4/verification/`。
 
 **首个 owner 初始化（不依赖公开注册）**：
 - 首次启动检测到 `users` 表为空时，进入**初始化向导**（网页/客户端显示"创建管理员账户"），或用命令行创建：

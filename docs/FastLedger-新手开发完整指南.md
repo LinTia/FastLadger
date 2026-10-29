@@ -2128,7 +2128,7 @@ func initDB() *xorm.Engine {
 		"_journal_mode=WAL&" +       // 读写不互锁
 		"_busy_timeout=5000&" +      // 遇锁等 5s 自动重试
 		"_foreign_keys=on&" +        // 外键约束每连接生效
-		"_synchronous=NORMAL"        // WAL 下安全且更快
+		"_synchronous=FULL"          // 断电不丢已提交事务（PRD §12 决策#5；WAL+FULL 家庭负载可接受）
 	engine, err := xorm.NewEngine("sqlite3", dsn)
 	if err != nil {
 		log.Fatal(err)
@@ -2159,7 +2159,7 @@ func initDB() *xorm.Engine {
 ./fastledger user create --username admin --owner
 ```
 
-建好后该入口失效；`ENABLE_REGISTER=false` 不影响它。
+建好后该入口失效；`EBK_ENABLE_REGISTER=false` 不影响它。
 
 ---
 ---
