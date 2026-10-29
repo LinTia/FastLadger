@@ -928,7 +928,11 @@ func Login(c *gin.Context) {
 		Username string `json:"username"`
 		Password string `json:"password"`
 	}
-	_ = c.ShouldBindJSON(&req)
+	// 绑定错误必须处理（与 Register 对齐）：非法 JSON 直接 400，不吞错继续
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "请求格式错误"})
+		return
+	}
 	token, err := services.Login(req.Username, req.Password)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})
@@ -2267,20 +2271,54 @@ func Pull(uid, bookID, afterVersion int64, limit int) (*SyncBatch, error) {
 		return nil, err
 	}
 
-	// 2) 同一快照内读取所有实体（同一版本的多表/多行一定一起可见）
-	batch := &SyncBatch{HighVersion: bv.Version}
-	if err := sess.Where("book_id=? AND sync_version>?", bookID, afterVersion).
-		OrderBy("sync_version ASC").Limit(limit).Find(&batch.Transactions); err != nil {
+	// 2) 确定本批版本上界 safeVersion：按【版本边界】分页，绝不把同一 sync_version
+	//    的一组变更拆到两批。先取增量交易前 limit 行所在的最高版本（含软删墓碑，
+	//    不过滤 deleted），再把该版本的全部行（含同版本的账户/分类/持仓）一起纳入。
+	var safeVersion int64
+	_, err := sess.SQL(`SELECT COALESCE(MAX(sync_version), 0) FROM (
+		SELECT sync_version FROM transactions
+		WHERE book_id = ? AND sync_version > ?
+		ORDER BY sync_version ASC LIMIT ?
+	)`, bookID, afterVersion, limit).Get(&safeVersion)
+	if err != nil {
 		return nil, err
 	}
-	sess.Where("book_id=? AND sync_version>?", bookID, afterVersion).Find(&batch.Accounts)
-	sess.Where("book_id=? AND sync_version>?", bookID, afterVersion).Find(&batch.Categories)
-	sess.Where("book_id=? AND sync_version>?", bookID, afterVersion).Find(&batch.Holdings)
+
+	// 兜底：本批没有交易增量时，可能只有账户/分类/持仓变更，
+	// 从这三张表取增量的最高版本，避免漏掉非交易变更。
+	if safeVersion == 0 {
+		_, err = sess.SQL(`SELECT COALESCE(MAX(v), 0) FROM (
+			SELECT sync_version AS v FROM accounts   WHERE book_id=? AND sync_version>?
+			UNION ALL
+			SELECT sync_version FROM categories WHERE book_id=? AND sync_version>?
+			UNION ALL
+			SELECT sync_version FROM holdings  WHERE book_id=? AND sync_version>?
+		)`, bookID, afterVersion, bookID, afterVersion, bookID, afterVersion).
+			Get(&safeVersion)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if safeVersion == 0 {
+		return &SyncBatch{HighVersion: bv.Version}, nil // 确实没有任何增量
+	}
+
+	// 3) 所有实体统一在 (afterVersion, safeVersion] 内、同一快照读取，
+	//    保证同一版本的多表/多行一起可见；limit 是目标规模，同版本回扩可能略超。
+	batch := &SyncBatch{HighVersion: safeVersion}
+	cond := "book_id=? AND sync_version>? AND sync_version<=?"
+	if err := sess.Where(cond, bookID, afterVersion, safeVersion).
+		OrderBy("sync_version ASC").Find(&batch.Transactions); err != nil {
+		return nil, err
+	}
+	sess.Where(cond, bookID, afterVersion, safeVersion).Find(&batch.Accounts)
+	sess.Where(cond, bookID, afterVersion, safeVersion).Find(&batch.Categories)
+	sess.Where(cond, bookID, afterVersion, safeVersion).Find(&batch.Holdings)
 	return batch, nil
 }
 ```
 
-> 分页注意：如按版本分页，**不能把同一 `sync_version` 的一组变更拆到两页**（同一事务可能同时改交易和账户）。应以版本为边界分页；WS 发送缓冲溢出时必须要求客户端全量重同步，不能静默丢弃后继续推进。
+> 分页规则（上面已实现）：① 以**版本边界**分页，`safeVersion` 回扩保证同一 `sync_version` 的多表/多行不拆到两批；② 客户端只有在**完整应用整批**后，才把本地游标推进到返回的 `HighVersion`，再用它作为下一次 `afterVersion`；③ WS 发送缓冲溢出时必须要求客户端全量重同步，不能静默丢弃后继续推进。
 
 ### 22.3 冲突处理
 

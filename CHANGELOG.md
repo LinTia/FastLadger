@@ -2,6 +2,15 @@
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.16] - 2026-10-30
+
+### D 复核 [1.15] 修复 + 两个 P3 收尾
+- 逐条回读文档（非仅看 CHANGELOG）确认 **D-R01–D-R06 全部真实落地**：audit_logs DDL/Delete-Restore/迁移 §4.7/WS 存活/OCR 契约/Flutter 网络层/Pull 授权均在骨架中，非表面文字。
+- 复核中发现并修复两个 P3 残留：
+  - **Login handler 仍吞绑定错误**（`_ = c.ShouldBindJSON`，与同文件 Register 不一致）→ 改为显式处理返 400。
+  - **Pull 分页未严格按版本边界**（`LIMIT` 按行截断可能拆同一 sync_version，且账户/分类/持仓未限范围）→ 改为先算 `safeVersion` 版本上界、所有实体统一在 `(afterVersion, safeVersion]` 快照读取，并补非交易变更兜底与客户端游标推进规则。
+- 结论：设计/骨架层已无阻塞项，可按 WBS 阶段 0 进入正式编码；运行时验证仍待正式工程补齐。
+
 ## [1.15] - 2026-10-30
 
 ### owner 裁决：D-R01–D-R06 复核全部属实，已采纳并修复
