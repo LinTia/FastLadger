@@ -2,6 +2,15 @@
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.12] - 2026-10-30
+
+### owner 裁决：§12.1 剩余 3 项待确认全部转为【决策】
+- **权限变化与本地缓存重建**（已采纳建议方案）：事件收敛为 4 类（`visibility_changed` / `member_removed` / `member_role_changed` / `book_deleted`）且 WS 广播**脱敏**；客户端**定向重拉该账本**（`afterVersion=0`）而非清空本地库；可见性变化**不递增业务 `sync_version`**（非数据变更），改用事件携带 `force_full_resync=true`；被移除成员客户端**主动清除该账本本地数据**并停止订阅；隐私边界话术写入 §7.3 并常驻显示于开关旁。改动 `docs/FastLedger-产品需求文档-PRD.md` §12.1、§7.3。
+- **实例管理员与账本 owner 边界**（已采纳）：两层角色**正交**（实例管理员 vs 账本 owner/admin/member），互不推导；整库备份含所有私账，故**下载仅限实例管理员**（文件权限 600 + 写审计），对普通 owner 提供**"按账本导出"**以机制上防越权；LLM 密钥修改仅实例管理员并写 `audit_logs(action=config_change)`；`users` 增 `is_instance_admin`，与 `book_members.role` 分离。改动 PRD §12.1。
+- **关闭公开注册后的成员入户**（已采纳）：**邀请与公开注册解耦**，`EBK_ENABLE_REGISTER=false` 不影响邀请码注册，邀请为唯一入户通道；邀请码绑定账本 + 角色、**有效期默认 7 天**（`EBK_INVITE_TTL_DAYS`）、**单次使用**（`used_at`/`used_by`）、可选绑定邮箱或用户名（防链接转发）；限流：每账本每分钟生成 ≤5、同 IP 每小时尝试 ≤10，失败计审计；注册**原子**建 `user` + `book_members`；生成/使用/撤销/过期全周期审计。改动 PRD §12.1。
+- **同步《开发WBS》**：附录 A 提案 1/2/3 由"待裁决"更新为"已采纳为【决策】"；阶段 1、3 的阻塞标记解除。
+- **至此 §12.1 五项技术待确认全部转为【决策】**，PRD 已无遗留【待确认】阻塞项，可进入开发阶段（见《FastLedger-开发WBS.md》）。
+
 ## [1.11] - 2026-10-30
 
 ### 新增开发 WBS（展开版）+ 3 项待确认的建议方案
