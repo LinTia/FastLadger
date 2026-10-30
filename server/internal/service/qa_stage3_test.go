@@ -394,11 +394,14 @@ func qas3Callees(fn *ast.FuncDecl) map[string]bool {
 	return out
 }
 
-// TestQAS3VisibilityCondWiredIntoAllThreeReadPaths 可见性条件必须真的拼进三处读路径。
+// TestQAS3VisibilityCondWiredIntoAllReadPaths 可见性条件必须真的拼进每一处读路径。
 //
 // 验收要点：List / Get / Pull 三个入口都必须调用 txVisibilityCond。
 // 只"算出来不用"是本阶段最危险的实现错误（List 会变成绕过开关的后门）。
-func TestQAS3VisibilityCondWiredIntoAllThreeReadPaths(t *testing.T) {
+//
+// 阶段 4 追加第四处：ListDeleted（回收站视图）。回收站同样受可见性开关约束——
+// 否则"关闭互看"后，成员仍能从回收站看到别人删掉的账目明细。
+func TestQAS3VisibilityCondWiredIntoAllReadPaths(t *testing.T) {
 	txFile := qas3Parse(t, "tx.go")
 	syncFile := qas3Parse(t, "sync.go")
 	visFile := qas3Parse(t, "visibility.go")
@@ -415,6 +418,8 @@ func TestQAS3VisibilityCondWiredIntoAllThreeReadPaths(t *testing.T) {
 		{"tx.go", txFile, "List"},
 		{"tx.go", txFile, "Get"},
 		{"sync.go", syncFile, "Pull"},
+		// 阶段 4：回收站视图也是读路径，必须同样按可见性过滤
+		{"recycle.go", qas3Parse(t, "recycle.go"), "ListDeleted"},
 	} {
 		fn := qas3Func(c.ast, c.fn)
 		if fn == nil {
@@ -425,9 +430,9 @@ func TestQAS3VisibilityCondWiredIntoAllThreeReadPaths(t *testing.T) {
 		}
 	}
 
-	// txVisibilityCond 必须在 visibility.go 里定义，且**只能**由这三处 + 自身使用（防止散落实现）
+	// txVisibilityCond 必须在 visibility.go 里定义，且**只能**由这些读路径使用（防止散落实现）
 	users := qas3AllCallers(t, "txVisibilityCond")
-	want := map[string]bool{"List": true, "Get": true, "Pull": true}
+	want := map[string]bool{"List": true, "Get": true, "Pull": true, "ListDeleted": true}
 	for name := range users {
 		if !want[name] {
 			t.Errorf("txVisibilityCond 被非读路径 %q 调用：请确认没有第四处自定义过滤", name)
@@ -483,11 +488,24 @@ func TestQAS3ListCountUsesSameCondition(t *testing.T) {
 // 断言"调用图闭环"：Create → {createSingleInTx, createTransferInTx} → {createChangeBalance, insertTxRow}，
 // 且 createChangeBalance / insertTxRow 不得被闭环以外的函数调用。
 // 任何新增的"第二个创建入口"都必然破坏这个闭环（要么绕过余额原子更新，要么绕过幂等回执）。
+//
+// 阶段 4 的澄清：Delete/Restore（经 mutateVisibility）是【变更】路径而非【创建】路径，
+// 它不新增交易行、不走幂等创建回执，但需要反向余额——因此被显式授权调用
+// createChangeBalance，并在此白名单内登记。它依旧不得调用 insertTxRow。
 func TestQAS3SingleCreateEntry(t *testing.T) {
-	// 只允许出现在这两个 helper 里
+	// 各底层原语的【授权调用方】白名单（阶段 4 起分化）：
+	//   - createChangeBalance（余额原子改动）：除两个创建 helper 外，额外允许阶段 4 的
+	//     mutateVisibility——删除/恢复做的是"精确反向"，必须复用同一条原子 UPDATE，
+	//     绝不许另起"先读余额再写回"的路径。
+	//   - insertTxRow（写交易行）：仍然【只】允许两个创建 helper。
+	//     删除/恢复不新增行，只改 deleted 标志，因此它出现在别处即为异常。
+	allowedCallers := map[string]map[string]bool{
+		"createChangeBalance": {"createSingleInTx": true, "createTransferInTx": true, "mutateVisibility": true},
+		"insertTxRow":         {"createSingleInTx": true, "createTransferInTx": true},
+	}
 	for _, callee := range []string{"createChangeBalance", "insertTxRow"} {
 		callers := qas3AllCallers(t, callee)
-		want := map[string]bool{"createSingleInTx": true, "createTransferInTx": true}
+		want := allowedCallers[callee]
 		for c := range callers {
 			if !want[c] {
 				t.Errorf("%s 被 %q 调用：出现了绕过 createSingleInTx/createTransferInTx 的写路径", callee, c)
