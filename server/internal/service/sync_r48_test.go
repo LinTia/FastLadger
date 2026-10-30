@@ -16,6 +16,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"slices"
 	"testing"
 
 	"fastledger/internal/model"
@@ -221,6 +222,80 @@ func TestR48SeedBulkVersionIsOnlyAllowedException(t *testing.T) {
 	}
 }
 
+// TestR48MixedChangesCompositionSimulation 复刻 TestR48MixedChangesBoundedByLimit 的真库
+// 版本分布，用真实 mergeSafeVersion 验证"19 行 / 7+7+5 / 账户 7 行"这个推导。
+//
+// 相对版本（起点视为 0），每轮 i（0-based）：
+//   - 交易 v=3i+1、新建账户 v=3i+2、新建分类 v=3i+3；
+//   - 每笔支出还会走 createChangeBalance 改写被扣款账户的余额，并把该账户行的
+//     sync_version 抬到本笔交易的版本 ⇒ 环境里那个既有账户（现金）最终停在 v=16，
+//     于是它被"搬"进本轮范围，成为第 19 行（库里它仍只有一行，不是重复下发）。
+func TestR48MixedChangesCompositionSimulation(t *testing.T) {
+	txs := make([]int64, 0, 6)
+	accts := make([]int64, 0, 7)
+	cats := make([]int64, 0, 6)
+	for i := 0; i < 6; i++ {
+		v := int64(3*i + 1)
+		txs = append(txs, v)
+		accts = append(accts, v+1)
+		cats = append(cats, v+2)
+	}
+	accts = append(accts, 16) // 既有账户「现金」被最后一笔支出搬到 v16
+	slices.Sort(accts)
+
+	tables := map[string][]int64{
+		"transactions": txs,
+		"accounts":     accts,
+		"categories":   cats,
+		"holdings":     {},
+	}
+
+	const limit = 7
+	var got batchStat
+	var sizes []int
+	cursor := int64(0)
+	for i := 0; i < 100; i++ {
+		sv := simulateSafeVersion(tables, cursor, limit)
+		if sv <= cursor {
+			break
+		}
+		cur := batchStat{}
+		for _, v := range txs {
+			if v > cursor && v <= sv {
+				cur.transactions++
+			}
+		}
+		for _, v := range accts {
+			if v > cursor && v <= sv {
+				cur.accounts++
+			}
+		}
+		for _, v := range cats {
+			if v > cursor && v <= sv {
+				cur.categories++
+			}
+		}
+		if cur.total() == 0 {
+			break
+		}
+		if cur.total() > limit {
+			t.Fatalf("第 %d 批 %d 行超过 limit=%d", len(sizes)+1, cur.total(), limit)
+		}
+		sizes = append(sizes, cur.total())
+		got = got.add(cur)
+		cursor = sv
+	}
+
+	want := batchStat{transactions: 6, accounts: 7, categories: 6, holdings: 0}
+	if got != want {
+		t.Fatalf("构成应为 交易=6 账户=7 分类=6 持仓=0（合计 19），实际 %+v（合计 %d）", got, got.total())
+	}
+	// 7 + 7 + 5：最后一批不足 limit 属正常，前面的批必须恰好等于 limit
+	if len(sizes) != 3 || sizes[0] != limit || sizes[1] != limit || sizes[2] != 5 {
+		t.Fatalf("分批应为 [7 7 5]，实际 %v", sizes)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // 真实 SQLite 端到端（无 CGO 时跳过）
 // ---------------------------------------------------------------------------
@@ -269,8 +344,31 @@ func entitiesAtVersion(t *testing.T, e *testEnv, ver int64) int64 {
 	return n
 }
 
-// pullAll 从 startVersion 起反复 pull 直到没有增量，返回每批的规模与最终游标。
-func pullAll(t *testing.T, e *testEnv, startVersion int64, limit int) (batches []int, high int64) {
+// batchStat 一批的构成。
+//
+// 为什么按实体拆分统计：只断言"总行数"时，一旦数字对不上就说不清是哪类实体多发/漏发
+// （CI 上踩过一次：多出来的 1 行其实是"余额变动被搬到新版本的既有账户"）。
+type batchStat struct {
+	transactions int
+	accounts     int
+	categories   int
+	holdings     int
+}
+
+func (b batchStat) total() int {
+	return b.transactions + b.accounts + b.categories + b.holdings
+}
+
+func (b batchStat) add(o batchStat) batchStat {
+	b.transactions += o.transactions
+	b.accounts += o.accounts
+	b.categories += o.categories
+	b.holdings += o.holdings
+	return b
+}
+
+// pullAll 从 startVersion 起反复 pull 直到没有增量，返回每批的构成与最终游标。
+func pullAll(t *testing.T, e *testEnv, startVersion int64, limit int) (batches []batchStat, high int64) {
 	t.Helper()
 	svc := NewSyncService(e.engine, e.txs, nil)
 	cursor := startVersion
@@ -282,20 +380,34 @@ func pullAll(t *testing.T, e *testEnv, startVersion int64, limit int) (batches [
 		if b.HighVersion < cursor {
 			t.Fatalf("游标倒退：%d → %d", cursor, b.HighVersion)
 		}
-		size := len(b.Transactions) + len(b.Accounts) + len(b.Categories) + len(b.Holdings)
-		if size == 0 {
+		cur := batchStat{
+			transactions: len(b.Transactions),
+			accounts:     len(b.Accounts),
+			categories:   len(b.Categories),
+			holdings:     len(b.Holdings),
+		}
+		if cur.total() == 0 {
 			// 没有可下发的行即收敛（book_versions 可能比最后一行 sync_version 略高，
 			// 那时 HighVersion 会带着空批前进，不能把它算成一批）
 			return batches, cursor
 		}
 		if b.HighVersion <= cursor {
-			t.Fatalf("返回了 %d 行但游标未推进（%d → %d）", size, cursor, b.HighVersion)
+			t.Fatalf("返回了 %d 行但游标未推进（%d → %d）", cur.total(), cursor, b.HighVersion)
 		}
-		batches = append(batches, size)
+		batches = append(batches, cur)
 		cursor = b.HighVersion
 	}
 	t.Fatal("pull 未在 1000 批内收敛（疑似死循环）")
 	return nil, 0
+}
+
+// sumBatches 汇总各批构成
+func sumBatches(batches []batchStat) batchStat {
+	var s batchStat
+	for _, b := range batches {
+		s = s.add(b)
+	}
+	return s
 }
 
 // TestR48OnlyAccountChangesAreBatched 只有账户变更：每批规模受 limit 约束，
@@ -322,19 +434,19 @@ func TestR48OnlyAccountChangesAreBatched(t *testing.T) {
 	if len(batches) == 0 {
 		t.Fatal("应至少有一批增量")
 	}
-	sum := 0
-	for i, n := range batches {
-		if n > limit {
-			t.Fatalf("第 %d 批返回 %d 行，超过 limit=%d（水位没被 limit 约束住）", i+1, n, limit)
+	for i, b := range batches {
+		if b.total() > limit {
+			t.Fatalf("第 %d 批返回 %d 行，超过 limit=%d（水位没被 limit 约束住）", i+1, b.total(), limit)
 		}
-		sum += n
 	}
-	// 全部 20 个新账户都要被下发，且恰好分 total/limit 批（每行一个版本）
-	if sum != total {
-		t.Fatalf("新增的 %d 个账户应全部被下发，实际 %d 行", total, sum)
+	// 全部 20 个新账户都要被下发（起点在 seed 之后，不涉及交易/持仓），
+	// 且恰好分 total/limit 批——每个账户各占一个版本，不存在同版本回扩。
+	got := sumBatches(batches)
+	if got.accounts != total || got.transactions != 0 || got.categories != 0 || got.holdings != 0 {
+		t.Fatalf("下发构成应为 账户=%d 交易=0 分类=0 持仓=0，实际 %+v", total, got)
 	}
 	if len(batches) != total/limit {
-		t.Fatalf("%d 个账户按 limit=%d 应恰好分 %d 批，实际 %d 批（%v）",
+		t.Fatalf("%d 个账户按 limit=%d 应恰好分 %d 批，实际 %d 批（%+v）",
 			total, limit, total/limit, len(batches), batches)
 	}
 }
@@ -371,17 +483,32 @@ func TestR48MixedChangesBoundedByLimit(t *testing.T) {
 	if len(batches) == 0 {
 		t.Fatal("应至少有一批增量")
 	}
-	sum := 0
-	for i, n := range batches {
-		// 本用例每个版本只有 1 行（无转账），故不存在同版本回扩，每批必须 ≤ limit
-		if n > limit {
-			t.Fatalf("第 %d 批返回 %d 行，超过 limit=%d", i+1, n, limit)
+	for i, b := range batches {
+		// 本用例没有转账，且每批都必须 ≤ limit（同版本回扩只可能发生在边界版本，
+		// 若某批超限说明水位没被 limit 约束住）
+		if b.total() > limit {
+			t.Fatalf("第 %d 批返回 %d 行，超过 limit=%d", i+1, b.total(), limit)
 		}
-		sum += n
 	}
-	// 三类实体的变更都要被下发（合计 18 行）
-	if sum != rounds*3 {
-		t.Fatalf("混合变更应下发 %d 行，实际 %d 行（%v）", rounds*3, sum, batches)
+
+	// 期望构成（逐项写死，避免"数字对不上却说不清"）：
+	//   - 交易 6 行：每轮 1 笔支出；
+	//   - 分类 6 行：每轮 1 个新建分类；
+	//   - 账户 7 行 = 每轮 1 个新建账户（6）+ **环境里那个既有账户（e.assetID「现金」）1 行**。
+	//     为什么会有这第 19 行：支出走 createChangeBalance 改写账户余额时，会把该账户行的
+	//     sync_version 抬到本笔交易的版本——余额变了，客户端必须重新收到这一行。
+	//     它本来在 start 之前（不在本轮范围），因为余额被改写才被"搬"进范围，属正确语义，
+	//     不是重复下发（库里它仍只有一行）。
+	//   合计 19 行 ⇒ 按 limit=7 分 3 批：7 + 7 + 5（最后一批不足 limit 属正常）。
+	got := sumBatches(batches)
+	want := batchStat{transactions: rounds, accounts: rounds + 1, categories: rounds, holdings: 0}
+	if got != want {
+		t.Fatalf("下发构成应为 交易=%d 账户=%d 分类=%d 持仓=%d（合计 %d），实际 %+v（合计 %d，分批 %+v）",
+			want.transactions, want.accounts, want.categories, want.holdings, want.total(),
+			got, got.total(), batches)
+	}
+	if len(batches) != 3 {
+		t.Fatalf("19 行按 limit=7 应分 3 批（7+7+5），实际 %d 批（%+v）", len(batches), batches)
 	}
 }
 
@@ -407,19 +534,20 @@ func TestR48OnlyCategoryChangesAreBatched(t *testing.T) {
 	if len(batches) == 0 {
 		t.Fatal("应至少有一批增量")
 	}
-	sum := 0
-	for i, n := range batches {
-		if n > limit {
-			t.Fatalf("第 %d 批返回 %d 行，超过 limit=%d（非交易变更没被 limit 约束）", i+1, n, limit)
+	for i, b := range batches {
+		if b.total() > limit {
+			t.Fatalf("第 %d 批返回 %d 行，超过 limit=%d（非交易变更没被 limit 约束）", i+1, b.total(), limit)
 		}
-		sum += n
 	}
-	if sum != total {
-		t.Fatalf("新增的 %d 个分类应全部被下发，实际 %d 行", total, sum)
+	// 只有分类变更：不涉及交易与余额改写，故账户/交易/持仓都应为 0
+	got := sumBatches(batches)
+	want := batchStat{categories: total}
+	if got != want {
+		t.Fatalf("下发构成应为 分类=%d 交易=0 账户=0 持仓=0，实际 %+v", total, got)
 	}
-	// 12 行 / limit=5 ⇒ 至少 3 批（旧实现只会返回 1 批）
-	if len(batches) < 3 {
-		t.Fatalf("%d 个分类按 limit=%d 至少应分 3 批，实际 %d 批（%v）", total, limit, len(batches), batches)
+	// 12 行 / limit=5 ⇒ 3 批（5+5+2）；旧实现的"取 MAX"兜底只会返回 1 批
+	if len(batches) != 3 {
+		t.Fatalf("%d 个分类按 limit=%d 应分 3 批（5+5+2），实际 %d 批（%+v）", total, limit, len(batches), batches)
 	}
 }
 
