@@ -649,7 +649,19 @@ func (h *Hub) Subscribe(c *Client, bookIDs []int64, uid int64) error {
 		for k, v := range gs.perBook {
 			snap.perBook[k] = v
 		}
-		snap.overflow = gs.overflow
+		// SYNC-09：溢出序号**只在整帧重验（本轮 pending 覆盖整帧）时**才吸收最新值。
+		// 溢出类事件无法归因到具体账本——若子集重验轮把它覆盖成最新值，就会把
+		// "上一轮快照之后、本轮快照之前"发生的溢出事件抹掉。攻击链（验证员推导）：
+		// 账本 1 的结论在溢出前取得（它不在 gen 表内，撤权只推进溢出序号）→ 账本 2
+		// 的 per-book 变化触发子集重验 → 撤权推进溢出 → 子集重验轮把溢出覆盖成最新值
+		// → 写入时 O==O、账本 1 的 per-book 0==0 → 撤销前的 allow=true 被写回。
+		// 只有整帧重验之后（所有结论都是最新的），吸收最新溢出序号才是安全的；
+		// 否则保持旧值，让 writeSubscribe 继续作废整帧（fail-closed）。
+		// pending 恒为 ids 的同序子集（stale 按 ids 顺序产生；溢出路径直接复制 ids），
+		// 因此长度相等即等价于覆盖整帧。
+		if len(pending) == len(ids) {
+			snap.overflow = gs.overflow
+		}
 		// 锁外查库校验（每个 bookID 独立判定，失败/非成员一律不订阅）
 		for _, b := range pending {
 			canView, cerr := checker(uid, b)

@@ -18,6 +18,9 @@ package ws
 
 import (
 	"errors"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"strings"
 	"testing"
 	"time"
@@ -355,5 +358,206 @@ func TestSync04GenerationMapBounded(t *testing.T) {
 	hub.RefreshVisibility(1)
 	if c.Subscribed(1) {
 		t.Fatal("gen 表有界化之后，撤权必须仍然生效（R50 不变量）")
+	}
+}
+
+// sync09SeqChecker 按调用序注入副作用的校验器（SYNC-09 确定性复现用）。
+//
+// 调用序（帧 [target1, 2]）：
+//   - 第 1 次（target1，round0）：放行 allow=true —— 这是"撤销前取得的结论"；
+//   - 第 2 次（账本 2，round0）：闸门①——卡住期间 RefreshVisibility(2) 让账本 2
+//     的 per-book gen 变化 → round0 写入判 stale=[2]（溢出未变，不触发整帧）；
+//   - 第 3 次（账本 2，round1）：闸门②——此时 round1 的快照合并【已经完成】，
+//     卡住期间对"不在 gen 表内的账本"撤权（只推进溢出序号）；
+//   - 第 4 次（target1，round2 整帧重验）：已撤权 → 返回错误；
+//   - 第 5 次（账本 2，round2）：放行。
+type sync09SeqChecker struct {
+	inner        *fakeChecker
+	hub          *Hub
+	gate2Enter   chan struct{}
+	gate2Release chan struct{}
+	gate3Enter   chan struct{}
+	gate3Release chan struct{}
+	calls        int
+}
+
+func (s *sync09SeqChecker) check(uid, bookID int64) (bool, error) {
+	s.calls++
+	v, err := s.inner.check(uid, bookID)
+	if err != nil {
+		return v, err // 已撤权：保持错误路径
+	}
+	switch s.calls {
+	case 2:
+		close(s.gate2Enter)
+		<-s.gate2Release
+	case 3:
+		close(s.gate3Enter)
+		<-s.gate3Release
+	}
+	return v, err
+}
+
+// TestSync09OverflowNotAbsorbedBySubsetRetry 溢出序号不得被子集重验轮吸收（SYNC-09）。
+//
+// 攻击链（验证员推导，本用例确定性复现）：账本 target1 不在 gen 表内，其撤权只能
+// 推进溢出序号；round0 停在写入前 → 账本 2 的 per-book 变化触发 stale=[2]（子集）
+// → 放行后 round1 的快照合并【已经完成】，此时撤权推进溢出 → 若子集重验轮把
+// snap.overflow 覆盖成最新值，round1 写入时 O==O、target1 的 per-book 0==0，
+// 撤销前的 allow=true 被写回（已撤销成员订阅成功）。
+// 修复：溢出序号只在整帧重验时吸收 → round1 写入发现溢出变化 → 整帧重验 → 撤权生效。
+func TestSync09OverflowNotAbsorbedBySubsetRetry(t *testing.T) {
+	const uid = int64(100)
+	target1 := int64(maxGenerationEntries) + 7 // 不在 gen 表内：撤权只推进溢出序号
+	overflowBook := int64(maxGenerationEntries) + 8
+
+	chk := newFakeChecker()
+	chk.allow(target1, uid, true)
+	chk.allow(2, uid, true)
+	seq := &sync09SeqChecker{
+		inner:        chk,
+		gate2Enter:   make(chan struct{}),
+		gate2Release: make(chan struct{}),
+		gate3Enter:   make(chan struct{}),
+		gate3Release: make(chan struct{}),
+	}
+	hub := NewHub(seq.check)
+
+	// gen 表填满：此后新账本的权限事件只能推进溢出序号（SYNC-07 语义）
+	for b := int64(1); b <= maxGenerationEntries; b++ {
+		hub.RefreshVisibility(b)
+	}
+	if hub.GenerationCount() != maxGenerationEntries {
+		t.Fatalf("前置条件失败：gen 表应恰好满（%d），实际 %d", maxGenerationEntries, hub.GenerationCount())
+	}
+
+	c := NewClient()
+	c.UID = uid
+	if err := hub.Register(c); err != nil {
+		t.Fatalf("注册失败：%v", err)
+	}
+
+	done := make(chan error, 1)
+	go func() { done <- hub.Subscribe(c, []int64{target1, 2}, uid) }()
+
+	// 闸门①：round0 停在第 2 个账本的鉴权上；期间让账本 2 的 per-book gen 变化
+	<-seq.gate2Enter
+	hub.RefreshVisibility(2)
+	close(seq.gate2Release)
+
+	// 闸门②：round1 的快照合并已完成（子集 [2]，按修复【不吸收】溢出序号）；
+	// 此时撤权 target1（不在表内 → 只推进溢出序号），再放行
+	<-seq.gate3Enter
+	chk.revoke(target1, uid)
+	hub.RefreshVisibility(overflowBook)
+	close(seq.gate3Release)
+
+	if err := <-done; err != nil {
+		t.Fatalf("订阅应落定（撤权生效、账本 2 正常订阅）：%v", err)
+	}
+	if c.Subscribed(target1) {
+		t.Fatal("SYNC-09 回归：已撤销成员仍然订阅成功 —— 子集重验轮把溢出事件吸收掉了")
+	}
+	if !c.Subscribed(2) {
+		t.Fatal("账本 2 应订阅成功（它的结论在重验后取得）")
+	}
+	if seq.calls != 5 {
+		t.Fatalf("调用序应为 5 次（round0 全帧 2 + round1 子集 1 + round2 整帧 2），实际 %d 次"+
+			"（若为 3 次说明溢出事件被吸收、整帧重验没有发生）", seq.calls)
+	}
+}
+
+// TestSync09OverflowAbsorptionOnlyOnFullFrameRetry 源码级守卫（SYNC-09）。
+//
+// 行为层无法确定性命中攻击链的注入窗口（溢出事件必须落在"round0 写入"与
+// "round1 快照合并"之间，而那段代码没有任何外部钩子——验证员同样只能固化
+// 前置路径），因此这里用 AST 把修复机械地钉住：
+//
+//	Subscribe 内对 snap.overflow 的赋值必须**恰好一处**，且必须位于
+//	"len(pending) == len(ids)"（本轮 pending 覆盖整帧）的 IfStmt 之内。
+//
+// 若有人把吸收改回无条件（每轮覆盖成最新值），或加第二处赋值，本用例立刻红。
+func TestSync09OverflowAbsorptionOnlyOnFullFrameRetry(t *testing.T) {
+	f, err := parser.ParseFile(token.NewFileSet(), "hub.go", nil, 0)
+	if err != nil {
+		t.Fatalf("解析 hub.go 失败：%v", err)
+	}
+	var subscribe *ast.FuncDecl
+	for _, d := range f.Decls {
+		if fn, ok := d.(*ast.FuncDecl); ok && fn.Name != nil && fn.Name.Name == "Subscribe" && fn.Body != nil {
+			subscribe = fn
+			break
+		}
+	}
+	if subscribe == nil {
+		t.Fatal("未找到 Subscribe")
+	}
+
+	// countOverflowAssigns 统计子树内 "snap.overflow = ..." 的赋值次数
+	countOverflowAssigns := func(root ast.Node) int {
+		n := 0
+		ast.Inspect(root, func(c ast.Node) bool {
+			if as, ok := c.(*ast.AssignStmt); ok {
+				for _, lhs := range as.Lhs {
+					if sel, ok := lhs.(*ast.SelectorExpr); ok {
+						if x, ok := sel.X.(*ast.Ident); ok && x.Name == "snap" && sel.Sel.Name == "overflow" {
+							n++
+						}
+					}
+				}
+			}
+			return true
+		})
+		return n
+	}
+	// condCoversWholeFrame 条件是否同时引用 len(pending) 与 len(ids)
+	condCoversWholeFrame := func(cond ast.Expr) bool {
+		hasPending, hasIDs := false, false
+		ast.Inspect(cond, func(c ast.Node) bool {
+			if call, ok := c.(*ast.CallExpr); ok {
+				if id, ok := call.Fun.(*ast.Ident); ok && id.Name == "len" && len(call.Args) == 1 {
+					if arg, ok := call.Args[0].(*ast.Ident); ok {
+						switch arg.Name {
+						case "pending":
+							hasPending = true
+						case "ids":
+							hasIDs = true
+						}
+					}
+				}
+			}
+			return true
+		})
+		return hasPending && hasIDs
+	}
+
+	if total := countOverflowAssigns(subscribe.Body); total != 1 {
+		t.Fatalf("Subscribe 内对 snap.overflow 的赋值必须恰好 1 处（整帧重验时吸收最新溢出序号），实际 %d 处", total)
+	}
+
+	// 收集 Subscribe 内所有 IfStmt，确认唯一的赋值点被正确条件守护
+	var ifs []*ast.IfStmt
+	ast.Inspect(subscribe.Body, func(n ast.Node) bool {
+		if iff, ok := n.(*ast.IfStmt); ok {
+			ifs = append(ifs, iff)
+		}
+		return true
+	})
+	guarded, unguarded := 0, 0
+	for _, iff := range ifs {
+		if countOverflowAssigns(iff.Body) == 0 {
+			continue
+		}
+		if condCoversWholeFrame(iff.Cond) {
+			guarded++
+		} else {
+			unguarded++
+		}
+	}
+	if guarded != 1 || unguarded != 0 {
+		t.Fatalf("SYNC-09 回归：snap.overflow 的吸收必须恰好被一处"+
+			"\"len(pending) == len(ids)\"（整帧重验）条件守护（实际 guarded=%d, unguarded=%d）—— "+
+			"无条件吸收会让子集重验轮把上一轮之后发生的溢出事件（如不在 gen 表内的账本被撤权）吸收掉，"+
+			"已撤销成员的订阅会被写回", guarded, unguarded)
 	}
 }
