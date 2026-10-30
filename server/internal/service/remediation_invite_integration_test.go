@@ -799,3 +799,96 @@ func TestR42RevokeFailureWritesRejectedAudit(t *testing.T) {
 		t.Fatalf("撤销失败必须留下 rejected 审计，实际 %v", rows)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// GPT-R43：已删除账本不得继续成员管理（需真实 SQLite）
+// ---------------------------------------------------------------------------
+
+// TestR43DeletedBookBlocksMemberOperations 账本软删之后：
+// 不能再签发邀请、不能再入户、成员列表不再可读、成员管理动作全部失效。
+//
+// 覆盖之所以要逐个入口点名，是因为此前的口径是"成员行还在 ⇒ 账本还能用"，
+// 而账本被删之后 book_members 的残留行并没有跟着消失。
+func TestR43DeletedBookBlocksMemberOperations(t *testing.T) {
+	e := newInviteEnv(t)
+	inv := newRevocableInvite(t, e)
+	if err := e.books.Delete(e.uid, e.bookID); err != nil {
+		t.Fatalf("删除账本失败：%v", err)
+	}
+
+	// ① 签发邀请：不得再产生新的入户凭证
+	if _, err := e.members.CreateInvite(e.uid, e.bookID, model.RoleMember, "", ""); !errors.Is(err, ErrEntityDeleted) {
+		t.Fatalf("已删账本不得再签发邀请，实际 %v", err)
+	}
+	var inviteCount int64
+	if _, err := e.engine.SQL("SELECT COUNT(1) FROM invites WHERE book_id = ?", e.bookID).Get(&inviteCount); err != nil {
+		t.Fatalf("统计邀请失败：%v", err)
+	}
+	if inviteCount != 1 {
+		t.Fatalf("删除前只签发了 1 条邀请，删除后不得新增，实际 %d", inviteCount)
+	}
+
+	// ② 兑换：不能给一个不存在的账本继续拉人
+	if _, err := e.members.JoinViaInvite(e.bookID, inv.Code, "ghost", "", "password123", "10.0.0.6"); !errors.Is(err, ErrInviteInvalid) {
+		t.Fatalf("已删账本的邀请必须不可兑换，实际 %v", err)
+	}
+	var userCount int64
+	if _, err := e.engine.SQL("SELECT COUNT(1) FROM users WHERE username = ?", "ghost").Get(&userCount); err != nil {
+		t.Fatalf("统计用户失败：%v", err)
+	}
+	if userCount != 0 {
+		t.Fatalf("被拒绝的兑换不得留下孤儿用户，实际 %d", userCount)
+	}
+	if row := inviteRow(t, e, inv.Id); row.UsedAt != 0 {
+		t.Fatalf("账本已删时的兑换不得消耗邀请：used_at=%d", row.UsedAt)
+	}
+
+	// ③ 成员列表：只读路径也不得return出一个已经不存在的账本的成员清单
+	if _, err := e.members.List(e.bookID); !errors.Is(err, ErrEntityDeleted) {
+		t.Fatalf("已删账本的成员列表应返回 ErrEntityDeleted，实际 %v", err)
+	}
+
+	// ④ 成员管理动作（改角色 / 移除 / 撤销）：由 roleOfTx 的 JOIN 天然拦下
+	if err := e.members.RevokeInvite(e.uid, e.bookID, inv.Id); !errors.Is(err, ErrNotMember) {
+		t.Fatalf("已删账本不得执行撤销，实际 %v", err)
+	}
+	target := insertInviteUser(t, e, "leftover-member")
+	addInviteMember(t, e, target, model.RoleMember)
+	if err := e.members.ChangeRole(e.uid, e.bookID, target, model.RoleAdmin); !errors.Is(err, ErrNotMember) {
+		t.Fatalf("已删账本不得改成员角色，实际 %v", err)
+	}
+	if err := e.members.Remove(e.uid, e.bookID, target); !errors.Is(err, ErrNotMember) {
+		t.Fatalf("已删账本不得移除成员，实际 %v", err)
+	}
+}
+
+// TestR43DeletedBookJoinFailureIsAudited 账本已删导致的兑换失败要留下可查证的痕迹
+// （否则 owner 事后无法区分"没人来"和"有人来了但账本没了"）。
+func TestR43DeletedBookJoinFailureIsAudited(t *testing.T) {
+	e := newInviteEnv(t)
+	inv := newRevocableInvite(t, e)
+	if err := e.books.Delete(e.uid, e.bookID); err != nil {
+		t.Fatalf("删除账本失败：%v", err)
+	}
+	if _, err := e.members.JoinViaInvite(e.bookID, inv.Code, "ghost", "", "password123", "10.0.0.7"); !errors.Is(err, ErrInviteInvalid) {
+		t.Fatalf("预期兑换被拒，实际 %v", err)
+	}
+	rows := inviteAuditRowsFor(t, e, inv.Id)
+	found := false
+	for _, r := range rows {
+		p := parseInviteAudit(t, r)
+		if p["inviteEvent"] == inviteEventRedeem && p["result"] == inviteResultRejected &&
+			p["reason"] == inviteReasonBookDeleted {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("缺少 reason=%s 的失败审计，实际 %v", inviteReasonBookDeleted, rows)
+	}
+}
+
+// 说明（刻意不做"删除与兑换并发"用例）：本机 SQLite 固定 MaxOpenConns=1，
+// 两个写事务只能串行，无法在不依赖 sleep 的前提下把"删除"精确塞进
+// JoinViaInvite 的【Begin 之后、写入之前】那个窗口里。因此 R43 的并发正确性
+// 由【确定性顺序（先删再兑 ⇒ 必拒）】+【源码顺序断言（requireActiveBookTx
+// 在 Begin 之后且早于任何写入）】共同保证，而不是用一个随机调度碰运气。

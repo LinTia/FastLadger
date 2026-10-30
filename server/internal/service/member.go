@@ -74,6 +74,8 @@ const (
 	inviteReasonBoundMismatch = "bound_mismatch"
 	// inviteReasonEmailTaken 邮箱已被其他账号占用（对外并入 bound_mismatch 文案）
 	inviteReasonEmailTaken = "email_taken"
+	// inviteReasonBookDeleted 账本已被删除（GPT-R43）
+	inviteReasonBookDeleted = "book_deleted"
 )
 
 // GPT-R40：邀请撤销的失败语义，全部**继承**既有错误树（用 %w 包装），
@@ -156,15 +158,47 @@ func NewMemberService(engine *xorm.Engine, auth *AuthService, inviteTTLDays int)
 }
 
 // List 账本成员列表（调用方需已校验成员资格）
+//
+// GPT-R43：账本软删之后不再允许任何成员管理动作。列表虽然只读，
+// 但它是客户端判断"这个账本还有谁"的依据——继续返回等于让已删账本保持"还活着"的表象，
+// 也让被清除数据的客户端又有理由重新拉一遍。
 func (s *MemberService) List(bookID int64) ([]MemberDTO, error) {
+	sess := s.engine.NewSession()
+	defer sess.Close()
+	if err := requireActiveBookTx(sess, bookID); err != nil {
+		return nil, err
+	}
 	var out []MemberDTO
-	err := s.engine.SQL(
+	err := sess.SQL(
 		`SELECT m.uid, u.username, m.role, m.can_view_others AS can_view_others,
 		        u.is_instance_admin AS is_instance_admin
 		 FROM book_members m INNER JOIN users u ON u.id = m.uid
 		 WHERE m.book_id = ? AND m.deleted = 0 AND u.deleted = 0
 		 ORDER BY m.role ASC, m.id ASC`, bookID).Find(&out)
 	return out, err
+}
+
+// requireActiveBookTx 账本必须仍然存在（books.deleted = 0）。
+//
+// 为什么不能只看 book_members.deleted：成员关系是账本的【子对象】，
+// 账本被删了之后残留的成员行不能反过来证明"这个账本还能操作"——
+// 那会让已删账本继续签发邀请、继续接收成员（GPT-R43）。
+//
+// 写事务路径另有 roleOfTx / requireMemberTx，它们的 SQL 本身就 JOIN 了
+// `books b ON b.id = m.book_id AND b.deleted = 0`（单一口径），
+// 因此 ChangeRole / Remove / RevokeInvite 天然满足本约束；
+// 本函数服务的是那些【不经过成员资格判定】的入口（List、JoinViaInvite），
+// 以及需要把"账本没了"独立于权限错误表达出来的入口（CreateInvite）。
+func requireActiveBookTx(sess *xorm.Session, bookID int64) error {
+	var deleted int64
+	has, err := sess.SQL("SELECT deleted FROM books WHERE id = ?", bookID).Get(&deleted)
+	if err != nil {
+		return err
+	}
+	if !has || deleted != 0 {
+		return fmt.Errorf("%w：账本不存在或已被删除", ErrEntityDeleted)
+	}
+	return nil
 }
 
 // ChangeRole 修改成员角色：owner/admin 可操作，但 admin 不能改 owner，也不能把他人提为 owner
@@ -306,6 +340,12 @@ func (s *MemberService) CreateInvite(actor, bookID int64, role int8, boundUserna
 	}
 	if !CanManageMembers(actorRole) {
 		return nil, ErrForbidden
+	}
+	// GPT-R43：账本必须仍然有效。roleOfTx 的 JOIN 其实已经保证了这一点，
+	// 这里再显式判一次不是为了重复兜底，而是为了让「账本已删」
+	// 与"没有权限"成为两种可分辨的结果——排查时这两件事的含义完全不同。
+	if err := requireActiveBookTx(sess, bookID); err != nil {
+		return nil, err
 	}
 
 	code, err := randomCode(32)
@@ -484,6 +524,9 @@ func inviteRejectError(reason string) error {
 	case inviteReasonEmailTaken:
 		// 继承 ErrInviteBoundMismatch：对外文案统一，防止邮箱枚举（见 ErrInviteEmailUnavailable）
 		return ErrInviteEmailUnavailable
+	case inviteReasonBookDeleted:
+		// 并入"邀请无效"：兑换入口未认证，不能让它变成账本存在性的探测器
+		return ErrInviteBookUnavailable
 	default:
 		return ErrInviteInvalid
 	}
@@ -692,6 +735,17 @@ func (s *MemberService) JoinViaInvite(bookID int64, code, username, email, passw
 		_ = sess.Rollback()
 		return nil, s.inviteFailed(inviteEventRedeem, bookID, model.AuditActorSystem,
 			inviteIDOrZero(found, inv.Id), reason, ipBucket(clientIP))
+	}
+	// GPT-R43：账本状态的检查必须在【事务内】、且在写任何东西之前。
+	//
+	// 放在事务外会留下这样的窗口：请求进来时账本还在，随即被 owner 删除，
+	// 于是这一边继续给一个已经不存在的账本塞进新成员——留下无主的用户与成员行。
+	// 这里与后续的 INSERT 共享同一快照，删除一旦先提交，本次判定立刻变成"账本没了"。
+	if err := requireActiveBookTx(sess, inv.BookId); err != nil {
+		_ = sess.Rollback()
+		// 对外仍然并入"邀请无效"：兑换入口未认证，不能让它成为账本存在性的探测器。
+		return nil, s.inviteFailed(inviteEventRedeem, bookID, model.AuditActorSystem, inv.Id,
+			inviteReasonBookDeleted, ipBucket(clientIP))
 	}
 	if inv.BoundUsername != "" && !strings.EqualFold(inv.BoundUsername, uname) {
 		_ = sess.Rollback()

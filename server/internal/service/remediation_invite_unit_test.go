@@ -15,6 +15,8 @@ package service
 import (
 	"encoding/json"
 	"errors"
+	"go/ast"
+	"go/token"
 	"reflect"
 	"strings"
 	"testing"
@@ -478,3 +480,88 @@ func TestR42FailurePathsUseAppendedAudit(t *testing.T) {
 
 // HTTP 层的 boundEmail / email 入参与路由注册由 internal/api/book_handler_r41_test.go
 // 与 internal/api/invite_lifecycle_api_test.go 校验（service 包不能反向 import api，故按包拆分）。
+
+// ---------------------------------------------------------------------------
+// GPT-R43：已删除账本不得继续成员管理（源码结构断言，本地可验证）
+// ---------------------------------------------------------------------------
+
+// TestR43MemberEntryPointsCheckBookAlive List / CreateInvite / JoinViaInvite
+// 必须【各自显式】校验 books.deleted = 0，不能只靠 book_members.deleted 推断。
+//
+// 为什么三个入口都要点名：此前的口径是"成员行还在 ⇒ 账本还能用"，
+// 于是账本删掉之后，残留的成员行就成了继续签发邀请 / 继续拉人的通行证。
+func TestR43MemberEntryPointsCheckBookAlive(t *testing.T) {
+	cases := []struct{ file, fn string }{
+		{"member.go", "List"},
+		{"member.go", "CreateInvite"},
+		{"member.go", "JoinViaInvite"},
+	}
+	for _, c := range cases {
+		f, _ := remediationParse(t, c.file)
+		fn := qas3Func(f, c.fn)
+		if fn == nil {
+			t.Errorf("%s 中找不到 %s", c.file, c.fn)
+			continue
+		}
+		if got := remediationCallCount(fn, "requireActiveBookTx"); got != 1 {
+			t.Errorf("%s.%s 应显式调用 requireActiveBookTx 恰好 1 次（GPT-R43），实际 %d",
+				c.file, c.fn, got)
+		}
+	}
+
+	// 判定必须落在 books 表上，而不是只看 book_members.deleted
+	guard := qas3Func(mustParseMember(t), "requireActiveBookTx")
+	if guard == nil {
+		t.Fatal("member.go 中找不到 requireActiveBookTx")
+	}
+	found := false
+	ast.Inspect(guard.Body, func(n ast.Node) bool {
+		lit, ok := n.(*ast.BasicLit)
+		if !ok || lit.Kind != token.STRING {
+			return true
+		}
+		if strings.Contains(lit.Value, "FROM books WHERE id = ?") {
+			found = true
+			return false
+		}
+		return true
+	})
+	if !found {
+		t.Fatal("requireActiveBookTx 必须直接读 books 表的 deleted 状态（不能由成员行推断）")
+	}
+	if !remediationRefsIdent(guard, "ErrEntityDeleted") {
+		t.Fatal("账本不可用必须返回 ErrEntityDeleted（HTTP 409），而不是静默放行")
+	}
+}
+
+// TestR43JoinChecksBookInsideTransaction JoinViaInvite 的账本校验必须在写事务内，
+// 且早于任何写入——事务外读会留下"检查通过后才被删"的窗口。
+func TestR43JoinChecksBookInsideTransaction(t *testing.T) {
+	f, fset := remediationParse(t, "member.go")
+	fn := qas3Func(f, "JoinViaInvite")
+	if fn == nil {
+		t.Fatal("member.go 中找不到 JoinViaInvite")
+	}
+	beginLine := remediationFirstCallLine(fn, fset, "Begin")
+	bookLine := remediationFirstCallLine(fn, fset, "requireActiveBookTx")
+	if beginLine == 0 || bookLine == 0 {
+		t.Fatalf("JoinViaInvite 缺少 Begin(%d) 或 requireActiveBookTx(%d)", beginLine, bookLine)
+	}
+	if beginLine > bookLine {
+		t.Fatalf("JoinViaInvite：requireActiveBookTx(L%d) 必须在 Begin(L%d) 之后", bookLine, beginLine)
+	}
+	// 并且必须早于本次事务的任何写入
+	for _, write := range []string{"Insert", "Update"} {
+		if line := remediationFirstCallLine(fn, fset, write); line != 0 && bookLine > line {
+			t.Fatalf("JoinViaInvite：%s(L%d) 早于账本校验(L%d)——先写了才检查等于没检查",
+				write, line, bookLine)
+		}
+	}
+}
+
+// mustParseMember 解析 member.go（测试内的小工具，失败即 t.Fatal）
+func mustParseMember(t *testing.T) *ast.File {
+	t.Helper()
+	f, _ := remediationParse(t, "member.go")
+	return f
+}
