@@ -12,6 +12,7 @@ package ws
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"time"
 
@@ -34,6 +35,37 @@ const (
 	uidContextKey = "uid"
 )
 
+// wsErrorMsg 服务端主动下行的错误通知（订阅被拒等）。
+//
+// 为什么必须有（GPT-R49）：订阅超限/被限流时若静默忽略，客户端会以为订阅已生效，
+// 之后永远收不到该账本的事件——现象是"偶尔不实时"这种极难定位的问题。
+// 因此所有拒绝都必须回一条显式错误，让客户端能提示用户或退避重试。
+type wsErrorMsg struct {
+	Event string `json:"event"`
+	Code  string `json:"code"`
+	Msg   string `json:"msg"`
+}
+
+// sendError 把一条错误通知放入发送队列（由写循环统一写出）。
+//
+// 刻意**不**在读循环里直接写 conn：gorilla 一条连接只允许一个并发写者，
+// 写职责已归属写循环。Send 满则丢弃并计入 Dropped（WS 只是尽力通知，
+// 客户端有周期 pull 与重连必 pull 兜底）。
+func sendError(c *Client, code, msg string) {
+	payload, err := json.Marshal(wsErrorMsg{Event: "error", Code: code, Msg: msg})
+	if err != nil {
+		log.Printf("ws: 错误通知序列化失败（已丢弃）code=%s err=%v", code, err)
+		return
+	}
+	select {
+	case c.Send <- payload:
+	default:
+		c.mu.Lock()
+		c.Dropped++
+		c.mu.Unlock()
+	}
+}
+
 // upgrader 显式定义，避免不同入口下默认行为不一致。
 //
 // CheckOrigin 自托管场景先放宽（Flutter/桌面客户端不带 Origin）；
@@ -53,7 +85,7 @@ type subscribeMsg struct {
 // ServeWS 处理 GET /api/v1/ws。
 //
 // 鉴权由 api.wsAuth 中间件完成（浏览器 WS 无法设置 Authorization 头，故 wsAuth
-// 优先读 Header，回退读 ?token=）。这里只做"取 uid → 升级 → 读写循环"。
+// 优先读 Header，回退读 ?token=）。这里只做"取凭证 → 升级 → 读写循环"。
 func ServeWS(c *gin.Context) {
 	uidVal, ok := c.Get(uidContextKey)
 	if !ok {
@@ -87,7 +119,8 @@ func ServeWS(c *gin.Context) {
 	client.UID = uid // 连接绑定认证用户（R05）：广播按这个 uid 做可见性过滤
 	DefaultHub.Register(client)
 
-	// 读/写循环共用一个取消上下文，任一方结束都恰好清理一次（R18）
+	// 读/写循环共用一个取消上下文，任一方结束都恰好清理一次（R18）。
+	//
 	ctx, cancel := context.WithCancel(context.Background())
 	defer func() {
 		cancel()
@@ -96,6 +129,8 @@ func ServeWS(c *gin.Context) {
 	}()
 
 	// 读循环：处理 subscribe（经 Hub 受锁 + 服务端校验，R05/R18）
+	//
+	// GPT-R49：订阅被拒（超量/限流/无权）一律回一条显式错误帧，不静默吞掉。
 	go func() {
 		defer cancel()
 		for {
@@ -105,7 +140,9 @@ func ServeWS(c *gin.Context) {
 			}
 			var sub subscribeMsg
 			if json.Unmarshal(msg, &sub) == nil && sub.Action == "subscribe" {
-				DefaultHub.Subscribe(client, sub.Books, uid)
+				if err := DefaultHub.Subscribe(client, sub.Books, uid); err != nil {
+					sendError(client, "subscribe_rejected", err.Error())
+				}
 			}
 		}
 	}()
