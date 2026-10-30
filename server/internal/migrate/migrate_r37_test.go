@@ -58,21 +58,13 @@ func TestR37CheckIssuesNoDDLOnEmptyDB(t *testing.T) {
 
 // TestR37CheckReadsVersionWhenTableExists 表已存在时 Check 正常读出版本（不能矫枉过正）
 func TestR37CheckReadsVersionWhenTableExists(t *testing.T) {
-	want, err := latestVersion()
+	// 已应用版本集合取"与本地脚本完全一致"——GPT-R38 之后 Check 比对的是整个集合
+	ms, err := listMigrations()
 	if err != nil {
-		t.Fatalf("latestVersion 失败：%v", err)
+		t.Fatalf("读取内嵌迁移脚本失败：%v", err)
 	}
-	handler := func(query string, _ []driver.Value) (*queryResult, error) {
-		q := strings.ToUpper(query)
-		switch {
-		case strings.Contains(q, "SQLITE_MASTER"):
-			return &queryResult{cols: []string{"n"}, rows: []row{{int64(1)}}}, nil
-		case strings.Contains(q, "MAX(VERSION)"):
-			return &queryResult{cols: []string{"v"}, rows: []row{{want}}}, nil
-		}
-		return nil, nil
-	}
-	db, drv := openSpy(t, handler)
+	want := latestOf(ms)
+	db, drv := openSpy(t, appliedVersionsHandler(versionsOf(ms)))
 	st, err := checkDB(db)
 	if err != nil {
 		t.Fatalf("表存在且版本一致时 Check 不应报错：%v", err)
