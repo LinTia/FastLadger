@@ -1,17 +1,25 @@
 [
   {
     "id": "GPT-R24",
-    "title": "先摘除 WS 订阅再广播 member_removed，导致被移除端收不到本地数据清理通知",
+    "title": "移除成员时先摘除订阅再广播，导致目标客户端收不到 member_removed 清理通知",
     "severity": "P1",
-    "location": "server/internal/api/broadcast.go §notifyMemberRemoved L135-L142; server/internal/ws/hub.go §RefreshVisibility L294-L380（摘除 L369-L375）与 §BroadcastToBook L236-L262（过滤 L254-L258）; PRD §12.1 决策5 L561",
-    "quote": "func notifyMemberRemoved(bookID, version, targetUid int64) { ws.DefaultHub.RefreshVisibility(bookID); broadcastBookEvent(bookID, bookEventEnvelope{Event: eventMemberRemoved, ...}) }；RefreshVisibility 非成员分支 delete(t.c.BookIds, bookID)；BroadcastToBook 对 !sub 的连接 continue。",
-    "problem": "移除通知先刷新订阅；刷新时目标用户已不是成员，BookIds[bookID] 被删除。随后普通账本广播只投递给仍订阅该账本的连接，目标用户因此收不到 member_removed。",
-    "reproduce": "令 A、B 同时在线且订阅同一账本；A 移除 B；跟踪 removeMember→notifyMemberRemoved→RefreshVisibility→BroadcastToBook。确认 B 的 BookIds 被删除，随后 BroadcastToBook 在 !sub 分支跳过 B。当前为静态控制流验证，本轮未运行集成测试。",
-    "actual": "目标用户被停止后续订阅，但不会收到 member_removed；其客户端可能继续保留此前同步到本地的账本数据。",
-    "expected": "被移除用户应收到一次仅针对自己的清理通知，其他仍有权限的成员也收到账本级事件；目标连接之后不得再收到该账本事件。",
-    "impact": "PRD 要求被移除成员主动清除该账本本地数据。通知未送达可能导致已移除成员设备继续显示家庭财务数据，涉及隐私，P1。",
-    "suggestion": "增加按 targetUid 定向投递清理事件的 Hub API，先保证目标连接收到清理通知，再撤销其订阅；普通账本广播仍通知其他成员。补回归测试覆盖目标收到清理事件、后续 data_changed 不再送达、其他成员正常收到、断线/重复移除竞争安全。",
+    "location": [
+      "server/internal/api/broadcast.go:73-86,135-142",
+      "server/internal/ws/hub.go:236-262,294-380（非成员摘除 L369-L375）",
+      "docs/FastLedger-产品需求文档-PRD.md §7.3、§12.1 决策5"
+    ],
+    "quote": [
+      "func notifyMemberRemoved(bookID, version, targetUid int64) { ws.DefaultHub.RefreshVisibility(bookID); broadcastBookEvent(bookID, bookEventEnvelope{Event:eventMemberRemoved, ...}) }",
+      "if !d.member { delete(t.c.BookIds, bookID); delete(t.c.canView, bookID); ... }",
+      "if !sub || send == nil { continue }"
+    ],
+    "problem": "notifyMemberRemoved先刷新订阅；目标用户已被移除，RefreshVisibility删除其BookIds[bookID]。随后普通BroadcastToBook仅向仍订阅的连接投递，目标连接因此被过滤，收不到member_removed。",
+    "reproduce": "静态路径：A、B同时在线且B订阅账本X；A移除B；跟踪removeMember→notifyMemberRemoved→RefreshVisibility，确认B的BookIds[X]被删除；再跟踪broadcastBookEvent→BroadcastToBook，确认B命中!sub并被跳过。本轮未运行集成测试。",
+    "actual": "移除时仍在线的目标连接先被取消订阅，随后普通广播不会向其投递member_removed。",
+    "expected": "目标连接收到一次清理通知；其他有效成员收到账本级事件；目标连接之后不再收到该账本事件。离线重连/订阅拒绝路径也应明确触发本地清理。",
+    "impact": "PRD要求被移除成员清除该账本本地数据。通知不可达可能导致其设备继续保留已同步的家庭财务数据，属于隐私缺陷，P1；当前证据证明通知不可达，不证明所有客户端必然永久保留数据。",
+    "suggestion": "新增不经过普通订阅过滤的targetUid定向清理事件投递；在遵循Hub.mu→Client.mu锁序的前提下，确保事件入队后再撤销订阅。普通广播继续通知其他成员。补充目标收到清理事件、后续事件不达、其他成员正常收到、多连接/断线/重复移除/并发广播安全的集成测试；明确离线重连被拒时客户端清理缓存。",
     "status": "待确认",
-    "evidence": "静态核实当前 main @ 7cd0c58：broadcast.go:135-142 先 RefreshVisibility 后广播；hub.go:369-375 删除非成员 BookIds；hub.go:254-258 只向仍订阅者投递。PRD §12.1 决策5 L561 要求被移除成员收到 member_removed 后清除本地账本数据。本轮未执行运行时复现。"
+    "evidence": "静态核对当前main：broadcast.go:135-142先RefreshVisibility后broadcastBookEvent；broadcast.go:73-86仅调用BroadcastToBook；hub.go:369-375对非成员删除BookIds；hub.go:254-258对!sub跳过。PRD §7.3/§12.1决策5要求被移除客户端清理该账本数据。已与[1.27]-[1.28]区分：此前修复阻止移除者继续收后续事件，本finding指出清理事件本身被提前摘订阅截断。本轮未运行Go/SQLite/race/WS测试。"
   }
 ]
