@@ -1,5 +1,9 @@
 # GPT 审查意见处理记录
 
+## 2026-10-30 · v1.6 最新改动审查
+
+新增 GPT-R25（P2）：SQLite 驱动冒烟命令的 `internal/migrate` 与 `internal/database` 目标包均无测试文件，Actions 日志显示 `[no test files]`。owner 已采纳；尚未修复 CI/测试代码。完整 13 字段报告、结构化 finding 与日志摘要见 [v1.6](v1.6/审核结果.md)。根 CHANGELOG [1.32] 已同步，并更正 [1.31] 对专项 SQLite 验证范围的过度表述。
+
 ## 2026-10-29 · v1.4 定向复核 / 文档 v1.5
 
 新增 GPT-R19–GPT-R23，回填 GPT-R03/GPT-R06/GPT-R16 原编号证据。唯一创建入口裁决和修订参考骨架已同步 docs/；完整处理状态与范围以根 [CHANGELOG](../CHANGELOG.md) 最新节和 [逐条意见](v1.4/findings.json) 为准。
