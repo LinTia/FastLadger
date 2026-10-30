@@ -1,3 +1,7 @@
+## 2026-10-30 · v1.7 阶段 4扩展复核
+
+用户尚未安排 Workbuddy 修复；GPT 在原 GPT-R26–GPT-R30 基础上继续扩查，新增 GPT-R31–GPT-R34：P1 账户软删后交易无法恢复；P2 Restore 未清空 deleted_at；P2 账本名称+可见性组合更新非原子；P2 db purge 非法参数静默回退默认 TTL。另扩展 GPT-R28 授权 TOCTOU 涉及 BookService.Update/Delete 与 MemberService.CreateInvite。完整 13 字段与范围排除说明见 [v1.7 审核报告](v1.7/审核结果.md)，结构化数据见 [findings](v1.7/findings.json)。根 CHANGELOG 新增 [1.39]。
+
 # GPT 审查意见处理记录
 
 ## 2026-10-30 · v1.6 最新改动审查
