@@ -15,12 +15,17 @@ package main
 
 import (
 	"context"
+	"errors"
+	"flag"
+	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -240,58 +245,187 @@ func handleDBMigrate(engine *xorm.Engine) {
 // 与迁移同一口径：**仅 CLI 手动执行**，服务启动绝不静默删数据。
 // 保留天数默认取环境变量（EBK_RECYCLE_TTL_DAYS / EBK_AUDIT_RETENTION_DAYS），
 // 可用 --recycle-ttl-days / --audit-retention-days 覆盖（便于演练与应急）。
+//
+// GPT-R34：参数解析【先于任何 DELETE】完成，且非法输入一律 fail-fast。
+// 这里的删除不可逆，用"默认值顶替运维的真实意图"会把一次输入错误变成数据丢失。
 func handleDBPurge(engine *xorm.Engine, args []string) {
-	recycleTTL := envIntOr("EBK_RECYCLE_TTL_DAYS", config.DefaultRecycleTTLDays)
-	auditDays := envIntOr("EBK_AUDIT_RETENTION_DAYS", config.DefaultAuditRetentionDays)
-	for i := 0; i < len(args); i++ {
-		switch {
-		case args[i] == "--recycle-ttl-days" && i+1 < len(args):
-			recycleTTL = parsePositiveInt(args[i+1], recycleTTL)
-			i++
-		case args[i] == "--audit-retention-days" && i+1 < len(args):
-			auditDays = parsePositiveInt(args[i+1], auditDays)
-			i++
-		}
+	recycleTotal, auditTotal, bookCount, opts, err := purgeWithOptions(engine, args)
+	if err != nil {
+		log.Fatalf("db purge 未执行（参数非法，未触碰数据库）：%v", err)
 	}
-	if recycleTTL <= 0 || auditDays <= 0 {
-		log.Fatalf("保留天数必须为正整数：recycle=%d audit=%d", recycleTTL, auditDays)
-	}
+	log.Printf("清理完成：回收站硬清除 %d 条（TTL=%d 天，账本 %d 个）；审计清除 %d 条（保留 %d 天）",
+		recycleTotal, opts.RecycleTTLDays, bookCount, auditTotal, opts.AuditRetentionDays)
+}
 
+// purgeOptions db purge 解析后的保留天数（天数均为已校验的正整数）
+type purgeOptions struct {
+	// RecycleTTLDays 回收站墓碑保留天数
+	RecycleTTLDays int
+	// AuditRetentionDays 审计日志保留天数
+	AuditRetentionDays int
+}
+
+// purgeWithOptions 先严格解析参数，解析失败**立即返回错误且不触碰数据库**；
+// 解析通过后才执行硬删除。返回（回收站清除数，审计清除数，账本数，生效参数，错误）。
+func purgeWithOptions(engine *xorm.Engine, args []string) (int64, int64, int, *purgeOptions, error) {
+	opts, err := resolvePurgeOptions(args)
+	if err != nil {
+		return 0, 0, 0, nil, err
+	}
+	recycleTotal, auditTotal, bookCount, err := runPurge(engine, opts)
+	if err != nil {
+		return 0, 0, 0, nil, err
+	}
+	return recycleTotal, auditTotal, bookCount, opts, nil
+}
+
+// runPurge 执行硬删除（调用方必须已通过 resolvePurgeOptions 校验）
+func runPurge(engine *xorm.Engine, opts *purgeOptions) (int64, int64, int, error) {
+	if engine == nil {
+		return 0, 0, 0, errPurgeNoEngine
+	}
 	now := time.Now().Unix()
 	// 回收站：按账本逐个清除（PurgeExpiredTransactions 以账本为界，避免误删他库）
 	var bookIDs []int64
 	if err := engine.Table("books").Select("id").Find(&bookIDs); err != nil {
-		log.Fatalf("读取账本列表失败：%v", err)
+		return 0, 0, 0, fmt.Errorf("读取账本列表失败：%w", err)
 	}
 	txs := service.NewTxService(engine, version.NewRepo())
 	var recycleTotal int64
 	for _, id := range bookIDs {
-		n, err := txs.PurgeExpiredTransactions(id, recycleTTL, now)
+		n, err := txs.PurgeExpiredTransactions(id, opts.RecycleTTLDays, now)
 		if err != nil {
-			log.Fatalf("回收站清除失败（账本 %d）：%v", id, err)
+			return 0, 0, 0, fmt.Errorf("回收站清除失败（账本 %d）：%w", id, err)
 		}
 		recycleTotal += n
 	}
-	auditTotal, err := service.PurgeAuditLogs(engine, auditDays, now)
+	auditTotal, err := service.PurgeAuditLogs(engine, opts.AuditRetentionDays, now)
 	if err != nil {
-		log.Fatalf("审计保留期清除失败：%v", err)
+		return 0, 0, 0, fmt.Errorf("审计保留期清除失败：%w", err)
 	}
-	log.Printf("清理完成：回收站硬清除 %d 条（TTL=%d 天，账本 %d 个）；审计清除 %d 条（保留 %d 天）",
-		recycleTotal, recycleTTL, len(bookIDs), auditTotal, auditDays)
+	return recycleTotal, auditTotal, len(bookIDs), nil
 }
 
-// envIntOr 读取环境变量并转为正整数，缺失/非法时回落到 def。
-// 这里不走 config.Load()：该 CLI 只关心保留天数，不应被 JWT 校验等无关约束挡住。
-func envIntOr(key string, def int) int {
-	return parsePositiveInt(os.Getenv(key), def)
+// resolvePurgeOptions 决定本次清理的保留天数，优先级：显式 CLI > 环境变量 > 默认值。
+//
+// GPT-R34 的核心：**区分"未提供"与"提供了但非法"**。
+// 只有"未提供"才允许回落（那是运维确实没有表达偏好）；"提供了但非法"一律报错——
+// 静默回退会让运维以为指定了较长保留期，实际按默认 30/365 天执行不可恢复的硬删除。
+func resolvePurgeOptions(args []string) (*purgeOptions, error) {
+	// 这里不走 config.Load()：该 CLI 只关心保留天数，不应被 JWT 校验等无关约束挡住
+	recycleTTL, err := envRetentionDays(recycleTTLEnv, config.DefaultRecycleTTLDays)
+	if err != nil {
+		return nil, err
+	}
+	auditDays, err := envRetentionDays(auditRetentionEnv, config.DefaultAuditRetentionDays)
+	if err != nil {
+		return nil, err
+	}
+	opts := &purgeOptions{RecycleTTLDays: recycleTTL, AuditRetentionDays: auditDays}
+	if err := applyPurgeFlags(opts, args); err != nil {
+		return nil, err
+	}
+	return opts, nil
 }
 
-// parsePositiveInt 解析正整数（命令行覆盖值），非法时回落到 def。
-func parsePositiveInt(s string, def int) int {
-	if n, err := strconv.Atoi(s); err == nil && n > 0 {
-		return n
+const (
+	// recycleTTLEnv 回收站保留天数环境变量
+	recycleTTLEnv = "EBK_RECYCLE_TTL_DAYS"
+	// auditRetentionEnv 审计保留天数环境变量
+	auditRetentionEnv = "EBK_AUDIT_RETENTION_DAYS"
+	// recycleFlagName / auditFlagName CLI 覆盖参数名
+	recycleFlagName = "--recycle-ttl-days"
+	auditFlagName   = "--audit-retention-days"
+)
+
+// errPurgeNoEngine 数据库句柄缺失（防御性，正常 CLI 路径不会触发）
+var errPurgeNoEngine = errors.New("db purge：数据库句柄缺失")
+
+// applyPurgeFlags 严格解析命令行覆盖参数。
+//
+// 用标准库 flag 而非手写扫描：缺值、未知参数、格式错误都由 flag 明确报错，
+// "未提供"与"提供了"通过 retentionFlag.set 区分（不能用 0 当哨兵——
+// `--recycle-ttl-days 0` 是运维真实输入的非法值，必须报错而不是回落默认值）。
+func applyPurgeFlags(opts *purgeOptions, args []string) error {
+	fs := flag.NewFlagSet("db purge", flag.ContinueOnError)
+	// 报错由本函数包装后交给调用方（log.Fatalf / 测试断言），不打到 stderr 两次
+	fs.SetOutput(io.Discard)
+	fs.Usage = func() {}
+	recycle := &retentionFlag{name: recycleFlagName}
+	audit := &retentionFlag{name: auditFlagName}
+	fs.Var(recycle, strings.TrimPrefix(recycleFlagName, "--"), "回收站保留天数（正整数）")
+	fs.Var(audit, strings.TrimPrefix(auditFlagName, "--"), "审计保留天数（正整数）")
+	if err := fs.Parse(args); err != nil {
+		return fmt.Errorf("解析 db purge 参数失败：%w", err)
 	}
-	return def
+	if fs.NArg() > 0 {
+		return fmt.Errorf("db purge 不接受位置参数：%q（可用 %s / %s）",
+			fs.Args(), recycleFlagName, auditFlagName)
+	}
+	if recycle.set {
+		opts.RecycleTTLDays = recycle.value
+	}
+	if audit.set {
+		opts.AuditRetentionDays = audit.value
+	}
+	return nil
+}
+
+// envRetentionDays 读取环境变量保留天数：未设置用默认值，设置了但非法则报错。
+func envRetentionDays(key string, def int) (int, error) {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return def, nil
+	}
+	return parseRetentionDays(key, raw)
+}
+
+// parseRetentionDays 解析保留天数：必须是 (0, config.MaxRetentionDays] 内的整数。
+//
+// 刻意【不】做 TrimSpace 之类的"善意容错"：这是个不可逆删除的参数，
+// " 30 " 这种带空白的输入要么被明确接受要么被明确拒绝，不能靠猜测。
+// 这里选择拒绝（strconv.Atoi 对带空白的串会报错），让运维立刻看到问题。
+//
+// 返回值是 (天数, error) 而不是"失败就回落"的 (天数)：调用方需要据此决定是否终止，
+// 而"回落默认值"正是 GPT-R34 要消灭的行为。
+func parseRetentionDays(name, raw string) (int, error) {
+	n, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, fmt.Errorf("%s 必须是整数，当前=%q", name, raw)
+	}
+	if n <= 0 {
+		return 0, fmt.Errorf("%s 必须为正整数，当前=%d", name, n)
+	}
+	if n > config.MaxRetentionDays {
+		return 0, fmt.Errorf("%s 超过上限 %d 天，当前=%d", name, config.MaxRetentionDays, n)
+	}
+	return n, nil
+}
+
+// retentionFlag 实现 flag.Value：记录"是否被显式设置"，并对非法值直接报错
+type retentionFlag struct {
+	name  string
+	value int
+	set   bool
+}
+
+// String 供 flag 打印默认值（未设置时为空串）
+func (f *retentionFlag) String() string {
+	if f == nil || !f.set {
+		return ""
+	}
+	return strconv.Itoa(f.value)
+}
+
+// Set 解析并校验单个参数值；非法一律返回错误，不做任何回落
+func (f *retentionFlag) Set(s string) error {
+	n, err := parseRetentionDays(f.name, s)
+	if err != nil {
+		return err
+	}
+	f.value = n
+	f.set = true
+	return nil
 }
 
 // handleUser 用户创建子命令
