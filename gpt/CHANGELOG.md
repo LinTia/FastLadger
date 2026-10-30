@@ -1,3 +1,7 @@
+## 2026-10-30 · v1.9 阶段 0–3 第二轮补充复核
+
+重新抽查 v1.8 的 GPT-R35–GPT-R52，并新增 GPT-R53（P2）：账户父节点仍有活跃子账户时，AccountService.Delete 未检查子账户，允许删除父节点并留下悬空 parent_id。该问题不同于 R47 的父级环路与 R31 的交易恢复依赖。未发现足够证据新增其他 finding；既有风险仍待处理。静态审查，未运行 Go/SQLite/race/WebSocket/断电测试，未修改业务代码。报告、结构化 finding 和验证边界见 [v1.9](v1.9/审核结果.md)、[findings](v1.9/findings.json)、[runtime-results](v1.9/verification/runtime-results.json)。根 CHANGELOG 新增 [1.41]。
+
 ## 2026-10-30 · v1.8 阶段 0–3 回溯式代码复核
 
 重新检查当前阶段 0–3 代码、PRD/WBS 契约与历史 Finding，新增 GPT-R35–GPT-R52 共 18 项（1 P1、15 P2、2 P3）。重点涉及 SQLite 文件权限/外键/迁移校验、恢复世代持久性、邀请撤销/邮箱绑定/审计、删除账本后的成员管理、限流器内存增长、认证输入边界、账户分组环、Pull 多实体分页与 WebSocket 订阅/鉴权生命周期。GPT-R52 为 PRD 会话撤销要求与 WBS 阶段分配不一致，等待 owner 裁决。
