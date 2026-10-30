@@ -95,6 +95,14 @@ const (
 	// 上限是兜底：满桶时**无损**回收"当前满桶"的条目（满桶状态可由
 	// tokens=burst 完全重建），不淘汰活跃用户的桶。
 	maxSubBuckets = 4096
+	// maxGenerationEntries 权限 generation 表的条目上限（SYNC-04）。
+	//
+	// 每次成员/可见性/删除事件都会让对应账本的 generation +1，且账本删除
+	// 并不会让条目消失 —— 不设上限就是一个只增不减的 map。上限取
+	// "家庭场景可能出现的账本数"的数十倍：正常永远触不到；触到时按"删条目"
+	// 回收，删除条目等价于一次 generation 变更（只会让 in-flight 的鉴权结论
+	// 被重新验证，方向是安全的），不影响 R50 的正确性。
+	maxGenerationEntries = 4096
 )
 
 // VisibilityChecker 订阅资格 + 可见性校验。
@@ -414,6 +422,13 @@ func (h *Hub) Generation(bookID int64) uint64 {
 	return h.gen[bookID] // nil map 读取安全，返回 0
 }
 
+// GenerationCount 当前 gen 表的条目数（观测/测试用；SYNC-04 的有界性验证）。
+func (h *Hub) GenerationCount() int {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return len(h.gen)
+}
+
 // UserSubscriptionCount 某用户当前在全部在线连接上的订阅条目总数
 // （连接 × 账本；观测/测试与运维排障用）。
 func (h *Hub) UserSubscriptionCount(uid int64) int {
@@ -432,6 +447,14 @@ func (h *Hub) bumpGenerationLocked(bookID int64) {
 	if h.gen == nil {
 		// 字面量构造的 Hub（&Hub{}）：补出来，避免"assignment to entry in nil map"
 		h.gen = make(map[int64]uint64)
+	}
+	if _, ok := h.gen[bookID]; !ok && len(h.gen) >= maxGenerationEntries {
+		for id := range h.gen { // 回收任意条目直到低于上限（见上：删除是安全方向的变更）
+			delete(h.gen, id)
+			if len(h.gen) < maxGenerationEntries {
+				break
+			}
+		}
 	}
 	h.gen[bookID]++
 }

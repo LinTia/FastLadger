@@ -318,3 +318,31 @@ func TestSync03RetryConsumesToken(t *testing.T) {
 		t.Fatal("generation 重试必须扣令牌：重试耗尽的订阅之后，同一 uid 的可用额度应减少")
 	}
 }
+
+// TestSync04GenerationMapBounded gen 表有界（SYNC-04）：刷新远超上限数量的账本后，
+// 条目数不再增长；且回收不得破坏 R50 的不变量（撤权仍然生效）。
+func TestSync04GenerationMapBounded(t *testing.T) {
+	chk := newFakeChecker()
+	chk.allow(7, 1, true)
+	hub := NewHub(chk.check)
+
+	for b := int64(1); b <= maxGenerationEntries+500; b++ {
+		hub.RefreshVisibility(b)
+	}
+	if got := hub.GenerationCount(); got > maxGenerationEntries {
+		t.Fatalf("gen 表必须有界（≤%d），实际 %d（修复前只增不减）", maxGenerationEntries, got)
+	}
+
+	// 回收条目等价于一次 generation 变更，方向安全：撤权语义不受影响
+	c := NewClient()
+	c.UID = 7
+	hub.Register(c)
+	if err := hub.Subscribe(c, []int64{1}, 7); err != nil {
+		t.Fatalf("订阅失败：%v", err)
+	}
+	chk.revoke(1, 7)
+	hub.RefreshVisibility(1)
+	if c.Subscribed(1) {
+		t.Fatal("gen 表有界化之后，撤权必须仍然生效（R50 不变量）")
+	}
+}
