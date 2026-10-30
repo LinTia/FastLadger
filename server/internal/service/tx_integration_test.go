@@ -32,6 +32,7 @@ type testEnv struct {
 	bookID     int64
 	txs        *TxService
 	assetID    int64
+	toAssetID  int64
 	liabID     int64
 	expenseCat int64
 	incomeCat  int64
@@ -47,6 +48,8 @@ func newTestEnv(t *testing.T) *testEnv {
 
 	asset, err := as.Create(uid, bookID, AccountCreateInput{Name: "现金", Category: model.CategoryCash, Currency: "CNY"})
 	must(t, err)
+	toAsset, err := as.Create(uid, bookID, AccountCreateInput{Name: "银行卡", Category: model.CategoryDemandDeposit, Currency: "CNY"})
+	must(t, err)
 	liab, err := as.Create(uid, bookID, AccountCreateInput{Name: "信用卡", Category: model.CategoryCreditCard, Currency: "CNY"})
 	must(t, err)
 	exp, err := cs.Create(uid, bookID, CategoryCreateInput{Name: "餐饮", CatType: model.CategoryTypeExpense})
@@ -61,6 +64,7 @@ func newTestEnv(t *testing.T) *testEnv {
 		bookID:     bookID,
 		txs:        NewTxService(engine, version.NewRepo()),
 		assetID:    asset.Id,
+		toAssetID:  toAsset.Id,
 		liabID:     liab.Id,
 		expenseCat: exp.Id,
 		incomeCat:  inc.Id,
@@ -176,7 +180,7 @@ func TestTransferBilateralAndRelatedPairing(t *testing.T) {
 	e := newTestEnv(t)
 	res, err := e.txs.Create(context.Background(), e.uid, e.bookID, CreateRequest{
 		ClientUuid: "xfer-1", TxType: int(model.TxTypeTransfer),
-		AccountId: e.assetID, ToAccountId: e.liabID, Amount: 5000,
+		AccountId: e.assetID, ToAccountId: e.toAssetID, Amount: 5000,
 		CategoryId: 0, PaymentChannel: 0, TxTime: time.Now().Unix(), Source: 0,
 	})
 	must(t, err)
@@ -186,7 +190,7 @@ func TestTransferBilateralAndRelatedPairing(t *testing.T) {
 	if got := e.balance(e.assetID); got != -5000 {
 		t.Fatalf("转出账户余额应为 -5000，实际 %d", got)
 	}
-	if got := e.balance(e.liabID); got != 5000 {
+	if got := e.balance(e.toAssetID); got != 5000 {
 		t.Fatalf("转入账户余额应为 +5000，实际 %d", got)
 	}
 	var rows []model.Transaction
