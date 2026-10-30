@@ -25,6 +25,8 @@ const (
 
 	// DefaultAuditRetentionDays 审计日志默认保留天数（PRD §12.1：保留 1 年）
 	DefaultAuditRetentionDays = 365
+	// DefaultRecycleTTLDays 回收站默认保留天数（PRD §12.1 决策：30 天）
+	DefaultRecycleTTLDays = 30
 )
 
 // jwtPlaceholders 常见的"没改过"的占位值
@@ -60,7 +62,7 @@ func Load() (*Config, error) {
 		DataDir:        envOr("EBK_DATA_DIR", DefaultDataDir),
 		JWTSecret:      os.Getenv("EBK_JWT_SECRET"),
 		EnableRegister: envBool("EBK_ENABLE_REGISTER", false),
-		RecycleTTLDays: envInt("EBK_RECYCLE_TTL_DAYS", 30),
+		RecycleTTLDays: envInt("EBK_RECYCLE_TTL_DAYS", DefaultRecycleTTLDays),
 		InviteTTLDays:  envInt("EBK_INVITE_TTL_DAYS", 7),
 		// 审计保留 1 年（PRD §12.1）；到期由 PurgeAuditLogs 硬清除
 		AuditRetentionDays: envInt("EBK_AUDIT_RETENTION_DAYS", DefaultAuditRetentionDays),

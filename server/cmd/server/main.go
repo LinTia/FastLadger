@@ -4,6 +4,8 @@
 //
 //	fastledger                                   # 启动 HTTP 服务
 //	fastledger db migrate                        # 手动执行数据库迁移
+//	fastledger db purge                          # 回收站与审计的到期硬清除（可用
+//	                                             #   --recycle-ttl-days / --audit-retention-days 覆盖）
 //	fastledger instance bump                     # 恢复后递增 restore_epoch（不随备份恢复）
 //	fastledger user create --username u --password p [--owner]
 //	                                             # --owner 仅在【无任何用户】时可用（首个 owner 初始化）
@@ -18,6 +20,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -169,11 +172,23 @@ func handleInstance(dataDir string, args []string) {
 		before.RestoreEpoch, after.RestoreEpoch, after.RestoredAt, instance.Path(dataDir))
 }
 
-// handleDB 迁移子命令
+// handleDB 数据库子命令：migrate（应用迁移）/ purge（回收站与审计到期硬清除）
 func handleDB(engine *xorm.Engine, args []string) {
-	if len(args) == 0 || args[0] != "migrate" {
-		log.Fatalf("用法：db migrate")
+	if len(args) == 0 {
+		log.Fatalf("用法：db migrate | db purge")
 	}
+	switch args[0] {
+	case "migrate":
+		handleDBMigrate(engine)
+	case "purge":
+		handleDBPurge(engine, args[1:])
+	default:
+		log.Fatalf("用法：db migrate | db purge")
+	}
+}
+
+// handleDBMigrate 应用未执行的迁移
+func handleDBMigrate(engine *xorm.Engine) {
 	n, err := migrate.Apply(engine)
 	if err != nil {
 		log.Fatalf("迁移失败：%v", err)
@@ -183,6 +198,65 @@ func handleDB(engine *xorm.Engine, args []string) {
 		log.Fatalf("迁移后校验失败：%v", err)
 	}
 	log.Printf("迁移完成：本次应用 %d 个，当前 schema v%d", n, st.Current)
+}
+
+// handleDBPurge 回收站与审计的到期硬清除（WBS 4.1 / 4.3，PRD §12.1）。
+//
+// 与迁移同一口径：**仅 CLI 手动执行**，服务启动绝不静默删数据。
+// 保留天数默认取环境变量（EBK_RECYCLE_TTL_DAYS / EBK_AUDIT_RETENTION_DAYS），
+// 可用 --recycle-ttl-days / --audit-retention-days 覆盖（便于演练与应急）。
+func handleDBPurge(engine *xorm.Engine, args []string) {
+	recycleTTL := envIntOr("EBK_RECYCLE_TTL_DAYS", config.DefaultRecycleTTLDays)
+	auditDays := envIntOr("EBK_AUDIT_RETENTION_DAYS", config.DefaultAuditRetentionDays)
+	for i := 0; i < len(args); i++ {
+		switch {
+		case args[i] == "--recycle-ttl-days" && i+1 < len(args):
+			recycleTTL = parsePositiveInt(args[i+1], recycleTTL)
+			i++
+		case args[i] == "--audit-retention-days" && i+1 < len(args):
+			auditDays = parsePositiveInt(args[i+1], auditDays)
+			i++
+		}
+	}
+	if recycleTTL <= 0 || auditDays <= 0 {
+		log.Fatalf("保留天数必须为正整数：recycle=%d audit=%d", recycleTTL, auditDays)
+	}
+
+	now := time.Now().Unix()
+	// 回收站：按账本逐个清除（PurgeExpiredTransactions 以账本为界，避免误删他库）
+	var bookIDs []int64
+	if err := engine.Table("books").Select("id").Find(&bookIDs); err != nil {
+		log.Fatalf("读取账本列表失败：%v", err)
+	}
+	txs := service.NewTxService(engine, version.NewRepo())
+	var recycleTotal int64
+	for _, id := range bookIDs {
+		n, err := txs.PurgeExpiredTransactions(id, recycleTTL, now)
+		if err != nil {
+			log.Fatalf("回收站清除失败（账本 %d）：%v", id, err)
+		}
+		recycleTotal += n
+	}
+	auditTotal, err := service.PurgeAuditLogs(engine, auditDays, now)
+	if err != nil {
+		log.Fatalf("审计保留期清除失败：%v", err)
+	}
+	log.Printf("清理完成：回收站硬清除 %d 条（TTL=%d 天，账本 %d 个）；审计清除 %d 条（保留 %d 天）",
+		recycleTotal, recycleTTL, len(bookIDs), auditTotal, auditDays)
+}
+
+// envIntOr 读取环境变量并转为正整数，缺失/非法时回落到 def。
+// 这里不走 config.Load()：该 CLI 只关心保留天数，不应被 JWT 校验等无关约束挡住。
+func envIntOr(key string, def int) int {
+	return parsePositiveInt(os.Getenv(key), def)
+}
+
+// parsePositiveInt 解析正整数（命令行覆盖值），非法时回落到 def。
+func parsePositiveInt(s string, def int) int {
+	if n, err := strconv.Atoi(s); err == nil && n > 0 {
+		return n
+	}
+	return def
 }
 
 // handleUser 用户创建子命令

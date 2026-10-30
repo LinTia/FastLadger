@@ -14,6 +14,7 @@
   - 迁移 `0005`：幂等表加 `op` 列，唯一键扩为 `(book_id, uid, op, client_uuid)`。用 `DROP INDEX` + `CREATE UNIQUE INDEX` 实现——**不重建表、不删数据**，符合「老库升级不得删除旧回执」约束。没有 `op` 维度时，同一 `clientUuid` 先删后恢复会互相命中回执。
   - `Delete`/`Restore` 增加必填 `clientUuid`，与 `Create` 对称：事务内占位、命中即重放原版本、异内容报冲突；失败路径整体回滚，**不占用幂等键**（可原键重试）。
 - **4.1 回收站与 30 天 TTL**：新增 `ListDeleted`（回收站视图，叠加可见性条件）与 `PurgeExpiredTransactions`（只硬删到期墓碑，存活记录绝不动，`deleted_at=0` 视为永不过期，且不连带清幂等回执）。路由 `GET /books/:id/recycle`——刻意避开与 `/transactions/:txId` 的通配段冲突，否则 gin 注册即 panic。配置项 `EBK_RECYCLE_TTL_DAYS` 本已存在（默认 30），本次补上实现。
+- **清理触发点 `fastledger db purge`**：仅有 purge 函数而没有触发点，"到期硬清除"等于没落地。按项目既有约定（迁移/运维走 CLI，**服务启动绝不静默改数据**）新增子命令，逐个账本清回收站 + 按保留期清审计，可用 `--recycle-ttl-days` / `--audit-retention-days` 覆盖。**未做后台定时 goroutine**——避免引入本轮无法真机验证的常驻逻辑。
 - **4.3 审计写入点与保留期**：补交易 `create` 审计（单笔 1 条、转账两侧各 1 条；create 无「变更前」状态故 `before_json` 留空）；新增 `PurgeAuditLogs` 与 `EBK_AUDIT_RETENTION_DAYS`（默认 365，PRD §12.1 保留 1 年）。
 - **4.5 旧离线数据回流**：`loadTxAccount`/`loadCategoryForType` 不再用 `deleted=0` 过滤，区分「从未存在」（404）与「已删除」（409 `ENTITY_DELETED`），**绝不静默复活已删数据**；push 侧映射 `conflict` + `ENTITY_DELETED`。
 - **测试**：`tx_delete_integration_test.go` 扩充至 11 个真实 SQLite 用例（幂等重放不双反向、同 uuid 跨操作冲突、`op` 维度先删后恢复、回收站视图、到期硬清除只清墓碑、审计保留期清理、已删账户拦截、`clientUuid` 必填）。
