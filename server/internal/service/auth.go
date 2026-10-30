@@ -41,6 +41,12 @@ var (
 	//（按 TEXT 亲和性存储），所以超长用户名能一路落库，之后再遇到索引、审计、日志、
 	// 迁移对比都会踩到"超出 schema 预期"的坑。上限必须由应用层兜住。
 	ErrUsernameTooLong = errors.New("用户名长度超限：1~64 个字符")
+	// ErrAuthUnavailable 认证依赖不可用（GPT-R46）。
+	//
+	// 与 ErrBadCredentials 严格区分：数据库故障、登录审计写入失败、令牌签发失败都属于
+	// **服务端故障**，绝不能回落成 401——否则客户端会以为"用户名或密码错了"并反复重试，
+	// 而真正的故障被 401 掩盖；HTTP 层据此返回 503 并记安全日志。
+	ErrAuthUnavailable = errors.New("认证服务暂时不可用")
 )
 
 const (
@@ -176,12 +182,19 @@ func (s *AuthService) insertUserInTx(sess *xorm.Session, username, passwordHash 
 	return u, nil
 }
 
-// Login 校验口令并签发 token（含 jti）
+// Login 校验口令并签发 token（含 jti）。
+//
+// 错误分为两类，HTTP 层据此分岔（GPT-R46）：
+//   - 凭证类（ErrBadCredentials / ErrAccountDisabled）→ 统一 401，不区分"账号不存在"与
+//     "口令错误"，避免账号枚举；
+//   - 依赖类（ErrAuthUnavailable）→ 503：数据库故障 / 登录审计写入失败 / 令牌签发失败。
+//     这类故障必须显式标注，否则会被 401 吞掉（旧实现把所有错误一律 401）。
 func (s *AuthService) Login(username, password string) (string, error) {
 	var u model.User
 	has, err := s.engine.Where("username = ? AND deleted = 0", strings.TrimSpace(username)).Get(&u)
 	if err != nil {
-		return "", err
+		// 数据库故障 ≠ 口令错误：标成依赖不可用，由 HTTP 层返回 503 + 安全日志
+		return "", fmt.Errorf("%w：查询用户失败：%w", ErrAuthUnavailable, err)
 	}
 	if !has {
 		return "", ErrBadCredentials
@@ -190,15 +203,28 @@ func (s *AuthService) Login(username, password string) (string, error) {
 		return "", ErrAccountDisabled
 	}
 	if err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password)); err != nil {
-		return "", ErrBadCredentials
+		// 只有"口令不匹配"才算凭证错误；哈希本身损坏（长度不对/格式非法）是数据故障，
+		// 归到 503 才不会让运维误以为是用户输错密码。
+		if errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
+			return "", ErrBadCredentials
+		}
+		return "", fmt.Errorf("%w：校验口令失败：%w", ErrAuthUnavailable, err)
 	}
 	// 审计（WBS 4.3）：登录是实例级事件，不隶属任何账本，book_id 取哨兵 0。
 	// 刻意放在签发令牌【之前】：审计写失败就不签发，避免出现"已通过认证却无留痕"。
+	//
+	// GPT-R46 协调口径：审计写失败是**服务端故障**，不是"凭证不对"。
+	// 若把它归 401，客户端会提示"用户名或密码错误"并诱导用户反复重试，
+	// 而真正的故障（审计表写不进去）被彻底掩盖。
 	if err := AppendAudit(s.engine, model.AuditBookInstance, u.Id,
 		model.AuditActionLogin, model.AuditEntityUser, u.Id, nil, "server"); err != nil {
-		return "", err
+		return "", fmt.Errorf("%w：登录审计写入失败，已拒绝签发令牌：%w", ErrAuthUnavailable, err)
 	}
-	return SignJWT(s.secret, u.Id, s.ttl)
+	token, err := SignJWT(s.secret, u.Id, s.ttl)
+	if err != nil {
+		return "", fmt.Errorf("%w：签发令牌失败：%w", ErrAuthUnavailable, err)
+	}
+	return token, nil
 }
 
 // GetByID 按 ID 取有效用户（已删除返回 ErrBadCredentials）

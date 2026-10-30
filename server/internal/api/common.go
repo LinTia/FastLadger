@@ -103,6 +103,9 @@ func mapSvcErr(c *gin.Context, err error) {
 	case errors.Is(err, service.ErrUsernameTooLong):
 		// GPT-R45：用户名按字符计 1~64，且 UTF-8 字节不超过 255
 		fail(c, http.StatusBadRequest, "用户名长度超限：1~64 个字符")
+	case errors.Is(err, service.ErrAuthUnavailable):
+		// GPT-R46：认证依赖不可用（DB / 审计 / 令牌签发）→ 503，可重试
+		fail(c, http.StatusServiceUnavailable, "服务暂时不可用，请稍后重试")
 	default:
 		// 不回显内部错误，避免泄露实现细节
 		fail(c, http.StatusInternalServerError, "服务内部错误")
