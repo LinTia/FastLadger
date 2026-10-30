@@ -94,6 +94,9 @@ func NewRouter(d Deps) *gin.Engine {
 		auth.GET("/books/:id/transactions", lh.listTransactions)
 		auth.GET("/books/:id/transactions/:txId", lh.getTransaction)
 		auth.POST("/books/:id/transactions", lh.createTransaction)
+		// 阶段 4：删除 / 恢复（整笔，含转账对侧）
+		auth.DELETE("/books/:id/transactions/:txId", lh.deleteTransaction)
+		auth.POST("/books/:id/transactions/:txId/restore", lh.restoreTransaction)
 
 		// 增量同步（阶段 3.1 / 3.2）
 		auth.GET("/books/:id/sync/pull", sh.pull)

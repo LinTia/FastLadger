@@ -1,10 +1,11 @@
 package api
 
-// 交易 HTTP 适配：唯一的创建路径 POST /books/:id/transactions（收入/支出/转账共用）。
+// 交易 HTTP 适配：唯一的创建路径 POST /books/:id/transactions（收入/支出/转账共用），
+// 以及阶段 4 的删除（DELETE）/ 恢复（POST .../restore）——软删、余额精确反向、版本递增、审计。
 //
 // 说明：
 //   - 不提供独立的 /transfer 入口（《转账入口裁决》§5：禁止第二条创建路径）；
-//   - PUT / DELETE 交易属于阶段 4「删除 / 恢复 / 审计」，本阶段只做创建与查询。
+//   - 删除/恢复在服务层统一实现（mutateVisibility），handler 仅做鉴权与版本通知。
 import (
 	"net/http"
 
@@ -111,4 +112,44 @@ func (h *ledgerHandler) getTransaction(c *gin.Context) {
 		return
 	}
 	ok(c, tx)
+}
+
+// deleteTransaction 阶段 4：删除一笔交易（整笔，含转账对侧）。
+// 软删 + 余额精确反向 + 版本递增 + 审计，均在服务层完成。
+func (h *ledgerHandler) deleteTransaction(c *gin.Context) {
+	bookID, good := bookID(c)
+	if !good {
+		return
+	}
+	txID, good := pathID(c, "txId", "交易 ID 非法")
+	if !good {
+		return
+	}
+	ver, err := h.txs.Delete(c.Request.Context(), currentUID(c), bookID, txID)
+	if err != nil {
+		mapSvcErr(c, err)
+		return
+	}
+	// 已提交 → 通知在线成员拉取（删除也是版本递增事件；失败只记日志，不反转结果）
+	notifyDataChanged(bookID, ver)
+	ok(c, gin.H{"version": ver})
+}
+
+// restoreTransaction 阶段 4：恢复一笔已软删的交易（整笔）。与删除对称。
+func (h *ledgerHandler) restoreTransaction(c *gin.Context) {
+	bookID, good := bookID(c)
+	if !good {
+		return
+	}
+	txID, good := pathID(c, "txId", "交易 ID 非法")
+	if !good {
+		return
+	}
+	ver, err := h.txs.Restore(c.Request.Context(), currentUID(c), bookID, txID)
+	if err != nil {
+		mapSvcErr(c, err)
+		return
+	}
+	notifyDataChanged(bookID, ver)
+	ok(c, gin.H{"version": ver})
 }

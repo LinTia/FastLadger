@@ -164,6 +164,7 @@ type Transaction struct {
 	TimezoneOffset int    `xorm:"notnull default 0" json:"timezoneOffset"`
 	Source         int8   `xorm:"notnull default 0" json:"source"`
 	RelatedId      int64  `xorm:"default 0" json:"relatedId"`
+	Direction       int8   `xorm:"notnull default 0" json:"direction"` // 0=单笔 1=转出侧 2=转入侧（仅转账）；删除/恢复时据其精确反向余额
 	ClientUuid     string `xorm:"varchar(64) default ''" json:"clientUuid"`
 	SyncVersion    int64  `xorm:"notnull default 0" json:"syncVersion"`
 	Deleted        bool   `xorm:"notnull default 0" json:"deleted"` // 同步墓碑标识：客户端须以 deleted=true 覆盖本地行
@@ -171,6 +172,39 @@ type Transaction struct {
 	UpdatedAt      int64  `xorm:"updated" json:"updatedAt"`
 	DeletedAt      int64  `json:"deletedAt,omitempty"` // 墓碑时间（未删除时为 0，不输出）
 }
+
+// 转账方向（transactions.direction）——《枚举字典》§13
+const (
+	TxDirectionSingle int8 = 0 // 单笔（收入/支出）
+	TxDirectionOut    int8 = 1 // 转账转出侧（资金离场，余额减少）
+	TxDirectionIn     int8 = 2 // 转账转入侧（资金入场，余额增加）
+)
+
+// AuditLog 审计日志（append-only；PRD §12.1 决策，保留 1 年）。
+//
+// 软删/恢复/创建/权限变更等均在此留痕；仓库层只暴露 Insert（禁止 UPDATE/DELETE）。
+// before_json 记录变更前状态——软删本身回答不了"删前是什么"，故必须落原文。
+type AuditLog struct {
+	Id         int64  `xorm:"pk autoincr" json:"id"`
+	BookId     int64  `xorm:"notnull" json:"bookId"`
+	ActorUid   int64  `xorm:"notnull" json:"actorUid"`
+	Action     string `xorm:"varchar(32) notnull" json:"action"`
+	EntityType string `xorm:"varchar(32) notnull" json:"entityType"`
+	EntityId   int64  `xorm:"notnull default 0" json:"entityId"`
+	BeforeJson string `xorm:"text" json:"beforeJson"`
+	At         int64  `xorm:"notnull" json:"at"`
+	Source     string `xorm:"varchar(16) default ''" json:"source"`
+}
+
+func (AuditLog) TableName() string { return "audit_logs" }
+
+// 审计动作（audit_logs.action）——《枚举字典》§14
+const (
+	AuditActionCreate  = "create"
+	AuditActionUpdate  = "update"
+	AuditActionDelete  = "delete"
+	AuditActionRestore = "restore"
+)
 
 func (Transaction) TableName() string { return "transactions" }
 

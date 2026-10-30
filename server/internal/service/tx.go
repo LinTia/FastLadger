@@ -298,6 +298,7 @@ func (s *TxService) createTransferInTx(sess *xorm.Session, uid, bookID int64, r 
 	out := newTxRow(uid, bookID, r, ver)
 	out.AccountId = from.Id
 	out.ToAccountId = to.Id
+	out.Direction = model.TxDirectionOut // 转出侧：资金离场，余额减少
 	if err := insertTxRow(sess, out); err != nil {
 		return nil, err
 	}
@@ -306,6 +307,7 @@ func (s *TxService) createTransferInTx(sess *xorm.Session, uid, bookID int64, r 
 	in.AccountId = to.Id
 	in.ToAccountId = from.Id
 	in.RelatedId = out.Id
+	in.Direction = model.TxDirectionIn // 转入侧：资金入场，余额增加
 	if err := insertTxRow(sess, in); err != nil {
 		return nil, err
 	}
@@ -680,6 +682,204 @@ func normalizePaging(page, count int) (int, int) {
 func likePattern(kw string) string {
 	r := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
 	return "%" + r.Replace(kw) + "%"
+}
+
+// ---- 阶段 4：删除 / 恢复 / 审计 ----
+
+// Delete 删除一笔交易（整笔，含转账对侧）：软删 + 余额精确反向 + 版本递增 + 审计。
+//
+// 权限（PRD §7.3 / 落地方案 §5.5 修订版）：owner/admin 可删任意；member 仅本人
+// （creator_uid==uid，且 creator_uid=0 的遗留记录只允许 owner/admin）。删除"整笔"——
+// 若 txID 指向转账的一侧，对侧（related_id 配对）一并处理，禁止单边路径（WBS 4.2）。
+//
+// 余额反向依赖 transactions.direction（0004 补入）：转出侧 flow=-amount、转入侧
+// flow=+amount；单笔按 type 判定。createChangeBalance 复用同一原子 UPDATE，
+// 全组共享一个递增版本（WBS 4.6：单一事务边界）。
+func (s *TxService) Delete(ctx context.Context, uid, bookID, txID int64) (int64, error) {
+	return s.mutateVisibility(ctx, uid, bookID, txID, true, model.AuditActionDelete)
+}
+
+// Restore 恢复一笔已软删的交易（整笔）。与 Delete 对称：余额回滚到删除前、deleted 复位、
+// 版本递增、写审计，复用同一事务与版本来源（WBS 4.4）。
+func (s *TxService) Restore(ctx context.Context, uid, bookID, txID int64) (int64, error) {
+	return s.mutateVisibility(ctx, uid, bookID, txID, false, model.AuditActionRestore)
+}
+
+// mutateVisibility Delete/Restore 的统一实现。wantDeleted=true 表示本次要把目标置为"已删"。
+func (s *TxService) mutateVisibility(ctx context.Context, uid, bookID, txID int64, wantDeleted bool, action string) (int64, error) {
+	if uid <= 0 || bookID <= 0 || txID <= 0 {
+		return 0, fmt.Errorf("%w：用户/账本/交易 ID 缺失", ErrInvalidArgument)
+	}
+
+	// 权限：非成员直接失败；member 仅能操作本人（creator_uid 哨兵：0 视为仅 owner/admin 可见/可改）
+	role, err := RoleOf(s.engine, bookID, uid)
+	if err != nil {
+		if errors.Is(err, ErrNotMember) {
+			return 0, ErrForbidden
+		}
+		return 0, err
+	}
+	canEditOthers := CanEditOthersTx(role)
+
+	sess := s.engine.NewSession()
+	defer sess.Close()
+	if ctx != nil {
+		sess.Context(ctx)
+	}
+	if err := sess.Begin(); err != nil {
+		return 0, err
+	}
+	defer func() { _ = sess.Rollback() }()
+
+	// 目标当前必须处于与操作相反的删除态（删前须存活、恢复前须已删），否则 404
+	row, err := loadTxRowByState(sess, bookID, txID, wantDeleted)
+	if err != nil {
+		return 0, err
+	}
+	group, err := collectTransferGroup(sess, bookID, row, wantDeleted)
+	if err != nil {
+		return 0, err
+	}
+	for _, r := range group {
+		if !canEditOthers && r.CreatorUid != uid {
+			return 0, ErrForbidden
+		}
+	}
+
+	ver, err := s.versions.Next(sess, bookID)
+	if err != nil {
+		return 0, err
+	}
+
+	now := time.Now().Unix()
+	for _, r := range group {
+		acct, err := loadTxAccount(sess, bookID, r.AccountId)
+		if err != nil {
+			return 0, err
+		}
+		// Create 对该账户施加的 delta；删除反向（取负），恢复再施加（取正）
+		apply := signedBalanceDelta(acct.Category, txRowFlow(r))
+		if wantDeleted {
+			apply = -apply
+		}
+		if err := createChangeBalance(sess, bookID, r.AccountId, apply, ver); err != nil {
+			return 0, err
+		}
+		newDeleted := 0
+		if wantDeleted {
+			newDeleted = 1
+		}
+		res, err := sess.Exec(
+			`UPDATE transactions SET deleted = ?, deleted_at = ?, sync_version = ?
+			 WHERE id = ? AND book_id = ? AND deleted = ?`,
+			newDeleted, now, ver, r.Id, bookID, boolToInt(!wantDeleted))
+		if err != nil {
+			return 0, fmt.Errorf("更新交易删除状态失败：%w", err)
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return 0, err
+		}
+		if n != 1 {
+			return 0, ErrIncompleteReceipt
+		}
+		// 审计：before_json 记录变更前状态（此刻 r 仍是变更前快照）
+		if err := insertAudit(sess, bookID, uid, action, "transaction", r.Id, r, "server"); err != nil {
+			return 0, err
+		}
+	}
+
+	if err := sess.Commit(); err != nil {
+		return 0, err
+	}
+	return ver, nil
+}
+
+// loadTxRowByState 按"是否已删除"加载交易行；状态不符返回 ErrTransactionNotFound（→HTTP 404）。
+func loadTxRowByState(sess *xorm.Session, bookID, txID int64, expectLive bool) (*model.Transaction, error) {
+	deleted := 0
+	if !expectLive {
+		deleted = 1
+	}
+	var r model.Transaction
+	has, err := sess.Where("id = ? AND book_id = ? AND deleted = ?", txID, bookID, deleted).Get(&r)
+	if err != nil {
+		return nil, err
+	}
+	if !has {
+		return nil, ErrTransactionNotFound
+	}
+	return &r, nil
+}
+
+// collectTransferGroup 收集"整笔"：转账（related_id>0）返回两侧；否则仅自身。
+// wantLive 表示对侧也需处于相同删除态（删除时找未删对侧，恢复时找已删对侧）。
+func collectTransferGroup(sess *xorm.Session, bookID int64, row *model.Transaction, wantLive bool) ([]*model.Transaction, error) {
+	if row.TxType != model.TxTypeTransfer || row.RelatedId <= 0 {
+		return []*model.Transaction{row}, nil
+	}
+	deleted := 0
+	if !wantLive {
+		deleted = 1
+	}
+	var counterpart model.Transaction
+	has, err := sess.Where("id = ? AND book_id = ? AND deleted = ?", row.RelatedId, bookID, deleted).Get(&counterpart)
+	if err != nil {
+		return nil, err
+	}
+	if !has {
+		// 对侧已不在预期状态：仍按"整笔"处理存在的这一侧，避免悬空配对
+		return []*model.Transaction{row}, nil
+	}
+	return []*model.Transaction{row, &counterpart}, nil
+}
+
+// txRowFlow 该记录在 Create 时对其所在账户的现金流符号（收入为正、支出为负）。
+// 转账靠 direction 区分转出（本侧 -amount）/ 转入（本侧 +amount）；单笔按 type 判定。
+func txRowFlow(r *model.Transaction) int64 {
+	switch r.Direction {
+	case model.TxDirectionOut:
+		return -r.Amount
+	case model.TxDirectionIn:
+		return r.Amount
+	default: // 单笔
+		if r.TxType == model.TxTypeIncome {
+			return r.Amount
+		}
+		if r.TxType == model.TxTypeExpense {
+			return -r.Amount
+		}
+		return 0
+	}
+}
+
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}
+
+// insertAudit 写入一条审计日志（append-only）。before 为变更前实体的序列化。
+func insertAudit(sess *xorm.Session, bookID, actorUid int64, action, entityType string, entityID int64, before interface{}, source string) error {
+	b, err := json.Marshal(before)
+	if err != nil {
+		return fmt.Errorf("审计 before_json 序列化失败：%w", err)
+	}
+	a := &model.AuditLog{
+		BookId:     bookID,
+		ActorUid:   actorUid,
+		Action:     action,
+		EntityType: entityType,
+		EntityId:   entityID,
+		BeforeJson: string(b),
+		At:         time.Now().Unix(),
+		Source:     source,
+	}
+	if _, err := sess.Insert(a); err != nil {
+		return fmt.Errorf("写入审计日志失败：%w", err)
+	}
+	return nil
 }
 
 // 编译期确保 versions 为版本唯一实现
