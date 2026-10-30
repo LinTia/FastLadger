@@ -25,8 +25,13 @@ var (
 	ErrAccountNotFound = errors.New("账户不存在")
 	// ErrAccountInvalid 账户参数非法
 	ErrAccountInvalid = errors.New("账户参数非法")
-	// ErrAccountInUse 账户仍被未删除的交易引用，不允许删除
+	// ErrAccountInUse 账户仍被未删除或仍在回收站的交易引用，不允许删除
 	ErrAccountInUse = errors.New("账户仍存在交易记录，无法删除")
+	// ErrAccountHasChildren 该账户下仍有未删除的子账户（parent_id 指向它），不允许删除。
+	//
+	// GPT-R53：直接删父账户会让子账户留下悬空的 parent_id——列表/j树组装时父节点
+	// 不存在，前端只能把子账户当孤儿节点展示，父子层级（净资产分组）就此失真。
+	ErrAccountHasChildren = errors.New("该账户下仍有子账户，无法删除")
 )
 
 // AccountService 账户服务
@@ -217,10 +222,29 @@ func (s *AccountService) Delete(uid, bookID, accountID int64) (int64, error) {
 	if err := ensureAccountInBook(sess, bookID, accountID); err != nil {
 		return 0, err
 	}
+	// GPT-R53：仍有活跃子账户引用本账户的 parent_id 时显式拒绝。
+	// 与 R47（parent_id 环路）不同：这里不是"能不能指向"，而是"被指向的一方能不能消失"。
+	// 与 R31（交易引用账户）也不同：这里是账户树内部的父子引用。
+	var children int64
+	if _, err := sess.SQL(
+		`SELECT COUNT(1) FROM accounts WHERE book_id = ? AND parent_id = ? AND deleted = 0`,
+		bookID, accountID).Get(&children); err != nil {
+		return 0, err
+	}
+	if children > 0 {
+		return 0, ErrAccountHasChildren
+	}
+	// GPT-R31：引用检查必须覆盖【软删除】的交易。
+	//
+	// 旧实现带 `deleted = 0`，于是"先删交易、再删账户"可以成功：交易还躺在回收站里，
+	// 30 天保留期内用户想恢复它，却发现恢复所依赖的账户已经没了——回收站形同虚设。
+	// 现在只要还有任何一行（含墓碑）引用该账户，就不允许删除；
+	// TTL 到期硬清理（PurgeExpiredTransactions）之后墓碑消失，账户才可正常删除。
+	// 转账两侧账户都要计入：转出账户走 account_id、转入账户走 to_account_id。
 	var used int64
 	if _, err := sess.SQL(
 		`SELECT COUNT(1) FROM transactions
-		 WHERE book_id = ? AND deleted = 0 AND (account_id = ? OR to_account_id = ?)`,
+		 WHERE book_id = ? AND (account_id = ? OR to_account_id = ?)`,
 		bookID, accountID, accountID).Get(&used); err != nil {
 		return 0, err
 	}

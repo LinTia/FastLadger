@@ -76,6 +76,9 @@ func mapSvcErr(c *gin.Context, err error) {
 		fail(c, http.StatusBadRequest, "请求参数非法")
 	case errors.Is(err, service.ErrAccountInUse):
 		fail(c, http.StatusConflict, "账户仍存在交易记录，无法删除")
+	case errors.Is(err, service.ErrAccountHasChildren):
+		// GPT-R53：删父账户会留下悬空 parent_id
+		fail(c, http.StatusConflict, "该账户下仍有子账户，无法删除")
 	case errors.Is(err, service.ErrCategoryInUse):
 		fail(c, http.StatusConflict, "分类仍存在交易记录，无法删除")
 	case errors.Is(err, service.ErrCategoryHasChildren):
