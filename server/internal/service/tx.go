@@ -62,6 +62,15 @@ var (
 	// 迁移 0006 会回填历史转账行；若仍出现 0，说明数据需要修复。
 	// 此时删除/恢复【必须失败】而不是把余额增量算成 0（那会"钱没回滚却不报错"）。
 	ErrTxDirectionMissing = errors.New("转账记录缺少方向标记")
+	// ErrTransferGroupIncomplete 转账（type=3）配对不完整或两侧不一致（HTTP 409）。
+	//
+	// WBS 4.2 明令禁止"单边路径"：一笔转账的两条记录必须同生共死。若对侧缺失、
+	// 互指关系不成立、类型/金额/账户/方向任一项对不上，说明这批数据已经不是一笔
+	// 完整的转账——此时若按"存在的这一侧"继续操作，会让余额、交易状态与审计互相
+	// 矛盾（一侧反向了余额另一侧没有；或恢复出一条找不到对侧的孤儿转账）。
+	//
+	// 因此一律【整笔失败并回滚】，绝不静默退化为单边操作（GPT-R26）。
+	ErrTransferGroupIncomplete = errors.New("转账配对不完整，无法整笔操作")
 )
 
 const (
@@ -753,16 +762,6 @@ func (s *TxService) mutateVisibility(ctx context.Context, uid, bookID, txID int6
 	}
 	hash := mutateRequestHash(op, bookID, uid, txID)
 
-	// 权限：非成员直接失败；member 仅能操作本人（creator_uid 哨兵：0 视为仅 owner/admin 可见/可改）
-	role, err := RoleOf(s.engine, bookID, uid)
-	if err != nil {
-		if errors.Is(err, ErrNotMember) {
-			return 0, ErrForbidden
-		}
-		return 0, err
-	}
-	canEditOthers := CanEditOthersTx(role)
-
 	sess := s.engine.NewSession()
 	defer sess.Close()
 	if ctx != nil {
@@ -773,7 +772,22 @@ func (s *TxService) mutateVisibility(ctx context.Context, uid, bookID, txID int6
 	}
 	defer func() { _ = sess.Rollback() }()
 
-	// 1) 幂等占位（与 Create 对称）：同键命中即重放原回执，绝不重复反转余额。
+	// 1) 权限：必须在【写事务内】重新读取 actor 的当前成员资格与角色（GPT-R28）。
+	//
+	// 事务外读取会留下 TOCTOU 窗口：请求先通过权限检查，随后被并发降权/移除，
+	// 却仍拿着过期权限完成删除/恢复这类不可逆操作。事务内重读与后续写入共享同一
+	// 快照——撤销一旦先提交，本次判定立刻变为"已无权限"。
+	role, err := roleOfTx(sess, bookID, uid)
+	if err != nil {
+		if errors.Is(err, ErrNotMember) {
+			return 0, ErrForbidden
+		}
+		return 0, err
+	}
+	// 非成员已在上一步拒绝；member 仅能操作本人（creator_uid 哨兵：0 视为仅 owner/admin 可改）
+	canEditOthers := CanEditOthersTx(role)
+
+	// 2) 幂等占位（与 Create 对称）：同键命中即重放原回执，绝不重复反转余额。
 	// 失败路径（404/无权限）会整体回滚，占位一并撤销，客户端可用同一键重试。
 	now := time.Now().Unix()
 	res, err := sess.Exec(`INSERT INTO idempotency_records
@@ -795,7 +809,7 @@ func (s *TxService) mutateVisibility(ctx context.Context, uid, bookID, txID int6
 		return 0, ErrIncompleteReceipt
 	}
 
-	// 2) 目标当前必须处于与操作相反的删除态（删前须存活、恢复前须已删），否则 404
+	// 3) 目标当前必须处于与操作相反的删除态（删前须存活、恢复前须已删），否则 404
 	row, err := loadTxRowByState(sess, bookID, txID, wantDeleted)
 	if err != nil {
 		return 0, err
@@ -825,6 +839,14 @@ func (s *TxService) mutateVisibility(ctx context.Context, uid, bookID, txID int6
 		if err != nil {
 			return 0, err
 		}
+		// 恢复时校验引用仍然有效（GPT-R31）：账户/分类若在回收站保留期内被删掉，
+		// 恢复这笔交易就会产出一条指向已删实体的悬空记录（余额能回滚、但数据不可信）。
+		// 删除方向不做此校验——已删的分类不该拦住用户清理这笔账。
+		if !wantDeleted && r.TxType != model.TxTypeTransfer {
+			if err := loadCategoryForType(sess, bookID, r.CategoryId, r.TxType); err != nil {
+				return 0, err
+			}
+		}
 		// Create 对该账户施加的 delta；删除反向（取负），恢复再施加（取正）
 		apply := signedBalanceDelta(acct.Category, txRowFlow(r))
 		if wantDeleted {
@@ -840,7 +862,11 @@ func (s *TxService) mutateVisibility(ctx context.Context, uid, bookID, txID int6
 		res, err := sess.Exec(
 			`UPDATE transactions SET deleted = ?, deleted_at = ?, sync_version = ?
 			 WHERE id = ? AND book_id = ? AND deleted = ?`,
-			newDeleted, now, ver, r.Id, bookID, boolToInt(!wantDeleted))
+			// GPT-R32：deleted_at 是**墓碑时间**，只在 deleted=1 期间有效
+			// （回收站保留期的起算点）。删除写当前时刻，恢复必须清零——
+			// 否则恢复后的行会"活着却带着墓碑时间"，REST 与 Pull 输出的
+			// deletedAt 会让人以为它被删过。
+			newDeleted, tombstoneAt(now, wantDeleted), ver, r.Id, bookID, boolToInt(!wantDeleted))
 		if err != nil {
 			return 0, fmt.Errorf("更新交易删除状态失败：%w", err)
 		}
@@ -948,11 +974,27 @@ func loadTxRowByState(sess *xorm.Session, bookID, txID int64, expectLive bool) (
 	return &r, nil
 }
 
-// collectTransferGroup 收集"整笔"：转账（related_id>0）返回两侧；否则仅自身。
+// collectTransferGroup 收集"整笔"：转账返回两侧；否则仅自身。
 // wantLive 表示对侧也需处于相同删除态（删除时找未删对侧，恢复时找已删对侧）。
+//
+// GPT-R26：对转账（type=3）【禁止任何单边退化】。旧实现在找不到对侧时返回
+// `[]*model.Transaction{row}`，把整笔操作静默变成单边操作——余额只反向一侧、
+// 交易状态与审计只对一侧生效，数据立刻自相矛盾（WBS 4.2 明令禁止）。
+//
+// 现在的口径是：对侧必须存在、同属本账本、与当前行互指，且类型 / 金额 / 账户 /
+// 方向四项完全对应；任一项不成立即返回错误，由调用方整笔回滚。
+// 单笔（type≠3）不参与配对校验，仍按单行处理。
 func collectTransferGroup(sess *xorm.Session, bookID int64, row *model.Transaction, wantLive bool) ([]*model.Transaction, error) {
-	if row.TxType != model.TxTypeTransfer || row.RelatedId <= 0 {
+	if row.TxType != model.TxTypeTransfer {
 		return []*model.Transaction{row}, nil
+	}
+	if row.RelatedId <= 0 {
+		return nil, fmt.Errorf("%w：转账记录 %d 缺少对侧（related_id=%d），拒绝单边操作",
+			ErrTransferGroupIncomplete, row.Id, row.RelatedId)
+	}
+	if row.RelatedId == row.Id {
+		return nil, fmt.Errorf("%w：转账记录 %d 的 related_id 指向自身",
+			ErrTransferGroupIncomplete, row.Id)
 	}
 	deleted := 0
 	if !wantLive {
@@ -964,10 +1006,78 @@ func collectTransferGroup(sess *xorm.Session, bookID int64, row *model.Transacti
 		return nil, err
 	}
 	if !has {
-		// 对侧已不在预期状态：仍按"整笔"处理存在的这一侧，避免悬空配对
-		return []*model.Transaction{row}, nil
+		return nil, fmt.Errorf("%w：转账记录 %d 的对侧 %d 不存在或删除态不符（期望 deleted=%d）",
+			ErrTransferGroupIncomplete, row.Id, row.RelatedId, deleted)
+	}
+	if err := verifyTransferPair(row, &counterpart); err != nil {
+		return nil, err
 	}
 	return []*model.Transaction{row, &counterpart}, nil
+}
+
+// verifyTransferPair 校验一笔转账的两侧是否真的互为对侧（纯函数，便于单测）。
+//
+// 七项校验（GPT-R26）：
+//  1. 对侧 type 必须是转账（3）——对侧是收入/支出说明 related_id 指错了行；
+//  2. 互指：row.related_id == cp.id 且 cp.related_id == row.id；
+//  3. 两侧 amount 相等——金额不等时余额反向必然算错一侧；
+//  4. 账户交叉对应：row.account_id == cp.to_account_id 且 row.to_account_id == cp.account_id；
+//  5. 方向互补：一侧 TxDirectionOut、另一侧 TxDirectionIn；
+//  6. direction=0（缺标记）单独报 ErrTxDirectionMissing，因为它有专门的修复路径（迁移 0006）；
+//  7. 任一项失败即视为数据损坏，整笔拒绝。
+func verifyTransferPair(row, cp *model.Transaction) error {
+	if row == nil || cp == nil {
+		return fmt.Errorf("%w：转账配对为空", ErrTransferGroupIncomplete)
+	}
+	if row.TxType != model.TxTypeTransfer {
+		return fmt.Errorf("%w：记录 %d 不是转账（type=%d）", ErrTransferGroupIncomplete, row.Id, row.TxType)
+	}
+	if cp.TxType != model.TxTypeTransfer {
+		return fmt.Errorf("%w：转账记录 %d 的对侧 %d 类型不是转账（type=%d）",
+			ErrTransferGroupIncomplete, row.Id, cp.Id, cp.TxType)
+	}
+	if row.RelatedId != cp.Id || cp.RelatedId != row.Id {
+		return fmt.Errorf("%w：转账记录 %d 与 %d 未互指（%d.related_id=%d，%d.related_id=%d）",
+			ErrTransferGroupIncomplete, row.Id, cp.Id, row.Id, row.RelatedId, cp.Id, cp.RelatedId)
+	}
+	if row.Amount != cp.Amount {
+		return fmt.Errorf("%w：转账记录 %d 与 %d 金额不一致（%d ≠ %d）",
+			ErrTransferGroupIncomplete, row.Id, cp.Id, row.Amount, cp.Amount)
+	}
+	if row.AccountId != cp.ToAccountId || row.ToAccountId != cp.AccountId {
+		return fmt.Errorf("%w：转账记录 %d 与 %d 账户未交叉对应（%d: %d→%d，%d: %d→%d）",
+			ErrTransferGroupIncomplete, row.Id, cp.Id,
+			row.Id, row.AccountId, row.ToAccountId, cp.Id, cp.AccountId, cp.ToAccountId)
+	}
+	if row.Direction == model.TxDirectionSingle || cp.Direction == model.TxDirectionSingle {
+		return fmt.Errorf("%w：转账记录 %d 或 %d 缺少方向标记，无法精确反向余额",
+			ErrTxDirectionMissing, row.Id, cp.Id)
+	}
+	if row.Direction == cp.Direction {
+		return fmt.Errorf("%w：转账记录 %d 与 %d 方向不互补（同为 %d）",
+			ErrTransferGroupIncomplete, row.Id, cp.Id, row.Direction)
+	}
+	if row.Direction != model.TxDirectionOut && row.Direction != model.TxDirectionIn {
+		return fmt.Errorf("%w：转账记录 %d 方向取值非法（direction=%d）",
+			ErrTransferGroupIncomplete, row.Id, row.Direction)
+	}
+	if cp.Direction != model.TxDirectionOut && cp.Direction != model.TxDirectionIn {
+		return fmt.Errorf("%w：转账记录 %d 方向取值非法（direction=%d）",
+			ErrTransferGroupIncomplete, cp.Id, cp.Direction)
+	}
+	return nil
+}
+
+// tombstoneAt 计算本次写入 transactions.deleted_at 的值：删除写当前时刻，恢复清零（GPT-R32）。
+//
+// deleted_at 是**墓碑时间**：语义上只在 deleted=1 期间有效，是回收站保留期的起算点。
+// 恢复时若沿用"当前时刻"，该行会变成"活着却带着墓碑时间"的矛盾状态——
+// REST 与 Pull 的 deletedAt 输出会让人以为它被删过，且下次删除前它一直是脏的。
+func tombstoneAt(now int64, wantDeleted bool) int64 {
+	if wantDeleted {
+		return now
+	}
+	return 0
 }
 
 // txRowFlow 该记录在 Create 时对其所在账户的现金流符号（收入为正、支出为负）。

@@ -54,6 +54,9 @@ func mapSvcErr(c *gin.Context, err error) {
 	case errors.Is(err, service.ErrTxDirectionMissing):
 		// 失败关闭：宁可报错也不静默算错余额
 		fail(c, http.StatusConflict, "该转账记录缺少方向标记，无法删除或恢复，请联系实例管理员修复数据")
+	case errors.Is(err, service.ErrTransferGroupIncomplete):
+		// GPT-R26：转账配对损坏 → 整笔拒绝，绝不退化成单边操作
+		fail(c, http.StatusConflict, "该转账记录配对不完整，无法整笔删除或恢复，请联系实例管理员修复数据")
 	case errors.Is(err, service.ErrIncompleteReceipt):
 		fail(c, http.StatusConflict, "该 clientUuid 已有不完整回执，请更换 clientUuid 或联系实例管理员处理")
 	case errors.Is(err, service.ErrConcurrentConflict):

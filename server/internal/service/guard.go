@@ -26,6 +26,27 @@ func requireMemberTx(sess *xorm.Session, bookID, uid int64) error {
 	return nil
 }
 
+// roleOfTx 在【调用方已有的事务内】读取成员角色；非成员返回 ErrNotMember。
+//
+// GPT-R28：所有"写操作"的权限判定都必须走这里，而不是事务外的 RoleOf。
+// 事务外读角色会留下 TOCTOU 窗口——请求通过检查后被降权/移除，仍能用过期权限
+// 完成敏感操作。事务内重读与随后的写入共享同一快照，撤销一旦先提交，本次判定
+// 立刻变成"已无权限"。
+func roleOfTx(sess *xorm.Session, bookID, uid int64) (int8, error) {
+	var role int64
+	has, err := sess.SQL(
+		`SELECT m.role FROM book_members m
+		 INNER JOIN books b ON b.id = m.book_id AND b.deleted = 0
+		 WHERE m.book_id = ? AND m.uid = ? AND m.deleted = 0`, bookID, uid).Get(&role)
+	if err != nil {
+		return 0, err
+	}
+	if !has || role < int64(model.RoleOwner) || role > int64(model.RoleMember) {
+		return 0, ErrNotMember
+	}
+	return int8(role), nil
+}
+
 // requireMember 非事务版本的成员资格复核（只读路径使用）。
 func requireMember(engine *xorm.Engine, bookID, uid int64) error {
 	sess := engine.NewSession()
