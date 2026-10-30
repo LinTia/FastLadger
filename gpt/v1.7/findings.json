@@ -1,0 +1,114 @@
+[
+  {
+    "id": "GPT-R26",
+    "title": "转账对侧缺失或关联错误时，删除/恢复仍继续执行单边或错误分组操作",
+    "severity": "P1",
+    "location": [
+      "server/internal/service/tx.go:953-970",
+      "server/internal/service/tx.go:798-820",
+      "docs/FastLedger-开发WBS.md:98"
+    ],
+    "quote": [
+      "if !has { return []*model.Transaction{row}, nil }",
+      "return []*model.Transaction{row, &counterpart}, nil"
+    ],
+    "problem": "对侧缺失或删除状态不符时返回单行且不报错；对侧错指同账本其他交易时会把无关交易纳入分组。",
+    "reproduce": "真实 SQLite 创建转账与普通交易，将转账一侧 related_id 改指普通交易，再调用 Delete；另测对侧缺失/状态不一致。",
+    "actual": "会继续单边修改，或同时修改无关交易。",
+    "expected": "仅完整、互指、方向金额账户匹配的双边转账可操作；异常配对必须回滚。",
+    "impact": "余额、交易状态、审计记录可能不一致或误删无关交易。",
+    "suggestion": "校验对侧 type/related_id/direction/amount/accounts/deleted/book；不完整时 ErrInvalidTransferPair 并回滚；补真实 SQLite 异常配对测试。",
+    "status": "待确认",
+    "evidence": "main tx.go:953-970 在 !has 时返回单行 nil error；WBS 4.2 明确禁止单边路径。测试源码仅覆盖正常双边删除，本轮未运行测试。"
+  },
+  {
+    "id": "GPT-R27",
+    "title": "回收站/审计保留天数乘法溢出可将清理截止时间推至未来并清空历史数据",
+    "severity": "P1",
+    "location": [
+      "server/cmd/server/main.go:239-290",
+      "server/internal/service/recycle.go:58-68",
+      "server/internal/service/recycle.go:79-90"
+    ],
+    "quote": [
+      "cutoff := now - int64(ttlDays)*secondsPerDay",
+      "cutoff := now - int64(retentionDays)*secondsPerDay",
+      "parsePositiveInt 仅检查 Atoi 成功且 n>0"
+    ],
+    "problem": "超大正整数通过 64 位 Atoi 后，乘以 86400 可发生 int64 溢出，cutoff 变成未来时间。",
+    "reproduce": "64 位环境执行 fastledger db purge --recycle-ttl-days 110000000000000 --audit-retention-days 110000000000000；这是算术推导，本轮未执行。",
+    "actual": "回收站 DELETE 可能命中所有正 deleted_at 墓碑，审计 DELETE 可能命中所有正常时间戳记录。",
+    "expected": "超范围配置必须在任何 DELETE 前报错；截止时间计算必须 checked arithmetic。",
+    "impact": "可能批量、不可逆清除回收站和审计历史。",
+    "suggestion": "配置最大值、checked multiplication/subtraction、非法值显式报错；补边界/溢出测试并断言数据库行数不变。",
+    "status": "待确认",
+    "evidence": "main.go:286-290 只做正数解析；recycle.go:65/86 直接 int64 乘法后用于 DELETE。"
+  },
+  {
+    "id": "GPT-R28",
+    "title": "删除/恢复与成员管理在事务外读取角色，存在权限撤销后的 TOCTOU 窗口",
+    "severity": "P1",
+    "location": [
+      "server/internal/service/tx.go:756-774",
+      "server/internal/service/member.go:118-150,172-198",
+      "server/internal/service/book.go:216-246"
+    ],
+    "quote": [
+      "role, err := RoleOf(s.engine, bookID, uid)",
+      "canEditOthers := CanEditOthersTx(role)",
+      "sess.Begin() occurs after RoleOf"
+    ],
+    "problem": "授权依据在事务外读取；读取后到写事务开始前，成员可能被移除或降权，敏感操作仍使用旧角色。",
+    "reproduce": "在 RoleOf 返回后、sess.Begin 前设置 barrier；并发 Remove/demote actor，再放行 Delete/ChangeRole/SetVisibility。",
+    "actual": "业务事务未重新验证 actor 的当前成员关系与角色，可能继续写入。",
+    "expected": "同一事务内读取当前角色并授权，撤权已提交后操作必须失败且不产生业务写入。",
+    "impact": "被移除成员仍可能删除/恢复交易；被降权管理员仍可能管理成员或配置。",
+    "suggestion": "将 actor membership/role 读取移入写事务同一 session；补 barrier 控制的并发回归测试。",
+    "status": "待确认",
+    "evidence": "tx.go:757 早于 Begin L771；member.go:119/173、book.go:220 均早于各自 Begin。"
+  },
+  {
+    "id": "GPT-R29",
+    "title": "成员/配置变更的 before_json 在事务外读取，并发更新时可能记录错误的变更前状态",
+    "severity": "P2",
+    "location": [
+      "server/internal/service/book.go:216-246,254-257",
+      "server/internal/service/member.go:130-162,180-209"
+    ],
+    "quote": [
+      "oldCanView := b.MembersCanViewOthers before sess.Begin",
+      "targetRole := RoleOf(...) before sess.Begin"
+    ],
+    "problem": "before_json 使用事务外读取的旧快照，并发请求可能让第二条审计记录写入过期旧值或为无实际变化写审计。",
+    "reproduce": "两个并发 SetVisibility(false) 在读取旧值后 barrier，A 提交后再放行 B，核对第二条 before_json 与是否应写审计。",
+    "actual": "审计快照可能与数据库真实变更前状态不符。",
+    "expected": "事务内读取旧状态，只有真实状态变化才写审计。",
+    "impact": "权限/配置审计不再能准确还原变更时间线。",
+    "suggestion": "同一 session 内完成读取、权限校验、比较、更新与 insertAudit；增加并发重复设置/角色变更测试。",
+    "status": "待确认",
+    "evidence": "book.go:216/220/232 在 Begin L238 前；member.go:130/180 在 Begin L141/188 前。"
+  },
+  {
+    "id": "GPT-R30",
+    "title": "WBS 4.3 要求交易 update 审计，但当前没有交易更新入口或 update 审计写入",
+    "severity": "P2",
+    "location": [
+      "docs/FastLedger-开发WBS.md:99",
+      "server/internal/model/ledger.go:206-210",
+      "server/internal/api/router.go:94-101"
+    ],
+    "quote": [
+      "WBS 4.3: 覆盖 create/update/delete/restore",
+      "AuditActionUpdate = \"update\"",
+      "当前交易路由只有 GET/POST/DELETE/restore/recycle"
+    ],
+    "problem": "只有 update 动作常量，没有交易 Update 服务/路由或审计写入调用。",
+    "reproduce": "搜索 AuditActionUpdate 全仓引用并检查 TxService 与 router 交易路径。",
+    "actual": "update 审计路径不存在。",
+    "expected": "owner 明确交易更新是否属于阶段4；延期则同步修订 WBS 与验收状态。",
+    "impact": "若更新功能后续上线而未补审计，财务数据修改不可追溯；当前阶段完成度表述也不准确。",
+    "suggestion": "实现 Update+同事务 before_json 审计，或在 WBS/CHANGELOG 明确延期，不将此项计为已完成。",
+    "status": "待确认",
+    "evidence": "WBS 4.3 明列 update；ledger.go 仅定义常量；router.go 无 PUT/PATCH 交易路由。"
+  }
+]
