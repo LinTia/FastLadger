@@ -6,6 +6,7 @@ package service
 // 全在同一事务内完成，避免出现"有账本但没版本记录"的不一致。
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -39,7 +40,8 @@ func NewBookService(engine *xorm.Engine, versions version.Source) *BookService {
 func (s *BookService) Create(uid int64, name string, bookType int8) (*model.Book, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
-		return nil, errors.New("账本名称不能为空")
+		// 归入 ErrInvalidArgument：由 mapSvcErr 映射为 400，而不是 500
+		return nil, fmt.Errorf("%w：账本名称不能为空", ErrInvalidArgument)
 	}
 	if bookType != model.BookTypePersonal && bookType != model.BookTypeFamily {
 		bookType = model.BookTypeFamily
@@ -72,6 +74,16 @@ func (s *BookService) Create(uid int64, name string, bookType int8) (*model.Book
 	if _, err := sess.Insert(&model.BookMember{
 		BookId: b.Id, Uid: uid, Role: model.RoleOwner, CanViewOthers: true, CreatedAt: now, UpdatedAt: now,
 	}); err != nil {
+		_ = sess.Rollback()
+		return nil, err
+	}
+	// 默认账户与默认分类与账本同事务创建（WBS 2.1：新账本开箱可用）
+	seedVer, err := s.versions.Next(sess, b.Id)
+	if err != nil {
+		_ = sess.Rollback()
+		return nil, err
+	}
+	if err := seedBookDefaults(sess, b.Id, seedVer); err != nil {
 		_ = sess.Rollback()
 		return nil, err
 	}

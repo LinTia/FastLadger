@@ -116,7 +116,8 @@ func (s *MemberService) ChangeRole(actor, bookID, targetUid int64, newRole int8)
 		return ErrForbidden
 	}
 	if newRole != model.RoleAdmin && newRole != model.RoleMember {
-		return errors.New("只能将成员设为管理员或普通成员")
+		// 归入 ErrInvalidArgument：由 mapSvcErr 映射为 400，而不是 500
+		return fmt.Errorf("%w：只能将成员设为管理员或普通成员", ErrInvalidArgument)
 	}
 	targetRole, err := RoleOf(s.engine, bookID, targetUid)
 	if err != nil {

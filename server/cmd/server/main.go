@@ -86,12 +86,18 @@ func main() {
 	authSvc := service.NewAuthService(engine, cfg.JWTSecret, tokenTTL)
 	books := service.NewBookService(engine, versions)
 	members := service.NewMemberService(engine, authSvc, cfg.InviteTTLDays)
+	accounts := service.NewAccountService(engine, versions)
+	categories := service.NewCategoryService(engine, versions)
+	txs := service.NewTxService(engine, versions)
 
 	r := api.NewRouter(api.Deps{
 		Config:        cfg,
 		AuthService:   authSvc,
 		Books:         books,
 		Members:       members,
+		Accounts:      accounts,
+		Categories:    categories,
+		Txs:           txs,
 		SchemaVersion: st.Current,
 	})
 

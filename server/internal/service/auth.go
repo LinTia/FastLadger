@@ -47,7 +47,8 @@ func NewAuthService(engine *xorm.Engine, secret string, ttl time.Duration) *Auth
 func (s *AuthService) Register(username, password string) (*model.User, error) {
 	username = strings.TrimSpace(username)
 	if username == "" {
-		return nil, errors.New("用户名不能为空")
+		// 归入 ErrInvalidArgument：由 mapSvcErr 映射为 400，而不是 500
+		return nil, fmt.Errorf("%w：用户名不能为空", ErrInvalidArgument)
 	}
 	if len(password) < minPasswordLen {
 		return nil, ErrWeakPassword

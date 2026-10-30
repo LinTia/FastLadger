@@ -1,0 +1,6 @@
+# 构建与运行产物（不纳入版本控制）
+/gotmp/
+/.gotmp/
+/data/
+*.exe
+/fastledger

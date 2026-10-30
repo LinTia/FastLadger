@@ -33,16 +33,44 @@ func bindJSON(c *gin.Context, obj interface{}) bool {
 }
 
 // mapSvcErr 把服务层错误映射为 HTTP 状态码
+//
+// 阶段 2 追加记账核心映射（《转账入口裁决》§2）：
+// 缺键/非法命令 400、幂等键冲突或并发冲突 409、无成员权限 403、资源不存在 404。
 func mapSvcErr(c *gin.Context, err error) {
 	switch {
 	case err == nil:
 		return
-	case errors.Is(err, service.ErrForbidden), errors.Is(err, service.ErrNotMember):
+	case errors.Is(err, service.ErrForbidden),
+		errors.Is(err, service.ErrNotMember),
+		errors.Is(err, service.ErrCreateForbidden):
 		fail(c, http.StatusForbidden, "无权限")
 	case errors.Is(err, service.ErrCannotOperateOwner):
 		fail(c, http.StatusForbidden, "不能对账本所有者执行该操作")
+	case errors.Is(err, service.ErrCreateConflict):
+		fail(c, http.StatusConflict, "同一 clientUuid 已用于不同内容，请检查请求或更换 clientUuid")
+	case errors.Is(err, service.ErrIncompleteReceipt):
+		fail(c, http.StatusConflict, "该 clientUuid 已有不完整回执，请更换 clientUuid 或联系实例管理员处理")
+	case errors.Is(err, service.ErrConcurrentConflict):
+		fail(c, http.StatusConflict, "数据已被并发修改，请重试")
 	case errors.Is(err, service.ErrBookNotFound):
 		fail(c, http.StatusNotFound, "账本不存在")
+	case errors.Is(err, service.ErrAccountNotFound):
+		fail(c, http.StatusNotFound, "账户不存在")
+	case errors.Is(err, service.ErrCategoryNotFound):
+		fail(c, http.StatusNotFound, "分类不存在")
+	case errors.Is(err, service.ErrTransactionNotFound):
+		fail(c, http.StatusNotFound, "交易不存在")
+	case errors.Is(err, service.ErrInvalidCreate),
+		errors.Is(err, service.ErrInvalidArgument),
+		errors.Is(err, service.ErrAccountInvalid),
+		errors.Is(err, service.ErrCategoryInvalid):
+		fail(c, http.StatusBadRequest, "请求参数非法")
+	case errors.Is(err, service.ErrAccountInUse):
+		fail(c, http.StatusConflict, "账户仍存在交易记录，无法删除")
+	case errors.Is(err, service.ErrCategoryInUse):
+		fail(c, http.StatusConflict, "分类仍存在交易记录，无法删除")
+	case errors.Is(err, service.ErrCategoryHasChildren):
+		fail(c, http.StatusConflict, "该分类下仍有子分类，无法删除")
 	case errors.Is(err, service.ErrUserExists):
 		fail(c, http.StatusConflict, "用户名已存在")
 	case errors.Is(err, service.ErrInviteInvalid):

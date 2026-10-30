@@ -2,6 +2,38 @@
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.20] - 2026-10-30
+
+### 阶段 2：记账核心闭环（统一 Create / 转账双边 / 幂等 / 账户分类）
+
+- **唯一创建入口** `TxService.Create`：HTTP（及后续 sync/push）复用同一入口；无 `AddTransaction`/`Transfer` 等第二入口（路由与测试双重断言）。
+- **转账双边原子** `createTransferInTx`：复用外层事务与版本（每个命令仅一次 `versions.Next`），两侧余额 + 两条记录同事务同版本；`related_id` 互指并校验影响行数；任一步失败整笔回滚；**无单边路径**。
+- **余额唯一写路径** `createChangeBalance`：单条原子 UPDATE（带 `book_id`、`deleted=0`、`RowsAffected==1`、`balance BETWEEN` 溢出保护），无"先读后写"。
+- **负债符号** `signedBalanceDelta`：category 10~15（负债）取反。储蓄 1000 + 信用 0、刷卡 100 → 信用 `+10000` 分，**净资产 90000 分（900 元）**；还款后仍 90000。
+- **幂等**：`idempotency_records` 事务内 `ON CONFLICT(book_id,uid,client_uuid) DO NOTHING` + `RowsAffected` 判定；命中重读回执核对 `request_hash/result_type/result_ids/result_version`；不一致 409；回执回写失败整笔回滚；重放不碰余额、不递增版本。
+- **`requestHash`** 覆盖完整请求（域标签 `transaction.create/v1`）且**排除 clientUuid**；备注尾部空白归一化。
+- **服务层强制 `clientUuid`**（`validateCreate`），handler 另有 binding 双重校验。
+- **账户 / 分类**：CRUD（软删、归属校验、引用保护、两级分类）；新账本在同一事务内落默认数据。
+- **HTTP**：400 / 403 / 404 / 409 映射；新增 `0003` 迁移补 `creator_uid`、`source`、`timezone_offset` 与 `idx_tx_creator`（**未改 0001/0002**）。
+
+### 本轮返工（QA 两轮独立验证后）
+
+- **P2-1 修**：补 `creator_uid`（此前 `uid` 是死参数，交易归属会永久丢失）。`newTxRow(creatorUid, bookID, r, ver)` 接线，转账两条记录同 creator。
+- **P3-1 修**：溢出误判 409 → `RowsAffected==0` 时复查账户区分"溢出(400)"与"已删/并发(409)"；新增金额上界 **1 亿元/笔**（`maxAmountCents`）。
+- **P3-4 / P3-5 / P3-6 / P3-2 修**：分页回显归一化；账户 `parentId` 自引用拦截；三处 `errors.New` 改 `ErrInvalidArgument`（500→400）；不完整回执文案改为如实告知 + `log.Printf` 留痕。
+
+### 验证
+
+- ✅ `gofmt` 空、`go build ./...`、`go vet ./...`、`go test ./...` 全过；**RUN=41 / PASS=41 / FAIL=0 / SKIP=0**（QA 23 + 工程师 18；含 JWT 安全、权限矩阵、限流、符号全类别、225 组转账守恒、hash 独立判据、27 条错误映射、路由唯一性）。
+- ✅ 主理人独立复核：4 参数调用无 3 参数残留；`0001/0002` 未被修改（`git diff` 为空）；亲自跑通全量。
+- ❌ 仍需 gcc / 真库补验：事务真实回滚、UPSERT 的 `RowsAffected` 语义、并发（`busy_timeout` + `MaxOpenConns=1`）、`xorm:"'type'"` 引号列与零值写入、`related_id` 双向落库、`0003` 在真实库可执行、PRD §10.1/§10.3/§10.4 端到端、`go test -race`、Gin 全链路集成。
+
+### 遗留（不阻塞阶段 2）
+
+- **P2-2**：PRD §7.3「member 仅看本人记录」的服务端过滤 → **阶段 3**（所依赖的 `creator_uid` 已补齐）。
+- **历史行 `creator_uid=0` = 未知归属**：阶段 3/4 做可见性与"仅本人可改"判定时**必须显式处理 0**（建议视为"仅 owner/admin 可见/可改"），**禁止**把 0 当作放行条件。
+- **P3-3**：`CreateRequest` 缺 `Merchant`，`transactions.merchant` 恒空、`keyword LIKE merchant` 为死条件——属**设计文档缺口**（指南 §13.1 参考骨架同样缺失），建议随阶段 5（OCR）一并补文档与字段。
+
 ## [1.19] - 2026-10-30
 
 ### 阶段 1：认证 / 账本 / 成员 + 邀请入户

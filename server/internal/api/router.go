@@ -14,6 +14,9 @@ type Deps struct {
 	AuthService   *service.AuthService
 	Books         *service.BookService
 	Members       *service.MemberService
+	Accounts      *service.AccountService
+	Categories    *service.CategoryService
+	Txs           *service.TxService
 	SchemaVersion int64
 }
 
@@ -24,6 +27,7 @@ func NewRouter(d Deps) *gin.Engine {
 
 	ah := &authHandler{authSvc: d.AuthService, enableRegister: d.Config.EnableRegister}
 	bh := &bookHandler{books: d.Books, members: d.Members}
+	lh := &ledgerHandler{accounts: d.Accounts, categories: d.Categories, txs: d.Txs}
 
 	r.GET("/healthz", func(c *gin.Context) {
 		c.JSON(200, gin.H{"code": 0, "msg": "ok", "data": gin.H{
@@ -53,6 +57,24 @@ func NewRouter(d Deps) *gin.Engine {
 		auth.POST("/books/:id/members/invite", bh.createInvite)
 		auth.PUT("/books/:id/members/:uid", bh.changeRole)
 		auth.DELETE("/books/:id/members/:uid", bh.removeMember)
+
+		// 账户（阶段 2.1）
+		auth.GET("/books/:id/accounts", lh.listAccounts)
+		auth.POST("/books/:id/accounts", lh.createAccount)
+		auth.GET("/books/:id/accounts/:aid", lh.getAccount)
+		auth.PUT("/books/:id/accounts/:aid", lh.updateAccount)
+		auth.DELETE("/books/:id/accounts/:aid", lh.deleteAccount)
+
+		// 分类（阶段 2.1，两级；?tree=1 返回树）
+		auth.GET("/books/:id/categories", lh.listCategories)
+		auth.POST("/books/:id/categories", lh.createCategory)
+		auth.PUT("/books/:id/categories/:cid", lh.updateCategory)
+		auth.DELETE("/books/:id/categories/:cid", lh.deleteCategory)
+
+		// 交易（阶段 2.2~2.6）：三种类型共用同一创建入口
+		auth.GET("/books/:id/transactions", lh.listTransactions)
+		auth.GET("/books/:id/transactions/:txId", lh.getTransaction)
+		auth.POST("/books/:id/transactions", lh.createTransaction)
 	}
 	return r
 }
