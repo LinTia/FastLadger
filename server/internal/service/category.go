@@ -257,9 +257,12 @@ func (s *CategoryService) Delete(uid, bookID, categoryID int64) (int64, error) {
 	if children > 0 {
 		return 0, ErrCategoryHasChildren
 	}
+	// GPT-R31：引用检查必须覆盖【软删除】的交易（口径同 account.Delete）。
+	// 分类被删掉后，回收站里的那笔交易就无法恢复——恢复会写出一条指向已删分类的记录。
+	// TTL 到期硬清理之后墓碑消失，分类才可正常删除。
 	var used int64
 	if _, err := sess.SQL(
-		`SELECT COUNT(1) FROM transactions WHERE book_id = ? AND category_id = ? AND deleted = 0`,
+		`SELECT COUNT(1) FROM transactions WHERE book_id = ? AND category_id = ?`,
 		bookID, categoryID).Get(&used); err != nil {
 		return 0, err
 	}
