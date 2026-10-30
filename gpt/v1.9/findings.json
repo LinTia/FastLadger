@@ -15,8 +15,17 @@
       "expected": "有活跃子账户时拒绝删除父账户，或在同一事务中明确迁移/提升子账户并递增其 sync_version。",
       "impact": "账户树出现孤儿节点，不同客户端可能展示不同分组结构。",
       "suggestion": "在 AccountService.Delete 事务中查询活跃子账户并拒绝删除；增加真实 SQLite 测试，验证拒绝时数据与版本不变，并验证软删子账户不阻止删除。",
-      "status": "待确认",
-      "evidence": "account.go Delete 完整检查链没有子账户查询；category.go Delete 有 children 查询与 ErrCategoryHasChildren 对称保护。静态审查，未执行测试。"
+      "status": "resolved",
+      "evidence": "account.go Delete 完整检查链没有子账户查询；category.go Delete 有 children 查询与 ErrCategoryHasChildren 对称保护。静态审查，未执行测试。",
+      "fix": {
+        "summary": "拒绝删除仍有活跃子账户的父账户",
+        "commit": "027b348"
+      },
+      "verification": {
+        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+        "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
+        "status_note": "已修复并有可追溯回归测试；测试实际运行并通过"
+      }
     }
   ],
   "review_notes": [

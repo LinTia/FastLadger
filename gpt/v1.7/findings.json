@@ -18,8 +18,17 @@
     "expected": "仅完整、互指、方向金额账户匹配的双边转账可操作；异常配对必须回滚。",
     "impact": "余额、交易状态、审计记录可能不一致或误删无关交易。",
     "suggestion": "校验对侧 type/related_id/direction/amount/accounts/deleted/book；不完整时 ErrInvalidTransferPair 并回滚；补真实 SQLite 异常配对测试。",
-    "status": "待确认",
-    "evidence": "main tx.go:953-970 在 !has 时返回单行 nil error；WBS 4.2 明确禁止单边路径。测试源码仅覆盖正常双边删除，本轮未运行测试。"
+    "status": "resolved",
+    "evidence": "main tx.go:953-970 在 !has 时返回单行 nil error；WBS 4.2 明确禁止单边路径。测试源码仅覆盖正常双边删除，本轮未运行测试。",
+    "fix": {
+      "summary": "verifyTransferPair 六项校验齐全，不符即整笔回滚",
+      "commit": "9005d68"
+    },
+    "verification": {
+      "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+      "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
+      "status_note": "已修复并有可追溯回归测试；测试实际运行并通过"
+    }
   },
   {
     "id": "GPT-R27",
@@ -41,8 +50,17 @@
     "expected": "超范围配置必须在任何 DELETE 前报错；截止时间计算必须 checked arithmetic。",
     "impact": "可能批量、不可逆清除回收站和审计历史。",
     "suggestion": "配置最大值、checked multiplication/subtraction、非法值显式报错；补边界/溢出测试并断言数据库行数不变。",
-    "status": "待确认",
-    "evidence": "main.go:286-290 只做正数解析；recycle.go:65/86 直接 int64 乘法后用于 DELETE。"
+    "status": "resolved",
+    "evidence": "main.go:286-290 只做正数解析；recycle.go:65/86 直接 int64 乘法后用于 DELETE。",
+    "fix": {
+      "summary": "service/ttl.go 唯一换算入口 + 上限与纪元检查；邀请 TTL 构造时校验",
+      "commit": "ba80b0d"
+    },
+    "verification": {
+      "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+      "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
+      "status_note": "已修复并有可追溯回归测试；测试实际运行并通过"
+    }
   },
   {
     "id": "GPT-R28",
@@ -67,8 +85,17 @@
     "expected": "同一事务内读取当前角色并授权，撤权已提交后操作必须失败且不产生业务写入。 所有敏感写入口（包括账本名称/删除、邀请创建）均应在事务内重验当前角色。",
     "impact": "被移除成员仍可能删除/恢复交易；被降权管理员仍可能管理成员或配置。 被撤权的 admin 还可能在撤权后创建邀请、修改账本名称或删除账本。",
     "suggestion": "将 actor membership/role 读取移入写事务同一 session；补 barrier 控制的并发回归测试。 全仓盘点 CreateInvite、BookService.Update/Delete 等管理写入口，统一改为 session 内授权与写入。",
-    "status": "待确认",
-    "evidence": "tx.go:757 早于 Begin L771；member.go:119/173、book.go:220 均早于各自 Begin。 book.go:143-183/211-263 与 member.go:215-245 也在 engine 上先查 RoleOf，后直接写库或插入邀请；未在写事务内重验。"
+    "status": "resolved",
+    "evidence": "tx.go:757 早于 Begin L771；member.go:119/173、book.go:220 均早于各自 Begin。 book.go:143-183/211-263 与 member.go:215-245 也在 engine 上先查 RoleOf，后直接写库或插入邀请；未在写事务内重验。",
+    "fix": {
+      "summary": "新增 roleOfTx，七个入口改为事务内重读角色",
+      "commit": "7584c57"
+    },
+    "verification": {
+      "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+      "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
+      "status_note": "已修复并有可追溯回归测试；测试实际运行并通过"
+    }
   },
   {
     "id": "GPT-R29",
@@ -88,8 +115,17 @@
     "expected": "事务内读取旧状态，只有真实状态变化才写审计。",
     "impact": "权限/配置审计不再能准确还原变更时间线。",
     "suggestion": "同一 session 内完成读取、权限校验、比较、更新与 insertAudit；增加并发重复设置/角色变更测试。",
-    "status": "待确认",
-    "evidence": "book.go:216/220/232 在 Begin L238 前；member.go:130/180 在 Begin L141/188 前。"
+    "status": "resolved",
+    "evidence": "book.go:216/220/232 在 Begin L238 前；member.go:130/180 在 Begin L141/188 前。",
+    "fix": {
+      "summary": "before_json 在事务内读取",
+      "commit": "a2255f3"
+    },
+    "verification": {
+      "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+      "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
+      "status_note": "已修复并有可追溯回归测试；测试实际运行并通过"
+    }
   },
   {
     "id": "GPT-R30",
@@ -111,8 +147,23 @@
     "expected": "owner 明确交易更新是否属于阶段4；延期则同步修订 WBS 与验收状态。",
     "impact": "若更新功能后续上线而未补审计，财务数据修改不可追溯；当前阶段完成度表述也不准确。",
     "suggestion": "实现 Update+同事务 before_json 审计，或在 WBS/CHANGELOG 明确延期，不将此项计为已完成。",
-    "status": "待确认",
-    "evidence": "WBS 4.3 明列 update；ledger.go 仅定义常量；router.go 无 PUT/PATCH 交易路由。"
+    "status": "deferred_owner_decision",
+    "evidence": "WBS 4.3 明列 update；ledger.go 仅定义常量；router.go 无 PUT/PATCH 交易路由。",
+    "fix": {
+      "summary": "维持不实现：阶段 4 无交易修改入口（路由守卫禁 PUT），改为在 WBS 4.3 明确记为延期范围，并写明后续开放交易 update 时必须同时补齐的服务/审计/架构守卫登记三项前置条件",
+      "commit": "pending"
+    },
+    "verification": {
+      "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+      "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
+      "status_note": "非代码修复：以文档裁决闭合。WBS 4.3 已新增「交易 update 审计延期说明」，并禁止在完成前将该项表述为已交付。不声称已实现 update 审计。"
+    },
+    "decision": {
+      "owner": "LinTia",
+      "date": "2026-10-30",
+      "outcome": "deferred",
+      "rationale": "阶段 4 无交易修改入口（TestQATransactionRoutesContract 禁 PUT），实现 update 审计等于引入新写入路径，超出阶段 4 范围且会触发架构守卫用例。"
+    }
   },
   {
     "id": "GPT-R31",
@@ -135,8 +186,17 @@
     "expected": "在交易回收站 TTL 内，系统必须保持交易恢复所需的依赖可用。至少应阻止删除仍被任何未硬清除交易（包括墓碑）引用的账户/分类；或实现经过明确审计和事务保护的依赖恢复策略。恢复前还应验证账户、分类引用一致性。",
     "impact": "用户可能先清理账户，再发现误删交易无法恢复；或恢复后出现交易分类悬空。破坏阶段 4 的可恢复性和账务数据完整性。",
     "suggestion": "建议账户/分类删除检查所有仍存在的交易引用（包括 deleted=1 墓碑），直到交易被 TTL 硬清除后才允许删除；若业务确实允许先删账户，应设计账户恢复/依赖恢复并保证同事务处理。补真实 SQLite 集成测试覆盖单笔与转账两侧账户、分类及 TTL 清理后的行为。",
-    "status": "待确认",
-    "evidence": "account.go Delete 查询明确限定 transactions.deleted=0；tx.go Restore 对每个交易行调用 loadTxAccount；loadTxAccount 对 Deleted=true 返回 ErrEntityDeleted。category.go Delete 同样只统计 deleted=0 交易，而 Restore 未检查 CategoryId。静态代码链路可直接证明，未运行测试。"
+    "status": "resolved",
+    "evidence": "account.go Delete 查询明确限定 transactions.deleted=0；tx.go Restore 对每个交易行调用 loadTxAccount；loadTxAccount 对 Deleted=true 返回 ErrEntityDeleted。category.go Delete 同样只统计 deleted=0 交易，而 Restore 未检查 CategoryId。静态代码链路可直接证明，未运行测试。",
+    "fix": {
+      "summary": "引用检查覆盖软删交易（转账两侧），恢复时校验引用有效",
+      "commit": "f4c4511"
+    },
+    "verification": {
+      "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+      "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
+      "status_note": "已修复并有可追溯回归测试；测试实际运行并通过"
+    }
   },
   {
     "id": "GPT-R32",
@@ -158,8 +218,17 @@
     "expected": "删除时 deleted_at=now；恢复时 deleted_at=0。两者均应在同一事务内更新 sync_version 并写审计。",
     "impact": "客户端/报表/运维若以 deletedAt 是否存在辅助判断墓碑，会把已恢复交易误判为曾处于删除状态；字段契约和数据语义不一致。",
     "suggestion": "按 wantDeleted 构造 deletedAt 参数：删除传 now，恢复传 0；增加真实 SQLite 测试断言数据库列、REST JSON、Pull 墓碑字段在删除/恢复前后的值。",
-    "status": "待确认",
-    "evidence": "tx.go 更新语句无条件传 now；model/ledger.go 对 DeletedAt 的注释明确未删除时为 0；现有 tx_delete_integration_test.go 的恢复用例未检查 deleted_at。本轮未执行测试。"
+    "status": "resolved",
+    "evidence": "tx.go 更新语句无条件传 now；model/ledger.go 对 DeletedAt 的注释明确未删除时为 0；现有 tx_delete_integration_test.go 的恢复用例未检查 deleted_at。本轮未执行测试。",
+    "fix": {
+      "summary": "tombstoneAt：删除写当前时刻、恢复置 0",
+      "commit": "9005d68"
+    },
+    "verification": {
+      "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+      "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
+      "status_note": "已修复并有可追溯回归测试；测试实际运行并通过"
+    }
   },
   {
     "id": "GPT-R33",
@@ -180,8 +249,17 @@
     "expected": "组合更新应具备原子性：要么名称与可见性及对应审计全部提交，要么全部回滚。若产品决定两个字段独立提交，API 也必须提供可识别的部分成功响应，而不是普通失败。",
     "impact": "客户端状态与服务端状态分叉；用户重试可能造成误判，审计/广播也可能只覆盖部分变更。",
     "suggestion": "将 BookService.Update 重构为单一事务；在该事务内读取账本和 actor 当前角色，写名称、写可见性、记录审计，提交后再由 handler 根据结果广播。避免在事务内调用会自行 Begin/Commit 的 SetVisibility，可抽出 session 版本的内部函数。",
-    "status": "待确认",
-    "evidence": "book_handler.go:89 将两个字段交给 BookService.Update；book.go 先执行 s.engine.ID(...).Update，再调用 SetVisibility；SetVisibility 自己创建 session 并 Begin/Commit，失败时无法回滚前面的名称 UPDATE。静态审查，未运行故障注入。"
+    "status": "resolved",
+    "evidence": "book_handler.go:89 将两个字段交给 BookService.Update；book.go 先执行 s.engine.ID(...).Update，再调用 SetVisibility；SetVisibility 自己创建 session 并 Begin/Commit，失败时无法回滚前面的名称 UPDATE。静态审查，未运行故障注入。",
+    "fix": {
+      "summary": "Update 名称+可见性同事务，广播在提交后",
+      "commit": "a8ce4c5"
+    },
+    "verification": {
+      "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+      "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
+      "status_note": "已修复并有可追溯回归测试；测试实际运行并通过"
+    }
   },
   {
     "id": "GPT-R34",
@@ -201,7 +279,16 @@
     "expected": "显式 flag 缺值、格式错误、越界或未知参数都必须 fail-fast；在参数完全验证通过前不得执行任何清理。环境变量非法也应明确告警或退出，不能静默替换成更短的默认保留期。",
     "impact": "运维误操作可提前硬删除回收站记录或审计历史；由于是硬删除，无法通过回收站恢复。",
     "suggestion": "用标准 flag 包或严格手写解析器；区分“未提供”与“提供但非法”；解析函数返回 (value,error)，拒绝未知参数/缺值/非正数/越界值；在执行任何 DELETE 前完成全部配置校验。增加 CLI 单测并断言非法输入下数据库行数不变。",
-    "status": "待确认",
-    "evidence": "main.go:249-262 只在 flag 与后续参数均存在时处理，否则忽略；parsePositiveInt 在非法时返回 def；之后仅检查结果是否 <=0，默认值为正，因此错误参数仍会进入清理流程。静态代码链路，未执行 CLI。"
+    "status": "resolved",
+    "evidence": "main.go:249-262 只在 flag 与后续参数均存在时处理，否则忽略；parsePositiveInt 在非法时返回 def；之后仅检查结果是否 <=0，默认值为正，因此错误参数仍会进入清理流程。静态代码链路，未执行 CLI。",
+    "fix": {
+      "summary": "config.envInt 非法即报错；CLI 用 flag 严格解析，校验先于 DELETE",
+      "commit": "ba80b0d, a7ca9d6"
+    },
+    "verification": {
+      "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+      "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
+      "status_note": "已修复并有可追溯回归测试；测试实际运行并通过"
+    }
   }
 ]

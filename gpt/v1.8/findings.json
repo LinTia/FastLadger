@@ -15,8 +15,17 @@
       "expected": "目录/数据库/sidecar 应按部署策略限制为 owner 或受控组可读。",
       "impact": "本机其他用户可能绕过 HTTP 鉴权读取账本与密码哈希。",
       "suggestion": "私有目录 0700，DB 与 sidecar 0600；既有文件同样处理并增加权限测试。",
-      "status": "待确认",
-      "evidence": "main.go 创建 0755 目录；database.Init 无 chmod。最终权限受 umask/SQLite 行为影响，本轮未在目标环境 stat。"
+      "status": "resolved",
+      "evidence": "main.go 创建 0755 目录；database.Init 无 chmod。最终权限受 umask/SQLite 行为影响，本轮未在目标环境 stat。",
+      "fix": {
+        "summary": "目录 0700、DB 与 WAL/SHM 0600，并收紧已存在文件",
+        "commit": "cb9b372, 40dd8e3"
+      },
+      "verification": {
+        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+        "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
+        "status_note": "已修复并有可追溯回归测试；测试实际运行并通过"
+      }
     },
     {
       "id": "GPT-R36",
@@ -30,8 +39,17 @@
       "expected": "建立适合的 FK 并定义删除策略，或明确选择不用 FK 并补完整性验证。",
       "impact": "维护 SQL 或未来遗漏校验的路径可写入孤儿数据。",
       "suggestion": "owner 裁决软删除/硬删除策略后增加 FK 或显式约束；测试实际非法引用，而不只读 PRAGMA。",
-      "status": "待确认（需 owner 裁决 FK 策略）",
-      "evidence": "本轮逐一检查 6 个 .up.sql 均无 REFERENCES/FOREIGN KEY；database_test 仅验证 PRAGMA=1。"
+      "status": "resolved",
+      "evidence": "本轮逐一检查 6 个 .up.sql 均无 REFERENCES/FOREIGN KEY；database_test 仅验证 PRAGMA=1。",
+      "fix": {
+        "summary": "【Owner 裁决】不使用外键；理由与补偿控制写入落地方案 §0.1",
+        "commit": "15ca242"
+      },
+      "verification": {
+        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+        "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
+        "status_note": "已修复并有可追溯回归测试；测试实际运行并通过"
+      }
     },
     {
       "id": "GPT-R37",
@@ -45,8 +63,17 @@
       "expected": "Check 应只读；表缺失应报未迁移，由 db migrate 创建。",
       "impact": "启动流程发生隐式 DDL，迁移职责边界不清晰。",
       "suggestion": "将 ensureVersionTable 保留在 Apply；Check 只查询 sqlite_master。",
-      "status": "待确认",
-      "evidence": "migrate.go 调用链与 ensureVersionTable 的 CREATE 语句直接证明；未运行空库启动测试。"
+      "status": "resolved",
+      "evidence": "migrate.go 调用链与 ensureVersionTable 的 CREATE 语句直接证明；未运行空库启动测试。",
+      "fix": {
+        "summary": "Check 改为纯只读，建表只留 Apply",
+        "commit": "f1369b4"
+      },
+      "verification": {
+        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+        "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
+        "status_note": "已修复并有可追溯回归测试；测试实际运行并通过"
+      }
     },
     {
       "id": "GPT-R38",
@@ -60,8 +87,17 @@
       "expected": "拒绝重复版本，并对照全部预期版本集合检查缺失/未知版本。",
       "impact": "迁移 SQL 可能静默跳过，或 schema 不完整却允许启动。",
       "suggestion": "listMigrations 检查唯一性；Check 校验完整版本集合；补重复/缺口/未知版本测试。",
-      "status": "待确认",
-      "evidence": "migrate.go 排序、Apply isApplied 和 MAX 查询路径无重复/完整性检查；现有测试主要覆盖新库。"
+      "status": "resolved",
+      "evidence": "migrate.go 排序、Apply isApplied 和 MAX 查询路径无重复/完整性检查；现有测试主要覆盖新库。",
+      "fix": {
+        "summary": "拒绝重复版本，按整个版本集合校验（含 MAX 相同但缺中间版本的用例）",
+        "commit": "27595db"
+      },
+      "verification": {
+        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+        "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
+        "status_note": "已修复并有可追溯回归测试；测试实际运行并通过"
+      }
     },
     {
       "id": "GPT-R39",
@@ -75,8 +111,17 @@
       "expected": "bump 成功返回前应持久化临时文件内容与父目录 rename 项。",
       "impact": "客户端可能误以为数据库未恢复，继续使用旧同步游标。",
       "suggestion": "写临时文件后 Sync/Close，Rename 后 Sync 父目录；增加恢复演练。",
-      "status": "待确认",
-      "evidence": "meta.go 只有 WriteFile 与 Rename；当前测试只验证正常读写，不证明断电持久性。"
+      "status": "resolved",
+      "evidence": "meta.go 只有 WriteFile 与 Rename；当前测试只验证正常读写，不证明断电持久性。",
+      "fix": {
+        "summary": "写临时文件后 Sync，Rename 后 Sync 父目录",
+        "commit": "3d40fe5"
+      },
+      "verification": {
+        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+        "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
+        "status_note": "已修复并有可追溯回归测试；测试实际运行并通过"
+      }
     },
     {
       "id": "GPT-R40",
@@ -90,8 +135,17 @@
       "expected": "owner/admin 可列出并撤销未使用邀请；撤销与 used_at=0 条件更新在同一事务。",
       "impact": "泄漏的 admin 邀请可被未授权用户兑换并取得账本管理权限。",
       "suggestion": "补邀请列表/撤销 API；条件更新并核对 RowsAffected；写审计；补并发使用/撤销测试。",
-      "status": "待确认",
-      "evidence": "PRD §12.1、WBS 1.5 明确要求撤销；router 无撤销路由，member.go 无撤销方法。"
+      "status": "resolved",
+      "evidence": "PRD §12.1、WBS 1.5 明确要求撤销；router 无撤销路由，member.go 无撤销方法。",
+      "fix": {
+        "summary": "RevokeInvite：事务内验权限 + 条件 UPDATE + RowsAffected",
+        "commit": "4a84da6"
+      },
+      "verification": {
+        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+        "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
+        "status_note": "已修复并有可追溯回归测试；测试实际运行并通过"
+      }
     },
     {
       "id": "GPT-R41",
@@ -105,8 +159,17 @@
       "expected": "邮箱绑定时创建、注册、落库和比较形成闭环；若延期则同步修改 PRD/schema。",
       "impact": "邮箱绑定邀请不能防止链接被转发给其他邮箱，产品契约不完整。",
       "suggestion": "补 email 字段、规范化和匹配测试；或由 owner 决定移除/延期该能力。",
-      "status": "待确认（需 owner 决定是否属于 MVP）",
-      "evidence": "迁移 0002 定义 bound_email；当前 CreateInvite/JoinViaInvite 只处理 boundUsername。"
+      "status": "resolved",
+      "evidence": "迁移 0002 定义 bound_email；当前 CreateInvite/JoinViaInvite 只处理 boundUsername。",
+      "fix": {
+        "summary": "邮箱绑定闭环：规范化 + 落库 + 兑换匹配",
+        "commit": "ff1d8a0"
+      },
+      "verification": {
+        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+        "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
+        "status_note": "已修复并有可追溯回归测试；测试实际运行并通过"
+      }
     },
     {
       "id": "GPT-R42",
@@ -120,8 +183,17 @@
       "expected": "成功状态变更与审计同事务；失败尝试记录安全摘要且不记录密码/完整邀请码。",
       "impact": "无法追踪邀请滥用与生命周期，管理员邀请泄漏后缺少调查证据。",
       "suggestion": "定义 invite audit actions；在创建/兑换/撤销事务中写审计；定义过期与失败尝试记录策略。",
-      "status": "待确认",
-      "evidence": "PRD §12.1 要求全生命周期及失败尝试审计；member.go 无审计调用。"
+      "status": "resolved",
+      "evidence": "PRD §12.1 要求全生命周期及失败尝试审计；member.go 无审计调用。",
+      "fix": {
+        "summary": "邀请全生命周期审计；过期判定收敛为单一来源 inviteUsableCond",
+        "commit": "61c7ea8, 3b836fd"
+      },
+      "verification": {
+        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+        "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
+        "status_note": "已修复并有可追溯回归测试；测试实际运行并通过"
+      }
     },
     {
       "id": "GPT-R43",
@@ -135,8 +207,17 @@
       "expected": "成员管理、邀请创建/兑换均在事务内确认账本 deleted=0。",
       "impact": "已删除账本仍暴露成员列表、发放邀请并增加成员。",
       "suggestion": "统一 active-book membership guard；JoinViaInvite 在事务内读取 active book；补真实 SQLite 回归。",
-      "status": "待确认",
-      "evidence": "book.go 软删账本；member.go RoleOf 只查成员关系；handler 使用 RoleOf；JoinViaInvite 未查询 books。"
+      "status": "resolved",
+      "evidence": "book.go 软删账本；member.go RoleOf 只查成员关系；handler 使用 RoleOf；JoinViaInvite 未查询 books。",
+      "fix": {
+        "summary": "已删账本拦截；修 Scan bool/int64 崩溃；判定顺序「先 404 后 403」",
+        "commit": "eddfb84, a433314, 23da8a2, f517d3c"
+      },
+      "verification": {
+        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+        "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
+        "status_note": "已修复并有可追溯回归测试；测试实际运行并通过"
+      }
     },
     {
       "id": "GPT-R44",
@@ -150,8 +231,17 @@
       "expected": "窗口过期 key 被清理，map 有明确上限。",
       "impact": "分布式新 IP 请求可让进程内存持续增长。",
       "suggestion": "增加周期/惰性全局清理、最大 key 数或有界 LRU；补 key 生命周期测试。",
-      "status": "待确认",
-      "evidence": "limiter.go Allow 无 delete/全局清理；现有测试未覆盖 key 生命周期。"
+      "status": "resolved",
+      "evidence": "limiter.go Allow 无 delete/全局清理；现有测试未覆盖 key 生命周期。",
+      "fix": {
+        "summary": "惰性+主动清理、key 上限 10000，满则拒绝新 key",
+        "commit": "8d4276b"
+      },
+      "verification": {
+        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+        "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
+        "status_note": "已修复并有可追溯回归测试；测试实际运行并通过"
+      }
     },
     {
       "id": "GPT-R45",
@@ -165,8 +255,17 @@
       "expected": "哈希前校验用户名上限与 bcrypt 字节上限，范围错误返回 400 且不落库。",
       "impact": "客户端收到 500；用户名长度契约被绕过。",
       "suggestion": "明确字符/字节口径；限制 username；限制 bcrypt 72 字节或换 KDF；补边界测试。",
-      "status": "待确认",
-      "evidence": "auth.go 无最大长度校验；0001 声明 username VARCHAR(64)；未运行 HTTP 注册测试。"
+      "status": "resolved",
+      "evidence": "auth.go 无最大长度校验；0001 声明 username VARCHAR(64)；未运行 HTTP 注册测试。",
+      "fix": {
+        "summary": "用户名 1~64 字符且 ≤255 字节；口令 ≤72 字节；输入错误 400 且不落库",
+        "commit": "bffd3cc"
+      },
+      "verification": {
+        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+        "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
+        "status_note": "已修复并有可追溯回归测试；测试实际运行并通过"
+      }
     },
     {
       "id": "GPT-R46",
@@ -180,8 +279,17 @@
       "expected": "凭证错误保持统一 401；内部错误返回 500/503，不泄露账号是否存在。",
       "impact": "客户端把服务故障误认为密码错误，运维排障方向错误。",
       "suggestion": "使用 errors.Is 区分认证类错误与内部错误；内部错误记录安全日志并返回 500/503。",
-      "status": "待确认",
-      "evidence": "auth_handler.go 对任意 err 直接返回 401；未执行故障注入。"
+      "status": "resolved",
+      "evidence": "auth_handler.go 对任意 err 直接返回 401；未执行故障注入。",
+      "fix": {
+        "summary": "凭证类统一 401；DB/审计/签发失败 503 + 安全日志",
+        "commit": "c0f0547"
+      },
+      "verification": {
+        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+        "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
+        "status_note": "已修复并有可追溯回归测试；测试实际运行并通过"
+      }
     },
     {
       "id": "GPT-R47",
@@ -195,8 +303,17 @@
       "expected": "账户分组关系必须无环；不得将后代设为上级。",
       "impact": "客户端递归构建分组树可能无限递归或无法定位根节点。",
       "suggestion": "同事务沿 parent 链/递归查后代，拒绝循环；补 A→B→A 与多层环测试。",
-      "status": "待确认",
-      "evidence": "account.go 只有 self check 与 ensureAccountInBook，无 descendant/cycle 检查。"
+      "status": "resolved",
+      "evidence": "account.go 只有 self check 与 ensureAccountInBook，无 descendant/cycle 检查。",
+      "fix": {
+        "summary": "parent_id 任意长度环检测，Create/Update 同事务",
+        "commit": "12190d9"
+      },
+      "verification": {
+        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+        "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
+        "status_note": "已修复并有可追溯回归测试；测试实际运行并通过"
+      }
     },
     {
       "id": "GPT-R48",
@@ -210,8 +327,17 @@
       "expected": "批次边界由所有同步实体共同决定；只有同版本整体回扩可例外超出。",
       "impact": "首次同步/大量账户变更时响应体和内存占用远超 MaxSyncBatch。",
       "suggestion": "合并所有实体版本流后选第 limit 个版本；同版本全量回扩；补真实 SQLite 分页测试。",
-      "status": "待确认",
-      "evidence": "sync.go 先查 transactions、fallback 取其他表 MAX、随后按区间查询；sync_test 无真实 SQLite Pull 分页测试。"
+      "status": "resolved",
+      "evidence": "sync.go 先查 transactions、fallback 取其他表 MAX、随后按区间查询；sync_test 无真实 SQLite Pull 分页测试。",
+      "fix": {
+        "summary": "水位由四类实体共同决定；修正用例 fixture 假设（seed 33 行同版本属合法回扩）",
+        "commit": "232907e, fc56720, f8be12e"
+      },
+      "verification": {
+        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+        "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
+        "status_note": "已修复并有可追溯回归测试；测试实际运行并通过"
+      }
     },
     {
       "id": "GPT-R49",
@@ -225,8 +351,17 @@
       "expected": "限制每帧 ID 数量，先去重，并限制连接/用户总订阅数与频率。",
       "impact": "一个已认证用户可占用唯一 SQLite 连接，拖慢其他 API/同步请求。",
       "suggestion": "ServeWS 限制 len(Books)；Hub 再去重/限量；补压力测试。",
-      "status": "待确认",
-      "evidence": "serve.go 只有 readLimit；hub.go 对输入逐项调用 checker，无数量上限/去重。"
+      "status": "resolved",
+      "evidence": "serve.go 只有 readLimit；hub.go 对输入逐项调用 checker，无数量上限/去重。",
+      "fix": {
+        "summary": "每帧 ID 上限、去重、订阅总数上限、令牌桶限流（限流在鉴权前）",
+        "commit": "7325fc8"
+      },
+      "verification": {
+        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+        "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
+        "status_note": "已修复并有可追溯回归测试；测试实际运行并通过"
+      }
     },
     {
       "id": "GPT-R50",
@@ -240,8 +375,17 @@
       "expected": "撤权提交后完成的订阅写入必须重新验证，或通过 book generation 使旧结果失效。",
       "impact": "被移除成员可能继续收到后续活动通知；违反撤权后摘订阅契约。",
       "suggestion": "引入 book 权限 generation；Subscribe 写入前比对；RefreshVisibility 即使 targets 为空也递增 generation；补 barrier 时序测试。",
-      "status": "待确认",
-      "evidence": "hub.go Subscribe checker 在锁外；RefreshVisibility 只收集现有订阅且 targets=0 返回；现有 QA 未覆盖该反向时序。"
+      "status": "resolved",
+      "evidence": "hub.go Subscribe checker 在锁外；RefreshVisibility 只收集现有订阅且 targets=0 返回；现有 QA 未覆盖该反向时序。",
+      "fix": {
+        "summary": "账本权限 generation；RefreshVisibility 即使 targets 为空也递增",
+        "commit": "201b87b"
+      },
+      "verification": {
+        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+        "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
+        "status_note": "已修复并有可追溯回归测试；测试实际运行并通过"
+      }
     },
     {
       "id": "GPT-R51",
@@ -255,8 +399,17 @@
       "expected": "WebSocket 会话有效期受 token exp 约束；过期主动 close 或重新验证。",
       "impact": "过期凭证建立的长连接可延长授权窗口；账号禁用/会话撤销也不会自动感知。",
       "suggestion": "wsAuth 将 exp 传入 context；ServeWS 到期关闭并注销；后续会话撤销需关闭对应 WS。",
-      "status": "待确认",
-      "evidence": "main.go tokenTTL=24h；ServeWS 无 re-Verify/exp timer；未执行 WebSocket 过期测试。"
+      "status": "resolved",
+      "evidence": "main.go tokenTTL=24h；ServeWS 无 re-Verify/exp timer；未执行 WebSocket 过期测试。",
+      "fix": {
+        "summary": "令牌 exp 作为连接生命周期上限，到期主动关闭并清理订阅",
+        "commit": "f188b1a"
+      },
+      "verification": {
+        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+        "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
+        "status_note": "已修复并有可追溯回归测试；测试实际运行并通过"
+      }
     },
     {
       "id": "GPT-R52",
@@ -270,8 +423,17 @@
       "expected": "持久化会话/令牌记录，提供会话列表与单设备撤销，HTTP/WS 鉴权检查 revoked 状态。",
       "impact": "被盗 token 无法单独提前吊销，用户不能终止遗失设备会话。",
       "suggestion": "owner 决定纳入阶段1收尾还是阶段7；实现 token_sessions 并补多端/撤销/过期测试。",
-      "status": "待 owner 裁决（PRD 明确要求，WBS 未分配阶段）",
-      "evidence": "PRD §4.1 要求会话查看/撤销；jwt.go 只携带 Jti；Verify 不查询会话；router 无 session endpoints。"
+      "status": "scheduled_owner_decision",
+      "evidence": "PRD §4.1 要求会话查看/撤销；jwt.go 只携带 Jti；Verify 不查询会话；router 无 session endpoints。",
+      "fix": {
+        "summary": "【Owner 裁决：排期实现】已排入 WBS 5.10 + PRD §10.10；尚未实现，不得标记 resolved",
+        "commit": "15ca242"
+      },
+      "verification": {
+        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+        "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
+        "status_note": "Owner 已裁决排期实现（WBS 5.10 / PRD §10.10），功能尚未实现，未关闭"
+      }
     }
   ]
 }

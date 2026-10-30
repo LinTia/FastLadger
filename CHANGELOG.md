@@ -70,7 +70,7 @@
 - **验证边界**：本轮通过 GitHub 文件读取进行静态审查，未在本会话重新运行 Go/SQLite/race。当前导读记录 Actions run `41034510229` 为 170 PASS / 0 FAIL，但不能证明本轮指出的异常配对、整数溢出与 TOCTOU 场景已覆盖。
 - **交付物**：`gpt/v1.7/审核结果.md`、`gpt/v1.7/findings.json`、`gpt/v1.7/verification/runtime-results.json`。所有新 finding 初始状态为「待确认」，等待 owner 裁决。
 
-## [1.38] - 2026-10-30
+## [1.42] - 2026-10-30
 
 ### GPT v1.7 / v1.8 / v1.9 全量整改：GPT-R26 – GPT-R53（28 项）
 
@@ -97,11 +97,29 @@
 
 **同步 / WebSocket**：R48 Pull 水位由四类实体共同决定（`232907e`）、R49 订阅数量上限+去重+限流（`7325fc8`）、R50 账本权限 generation 消除撤权竞态（`201b87b`）、R51 令牌有效期作为连接生命周期上限（`f188b1a`）。
 
-#### Owner 裁决（3 项）
+#### Owner 裁决（4 项）
 
 - **R36 不使用外键**：理由（软删墓碑与 FK/级联直接冲突等）与补偿控制写入《落地方案》决策表 + 新增 §0.1；明确**不得用 `PRAGMA foreign_keys=1` 当证据**。
 - **R52 排期实现**：排入 **WBS 5.10**，并在 **PRD 新增 §10.10** 验收项。
 - **R41 完整实现**（不做移除/延期），已按裁决施工。
+- **R30 延期（不实现交易 update 审计）**：阶段 4 无交易修改入口——架构守卫 `TestQATransactionRoutesContract` 显式禁止 `PUT`/`/transfer`/`/batch`，实现 update 审计等于新增写入路径，超出阶段 4 范围。已在 **WBS 4.3 新增「交易 update 审计延期说明」**，写明后续开放交易 update 时必须同时补齐：① 交易 Update 服务（单一入口、单一事务）② 同事务读 `before_json` 并写 `action=update` 审计 ③ 登记进架构守卫白名单。此项**不计入阶段 4 已完成范围，不得表述为已交付**。
+
+#### CI 验证结果（权威）
+
+**Actions run [41076750547](https://github.com/LinTia/FastLadger/actions/runs/41076750547)（commit `a573c6e`）：全绿。**
+gofmt / vet / build / SQLite 冒烟 / 全量测试 / **`-race`** 六步全 success；
+**474 PASS / 0 FAIL，DATA RACE 检出 0 次**。
+
+从首次红到全绿的收敛过程（每次都由 CI 暴露真问题，而非放宽断言）：
+
+| run | 结果 | 本轮修掉的根因 |
+|---|---|---|
+| 41068222122 | 441 PASS / 28 FAIL | `requireActiveBookTx` 把 BOOLEAN 列扫进 int64（真实 SQLite 必崩，本机无 CGO 测不出，影响约 14 例）；R26「非转账却带 related_id」仍被当单笔放行；R31 用例误用按 `deleted=0` 过滤的 helper |
+| 41069111152 | 464 PASS / 5 FAIL | `mergeSafeVersion` 在 seed 33 行同版本下走进"取最大版本"分支（实为规格允许的回扩，是**用例 fixture 假设错误**）；R40/R43 判定顺序 |
+| 41071899666 | 469 PASS / 2 FAIL | R43 回归（把"账本已删"误并入 not found）|
+| 41072473802 | 470 PASS / 1 FAIL | R48 断言算错 18（漏算余额改写会抬账户版本，实为 19 且构成可解释）|
+| 41073315674 / 41074321097 | 472 PASS / 1 FAIL（**race**） | `ServeWS` 反复读包级 `var DefaultHub`，与测试替换全局 Hub 竞争 |
+| **41076750547** | **474 PASS / 0 FAIL，race 0** | ServeWS 改为 Upgrade 后一次性捕获 Hub；端到端用例显式排干连接 |
 
 #### 验证状态（如实区分）
 

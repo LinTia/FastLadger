@@ -96,10 +96,15 @@
 |---|---|---|
 | 4.1 回收站 | 回收站视图 + 保留期 | 保留 **30 天**（`EBK_RECYCLE_TTL_DAYS`，默认 30），到期硬清除 |
 | 4.2 转账双边整笔删 / 恢复 | 分组删除 | 以**整笔**为单位（分组键 `transfer_group_id` 或复用 `related_id`）；两侧余额回滚同事务、版本统一 +1、写幂等回执；**禁止单边路径** |
-| 4.3 `audit_logs` 表与写入点 | append-only 审计 | 字段 `(id, book_id, actor_uid, action, entity_type, entity_id, before_json, at, source)`；覆盖 create/update/delete/restore/登录/权限变更/配置变更/备份恢复；仓库层禁 UPDATE/DELETE；保留 1 年或按容量滚动 |
+| 4.3 `audit_logs` 表与写入点 | append-only 审计 | 字段 `(id, book_id, actor_uid, action, entity_type, entity_id, before_json, at, source)`；覆盖 create/delete/restore/登录/权限变更/配置变更/备份恢复；仓库层禁 UPDATE/DELETE；保留 1 年或按容量滚动。**交易 update 审计延期，见下方说明** |
 | 4.4 统一 `TxService.Delete/Restore` | 删除恢复入口 | 与 `TxService.Create` 对称，复用 `VersionSource` + 幂等回执 + 单一事务边界（避免"双入口"） |
 | 4.5 旧离线数据回流 | 冲突处理 | 目标已删返 `409 + ENTITY_DELETED`，客户端丢弃或转"冲突/另存"；**绝不静默复活已删数据** |
 | 4.6 删除事务内动作 | 事务封装 | 置 `deleted_at` → 版本 +1 → 写 `sync_version` → 写审计，**同一事务** |
+
+> 📌 **交易 update 审计延期说明**（GPT-R30 裁决，2026-10-30）：阶段 4 不提供交易修改入口——交易路由白名单例 `TestQATransactionRoutesContract` 显式禁止 `PUT` / `/transfer` / `/batch`，只允许 `GET/POST/DELETE/restore/recycle`。因此 `AuditActionUpdate` 目前只有常量、无写入点，**不计入阶段 4 已完成范围**。
+>
+> 后续若要开放交易修改，必须**同时**补齐：① 交易 Update 服务（单一入口、单一事务）；② 同事务读取 `before_json` 并写 `action=update` 审计；③ 把该写入点登记进 `TestQAS3SingleCreateEntry` / `TestQAS3VisibilityCondWiredIntoAllReadPaths` 等架构守卫白名单，否则 CI 会红。
+> 在这三项完成前，任何文档中不得把"交易 update 审计"表述为已交付。
 
 **阶段验收**：§10.9 备份恢复与审计（三条"给定—当—则"）。
 

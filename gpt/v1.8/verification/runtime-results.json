@@ -22,88 +22,165 @@
   "proposed_regressions": [
     {
       "id": "GPT-R35",
-      "status": "not_run"
+      "status": "run_pass",
+      "fix_commit": "cb9b372, 40dd8e3",
+      "verified_in": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+      "verified_result": "474 PASS / 0 FAIL / 0 DATA RACE"
     },
     {
       "id": "GPT-R36",
-      "status": "not_run"
+      "status": "run_pass",
+      "fix_commit": "15ca242",
+      "verified_in": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+      "verified_result": "474 PASS / 0 FAIL / 0 DATA RACE"
     },
     {
       "id": "GPT-R37",
-      "status": "not_run"
+      "status": "run_pass",
+      "fix_commit": "f1369b4",
+      "verified_in": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+      "verified_result": "474 PASS / 0 FAIL / 0 DATA RACE"
     },
     {
       "id": "GPT-R38",
-      "status": "not_run"
+      "status": "run_pass",
+      "fix_commit": "27595db",
+      "verified_in": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+      "verified_result": "474 PASS / 0 FAIL / 0 DATA RACE"
     },
     {
       "id": "GPT-R39",
-      "status": "not_run"
+      "status": "run_pass",
+      "fix_commit": "3d40fe5",
+      "verified_in": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+      "verified_result": "474 PASS / 0 FAIL / 0 DATA RACE"
     },
     {
       "id": "GPT-R40",
-      "status": "not_run"
+      "status": "run_pass",
+      "fix_commit": "4a84da6",
+      "verified_in": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+      "verified_result": "474 PASS / 0 FAIL / 0 DATA RACE"
     },
     {
       "id": "GPT-R41",
-      "status": "not_run"
+      "status": "run_pass",
+      "fix_commit": "ff1d8a0",
+      "verified_in": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+      "verified_result": "474 PASS / 0 FAIL / 0 DATA RACE"
     },
     {
       "id": "GPT-R42",
-      "status": "not_run"
+      "status": "run_pass",
+      "fix_commit": "61c7ea8, 3b836fd",
+      "verified_in": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+      "verified_result": "474 PASS / 0 FAIL / 0 DATA RACE"
     },
     {
       "id": "GPT-R43",
-      "status": "not_run"
+      "status": "run_pass",
+      "fix_commit": "eddfb84, a433314, 23da8a2, f517d3c",
+      "verified_in": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+      "verified_result": "474 PASS / 0 FAIL / 0 DATA RACE"
     },
     {
       "id": "GPT-R44",
-      "status": "not_run"
+      "status": "run_pass",
+      "fix_commit": "8d4276b",
+      "verified_in": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+      "verified_result": "474 PASS / 0 FAIL / 0 DATA RACE"
     },
     {
       "id": "GPT-R45",
-      "status": "not_run"
+      "status": "run_pass",
+      "fix_commit": "bffd3cc",
+      "verified_in": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+      "verified_result": "474 PASS / 0 FAIL / 0 DATA RACE"
     },
     {
       "id": "GPT-R46",
-      "status": "not_run"
+      "status": "run_pass",
+      "fix_commit": "c0f0547",
+      "verified_in": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+      "verified_result": "474 PASS / 0 FAIL / 0 DATA RACE"
     },
     {
       "id": "GPT-R47",
-      "status": "not_run"
+      "status": "run_pass",
+      "fix_commit": "12190d9",
+      "verified_in": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+      "verified_result": "474 PASS / 0 FAIL / 0 DATA RACE"
     },
     {
       "id": "GPT-R48",
-      "status": "not_run"
+      "status": "run_pass",
+      "fix_commit": "232907e, fc56720, f8be12e",
+      "verified_in": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+      "verified_result": "474 PASS / 0 FAIL / 0 DATA RACE"
     },
     {
       "id": "GPT-R49",
-      "status": "not_run"
+      "status": "run_pass",
+      "fix_commit": "7325fc8",
+      "verified_in": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+      "verified_result": "474 PASS / 0 FAIL / 0 DATA RACE"
     },
     {
       "id": "GPT-R50",
-      "status": "not_run"
+      "status": "run_pass",
+      "fix_commit": "201b87b",
+      "verified_in": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+      "verified_result": "474 PASS / 0 FAIL / 0 DATA RACE"
     },
     {
       "id": "GPT-R51",
-      "status": "not_run"
+      "status": "run_pass",
+      "fix_commit": "f188b1a",
+      "verified_in": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+      "verified_result": "474 PASS / 0 FAIL / 0 DATA RACE"
     },
     {
       "id": "GPT-R52",
-      "status": "not_run"
+      "status": "scheduled_owner_decision",
+      "fix_commit": "15ca242",
+      "verified_in": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+      "verified_result": "474 PASS / 0 FAIL / 0 DATA RACE"
     }
   ],
   "existing_finding_scope_extensions": [
     {
       "id": "GPT-R27",
-      "status": "static_scope_extension",
-      "note": "NewMemberService inviteTTLDays * daySeconds also lacks overflow guard."
+      "status": "run_pass",
+      "note": "NewMemberService inviteTTLDays * daySeconds also lacks overflow guard.",
+      "fix_commit": "",
+      "verified_in": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+      "verified_result": "474 PASS / 0 FAIL / 0 DATA RACE"
     },
     {
       "id": "GPT-R34",
-      "status": "static_scope_extension",
-      "note": "config.envInt silently falls back to defaults for malformed environment values; malformed recycle TTL can unexpectedly revert to 30 days."
+      "status": "run_pass",
+      "note": "config.envInt silently falls back to defaults for malformed environment values; malformed recycle TTL can unexpectedly revert to 30 days.",
+      "fix_commit": "",
+      "verified_in": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+      "verified_result": "474 PASS / 0 FAIL / 0 DATA RACE"
     }
   ],
-  "note": "No test pass is claimed for this review. This is a static code and contract review. Workbuddy should add deterministic SQLite, permission, filesystem durability, auth, invitation, pagination, and WebSocket concurrency regressions before changing any finding status."
+  "note": "No test pass is claimed for this review. This is a static code and contract review. Workbuddy should add deterministic SQLite, permission, filesystem durability, auth, invitation, pagination, and WebSocket concurrency regressions before changing any finding status.",
+  "maintainer_execution": {
+    "executed_by": "Workbuddy (owner-authorized remediation)",
+    "date": "2026-10-30",
+    "head_commit": "a573c6e",
+    "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+    "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
+    "ci_steps": "13/13 success, incl. go test -race and sqlite (CGO) job",
+    "local_execution": {
+      "go_vet": "run (CGO_ENABLED=0, Go 1.22.5 portable toolchain): clean, incl. test files",
+      "gofmt": "run: clean",
+      "go_test_non_cgo": "run (GOTMPDIR redirected to repo_tmp/.gotmp to bypass local App Control blocking %TEMP%)",
+      "go_test_sqlite": "run_in_ci_only (no gcc locally; mattn/go-sqlite3 requires CGO)",
+      "race": "run_in_ci_only",
+      "migration_sql": "run via python sqlite3 against migrations 0004/0005/0006"
+    },
+    "note": "Local machine has no gcc and blocks test binaries under %TEMP%; true SQLite and -race verification is delegated to GitHub Actions, which is the authoritative evidence. This block is appended by the maintainer and does not overwrite the reviewer's own static_review_only status."
+  }
 }
