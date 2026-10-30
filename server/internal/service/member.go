@@ -85,7 +85,7 @@ var (
 	ErrInviteAlreadyUsed = fmt.Errorf("%w：邀请码已被使用", ErrInviteInvalid)
 	// ErrInviteAlreadyRevoked 邀请已被撤销（重复撤销不会被当成成功）
 	ErrInviteAlreadyRevoked = fmt.Errorf("%w：邀请码已被撤销", ErrInviteInvalid)
-	// ErrInviteExpired 邀请已过期（过期判定见 inviteExpired，全局只有这一个口径）
+	// ErrInviteExpired 邀请已过期（过期判定见 inviteRejectReason，全局只有这一个口径）
 	ErrInviteExpired = fmt.Errorf("%w：邀请码已过期", ErrInviteInvalid)
 	// ErrInviteNotFound 邀请不存在（含"存在但不属于该账本"——两者对外不可区分，
 	// 否则等于允许攻击者用 A 账本的凭证去枚举 B 账本的邀请主键）
@@ -428,9 +428,7 @@ func (s *MemberService) RevokeInvite(actor, bookID, inviteID int64) error {
 	}
 
 	now := time.Now().Unix()
-	n, err := sess.Where(
-		"id = ? AND book_id = ? AND used_at = 0 AND revoked = 0 AND expires_at > ?",
-		inviteID, bookID, now).
+	n, err := sess.Where("id = ? AND book_id = ? AND "+inviteUsableCond, inviteID, bookID, now).
 		Cols("revoked").Update(&model.Invite{Revoked: true})
 	if err != nil {
 		return err
@@ -488,6 +486,14 @@ func inviteIDOrZero(found bool, id int64) int64 {
 	}
 	return id
 }
+
+// inviteUsableCond 邀请"此刻仍然可操作"的 SQL 条件（撤销的 UPDATE 用它做 WHERE 尾巴）。
+//
+// 与 inviteRejectReason 同为一个过期口径的两面：那边按 `expires_at <= now` 判"已过期"，
+// 这边按 `expires_at > now` 判"仍可操作"。把它抽成常量而不是在两处各写一遍，
+// 是为了让"改了过期语义"必须同时改这两处——否则就会出现
+// "兑换说它过期了、撤销却说它还能撤销"这种自相矛盾的状态机（GPT-R42 策略一）。
+const inviteUsableCond = "used_at = 0 AND revoked = 0 AND expires_at > ?"
 
 // inviteRejectReason 按"只读快照"裁定一条邀请此刻不能被操作的原因。
 //

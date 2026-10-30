@@ -188,13 +188,26 @@ func TestR40RevokeUsesConditionalUpdateWithRowsAffected(t *testing.T) {
 	body := src[strings.Index(src, "func (s *MemberService) RevokeInvite"):]
 	body = body[:minStringEnd(body, 0)]
 
-	// ① 四个状态条件必须写进同一个 WHERE（少一个都会在并发下漏放行）
-	for _, cond := range []string{
-		"id = ?", "book_id = ?", "used_at = 0", "revoked = 0", "expires_at > ?",
-	} {
-		if !strings.Contains(body, cond) {
-			t.Fatalf("撤销的 WHERE 缺少 %q：未经条件约束的 UPDATE 会让已用/已撤销的邀请再次被改写", cond)
+	// ① 四个状态条件必须写进同一个 WHERE（少一个都会在并发下漏放行）。
+	// 状态条件刻意抽成常量 inviteUsableCond 与 inviteRejectReason 同源，
+	// 所以这里逐项核对的是那个常量的定义，而不是函数里散落的文本。
+	if !strings.Contains(body, `"id = ? AND book_id = ? AND "+inviteUsableCond`) {
+		t.Fatal("撤销的 UPDATE 必须带 id / book_id，并复用 inviteUsableCond 作为状态条件")
+	}
+	condIdx := strings.Index(src, "const inviteUsableCond = ")
+	if condIdx < 0 {
+		t.Fatal("member.go 缺少 inviteUsableCond 常量（状态判定必须是单一来源）")
+	}
+	condSrc := src[condIdx:]
+	condSrc = condSrc[:strings.Index(condSrc, "\n")]
+	for _, cond := range []string{"used_at = 0", "revoked = 0", "expires_at > ?"} {
+		if !strings.Contains(condSrc, cond) {
+			t.Fatalf("inviteUsableCond 缺少 %q：未经条件约束的 UPDATE 会让已用/已撤销的邀请再次被改写", cond)
 		}
+	}
+	// 过期口径必须与 inviteRejectReason 反向一致（同一常量 + 同一个比较方向）
+	if !strings.Contains(src, "case inv.ExpiresAt <= now:") {
+		t.Fatal("inviteRejectReason 必须以 expires_at <= now 判过期（与 inviteUsableCond 互为反面）")
 	}
 	// ② 必须核对影响行数
 	if !strings.Contains(body, "if n != 1 {") {
