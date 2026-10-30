@@ -74,6 +74,13 @@ func NewRouter(d Deps) *gin.Engine {
 
 		auth.GET("/books/:id/members", bh.listMembers)
 		auth.POST("/books/:id/members/invite", bh.createInvite)
+		// GPT-R40：撤销邀请码（只能撤销尚未使用、未撤销、未过期的邀请）。
+		//
+		// 用 POST + 动作段而不是 DELETE /invite/:inviteId：gin 的路由树不允许在
+		// 同一层同时存在通配段与静态段，而 DELETE /books/:id/members/:uid 已占用
+		// `:uid` 通配——注册 DELETE /books/:id/members/invite/... 会在启动时直接 panic。
+		// 动作段风格在本仓也有先例：`POST /transactions/:txId/restore`。
+		auth.POST("/books/:id/members/invite/:inviteId/revoke", bh.revokeInvite)
 		auth.PUT("/books/:id/members/:uid", bh.changeRole)
 		auth.DELETE("/books/:id/members/:uid", bh.removeMember)
 

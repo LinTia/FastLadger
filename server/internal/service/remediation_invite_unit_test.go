@@ -15,6 +15,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"fastledger/internal/model"
 )
 
 // ---------------------------------------------------------------------------
@@ -158,6 +160,98 @@ func TestR41BoundEmailAcceptedByCreateInviteSource(t *testing.T) {
 	}
 	if !strings.Contains(body, "boundEmail") {
 		t.Fatal("CreateInvite 缺少 boundEmail 入参")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// GPT-R40：邀请撤销（源码结构断言——本地可验证，无需数据库）
+// ---------------------------------------------------------------------------
+
+// TestR40RevokeUsesConditionalUpdateWithRowsAffected 撤销必须是"条件 UPDATE + 影响行数"，
+// 不得退回"先 SELECT 再 UPDATE"。
+//
+// 为什么是源码断言而不是跑一次：真实 SQLite 在 MaxOpenConns=1 下会把两个事务
+// 串行化，并发窗口很难靠 goroutine 调度稳定复现；而"是否把状态判定写进 WHERE"
+// 是【确定性】的。真实端的行为验证（同样的数据竞争）在
+// remediation_invite_integration_test.go 的 TestR40RevokeAndRedeemRaceExactlyOneWins。
+func TestR40RevokeUsesConditionalUpdateWithRowsAffected(t *testing.T) {
+	src := readServiceSource(t, "member.go")
+	body := src[strings.Index(src, "func (s *MemberService) RevokeInvite"):]
+	body = body[:minStringEnd(body, 0)]
+
+	// ① 四个状态条件必须写进同一个 WHERE（少一个都会在并发下漏放行）
+	for _, cond := range []string{
+		"id = ?", "book_id = ?", "used_at = 0", "revoked = 0", "expires_at > ?",
+	} {
+		if !strings.Contains(body, cond) {
+			t.Fatalf("撤销的 WHERE 缺少 %q：未经条件约束的 UPDATE 会让已用/已撤销的邀请再次被改写", cond)
+		}
+	}
+	// ② 必须核对影响行数
+	if !strings.Contains(body, "if n != 1 {") {
+		t.Fatal("RevokeInvite 必须核对 RowsAffected==1（D-R09 同源要求）")
+	}
+	// ③ 权限必须在 Begin 之后读到（GPT-R28）
+	beginLine := strings.Index(body, "sess.Begin()")
+	roleLine := strings.Index(body, "roleOfTx(sess")
+	if roleLine < 0 || beginLine < 0 || beginLine > roleLine {
+		t.Fatalf("RevokeInvite 的顺序应为 Begin → roleOfTx，实际 begin=%d role=%d", beginLine, roleLine)
+	}
+	// ④ 不得出现事务外的 RoleOf（engine 版）
+	if strings.Contains(body, "RoleOf(s.engine") || strings.Contains(body, "s.RoleOf(") {
+		t.Fatal("RevokeInvite 不得使用事务外的 RoleOf（GPT-R28 回归）")
+	}
+	// ⑤ 兑换侧必须带 revoked = 0，才能与撤销互斥
+	join := src[strings.Index(src, "func (s *MemberService) JoinViaInvite"):]
+	join = join[:minStringEnd(join, 0)]
+	if !strings.Contains(join, "used_at = 0 AND revoked = 0") {
+		t.Fatal("JoinViaInvite 标记已用的 UPDATE 必须带 revoked = 0，否则撤销与兑换可以双成功（GPT-R40）")
+	}
+}
+
+// TestR40InviteRejectReasonIsSingleSource 所有邀请路径只能用一个 reason 判定函数，
+// 不得各写一套 `used_at > 0 || revoked || expires_at <= now`（两处口径会各自漂移）。
+func TestR40InviteRejectReasonIsSingleSource(t *testing.T) {
+	// 纯函数口径矩阵：与 production code 的判定顺序一一对应
+	now := int64(1793260800)
+	live := &model.Invite{Id: 1, ExpiresAt: now + 10}
+	cases := []struct {
+		name   string
+		has    bool
+		inv    *model.Invite
+		reason string
+	}{
+		{"不存在", false, live, inviteReasonNotFound},
+		{"已使用", true, &model.Invite{Id: 1, UsedAt: now, ExpiresAt: now + 10}, inviteReasonAlreadyUsed},
+		{"已撤销", true, &model.Invite{Id: 1, Revoked: true, ExpiresAt: now + 10}, inviteReasonRevoked},
+		{"过期", true, &model.Invite{Id: 1, ExpiresAt: now - 1}, inviteReasonExpired},
+		{"可用", true, live, inviteReasonNone},
+	}
+	for _, c := range cases {
+		if got := inviteRejectReason(c.has, c.inv, now); got != c.reason {
+			t.Errorf("%s：reason=%q，期望 %q", c.name, got, c.reason)
+		}
+	}
+	// 优先级：既过期又已用时优先报"已用"（更贴近调用方的操作意图）
+	if got := inviteRejectReason(true, &model.Invite{UsedAt: now, ExpiresAt: now - 1}, now); got != inviteReasonAlreadyUsed {
+		t.Errorf("同时已用且过期应报 %q，实际 %q", inviteReasonAlreadyUsed, got)
+	}
+	// reason → error 必须是既有错误树的成员（否则会漏进 500）
+	for _, c := range []struct {
+		reason string
+		base   error
+	}{
+		{inviteReasonNotFound, ErrInviteNotFound},
+		{inviteReasonAlreadyUsed, ErrInviteAlreadyUsed},
+		{inviteReasonRevoked, ErrInviteAlreadyRevoked},
+		{inviteReasonExpired, ErrInviteExpired},
+	} {
+		if !errors.Is(inviteRejectError(c.reason), c.base) {
+			t.Errorf("%s 的翻译错误应为 %v", c.reason, c.base)
+		}
+		if !errors.Is(inviteRejectError(c.reason), ErrInviteInvalid) {
+			t.Errorf("%s 的翻译错误必须继承 ErrInviteInvalid（否则 mapSvcErr 会漏判成 500）", c.reason)
+		}
 	}
 }
 

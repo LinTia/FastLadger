@@ -16,6 +16,7 @@ import (
 	"errors"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -296,5 +297,213 @@ func TestR41EmailTakenByOtherAccountRejectedWithoutLeaking(t *testing.T) {
 	}
 	if got := countUsersByEmail(t, e, "alice@example.com"); got != 1 {
 		t.Fatalf("不应产生第二个同邮箱账号，实际 %d", got)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// GPT-R40：邀请撤销
+// ---------------------------------------------------------------------------
+
+// newRevocableInvite 建一条 owner 签发、未使用、未撤销、未过期的邀请
+func newRevocableInvite(t *testing.T, e *inviteEnv) model.Invite {
+	t.Helper()
+	inv, err := e.members.CreateInvite(e.uid, e.bookID, model.RoleMember, "", "")
+	if err != nil {
+		t.Fatalf("签发邀请失败：%v", err)
+	}
+	return *inv
+}
+
+// insertInviteUser 在邀请测试环境里插入一个用户（尚未加入账本）
+func insertInviteUser(t *testing.T, e *inviteEnv, username string) int64 {
+	t.Helper()
+	u := &model.User{Username: username, PasswordHash: "x"}
+	if _, err := e.engine.Insert(u); err != nil {
+		t.Fatalf("插入用户 %s 失败：%v", username, err)
+	}
+	return u.Id
+}
+
+// addInviteMember 把用户加为本账本成员（默认可见他人）
+func addInviteMember(t *testing.T, e *inviteEnv, uid int64, role int8) {
+	t.Helper()
+	now := time.Now().Unix()
+	if _, err := e.engine.Insert(&model.BookMember{
+		BookId: e.bookID, Uid: uid, Role: role, CanViewOthers: true, CreatedAt: now, UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("加入成员失败：%v", err)
+	}
+}
+
+// TestR40RevokeBlocksRedemption 撤销之后，同一个邀请码不得再入户。
+func TestR40RevokeBlocksRedemption(t *testing.T) {
+	e := newInviteEnv(t)
+	inv := newRevocableInvite(t, e)
+
+	if err := e.members.RevokeInvite(e.uid, e.bookID, inv.Id); err != nil {
+		t.Fatalf("owner 应能撤销自己签发的邀请，实际 %v", err)
+	}
+	if row := inviteRow(t, e, inv.Id); !row.Revoked {
+		t.Fatal("撤销后 invites.revoked 必须为 true")
+	}
+
+	if _, err := e.members.JoinViaInvite(e.bookID, inv.Code, "latecomer", "", "password123", "10.0.0.7"); !errors.Is(err, ErrInviteInvalid) {
+		t.Fatalf("已撤销的邀请不得入户，实际 %v", err)
+	}
+	if n := countMembers(t, e); n != 1 {
+		t.Fatalf("被撤销的邀请不得产生新成员，应仍为 1（owner），实际 %d", n)
+	}
+	if row := inviteRow(t, e, inv.Id); row.UsedAt != 0 || row.UsedBy != 0 {
+		t.Fatalf("兑换失败不得写 used_at/used_by：used_at=%d used_by=%d", row.UsedAt, row.UsedBy)
+	}
+}
+
+// TestR40RevokeRequiresManagerRole 普通成员不能撤销邀请；admin 可以（权限矩阵 §5.5）。
+func TestR40RevokeRequiresManagerRole(t *testing.T) {
+	e := newInviteEnv(t)
+	inv := newRevocableInvite(t, e)
+	plain := insertInviteUser(t, e, "plain-member")
+	addInviteMember(t, e, plain, model.RoleMember)
+
+	if err := e.members.RevokeInvite(plain, e.bookID, inv.Id); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("普通成员不得撤销邀请，实际 %v", err)
+	}
+	if row := inviteRow(t, e, inv.Id); row.Revoked {
+		t.Fatal("被拒绝的撤销不得改变邀请状态")
+	}
+
+	admin := insertInviteUser(t, e, "admin-member")
+	addInviteMember(t, e, admin, model.RoleAdmin)
+	if err := e.members.RevokeInvite(admin, e.bookID, inv.Id); err != nil {
+		t.Fatalf("admin 应能撤销邀请（权限矩阵 §5.5），实际 %v", err)
+	}
+}
+
+// TestR40RevokeRejectsWrongState 已使用 / 已过期 / 重复撤销 / 不存在都必须失败，
+// 且返回【可区分】的原因——一律回 ErrInviteInvalid 会让线上排查无从下手。
+func TestR40RevokeRejectsWrongState(t *testing.T) {
+	// ① 已使用
+	e := newInviteEnv(t)
+	inv := newRevocableInvite(t, e)
+	if _, err := e.members.JoinViaInvite(e.bookID, inv.Code, "early", "", "password123", "10.0.0.8"); err != nil {
+		t.Fatalf("兑换应成功：%v", err)
+	}
+	if err := e.members.RevokeInvite(e.uid, e.bookID, inv.Id); !errors.Is(err, ErrInviteAlreadyUsed) {
+		t.Fatalf("已使用的邀请应返回 ErrInviteAlreadyUsed，实际 %v", err)
+	}
+	if row := inviteRow(t, e, inv.Id); row.Revoked {
+		t.Fatal("不得把已使用的邀请改成已撤销（会抹掉「已被谁用过」这一事实）")
+	}
+
+	// ② 已过期（把 expires_at 改到过去，模拟时间流逝）
+	e2 := newInviteEnv(t)
+	inv2 := newRevocableInvite(t, e2)
+	if _, err := e2.engine.Exec("UPDATE invites SET expires_at = ? WHERE id = ?", time.Now().Unix()-60, inv2.Id); err != nil {
+		t.Fatalf("构造过期邀请失败：%v", err)
+	}
+	if err := e2.members.RevokeInvite(e2.uid, e2.bookID, inv2.Id); !errors.Is(err, ErrInviteExpired) {
+		t.Fatalf("过期邀请应返回 ErrInviteExpired，实际 %v", err)
+	}
+	if row := inviteRow(t, e2, inv2.Id); row.Revoked {
+		t.Fatal("过期邀请不应被写成已撤销：它已经失效，再写一次撤销只是产生伪事件")
+	}
+
+	// ③ 重复撤销（幂等性显式化：第二次必须报错，不得假装成功）
+	e3 := newInviteEnv(t)
+	inv3 := newRevocableInvite(t, e3)
+	if err := e3.members.RevokeInvite(e3.uid, e3.bookID, inv3.Id); err != nil {
+		t.Fatalf("首次撤销应成功：%v", err)
+	}
+	if err := e3.members.RevokeInvite(e3.uid, e3.bookID, inv3.Id); !errors.Is(err, ErrInviteAlreadyRevoked) {
+		t.Fatalf("重复撤销应返回 ErrInviteAlreadyRevoked，实际 %v", err)
+	}
+
+	// ④ 不存在 / 不属于本账本
+	if err := e3.members.RevokeInvite(e3.uid, e3.bookID, 9999999); !errors.Is(err, ErrInviteNotFound) {
+		t.Fatalf("不存在的邀请应返回 ErrInviteNotFound，实际 %v", err)
+	}
+}
+
+// TestR40CrossBookRevokeRejected A 账本的 owner 不得撤销 B 账本的邀请。
+//
+// 对外统一表现为 ErrInviteNotFound（而不是"存在但不在你的账本"）——
+// 后者会让攻击者用已知 ID 去枚举别的账本里有哪些邀请主键。
+func TestR40CrossBookRevokeRejected(t *testing.T) {
+	e := newInviteEnv(t)
+	inv := newRevocableInvite(t, e)
+
+	otherBook := &model.Book{Name: "另一本账", OwnerUid: e.uid, BookType: model.BookTypePersonal,
+		DefaultCurrency: "CNY", MembersCanViewOthers: true, Deleted: false}
+	if _, err := e.engine.Insert(otherBook); err != nil {
+		t.Fatalf("建第二个账本失败：%v", err)
+	}
+	if err := e.members.RevokeInvite(e.uid, otherBook.Id, inv.Id); !errors.Is(err, ErrInviteNotFound) {
+		t.Fatalf("跨账本撤销应表现为 ErrInviteNotFound，实际 %v", err)
+	}
+	if row := inviteRow(t, e, inv.Id); row.Revoked {
+		t.Fatal("跨账本的撤销请求不得改动目标邀请")
+	}
+}
+
+// TestR40RevokeAndRedeemRaceExactlyOneWins 撤销与兑换并发竞争：至多一个成功，
+// 且磁盘上的真实状态必须与"赢家"一致（不能出现"撤销成功却已入户"或反之）。
+//
+// 不用 sleep 做时序控制：两个 goroutine 同时出发，胜负交给数据库。
+// 断言的是【不变式】而非具体谁赢，因此在任何调度顺序下都是确定性的。
+func TestR40RevokeAndRedeemRaceExactlyOneWins(t *testing.T) {
+	e := newInviteEnv(t)
+	inv := newRevocableInvite(t, e)
+
+	var wg sync.WaitGroup
+	var revokeErr, joinErr error
+	var joinedUID int64
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		revokeErr = e.members.RevokeInvite(e.uid, e.bookID, inv.Id)
+	}()
+	go func() {
+		defer wg.Done()
+		u, err := e.members.JoinViaInvite(e.bookID, inv.Code, "racer", "", "password123", "10.0.0.9")
+		joinErr = err
+		if u != nil {
+			joinedUID = u.Id
+		}
+	}()
+	wg.Wait()
+
+	if revokeErr == nil && joinErr == nil {
+		t.Fatal("撤销与兑换不得同时成功：同一凭证只能有一种结局")
+	}
+	row := inviteRow(t, e, inv.Id)
+	members := countMembers(t, e)
+
+	switch {
+	case revokeErr == nil:
+		// 撤销赢：必须是"已撤销且未使用"，且没有任何新成员
+		if !row.Revoked || row.UsedAt != 0 || row.UsedBy != 0 {
+			t.Fatalf("撤销成功的状态应为 revoked=true, used_at=0，实际 revoked=%v used_at=%d used_by=%d",
+				row.Revoked, row.UsedAt, row.UsedBy)
+		}
+		if members != 1 {
+			t.Fatalf("撤销成功则不得有新成员，实际 %d", members)
+		}
+		if !errors.Is(joinErr, ErrInviteInvalid) {
+			t.Fatalf("输给撤销的兑换必须返回 ErrInviteInvalid，实际 %v", joinErr)
+		}
+	case joinErr == nil:
+		// 兑换赢：必须是"已使用且未撤销"，且成员表里真有这个人
+		if row.UsedAt == 0 || row.UsedBy != joinedUID || row.Revoked {
+			t.Fatalf("兑换成功的状态应为 used_at>0, used_by=%d, revoked=false，实际 used_at=%d used_by=%d revoked=%v",
+				joinedUID, row.UsedAt, row.UsedBy, row.Revoked)
+		}
+		if members != 2 {
+			t.Fatalf("兑换成功应新增 1 名成员（共 2），实际 %d", members)
+		}
+		if !errors.Is(revokeErr, ErrInviteAlreadyUsed) {
+			t.Fatalf("输给兑换的撤销必须返回 ErrInviteAlreadyUsed，实际 %v", revokeErr)
+		}
+	default:
+		t.Fatalf("两者都失败属于非预期状态：revoke=%v join=%v", revokeErr, joinErr)
 	}
 }

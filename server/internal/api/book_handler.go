@@ -156,6 +156,26 @@ func (h *bookHandler) createInvite(c *gin.Context) {
 	})
 }
 
+// revokeInvite 撤销尚未使用的邀请码（GPT-R40）
+//
+// 决策交给 service 层：权限复核、条件 UPDATE、审计都在那边的写事务里；
+// handler 只负责路径参数整形与错误映射，避免在 HTTP 层再凭 offset 读一次角色。
+func (h *bookHandler) revokeInvite(c *gin.Context) {
+	id, good := bookID(c)
+	if !good {
+		return
+	}
+	inviteID, good := pathID(c, "inviteId", "邀请 ID 非法")
+	if !good {
+		return
+	}
+	if err := h.members.RevokeInvite(currentUID(c), id, inviteID); err != nil {
+		mapSvcErr(c, err)
+		return
+	}
+	ok(c, gin.H{"inviteId": inviteID, "revoked": true})
+}
+
 func (h *bookHandler) join(c *gin.Context) {
 	id, good := bookID(c)
 	if !good {

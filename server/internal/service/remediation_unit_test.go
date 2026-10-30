@@ -299,6 +299,7 @@ func TestR28PermissionRevalidatedInsideWriteTransaction(t *testing.T) {
 		{"member.go", "ChangeRole"},   // 改角色
 		{"member.go", "Remove"},       // 移除成员
 		{"member.go", "CreateInvite"}, // 签发邀请码
+		{"member.go", "RevokeInvite"}, // 撤销邀请码（GPT-R40：新增写入路径，故登记）
 		{"book.go", "Update"},         // 改账本名称 + 可见性
 		{"book.go", "SetVisibility"},  // 可见性开关（唯一写实现）
 		{"book.go", "Delete"},         // 删除账本

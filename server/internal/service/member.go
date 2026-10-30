@@ -55,6 +55,39 @@ var ErrInviteBindingConflict = fmt.Errorf("%w：邀请码只能绑定邮箱或�
 // 与登录入口不区分"用户名不存在"与"口令错误"（ErrBadCredentials）同理。
 var ErrInviteEmailUnavailable = fmt.Errorf("%w：邮箱已被其他账号占用", ErrInviteBoundMismatch)
 
+// 邀请事件的粗粒度原因码（GPT-R40 起统一用于失败分支；GPT-R42 复用它们做审计 reason）。
+//
+// 取值刻意【粗】：只回答"属于哪一类失败"，绝不携带可以用来缩小猜测空间的细节
+// （不写"绑定的邮箱是 alice@…"、不写尝试过的用户名）。
+const (
+	// inviteReasonNone 无失败原因（成功事件用）
+	inviteReasonNone = ""
+	// inviteReasonNotFound 邀请不存在（含不属于该账本）
+	inviteReasonNotFound = "invite_not_found"
+	// inviteReasonAlreadyUsed 邀请已被使用
+	inviteReasonAlreadyUsed = "invite_already_used"
+	// inviteReasonRevoked 邀请已被撤销
+	inviteReasonRevoked = "invite_revoked"
+	// inviteReasonExpired 邀请已过期（判定时刻 expires_at <= now）
+	inviteReasonExpired = "invite_expired"
+)
+
+// GPT-R40：邀请撤销的失败语义，全部**继承**既有错误树（用 %w 包装），
+// 因此不需要改动 mapSvcErr，也不会新开一套 HTTP 状态码契约。
+var (
+	// ErrInviteAlreadyUsed 邀请已被使用（不可再撤销）
+	ErrInviteAlreadyUsed = fmt.Errorf("%w：邀请码已被使用", ErrInviteInvalid)
+	// ErrInviteAlreadyRevoked 邀请已被撤销（重复撤销不会被当成成功）
+	ErrInviteAlreadyRevoked = fmt.Errorf("%w：邀请码已被撤销", ErrInviteInvalid)
+	// ErrInviteExpired 邀请已过期（过期判定见 inviteExpired，全局只有这一个口径）
+	ErrInviteExpired = fmt.Errorf("%w：邀请码已过期", ErrInviteInvalid)
+	// ErrInviteNotFound 邀请不存在（含"存在但不属于该账本"——两者对外不可区分，
+	// 否则等于允许攻击者用 A 账本的凭证去枚举 B 账本的邀请主键）
+	ErrInviteNotFound = fmt.Errorf("%w：邀请码不存在", ErrInviteInvalid)
+	// ErrInviteBookUnavailable 目标账本不存在或已被删除（GPT-R43）
+	ErrInviteBookUnavailable = fmt.Errorf("%w：账本不可用", ErrInviteInvalid)
+)
+
 // RoleOf 查询成员角色；非成员返回 ErrNotMember（服务端权威判定）
 func RoleOf(engine *xorm.Engine, bookID, uid int64) (int8, error) {
 	var m model.BookMember
@@ -297,6 +330,101 @@ func (s *MemberService) CreateInvite(actor, bookID int64, role int8, boundUserna
 	return inv, nil
 }
 
+// RevokeInvite 撤销邀请码（GPT-R40）。
+//
+// 四条硬约束：
+//  1. **权限在写事务内重读**（GPT-R28，沿用 roleOfTx）：撤销决定"谁能入户"，
+//     用事务外的旧角色签发会让刚被降权/移除的管理员继续作废别人的邀请。
+//     roleOfTx 的 JOIN 同时保证账本仍然有效（books.deleted=0，GPT-R43）。
+//  2. **条件 UPDATE + RowsAffected**，而不是"先读后写"：两个并发请求若都先读到
+//     "可用"，后一个的写入会把前一个覆盖成同样的值并**误报成功**。
+//     这里把状态判定写进 WHERE，命中与否由数据库裁定：RowsAffected==1 才算撤销成功。
+//  3. **与兑换互斥**：JoinViaInvite 标记已用的 UPDATE 带 `used_at = 0 AND revoked = 0`，
+//     撤销的 UPDATE 带同样两个条件。二者都只认"自己读到的状态仍然成立"，
+//     因此同一邀请被同时撤销和兑换时【至多一个】能提交成功。
+//  4. **幂等性是显式的**：重复撤销返回 ErrInviteAlreadyRevoked，而不是假装成功——
+//     "已经生效"和"这次生效"在审计里必须能区分（GPT-R42）。
+//
+// 只能撤销"尚未使用、未撤销、未过期"的邀请：过期邀请已经不可兑换，
+// 再给它写一次撤销只会产生一行"什么都没改变"的伪事件。
+func (s *MemberService) RevokeInvite(actor, bookID, inviteID int64) error {
+	sess := s.engine.NewSession()
+	defer sess.Close()
+	if err := sess.Begin(); err != nil {
+		return err
+	}
+	defer func() { _ = sess.Rollback() }()
+
+	actorRole, err := roleOfTx(sess, bookID, actor)
+	if err != nil {
+		return err
+	}
+	if !CanManageMembers(actorRole) {
+		return ErrForbidden
+	}
+
+	now := time.Now().Unix()
+	n, err := sess.Where(
+		"id = ? AND book_id = ? AND used_at = 0 AND revoked = 0 AND expires_at > ?",
+		inviteID, bookID, now).
+		Cols("revoked").Update(&model.Invite{Revoked: true})
+	if err != nil {
+		return err
+	}
+	if n != 1 {
+		// 未命中：把原因查清楚再返回给调用方（"无效"太含糊，排查时无从下手）。
+		// 这次读在本事务内，与上面的 UPDATE 共享同一快照，不存在交错。
+		var inv model.Invite
+		has, rErr := sess.Where("id = ? AND book_id = ?", inviteID, bookID).Get(&inv)
+		if rErr != nil {
+			return rErr
+		}
+		reason := inviteRejectReason(has, &inv, now)
+		_ = sess.Rollback()
+		return inviteRejectError(reason)
+	}
+
+	if err := sess.Commit(); err != nil {
+		return err
+	}
+	return nil
+}
+
+// inviteRejectReason 按"只读快照"裁定一条邀请此刻不能被操作的原因。
+//
+// 刻意做成一个函数：**所有路径**（兑换、撤销）都必须走它，避免两处各写一遍
+// `used_at > 0 || revoked || expires_at <= now` 然后某一处漏掉一个条件。
+func inviteRejectReason(has bool, inv *model.Invite, now int64) string {
+	switch {
+	case !has:
+		return inviteReasonNotFound
+	case inv.UsedAt > 0:
+		return inviteReasonAlreadyUsed
+	case inv.Revoked:
+		return inviteReasonRevoked
+	case inv.ExpiresAt <= now:
+		return inviteReasonExpired
+	default:
+		return inviteReasonNone
+	}
+}
+
+// inviteRejectError 把粗粒度原因码翻译成对外错误（全部继承既有错误树）
+func inviteRejectError(reason string) error {
+	switch reason {
+	case inviteReasonNotFound:
+		return ErrInviteNotFound
+	case inviteReasonAlreadyUsed:
+		return ErrInviteAlreadyUsed
+	case inviteReasonRevoked:
+		return ErrInviteAlreadyRevoked
+	case inviteReasonExpired:
+		return ErrInviteExpired
+	default:
+		return ErrInviteInvalid
+	}
+}
+
 // JoinViaInvite 凭邀请码注册并加入。
 //
 // 三条硬约束：
@@ -423,8 +551,11 @@ func (s *MemberService) JoinViaInvite(bookID int64, code, username, email, passw
 		return nil, err
 	}
 
-	// 单次使用：条件更新必须核对影响行数（D-R08）
-	n, err := sess.Where("id = ? AND used_at = 0", inv.Id).
+	// 单次使用：条件更新必须核对影响行数（D-R08）。
+	//
+	// GPT-R40：WHERE 里带上 `revoked = 0`，使"兑换"与"撤销"互为对方的失败条件——
+	// 撤销抢先提交时本 UPDATE 命中 0 行，整笔回滚，不会出现"撤销了却又入户"。
+	n, err := sess.Where("id = ? AND used_at = 0 AND revoked = 0", inv.Id).
 		Cols("used_at", "used_by").Update(&model.Invite{UsedAt: now, UsedBy: u.Id})
 	if err != nil {
 		_ = sess.Rollback()
