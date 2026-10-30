@@ -2,6 +2,20 @@
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.39] - 2026-10-30
+
+### GPT v1.7 扩展复核（GPT-R31–GPT-R34，待 owner 裁决）
+
+- **GPT-R31 / P1 / 待确认**：交易软删后，账户删除仍因只统计 `transactions.deleted=0` 而允许；Restore 的 `loadTxAccount` 又拒绝已删除账户，导致回收站交易无法恢复。分类路径也可恢复出指向已删除分类的引用。位置 `account.go:206–251`、`tx.go:834–842,905–930`、`category.go:232–290`。
+- **GPT-R32 / P2 / 待确认**：Restore 与 Delete 共用 UPDATE，`deleted_at` 始终写 now；活交易恢复后仍有非零 deletedAt，与模型“未删除时为 0”契约冲突。位置 `tx.go:834–856`、`model/ledger.go:168–180`。
+- **GPT-R33 / P2 / 待确认**：`PUT /books/:id` 同时修改名称与可见性时，BookService.Update 先独立提交名称，再调用独立事务的 SetVisibility；第二步失败会留下部分成功却返回错误。位置 `api/book_handler.go:77–97`、`service/book.go:143–183,211–263`。
+- **GPT-R34 / P2 / 待确认**：`db purge` 对显式非法/缺失参数静默回退默认 TTL，未知参数也忽略，随后仍执行硬删除。位置 `cmd/server/main.go:249–262,279–290`。
+- **GPT-R28 范围补充**：事务外授权读取还出现在 BookService.Update/Delete 与 MemberService.CreateInvite；建议统一盘点敏感写入口。
+- **范围排除说明**：对照枚举字典 §14 后，未将 account/category CRUD 未写 audit 误报为阶段 4 缺陷；该契约当前明确限定交易 CRUD 与登录/权限/配置/备份恢复事件。
+- **验证边界**：本轮新增问题来自静态代码链路与契约核对；未执行 Go/SQLite/CLI/并发测试。所有新 finding 状态均为待确认。
+
+详见 `gpt/v1.7/审核结果.md`、`findings.json` 与 `verification/runtime-results.json`。
+
 ## [1.38] - 2026-10-30
 
 ### GPT v1.7 阶段 4 严格代码审查（GPT-R26–GPT-R30，待 owner 裁决）
