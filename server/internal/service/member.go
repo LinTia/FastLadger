@@ -416,10 +416,17 @@ func (s *MemberService) RevokeInvite(actor, bookID, inviteID int64) error {
 
 	actorRole, err := roleOfTx(sess, bookID, actor)
 	if err != nil {
-		// GPT-R40：调用者对本账本而言是"外人"时，对外统一表现为【邀请不存在】。
-		// 若如实返回"不是该账本成员"，就等于告诉对方"这个账本存在、而你不在里面"，
-		// 可被拿去枚举其他账本的邀请主键。
 		if errors.Is(err, ErrNotMember) {
+			// ErrNotMember 有两种成因，必须分开处理：
+			//
+			// ① 账本已删除 —— 与 ChangeRole / Remove 保持同一口径：
+			//    由 roleOfTx 的 JOIN 天然拦下，对外仍是 ErrNotMember。
+			// ② 账本还在、但调用者不是它的成员（跨账本）——
+			//    此时如实返回"不是该账本成员"等于告诉对方"该账本存在而你不在里面"，
+			//    可被用来枚举其他账本的邀请主键，故统一表现为【邀请不存在】。
+			if aerr := requireActiveBookTx(sess, bookID); aerr != nil {
+				return ErrNotMember
+			}
 			return ErrInviteNotFound
 		}
 		return err
