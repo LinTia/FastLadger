@@ -30,6 +30,7 @@
 - **历史去重**：重新确认 D-R07–D-R09、WB-R01、GPT-R24–R25 已有对应实现/测试，不重复登记；[1.28] 已知“账本软删不摘 WebSocket 订阅”也未重复计数。GPT-R43 只覆盖 HTTP 成员/邀请路径。
 - **验证边界**：静态审查；未在本轮本地运行 Go/SQLite/race/WebSocket/断电测试。历史 Actions run 41034510229 的 170 PASS / 0 FAIL 不覆盖本轮新增场景。
 - **交付物**：gpt/v1.8/审核结果.md、gpt/v1.8/findings.json、gpt/v1.8/verification/runtime-results.json。
+- **对齐入口**：更新 workbuddy/第三方审阅者导读.md 第 8/9 节，将 v1.7 阶段 4 标为历史审查焦点，并增加 v1.8 阶段 0–3 最新复核入口。
 
 ## [1.39] - 2026-10-30
 
