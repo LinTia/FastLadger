@@ -61,9 +61,17 @@ jobs:
         run: go build ./...
 
       # 真库冒烟：驱动必须真的注册成功（CGO stub 会在这里就暴露）
+      #
+      # 反向门禁（GPT-R25 建议 #4）：若某天这两个包又没了 *_test.go，go test 会静默以
+      # `[no test files]` 通过，等于没有验证。此处显式失败，逼出"补测试或明知故犯"。
       - name: SQLite 驱动冒烟（证明不是 stub）
         run: |
-          go test ./internal/migrate/... ./internal/database/... -count=1 -v
+          out=$(go test ./internal/migrate/... ./internal/database/... -count=1 -v 2>&1)
+          echo "$out"
+          if echo "$out" | grep -q "no test files"; then
+            echo "::error::database/migrate 冒烟步骤未执行任何测试（no test files）—— 专项门禁失败"
+            exit 1
+          fi
 
       - name: go test 全量
         run: go test ./... -count=1 -v
