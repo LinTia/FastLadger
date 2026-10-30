@@ -512,6 +512,8 @@ func normalizeBookIDs(bookIDs []int64) ([]int64, error) {
 // 旧的 allow=true 若被直接写回，撤权就白做了。因此：
 //   - 鉴权【前】快照各账本的权限 generation；
 //   - 写入【前】在 Hub 锁内比对 —— 变了就丢弃本次结论、重新鉴权（最多 maxSubscribeAttempts 次）；
+//   - **重试只重新鉴权 generation 变过的账本（SYNC-03）**，且重试同样扣令牌：
+//     否则一次订阅可借"权限持续变更"把单帧查询量放大 maxSubscribeAttempts 倍；
 //   - 撤权路径 RefreshVisibility **即使没有订阅者也要递增 generation**（见该方法注释）。
 //
 // 即：不得把"锁外鉴权结果"直接写回。
@@ -543,25 +545,40 @@ func (h *Hub) Subscribe(c *Client, bookIDs []int64, uid int64) error {
 		return ErrNoVisibilityChecker
 	}
 
-	// 5) 鉴权 → 写入（写入前比对 generation，过期就整轮重来）
+	// 5) 鉴权 → 写入（写入前比对 generation，过期就只重鉴权变过的账本）
+	allowed := make(map[int64]bool, len(ids))
+	pending := ids // 本轮需要鉴权的账本；首轮是整帧，重试只含 generation 变过的
 	var lastErr error
 	for attempt := 0; attempt < maxSubscribeAttempts; attempt++ {
-		snap := h.generationSnapshot(ids)
+		if attempt > 0 {
+			// SYNC-03：重试也要计费。整帧只扣 1 个令牌、重试却整帧重查的时代，
+			// 单帧查询量 = 64 × 4 且几乎免费；现在每次重试都消耗一个令牌，
+			// 放大被令牌桶的速率硬性兜住。
+			if !h.consumeSubToken(uid) {
+				return ErrSubscribeRateLimited
+			}
+		}
+		snap := h.generationSnapshot(pending)
 		// 锁外查库校验（每个 bookID 独立判定，失败/非成员一律不订阅）
-		allowed := make(map[int64]bool, len(ids))
-		for _, b := range ids {
+		for _, b := range pending {
 			canView, cerr := checker(uid, b)
 			if cerr != nil {
 				// 非成员 / 查询失败：静默跳过，不回显"账本是否存在"
+				// 注意：先清掉上一轮可能留下的旧结论，防止过期结论残留（R50）
+				delete(allowed, b)
 				continue
 			}
 			allowed[b] = canView
 		}
-		settled, werr := h.writeSubscribe(c, ids, allowed, snap, uid)
+		settled, stale, werr := h.writeSubscribe(c, ids, allowed, snap, uid)
 		if settled {
 			return werr
 		}
-		// 未落定 = 期间发生了权限变更，本次鉴权结论已作废 → 重新鉴权
+		// 未落定 = 期间发生了权限变更：只重鉴权变过的账本，未变化账本的结论继续有效
+		for _, b := range stale {
+			delete(allowed, b) // 旧结论作废：重鉴权若发现已非成员，不得残留旧值
+		}
+		pending = stale
 		lastErr = werr
 	}
 	// 重试次数耗尽：返回明确错误（客户端随后重试即可），绝不写回过期结论
@@ -620,18 +637,22 @@ func (h *Hub) checkSubscriptionQuota(c *Client, uid int64, ids []int64) error {
 //
 // 全程锁顺序 Hub.mu → Client.mu；在持有 c.mu 期间不触碰 Hub。
 func (h *Hub) writeSubscribe(c *Client, ids []int64, allowed map[int64]bool,
-	snap map[int64]uint64, uid int64) (bool, error) {
+	snap map[int64]uint64, uid int64) (bool, []int64, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if !h.clients[c] {
 		// 连接已注销（读循环刚结束）：不再写入，避免给已回收的连接挂状态
-		return true, ErrSubscribeClientGone
+		return true, nil, ErrSubscribeClientGone
 	}
-	// 写入前比对权限 generation：任一账本期间发生过成员/可见性变更 → 结论作废
+	// 写入前比对权限 generation：任一账本期间发生过成员/可见性变更 → 该账本结论作废
+	var stale []int64
 	for _, b := range ids {
 		if h.gen[b] != snap[b] {
-			return false, errStaleGeneration
+			stale = append(stale, b)
 		}
+	}
+	if len(stale) > 0 {
+		return false, stale, errStaleGeneration
 	}
 	// 订阅总数上限（并发兜底，预检见 checkSubscriptionQuota）：
 	// 先算用户维度（持 Hub.mu，逐个取 Client.mu），再落本连接的写。
@@ -648,11 +669,11 @@ func (h *Hub) writeSubscribe(c *Client, ids []int64, allowed map[int64]bool,
 		}
 	}
 	if len(c.BookIds)+fresh > MaxSubscriptionsPerClient {
-		return true, fmt.Errorf("%w：已有 %d + 新增 %d > %d",
+		return true, nil, fmt.Errorf("%w：已有 %d + 新增 %d > %d",
 			ErrSubscriptionLimitPerConnection, len(c.BookIds), fresh, MaxSubscriptionsPerClient)
 	}
 	if userTotal+fresh > MaxSubscriptionsPerUser {
-		return true, fmt.Errorf("%w：该用户已有 %d + 新增 %d > %d",
+		return true, nil, fmt.Errorf("%w：该用户已有 %d + 新增 %d > %d",
 			ErrSubscriptionLimitPerUser, userTotal, fresh, MaxSubscriptionsPerUser)
 	}
 	for b, canView := range allowed {
@@ -662,7 +683,7 @@ func (h *Hub) writeSubscribe(c *Client, ids []int64, allowed map[int64]bool,
 		c.visSeq[b]++
 	}
 	c.UID = uid
-	return true, nil
+	return true, nil, nil
 }
 
 // BroadcastToBook 给"已订阅该账本"的在线成员推消息。

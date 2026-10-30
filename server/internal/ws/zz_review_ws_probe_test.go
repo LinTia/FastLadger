@@ -251,6 +251,52 @@ func (r *reviewChurningChecker) check(uid, bookID int64) (bool, error) {
 	return true, nil
 }
 
+// TestReviewGenerationRetryAmplifiesAuthQueries 【SYNC-03 修复后的边界情形】
+//
+// 修复内容：① 重试只重新鉴权 generation 变过的账本（未变化账本的结论继续有效）；
+// ② **每次重试也扣令牌**（原来整帧只扣 1 个令牌，重试免费）。
+//
+// 本用例故意构造**最坏情形**：checker 对"每次被查询的账本"都推进它自己的
+// generation ⇒ 每一轮重试时全部账本都是 stale，重鉴权整个帧是**必要的**而非浪费
+// （sync_ws_limits_test.go 的 TestSync03RetryOnlyReverifiesStaleBooks 已证明
+// "只有部分账本变化时只重鉴权那些账本"）。
+// 此处锁定的结论是：这种最坏情形的查询量仍可复现（64 × 4），
+// 但**不再是免费的** —— 重试消耗了 3 个额外令牌，放大被令牌桶的速率兜住。
+func TestReviewGenerationRetryAmplifiesAuthQueries(t *testing.T) {
+	hub := NewHub(nil) // 先占位，随后注入 churning checker（它需要持有 hub 引用）
+	chk := &reviewChurningChecker{hub: hub, bookID: 1}
+	hub.SetChecker(chk.check)
+
+	c := NewClient()
+	hub.Register(c)
+
+	ids := reviewIDs(1, MaxBookIDsPerFrame)
+	err := hub.Subscribe(c, ids, 100)
+	if !errors.Is(err, ErrSubscribeGenerationStale) {
+		t.Fatalf("generation 持续变化时应耗尽重试并返回 ErrSubscribeGenerationStale，实际 %v", err)
+	}
+	got := atomic.LoadInt64(&chk.calls)
+	want := int64(MaxBookIDsPerFrame * maxSubscribeAttempts)
+	if got != want {
+		t.Fatalf("最坏情形（每个账本每轮都变化）下单帧鉴权查询次数应为 %d（%d ID × %d 次重试），实际 %d",
+			want, MaxBookIDsPerFrame, maxSubscribeAttempts, got)
+	}
+
+	// SYNC-03 的关键断言：这次订阅消耗了 maxSubscribeAttempts 个令牌（1 正常 + 3 重试），
+	// 同一 uid 的后续额度必须减少 —— 放大不再是免费的。
+	limitedAfter := 0
+	for i := 0; i < subscribeBurst; i++ {
+		if err := hub.Subscribe(c, []int64{2}, 100); errors.Is(err, ErrSubscribeRateLimited) {
+			limitedAfter++
+		}
+	}
+	if limitedAfter == 0 {
+		t.Fatal("generation 重试必须扣令牌：重试耗尽的订阅之后，同一 uid 的可用额度应减少")
+	}
+	t.Logf("最坏情形单帧 %d 次鉴权查询，但消耗了 %d 个令牌（含 %d 次重试计费），后续 %d 帧被限流",
+		got, maxSubscribeAttempts, maxSubscribeAttempts-1, limitedAfter)
+}
+
 // ---------------------------------------------------------------------------
 // 钉住"看起来可疑但实际没问题"的点
 // ---------------------------------------------------------------------------
@@ -503,33 +549,4 @@ var reviewHTTPUnused = func() error {
 	srv := httptest.NewUnstartedServer(r)
 	srv.Close()
 	return http.ErrServerClosed
-}
-
-// TestReviewGenerationRetryAmplifiesAuthQueries 权限 generation 持续变化时，
-// Subscribe 会整轮重来，最多 maxSubscribeAttempts 次；每一次都会把整帧的
-// MaxBookIDsPerFrame 个 ID **重新鉴权一遍**，而整帧只扣 1 个令牌。
-//
-// 于是单帧的鉴权查询量从 R49 封顶的 64 次变成 64 × 4 = 256 次。
-func TestReviewGenerationRetryAmplifiesAuthQueries(t *testing.T) {
-	hub := NewHub(nil) // 先占位，随后注入 churning checker（它需要持有 hub 引用）
-	chk := &reviewChurningChecker{hub: hub, bookID: 1}
-	hub.SetChecker(chk.check)
-
-	c := NewClient()
-	hub.Register(c)
-
-	ids := reviewIDs(1, MaxBookIDsPerFrame)
-	err := hub.Subscribe(c, ids, 100)
-	if !errors.Is(err, ErrSubscribeGenerationStale) {
-		t.Fatalf("generation 持续变化时应耗尽重试并返回 ErrSubscribeGenerationStale，实际 %v", err)
-	}
-	got := atomic.LoadInt64(&chk.calls)
-	want := int64(MaxBookIDsPerFrame * maxSubscribeAttempts)
-	if got != want {
-		t.Fatalf("单帧鉴权查询次数应为 %d（%d ID × %d 次重试），实际 %d",
-			want, MaxBookIDsPerFrame, maxSubscribeAttempts, got)
-	}
-	// 关键：整帧只扣了 1 个令牌，却做了 4 倍于封顶值的查询
-	t.Logf("单帧做了 %d 次鉴权查询，而只扣了 1 个订阅令牌（R49 的单帧封顶是 %d 次，放大 %d 倍）",
-		got, MaxBookIDsPerFrame, maxSubscribeAttempts)
 }

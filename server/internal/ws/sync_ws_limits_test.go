@@ -254,3 +254,67 @@ func TestSync02OversizedFrameConsumesToken(t *testing.T) {
 		t.Fatalf("被拒帧不得留下任何订阅，实际 %d", c.SubscriptionCount())
 	}
 }
+
+// TestSync03RetryOnlyReverifiesStaleBooks generation 变化后只重新鉴权"变过的账本"。
+//
+// 时序（channel barrier，确定性）：8 个账本的帧，闸门卡在最后一个账本的鉴权上；
+// 卡住期间只有账本 1 的 generation 被推进。修复前：整帧 8 个账本全部重跑（16 次查询）；
+// 修复后：只重鉴权账本 1（8 + 1 = 9 次）。
+func TestSync03RetryOnlyReverifiesStaleBooks(t *testing.T) {
+	const books = 8
+	gated := newR50GatedChecker(books) // 闸门挂在最后一个账本上
+	for b := int64(1); b <= books; b++ {
+		gated.allow(b, 100, true)
+	}
+	hub := NewHub(gated.check)
+	c := NewClient()
+	hub.Register(c)
+
+	done := make(chan error, 1)
+	go func() {
+		done <- hub.Subscribe(c, reviewIDs(1, books), 100)
+	}()
+
+	<-gated.entered          // 已完成 8 个账本的鉴权、停在写入前
+	hub.RefreshVisibility(1) // 只推进账本 1 的 generation（无订阅者，不触发查库）
+	close(gated.release)
+
+	if err := <-done; err != nil {
+		t.Fatalf("只有部分账本权限变化时订阅应当成功：%v", err)
+	}
+	want := books + 1 // 首轮 8 次 + 重试只补账本 1 的 1 次
+	if got := gated.callCount(); got != want {
+		t.Fatalf("重试只应重新鉴权 generation 变过的账本：期望 %d 次查库，实际 %d 次（整帧重跑会是 %d 次）",
+			want, got, books*maxSubscribeAttempts)
+	}
+	for b := int64(1); b <= books; b++ {
+		if !c.Subscribed(b) {
+			t.Fatalf("账本 %d 应订阅成功（权限未变的账本不得被重试误伤）", b)
+		}
+	}
+}
+
+// TestSync03RetryConsumesToken generation 重试也要扣令牌（SYNC-03）：
+// 权限持续变更时，重试的查询量必须被令牌桶的速率兜住，而不是免费放大。
+func TestSync03RetryConsumesToken(t *testing.T) {
+	hub := NewHub(nil)
+	chk := &reviewChurningChecker{hub: hub, bookID: 1}
+	hub.SetChecker(chk.check)
+	c := NewClient()
+	hub.Register(c)
+
+	if err := hub.Subscribe(c, []int64{1}, 100); !errors.Is(err, ErrSubscribeGenerationStale) {
+		t.Fatalf("generation 持续变化时应耗尽重试并返回明确错误，实际 %v", err)
+	}
+	// 这次订阅消耗了 maxSubscribeAttempts 个令牌（1 次正常 + 3 次重试）：
+	// 同一 uid 接着的订阅必须更早被限流。
+	limited := 0
+	for i := 0; i < subscribeBurst; i++ {
+		if err := hub.Subscribe(c, []int64{2}, 100); errors.Is(err, ErrSubscribeRateLimited) {
+			limited++
+		}
+	}
+	if limited == 0 {
+		t.Fatal("generation 重试必须扣令牌：重试耗尽的订阅之后，同一 uid 的可用额度应减少")
+	}
+}
