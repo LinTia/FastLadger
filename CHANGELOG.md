@@ -2,16 +2,30 @@
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.32] - 2026-10-30
+
+### GPT-R25（P2，已采纳）：SQLite 驱动冒烟步骤没有实际执行测试
+
+- **问题**：核对 Actions run [41010979053](https://github.com/LinTia/FastLadger/actions/runs/41010979053)，`.github/workflows/ci.yml` 的 SQLite 冒烟命令 `go test ./internal/migrate/... ./internal/database/... -count=1 -v` 输出：
+  - `? fastledger/internal/migrate [no test files]`
+  - `? fastledger/internal/database [no test files]`
+  当前两个包均没有 `*_test.go`，所以这一步没有运行测试函数，不能证明 SQLite 驱动打开真库、PRAGMA 生效或迁移执行成功。
+- **影响**：CI 该步骤虽然显示成功，但实际只完成包扫描/编译；此前 [1.31] 将它描述为“真库测试”并据此声称专项 SQLite 断言已跑通，证据表述过度。
+- **本次文档纠正**：已修订 [1.31] 对冒烟步骤及 9 项 SQLite 断言的表述。全量 `go test ./...` 的 140 PASS 与 `ws/service/api` race 通过记录保留，不将其误写成 database/migrate 专项集成测试通过。
+- **建议修复**：新增 `server/internal/database/database_test.go`，调用 `database.Init` 并断言 `foreign_keys=1`、`journal_mode=wal`、`synchronous=2`；新增 `server/internal/migrate/migrate_test.go`，在临时 SQLite 库执行迁移并验证版本与重复执行行为。保留 CI 命令，确保日志出现实际 `ok`，而非 `[no test files]`。
+- **状态**：owner 已认可并采纳 finding；本次仅落盘评审记录和更正 CHANGELOG，尚未修改 CI 或测试代码。待实现方补测并提供新的 Actions 证据后，再将状态更新为已修复/已验证。
+- **评审记录**：[GPT v1.6 审核结果](gpt/v1.6/审核结果.md)，结构化记录见 [findings.json](gpt/v1.6/findings.json)，运行日志摘要见 [runtime-results.json](gpt/v1.6/verification/runtime-results.json)。
+
 ## [1.31] - 2026-10-30
 
 ### 路径 1 落地：GitHub Actions CI（真实 CGO + 真库 + -race）全绿，并修复一处 -race data race
 
 - **动机**：本地构建机无 C 编译器，`mattn/go-sqlite3` 只能编译不能运行、`go test -race` 无法执行，导致阶段 3 的"运行证据"一直是盲区（GPT 卡片里 9 项 SQLite 断言从未真正跑过）。
-- **新增 `.github/workflows/ci.yml`**：`on: [push, pull_request, workflow_dispatch]`，`ubuntu-latest`（自带 gcc）。步骤：Toolchain（断言 `CGO_ENABLED=1`，否则失败——**防静默退化为 stub**）→ gofmt → vet → build → **SQLite 驱动冒烟**（`internal/migrate` + `internal/database` 真库测试）→ `go test ./...` 全量 → `go test -race`（仅 `ws`/`service`/`api`）。
-- **首次运行（run 41010979053，commit `cf4c4de`）全绿**：`CGO_ENABLED='1'` + `gcc (Ubuntu 13.3.0)`；真 SQLite 测试通过；`go test ./...` 在真实 Linux 上 **140 PASS / 0 FAIL / 0 SKIP**；`ws`+`service`+`api` 在 **`-race` 下全部 `ok`**。运行证据从此每次 push 自动留存（附录有 run 链接）。
+- **新增 `.github/workflows/ci.yml`**：`on: [push, pull_request, workflow_dispatch]`，`ubuntu-latest`（自带 gcc）。步骤：Toolchain（断言 `CGO_ENABLED=1`，否则失败——**防静默退化为 stub**）→ gofmt → vet → build → SQLite 冒烟命令（目标包当前无测试文件，实际只完成包扫描/编译；详见 [1.32]）→ `go test ./...` 全量 → `go test -race`（仅 `ws`/`service`/`api`）。
+- **首次运行（run 41010979053，commit `cf4c4de`）整体成功**：`CGO_ENABLED='1'` + `gcc (Ubuntu 13.3.0)`；`go test ./...` 在真实 Linux 上 **140 PASS / 0 FAIL / 0 SKIP**；`ws`+`service`+`api` 在 **`-race` 下全部 `ok`**。注意：独立 SQLite 冒烟命令的两个目标包均输出 `[no test files]`，不能据此声称专项真库测试已执行（见 [1.32]）。
 - **修复一处真实 data race（测试桩）**：`TestQAS3ServeWSRejectsSubscribeWithoutChecker` 用 `defer conn.Close()`，导致连接关闭发生在函数返回后，服务端注销 goroutine 与 `t.Cleanup` 恢复全局 `DefaultHub` 并发读写同一全局指针，`-race` 下 CI 失败。改为：显式 `conn.Close()` + `waitCount(0)`（确认服务端已完成 `Unregister` 对全局的读取）后再由 cleanup 恢复；并把 `RUnlock` 提前（否则 `waitCount` 内再次 `RLock` 会因 RWMutex 不可重入死锁）。
   - 该 race **仅存在于测试桩**：生产 `DefaultHub` 只在 init 设一次、运行期不替换，非生产 bug。
-- **盲区状态**：之前长期无法验证的 9 项 SQLite 断言（幂等迁移、负债符号、转账回滚、`related_id` 配对、`busy_timeout` 并发等）现已在真库上跑通并通过；`-race` 对 Hub/事务边界的并发保证也首次被证明。
+- **验证边界**：本次 Actions 记录证明全量 Go 测试与指定包的 race detector 通过；但不能仅凭 SQLite 冒烟步骤证明 9 项 SQLite 专项断言均已执行。相关断言需逐项映射到真实测试用例与日志，数据库初始化/迁移专项测试见 [1.32] 待补。
 
 ## [1.30] - 2026-10-30
 
