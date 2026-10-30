@@ -1,0 +1,73 @@
+# FastLedger CI —— 补齐"运行证据"缺口
+#
+# 存在的唯一理由：本地构建机没有 C 编译器，`mattn/go-sqlite3` 只能编译不能运行，
+# `go test -race` 也无法执行。Linux runner **自带 gcc**，因此这里能跑真库与竞态检测。
+#
+# 约束：本仓库的 Go module 根在 `server/`，所有 go 命令都要在该目录下执行。
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# 最小权限：只读代码即可
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: build / vet / test / race
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true
+          cache-dependency-path: server/go.sum
+
+      # 先证明"CGO 真的可用"——这是本 CI 的核心前提，不能靠假设
+      - name: Toolchain（必须看到 gcc 与 CGO_ENABLED=1）
+        run: |
+          go version
+          gcc --version | head -1
+          echo "CGO_ENABLED=$(go env CGO_ENABLED)"
+          test "$(go env CGO_ENABLED)" = "1" || { echo "::error::CGO 未启用，真库测试将退化为 stub"; exit 1; }
+
+      - name: gofmt（必须无未格式化文件）
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "以下文件未格式化："
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go build
+        run: go build ./...
+
+      # 真库冒烟：驱动必须真的注册成功（CGO stub 会在这里就暴露）
+      - name: SQLite 驱动冒烟（证明不是 stub）
+        run: |
+          go test ./internal/migrate/... ./internal/database/... -count=1 -v
+
+      - name: go test 全量
+        run: go test ./... -count=1 -v
+
+      # 阶段 3.3 明确要求：Hub 并发必须由 race detector 证明
+      - name: go test -race（Hub 并发 / 事务边界）
+        run: go test ./internal/ws/... ./internal/service/... ./internal/api/... -race -count=1
