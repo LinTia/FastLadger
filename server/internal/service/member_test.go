@@ -70,24 +70,36 @@ func TestInviteJoinRateLimitEmptyIPNotBypass(t *testing.T) {
 	}
 }
 
-// D-R07 / D-R08 / WB-R01 签名守卫：
-// JoinViaInvite 必须接收 (bookID, code, username, password, clientIP)。
-// 若被改回 3 参数（无 bookID / 无 IP），说明限流又退回全局 key 或丢失账本校验，此断言即失败。
+// D-R07 / D-R08 / WB-R01 / GPT-R41 签名守卫：
+// JoinViaInvite 必须接收 (bookID, code, username, email, password, clientIP)。
+//
+//   - 若被改回 3 参数（无 bookID / 无 IP），说明限流又退回全局 key 或丢失账本校验；
+//   - 若 email 被移除，说明 GPT-R41 的邮箱绑定闭环又被拆掉（邀请能绑邮箱却无从校验），
+//     这两类退化都必须让本用例失败。
+//
+// 逐参数断言而非只数个数：个数对了但顺序错了（例如 email 与 password 互换）
+// 同样是契约破坏，只是不会编译报错。
 func TestJoinViaInviteSignatureRequiresBookAndIP(t *testing.T) {
 	mt, ok := reflect.TypeOf(&MemberService{}).MethodByName("JoinViaInvite")
 	if !ok {
 		t.Fatal("MemberService 缺少 JoinViaInvite 方法")
 	}
 	ft := mt.Func.Type()
-	if ft.NumIn() != 6 { // receiver + 5 params
-		t.Fatalf("JoinViaInvite 入参个数 = %d，期望 6（receiver + 5）", ft.NumIn())
+	if ft.NumIn() != 7 { // receiver + 6 params（GPT-R41 起新增 email）
+		t.Fatalf("JoinViaInvite 入参个数 = %d，期望 7（receiver + bookID/code/username/email/password/clientIP）", ft.NumIn())
 	}
-	// 首位参数必须是 int64（bookID），末位必须是 string（clientIP）
-	if ft.In(1).Kind() != reflect.Int64 {
-		t.Fatalf("第 1 个参数应为 int64 bookID，实际 %s", ft.In(1).Kind())
+	want := []reflect.Kind{
+		reflect.Int64,  // bookID
+		reflect.String, // code
+		reflect.String, // username
+		reflect.String, // email（GPT-R41）
+		reflect.String, // password
+		reflect.String, // clientIP
 	}
-	if ft.In(5).Kind() != reflect.String {
-		t.Fatalf("末位参数应为 string clientIP，实际 %s", ft.In(5).Kind())
+	for i, kind := range want {
+		if got := ft.In(i + 1).Kind(); got != kind {
+			t.Fatalf("JoinViaInvite 第 %d 个参数应为 %s，实际 %s", i+1, kind, got)
+		}
 	}
 }
 

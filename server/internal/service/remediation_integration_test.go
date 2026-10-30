@@ -454,15 +454,15 @@ func TestR28CreateInviteRejectsStaleRole(t *testing.T) {
 	admin := insertUser(t, e, "r28-inv-admin")
 	addMember(t, e, admin, model.RoleAdmin)
 
-	// ① 初始权限有效
-	if _, err := ms.CreateInvite(admin, e.bookID, model.RoleMember, ""); err != nil {
+	// ① 初始权限有效（第 5 个参数为 GPT-R41 新增的 boundEmail：本用例不绑定）
+	if _, err := ms.CreateInvite(admin, e.bookID, model.RoleMember, "", ""); err != nil {
 		t.Fatalf("降权前管理员应能签发邀请码，实际 %v", err)
 	}
 	// ② 屏障降权 → ③ A 继续签发
 	actErr := r28AfterRevocation(t,
 		func() error { return ms.ChangeRole(e.uid, e.bookID, admin, model.RoleMember) },
 		func() error {
-			_, err := ms.CreateInvite(admin, e.bookID, model.RoleMember, "")
+			_, err := ms.CreateInvite(admin, e.bookID, model.RoleMember, "", "")
 			return err
 		})
 	if !errors.Is(actErr, ErrForbidden) {

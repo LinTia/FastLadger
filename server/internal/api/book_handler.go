@@ -134,14 +134,17 @@ func (h *bookHandler) createInvite(c *gin.Context) {
 	if !good {
 		return
 	}
+	// GPT-R41：boundEmail 与 boundUsername 二选一（都为空 = 不绑定）。
+	// 两者同时传入由 service 层 resolveInviteBinding 显式拒绝（400），此处不做取舍。
 	var req struct {
 		Role          int8   `json:"role"`
 		BoundUsername string `json:"boundUsername"`
+		BoundEmail    string `json:"boundEmail"`
 	}
 	if !bindJSON(c, &req) {
 		return
 	}
-	inv, err := h.members.CreateInvite(currentUID(c), id, req.Role, req.BoundUsername)
+	inv, err := h.members.CreateInvite(currentUID(c), id, req.Role, req.BoundUsername, req.BoundEmail)
 	if err != nil {
 		mapSvcErr(c, err)
 		return
@@ -158,9 +161,12 @@ func (h *bookHandler) join(c *gin.Context) {
 	if !good {
 		return
 	}
+	// GPT-R41：email 是邀请绑定邮箱时的兑换凭据；未绑定邮箱的邀请可以留空，
+	// 一旦提供了就会写进用户档案（缺失会造成"校验通过但档案无邮箱"的半截状态）。
 	var req struct {
 		Code     string `json:"code"`
 		Username string `json:"username"`
+		Email    string `json:"email"`
 		Password string `json:"password"`
 	}
 	if !bindJSON(c, &req) {
@@ -168,7 +174,7 @@ func (h *bookHandler) join(c *gin.Context) {
 	}
 	// 传入 path 上的 bookID 与真实客户端 IP：
 	// bookID 用于校验邀请确实属于该账本；IP 用于按 IP 限流（PRD §12.1，WB-R01）。
-	u, err := h.members.JoinViaInvite(id, req.Code, req.Username, req.Password, c.ClientIP())
+	u, err := h.members.JoinViaInvite(id, req.Code, req.Username, req.Email, req.Password, c.ClientIP())
 	if err != nil {
 		mapSvcErr(c, err)
 		return
