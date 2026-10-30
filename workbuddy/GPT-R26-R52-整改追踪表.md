@@ -78,7 +78,7 @@ v1.9 的 review_notes 明确：R27 保留"invite TTL 溢出"范围补充；R34 �
 | 已裁决延期（文档闭合，WBS 4.3 写明，不计入已交付） | 1 | R30 |
 | 已裁决不使用外键（决策 + 补偿控制写入落地方案 §0.1） | 1 | R36 |
 
-**权威验证证据**：Actions run [41076750547](https://github.com/LinTia/FastLadger/actions/runs/41076750547)（commit `a573c6e`）— **474 PASS / 0 FAIL / 0 DATA RACE**，13/13 步骤 success（含 `go test -race` 与 SQLite/CGO 作业）。
+**权威验证证据**：Actions run [41078424842](https://github.com/LinTia/FastLadger/actions/runs/41078424842)（commit `afbbe3f`）— **474 PASS / 0 FAIL / 0 DATA RACE**，13/13 步骤 success（含 `go test -race` 与 SQLite/CGO 作业）。
 
 **本地验证边界（如实记录，不夸大）**：
 

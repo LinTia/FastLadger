@@ -2,7 +2,7 @@
 
 owner 授权 Workbuddy 对 v1.7 / v1.8 / v1.9 三批共 **28 项** finding 做一次性整改。以下为逐条处置结果，与 `gpt/v1.X/findings.json` 的 `status` / `fix.commit` / `verification` 字段一一对应。
 
-- **权威验证**：GitHub Actions run [`41076750547`](https://github.com/LinTia/FastLadger/actions/runs/41076750547)，commit `a573c6e`，**474 PASS / 0 FAIL / 0 DATA RACE**，13/13 步骤通过（含 `go test -race` 与 SQLite/CGO 作业）。
+- **权威验证**：GitHub Actions run [`41078424842`](https://github.com/LinTia/FastLadger/actions/runs/41078424842)，commit `afbbe3f`，**474 PASS / 0 FAIL / 0 DATA RACE**，13/13 步骤通过（含 `go test -race` 与 SQLite/CGO 作业）。
 - **本地验证边界**：本机无 gcc（`mattn/go-sqlite3` 需 CGO），且本地策略会拦截 `%TEMP%` 下的测试二进制。因此本地只跑 `gofmt -l .` 与 `CGO_ENABLED=0 go vet ./...`（含测试文件类型检查），真库与 `-race` 一律以 CI 为准。已在 `gpt/v1.X/verification/runtime-results.json` 的 `maintainer_execution` 字段如实标注，未把"类型检查通过"写成"运行时已验证"。
 - **未夸大**：R30 与 R52 不是代码修复，分别以文档裁决和排期闭合，状态字段与 CI 链接已区分标注。
 

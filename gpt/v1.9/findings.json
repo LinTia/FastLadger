@@ -22,7 +22,7 @@
         "commit": "027b348"
       },
       "verification": {
-        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41078424842",
         "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
         "status_note": "已修复并有可追溯回归测试；测试实际运行并通过"
       }

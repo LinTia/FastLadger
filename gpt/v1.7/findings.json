@@ -25,7 +25,7 @@
       "commit": "9005d68"
     },
     "verification": {
-      "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+      "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41078424842",
       "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
       "status_note": "已修复并有可追溯回归测试；测试实际运行并通过"
     }
@@ -57,7 +57,7 @@
       "commit": "ba80b0d"
     },
     "verification": {
-      "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+      "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41078424842",
       "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
       "status_note": "已修复并有可追溯回归测试；测试实际运行并通过"
     }
@@ -92,7 +92,7 @@
       "commit": "7584c57"
     },
     "verification": {
-      "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+      "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41078424842",
       "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
       "status_note": "已修复并有可追溯回归测试；测试实际运行并通过"
     }
@@ -122,7 +122,7 @@
       "commit": "a2255f3"
     },
     "verification": {
-      "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+      "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41078424842",
       "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
       "status_note": "已修复并有可追溯回归测试；测试实际运行并通过"
     }
@@ -154,7 +154,7 @@
       "commit": "pending"
     },
     "verification": {
-      "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+      "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41078424842",
       "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
       "status_note": "非代码修复：以文档裁决闭合。WBS 4.3 已新增「交易 update 审计延期说明」，并禁止在完成前将该项表述为已交付。不声称已实现 update 审计。"
     },
@@ -193,7 +193,7 @@
       "commit": "f4c4511"
     },
     "verification": {
-      "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+      "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41078424842",
       "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
       "status_note": "已修复并有可追溯回归测试；测试实际运行并通过"
     }
@@ -225,7 +225,7 @@
       "commit": "9005d68"
     },
     "verification": {
-      "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+      "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41078424842",
       "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
       "status_note": "已修复并有可追溯回归测试；测试实际运行并通过"
     }
@@ -256,7 +256,7 @@
       "commit": "a8ce4c5"
     },
     "verification": {
-      "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+      "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41078424842",
       "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
       "status_note": "已修复并有可追溯回归测试；测试实际运行并通过"
     }
@@ -286,7 +286,7 @@
       "commit": "ba80b0d, a7ca9d6"
     },
     "verification": {
-      "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+      "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41078424842",
       "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
       "status_note": "已修复并有可追溯回归测试；测试实际运行并通过"
     }

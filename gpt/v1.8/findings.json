@@ -22,7 +22,7 @@
         "commit": "cb9b372, 40dd8e3"
       },
       "verification": {
-        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41078424842",
         "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
         "status_note": "已修复并有可追溯回归测试；测试实际运行并通过"
       }
@@ -46,7 +46,7 @@
         "commit": "15ca242"
       },
       "verification": {
-        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41078424842",
         "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
         "status_note": "已修复并有可追溯回归测试；测试实际运行并通过"
       }
@@ -70,7 +70,7 @@
         "commit": "f1369b4"
       },
       "verification": {
-        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41078424842",
         "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
         "status_note": "已修复并有可追溯回归测试；测试实际运行并通过"
       }
@@ -94,7 +94,7 @@
         "commit": "27595db"
       },
       "verification": {
-        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41078424842",
         "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
         "status_note": "已修复并有可追溯回归测试；测试实际运行并通过"
       }
@@ -118,7 +118,7 @@
         "commit": "3d40fe5"
       },
       "verification": {
-        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41078424842",
         "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
         "status_note": "已修复并有可追溯回归测试；测试实际运行并通过"
       }
@@ -142,7 +142,7 @@
         "commit": "4a84da6"
       },
       "verification": {
-        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41078424842",
         "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
         "status_note": "已修复并有可追溯回归测试；测试实际运行并通过"
       }
@@ -166,7 +166,7 @@
         "commit": "ff1d8a0"
       },
       "verification": {
-        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41078424842",
         "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
         "status_note": "已修复并有可追溯回归测试；测试实际运行并通过"
       }
@@ -190,7 +190,7 @@
         "commit": "61c7ea8, 3b836fd"
       },
       "verification": {
-        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41078424842",
         "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
         "status_note": "已修复并有可追溯回归测试；测试实际运行并通过"
       }
@@ -214,7 +214,7 @@
         "commit": "eddfb84, a433314, 23da8a2, f517d3c"
       },
       "verification": {
-        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41078424842",
         "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
         "status_note": "已修复并有可追溯回归测试；测试实际运行并通过"
       }
@@ -238,7 +238,7 @@
         "commit": "8d4276b"
       },
       "verification": {
-        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41078424842",
         "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
         "status_note": "已修复并有可追溯回归测试；测试实际运行并通过"
       }
@@ -262,7 +262,7 @@
         "commit": "bffd3cc"
       },
       "verification": {
-        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41078424842",
         "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
         "status_note": "已修复并有可追溯回归测试；测试实际运行并通过"
       }
@@ -286,7 +286,7 @@
         "commit": "c0f0547"
       },
       "verification": {
-        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41078424842",
         "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
         "status_note": "已修复并有可追溯回归测试；测试实际运行并通过"
       }
@@ -310,7 +310,7 @@
         "commit": "12190d9"
       },
       "verification": {
-        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41078424842",
         "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
         "status_note": "已修复并有可追溯回归测试；测试实际运行并通过"
       }
@@ -334,7 +334,7 @@
         "commit": "232907e, fc56720, f8be12e"
       },
       "verification": {
-        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41078424842",
         "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
         "status_note": "已修复并有可追溯回归测试；测试实际运行并通过"
       }
@@ -358,7 +358,7 @@
         "commit": "7325fc8"
       },
       "verification": {
-        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41078424842",
         "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
         "status_note": "已修复并有可追溯回归测试；测试实际运行并通过"
       }
@@ -382,7 +382,7 @@
         "commit": "201b87b"
       },
       "verification": {
-        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41078424842",
         "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
         "status_note": "已修复并有可追溯回归测试；测试实际运行并通过"
       }
@@ -406,7 +406,7 @@
         "commit": "f188b1a"
       },
       "verification": {
-        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41078424842",
         "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
         "status_note": "已修复并有可追溯回归测试；测试实际运行并通过"
       }
@@ -430,7 +430,7 @@
         "commit": "15ca242"
       },
       "verification": {
-        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41076750547",
+        "ci_run": "https://github.com/LinTia/FastLadger/actions/runs/41078424842",
         "ci_result": "474 PASS / 0 FAIL / 0 DATA RACE",
         "status_note": "Owner 已裁决排期实现（WBS 5.10 / PRD §10.10），功能尚未实现，未关闭"
       }

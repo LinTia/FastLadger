@@ -106,9 +106,11 @@
 
 #### CI 验证结果（权威）
 
-**Actions run [41076750547](https://github.com/LinTia/FastLadger/actions/runs/41076750547)（commit `a573c6e`）：全绿。**
-gofmt / vet / build / SQLite 冒烟 / 全量测试 / **`-race`** 六步全 success；
+**Actions run [41078424842](https://github.com/LinTia/FastLadger/actions/runs/41078424842)（commit `afbbe3f`，文档回填后的最终 HEAD）：全绿。**
+gofmt / vet / build / SQLite 冒烟 / 全量测试 / **`-race`** 六步全 success（13/13 step）；
 **474 PASS / 0 FAIL，DATA RACE 检出 0 次**。
+
+上一版代码提交 [`a573c6e`](https://github.com/LinTia/FastLadger/actions/runs/41076750547) 同为 **474 PASS / 0 FAIL / 0 DATA RACE**。
 
 从首次红到全绿的收敛过程（每次都由 CI 暴露真问题，而非放宽断言）：
 
