@@ -167,17 +167,18 @@ func (s *BookService) Update(actor, bookID int64, name string, canViewOthers *bo
 	}
 	defer func() { _ = sess.Rollback() }()
 
-	// 权限与账本快照都在事务内读取（GPT-R28 / R29）
+	// 账本快照与权限都在事务内读取（GPT-R28 / R29）。
+	// 顺序沿用旧实现：先判账本存在（404），再判权限（403），避免把"账本不存在"报成无权限
+	b, err := loadBookTx(sess, bookID)
+	if err != nil {
+		return nil, err
+	}
 	role, err := roleOfTx(sess, bookID, actor)
 	if err != nil {
 		return nil, err
 	}
 	if role != model.RoleOwner && role != model.RoleAdmin {
 		return nil, ErrForbidden
-	}
-	b, err := loadBookTx(sess, bookID)
-	if err != nil {
-		return nil, err
 	}
 
 	out := &BookUpdateResult{}
