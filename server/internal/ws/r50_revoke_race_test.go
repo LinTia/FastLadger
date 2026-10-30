@@ -160,34 +160,43 @@ func TestR50SubscribeSucceedsWithoutRevocation(t *testing.T) {
 }
 
 // TestR50RefreshVisibilityBumpsGenerationWithoutTargets RefreshVisibility
-// **即使没有任何订阅者**也必须递增 generation。
+// **即使没有任何订阅者**也必须登记权限事件（推进该账本的 generation）。
 //
-// 这是修复的核心：pending 的 Subscribe 不在订阅表里，只有 generation 递增
+// 这是修复的核心：pending 的 Subscribe 不在订阅表里，只有 generation 变化
 // 才能让它的旧结论作废。若因为"没人订阅"就跳过，R50 的窗口依然存在。
+//
+// 注（SYNC-07 之后）：generation 值取自全局单调计数器，因此断言口径是
+// "每次刷新都让值**变化**且 >0、且不影响其它账本"，而不是具体的数值。
 func TestR50RefreshVisibilityBumpsGenerationWithoutTargets(t *testing.T) {
 	hub := NewHub(r49AllAllowChecker) // 一个订阅者都没有
 
 	if got := hub.Generation(1); got != 0 {
 		t.Fatalf("初始 generation 应为 0，实际 %d", got)
 	}
+	prev := uint64(0)
 	for i := 1; i <= 3; i++ {
 		hub.RefreshVisibility(1)
-		if got := hub.Generation(1); got != uint64(i) {
-			t.Fatalf("第 %d 次 RefreshVisibility 后 generation 应为 %d，实际 %d", i, i, got)
+		got := hub.Generation(1)
+		if got == 0 {
+			t.Fatalf("第 %d 次 RefreshVisibility 后账本 1 必须已登记权限事件（>0），实际 0", i)
 		}
+		if got <= prev {
+			t.Fatalf("第 %d 次 RefreshVisibility 后 generation 必须严格推进：之前 %d，实际 %d", i, prev, got)
+		}
+		prev = got
 	}
-	// 别的账本不受影响（generation 按账本计数）
+	// 别的账本不受影响（generation 按账本各自登记）
 	hub.RefreshVisibility(2)
-	if got := hub.Generation(1); got != 3 {
-		t.Fatalf("刷新账本 2 不得改动账本 1 的 generation，实际 %d", got)
+	if got := hub.Generation(1); got != prev {
+		t.Fatalf("刷新账本 2 不得改动账本 1 的 generation，实际 %d（期望 %d）", got, prev)
 	}
-	if got := hub.Generation(2); got != 1 {
-		t.Fatalf("账本 2 的 generation 应为 1，实际 %d", got)
+	if got := hub.Generation(2); got == 0 {
+		t.Fatal("账本 2 的 generation 应已登记（>0）")
 	}
-	// 非法 bookID 不递增
+	// 非法 bookID 不登记
 	hub.RefreshVisibility(0)
 	if got := hub.Generation(0); got != 0 {
-		t.Fatalf("非法 bookID 不得递增 generation，实际 %d", got)
+		t.Fatalf("非法 bookID 不得登记权限事件，实际 %d", got)
 	}
 }
 

@@ -323,7 +323,7 @@ func TestSync03RetryConsumesToken(t *testing.T) {
 // 条目数不再增长；且回收不得破坏 R50 的不变量（撤权仍然生效）。
 func TestSync04GenerationMapBounded(t *testing.T) {
 	chk := newFakeChecker()
-	chk.allow(7, 1, true)
+	chk.allow(1, 7, true) // 账本 1、uid 7（注意参数序：bookID 在前）
 	hub := NewHub(chk.check)
 
 	for b := int64(1); b <= maxGenerationEntries+500; b++ {
@@ -333,7 +333,18 @@ func TestSync04GenerationMapBounded(t *testing.T) {
 		t.Fatalf("gen 表必须有界（≤%d），实际 %d（修复前只增不减）", maxGenerationEntries, got)
 	}
 
-	// 回收条目等价于一次 generation 变更，方向安全：撤权语义不受影响
+	// 触顶后登记新账本事件只会推进溢出序号（绝不删条目）：
+	// 既有条目的 generation 必须保持不变（单调性，SYNC-07）
+	before := hub.Generation(1)
+	hub.RefreshVisibility(maxGenerationEntries + 1)
+	if got := hub.Generation(1); got != before {
+		t.Fatalf("gen 表触顶后既有条目的 generation 不得变化（单调性）：期望 %d，实际 %d", before, got)
+	}
+	if hub.Generation(maxGenerationEntries+1) != 0 {
+		t.Fatal("触顶后新账本的事件无法登记（gen 仍为 0），必须由溢出序号兜底")
+	}
+
+	// R50 不变量：撤权仍然生效（条目永不回 0，撤销必然可被 in-flight 快照发现）
 	c := NewClient()
 	c.UID = 7
 	hub.Register(c)

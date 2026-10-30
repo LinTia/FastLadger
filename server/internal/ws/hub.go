@@ -95,14 +95,13 @@ const (
 	// 上限是兜底：满桶时**无损**回收"当前满桶"的条目（满桶状态可由
 	// tokens=burst 完全重建），不淘汰活跃用户的桶。
 	maxSubBuckets = 4096
-	// maxGenerationEntries 权限 generation 表的条目上限（SYNC-04）。
+	// maxGenerationEntries 权限 generation 表的条目上限（SYNC-04/07）。
 	//
-	// 每次成员/可见性/删除事件都会让对应账本的 generation +1，且账本删除
+	// 每次成员/可见性/删除事件都会让对应账本的 generation 登记一项，且账本删除
 	// 并不会让条目消失 —— 不设上限就是一个只增不减的 map。上限取
-	// "家庭场景可能出现的账本数"的数十倍：正常永远触不到；触到时按"删条目"
-	// 回收，删除条目等价于一次 generation 变更（只会让 in-flight 的鉴权结论
-	// 被重新验证，方向是安全的），不影响 R50 的正确性。
-	maxGenerationEntries = 4096
+	// 1<<20：家庭场景可能出现的"发生过权限事件的账本数"远小于此，正常永不触顶；
+	// 触顶后的行为见 bumpGenerationLocked（**绝不 delete**，改为溢出计数）。
+	maxGenerationEntries = 1 << 20
 )
 
 // VisibilityChecker 订阅资格 + 可见性校验。
@@ -296,7 +295,16 @@ type Hub struct {
 	// RefreshVisibility 看不到这个"还没写 BookIds"的 pending 连接（它不在任何订阅表里），
 	// 旧的 allow=true 随后被写回，等于撤权后订阅又被恢复。
 	// generation 让 Subscribe 能在写入【前】发现自己拿到的是过期结论并重新鉴权。
+	//
+	// SYNC-07：值取自全局单调计数器 genSeq —— **0 唯一表示"从未发生过权限事件"，
+	// 且任何账本的值一旦登记就永不归零、永不复用**（触顶时不删除条目，见
+	// bumpGenerationLocked）。这样"值变化 ⇒ 期间发生过权限变更"的方向性才成立。
 	gen map[int64]uint64
+	// genSeq 全局单调计数器：所有 gen 值与 genOverflow 都从这里取值（SYNC-07）
+	genSeq uint64
+	// genOverflow gen 表触顶后"无法为新账本登记事件"的序号（SYNC-07）。
+	// 快照里带着它：writeSubscribe 发现它变了就让整帧重新鉴权（fail-closed）。
+	genOverflow uint64
 
 	// ---- 连接数上限（SYNC-01）----
 	// maxConnPerUser / maxConnTotal 连接数上限；**0 = 不限**。
@@ -447,37 +455,53 @@ func (h *Hub) UserSubscriptionCount(uid int64) int {
 	return h.userSubscriptionCountLocked(uid)
 }
 
-// bumpGenerationLocked 递增某账本的权限 generation（**必须在持有 h.mu 写锁时调用**）。
+// bumpGenerationLocked 登记某账本的一次权限事件（**必须在持有 h.mu 写锁时调用**）。
 //
-// SYNC-04：gen 表只增不减（账本删除也不会清条目），因此给它设一个上限；
-// 触顶时回收条目。**删除条目与递增等价**——对 pending 的 Subscribe 而言，
-// "快照值 != 当前值"即判过期，条目消失（读到 0）同样构成变化，
-// 只会让 in-flight 的鉴权结论被重新验证，方向安全，不影响 R50 的正确性。
+// SYNC-07：值取自全局单调计数器（而不是"本账本 +1"），因此：
+//   - 0 唯一表示"该账本从未发生过权限事件"；
+//   - 任何账本的值一旦登记就**永不归零、永不复用**；
+//   - "快照值 != 当前值"严格等价于"这期间发生过针对它的权限事件"。
+//
+// 触顶时**绝不 delete 条目**（那会把 gen 拉回 0，与"从未有事件"不可区分，
+// 已被验证探针证伪：可把已撤销成员的订阅重新写回）。改为推进 genOverflow：
+// 快照里带着溢出序号，writeSubscribe 发现变化就让整帧重新鉴权 —— fail-closed，
+// 代价只是几次额外查询；触发前提是 100 万个不同账本都发生过权限事件，实际不可达。
 func (h *Hub) bumpGenerationLocked(bookID int64) {
 	if h.gen == nil {
 		// 字面量构造的 Hub（&Hub{}）：补出来，避免"assignment to entry in nil map"
 		h.gen = make(map[int64]uint64)
 	}
+	h.genSeq++
 	if _, ok := h.gen[bookID]; !ok && len(h.gen) >= maxGenerationEntries {
-		for id := range h.gen { // 回收任意条目直到低于上限（见上：删除是安全方向的变更）
-			delete(h.gen, id)
-			if len(h.gen) < maxGenerationEntries {
-				break
-			}
-		}
+		h.genOverflow = h.genSeq
+		return
 	}
-	h.gen[bookID]++
+	h.gen[bookID] = h.genSeq
 }
 
-// generationSnapshot 读取若干账本当前的 generation（读锁，不做 IO）。
+// genSnapshot 一次订阅的权限快照（写入前用于判断"结论是否已过期"）。
 //
-// 在鉴权【之前】取快照：Subscribe 写入前用它判断"期间是否发生过权限变更"。
-func (h *Hub) generationSnapshot(ids []int64) map[int64]uint64 {
+// SYNC-06：perBook **必须覆盖整帧**（而不是只覆盖本轮重验的子集）——
+// writeSubscribe 对整帧逐账本比对，快照缺项会读到 0，把"gen>0 且未在本轮
+// 重验"的账本误判为 stale，造成重试在两个子集间震荡直到耗尽。
+// 因此 Subscribe 持有一个覆盖整帧的持久快照，每轮只把本轮 pending 的最新值
+// 合并进来：每个账本都拿"它取得结论那一刻"的 gen 值比对。
+// SYNC-07：overflow 让 gen 表触顶后的新账本事件也能作废 in-flight 结论。
+type genSnapshot struct {
+	perBook  map[int64]uint64
+	overflow uint64
+}
+
+// generationSnapshot 读取若干账本当前的 generation 与溢出序号（读锁，不做 IO）。
+func (h *Hub) generationSnapshot(ids []int64) genSnapshot {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	snap := make(map[int64]uint64, len(ids))
+	snap := genSnapshot{
+		perBook:  make(map[int64]uint64, len(ids)),
+		overflow: h.genOverflow,
+	}
 	for _, id := range ids {
-		snap[id] = h.gen[id]
+		snap.perBook[id] = h.gen[id]
 	}
 	return snap
 }
@@ -580,6 +604,10 @@ func (h *Hub) Subscribe(c *Client, bookIDs []int64, uid int64) error {
 
 	// 5) 鉴权 → 写入（写入前比对 generation，过期就只重鉴权变过的账本）
 	allowed := make(map[int64]bool, len(ids))
+	// SYNC-06：快照**覆盖整帧且跨轮持久**——每轮只把本轮 pending 的最新值合并进来。
+	// 每个账本都拿"它取得结论那一刻"的 gen 值比对，既保住 stale-only 省查询，
+	// 又不会因重试轮快照缺项把"gen>0 且未在本轮重验"的账本误判为 stale（震荡根因）。
+	snap := genSnapshot{perBook: make(map[int64]uint64, len(ids))}
 	pending := ids // 本轮需要鉴权的账本；首轮是整帧，重试只含 generation 变过的
 	var lastErr error
 	for attempt := 0; attempt < maxSubscribeAttempts; attempt++ {
@@ -591,7 +619,11 @@ func (h *Hub) Subscribe(c *Client, bookIDs []int64, uid int64) error {
 				return ErrSubscribeRateLimited
 			}
 		}
-		snap := h.generationSnapshot(pending)
+		gs := h.generationSnapshot(pending)
+		for k, v := range gs.perBook {
+			snap.perBook[k] = v
+		}
+		snap.overflow = gs.overflow
 		// 锁外查库校验（每个 bookID 独立判定，失败/非成员一律不订阅）
 		for _, b := range pending {
 			canView, cerr := checker(uid, b)
@@ -670,17 +702,22 @@ func (h *Hub) checkSubscriptionQuota(c *Client, uid int64, ids []int64) error {
 //
 // 全程锁顺序 Hub.mu → Client.mu；在持有 c.mu 期间不触碰 Hub。
 func (h *Hub) writeSubscribe(c *Client, ids []int64, allowed map[int64]bool,
-	snap map[int64]uint64, uid int64) (bool, []int64, error) {
+	snap genSnapshot, uid int64) (bool, []int64, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if !h.clients[c] {
 		// 连接已注销（读循环刚结束）：不再写入，避免给已回收的连接挂状态
 		return true, nil, ErrSubscribeClientGone
 	}
+	// SYNC-07：gen 表触顶后新账本的事件登记不进表（只推进溢出序号）——
+	// 溢出序号变了就整帧作废（fail-closed，代价是整帧重新鉴权一次）。
+	if snap.overflow != h.genOverflow {
+		return false, append([]int64(nil), ids...), errStaleGeneration
+	}
 	// 写入前比对权限 generation：任一账本期间发生过成员/可见性变更 → 该账本结论作废
 	var stale []int64
 	for _, b := range ids {
-		if h.gen[b] != snap[b] {
+		if h.gen[b] != snap.perBook[b] {
 			stale = append(stale, b)
 		}
 	}
