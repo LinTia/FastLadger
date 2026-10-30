@@ -143,6 +143,60 @@
 
 ---
 
+## 14. 审计动作与实体（`audit_logs.action` / `audit_logs.entity_type`）
+
+> 依据 PRD §12.1 与 WBS 4.3：`audit_logs` 为 **append-only**，业务路径不得 UPDATE/DELETE；
+> 唯一允许的删除是到期滚动清理（`fastledger db purge`，保留期 `EBK_AUDIT_RETENTION_DAYS`，默认 365 天）。
+
+### 14.1 action
+
+| 值 | 含义 | 归属 | 说明 |
+|---|---|---|---|
+| `create` | 创建 | 账本 | 交易创建（转账两侧各一条） |
+| `update` | 更新 | 账本 | 预留；交易更新尚未实现 |
+| `delete` | 删除 | 账本 | 交易软删（整笔，含转账对侧） |
+| `restore` | 恢复 | 账本 | **恢复一笔交易** |
+| `login` | 登录 | 实例 | 登录成功时写，置于签发令牌之前 |
+| `permission_change` | 权限变更 | 账本 | 改成员角色 / 移除成员 |
+| `config_change` | 配置变更 | 账本 | 可见性开关等账本配置 |
+| `backup_restore` | 备份恢复 | 实例 | `restore_epoch` 递增（整实例从备份恢复） |
+
+**`backup_restore` 不得写成 `restore`**：`restore` 已被"恢复一笔交易"占用，混用会让
+"这笔交易被恢复过"与"整个实例从备份恢复过"无法区分。
+
+### 14.2 entity_type
+
+| 值 | 含义 |
+|---|---|
+| `transaction` | 交易 |
+| `user` | 用户（登录等） |
+| `book_member` | 账本成员（`entity_id` = 目标 uid） |
+| `book` | 账本（`entity_id` = book_id） |
+| `instance` | 实例（`entity_id` = 新 `restore_epoch`） |
+
+### 14.3 两个 0 哨兵（必须显式处理，禁止当作"空/放行"）
+
+`audit_logs.book_id` 与 `actor_uid` 都是 `NOT NULL`，没有"空"语义，故用 0 表示：
+
+| 字段 | 0 的含义 | 用途 |
+|---|---|---|
+| `book_id = 0` | **实例级事件**，不隶属任何账本 | `login`、`backup_restore` |
+| `actor_uid = 0` | **系统 / 运维操作**，无登录用户 | CLI 执行的 `instance bump` |
+
+查询约定：`book_id = 0` 即实例级事件，不要把它当成某个真实账本；按账本查审计时应显式排除。
+
+### 14.4 before_json
+
+记录**变更前**状态（软删回答不了"删前是什么"，故必须落原文）。
+
+- `create` / `login`：没有"变更前"状态，留空字符串；
+- `delete` / `restore`：序列化被操作的那条交易；
+- `permission_change`：`{"uid":<目标uid>,"role":<变更前角色>}`；
+- `config_change`：`{"membersCanViewOthers":<变更前bool>}`；
+- `backup_restore`：`{"restoreEpoch":<变更前世代>}`。
+
+---
+
 ## 维护规则
 
 1. 新增枚举：在对应表末尾追加，**不复用、不插队**，并在本文档注明启用版本。

@@ -137,7 +137,15 @@ func (s *MemberService) ChangeRole(actor, bookID, targetUid int64, newRole int8)
 	if actorRole == model.RoleAdmin && targetRole == model.RoleOwner {
 		return ErrCannotOperateOwner
 	}
-	n, err := s.engine.Where("book_id = ? AND uid = ? AND deleted = 0", bookID, targetUid).
+	// 角色变更与审计必须在【同一事务】：不允许出现"角色已改但审计缺失"（WBS 4.3 / 4.6）
+	sess := s.engine.NewSession()
+	defer sess.Close()
+	if err := sess.Begin(); err != nil {
+		return err
+	}
+	defer func() { _ = sess.Rollback() }()
+
+	n, err := sess.Where("book_id = ? AND uid = ? AND deleted = 0", bookID, targetUid).
 		Cols("role", "updated_at").
 		Update(&model.BookMember{Role: newRole, UpdatedAt: time.Now().Unix()})
 	if err != nil {
@@ -147,6 +155,15 @@ func (s *MemberService) ChangeRole(actor, bookID, targetUid int64, newRole int8)
 		// 目标在「读角色」与「写入」之间被并发移除：写条件 deleted=0 生效导致 0 行。
 		// 不能 return nil 冒充成功（D-R09）——映射为 409，让调用方刷新后重试。
 		return fmt.Errorf("%w：目标成员已不存在或已被移除", ErrConcurrentConflict)
+	}
+	// before_json 记录变更前的角色：事后要能回答"这个人原来是什么权限"
+	if err := insertAudit(sess, bookID, actor, model.AuditActionPermissionChange,
+		model.AuditEntityMember, targetUid,
+		map[string]interface{}{"uid": targetUid, "role": targetRole}, "server"); err != nil {
+		return err
+	}
+	if err := sess.Commit(); err != nil {
+		return err
 	}
 	return nil
 }
@@ -167,8 +184,16 @@ func (s *MemberService) Remove(actor, bookID, targetUid int64) error {
 	if targetRole == model.RoleOwner {
 		return ErrCannotOperateOwner
 	}
+	// 与 ChangeRole 同理：移除与审计在同一事务（WBS 4.3 / 4.6）
+	sess := s.engine.NewSession()
+	defer sess.Close()
+	if err := sess.Begin(); err != nil {
+		return err
+	}
+	defer func() { _ = sess.Rollback() }()
+
 	now := time.Now().Unix()
-	n, err := s.engine.Where("book_id = ? AND uid = ? AND deleted = 0", bookID, targetUid).
+	n, err := sess.Where("book_id = ? AND uid = ? AND deleted = 0", bookID, targetUid).
 		Cols("deleted", "deleted_at", "updated_at").
 		Update(&model.BookMember{Deleted: true, DeletedAt: now, UpdatedAt: now})
 	if err != nil {
@@ -177,6 +202,15 @@ func (s *MemberService) Remove(actor, bookID, targetUid int64) error {
 	if n != 1 {
 		// 与 ChangeRole 同理（D-R09）：目标已被并发移除时 0 行，不能当成功返回。
 		return fmt.Errorf("%w：目标成员已不存在或已被移除", ErrConcurrentConflict)
+	}
+	// before_json 保留被移除前的角色：事后要能回答"移除的是谁、当时什么权限"
+	if err := insertAudit(sess, bookID, actor, model.AuditActionPermissionChange,
+		model.AuditEntityMember, targetUid,
+		map[string]interface{}{"uid": targetUid, "role": targetRole}, "server"); err != nil {
+		return err
+	}
+	if err := sess.Commit(); err != nil {
+		return err
 	}
 	return nil
 }

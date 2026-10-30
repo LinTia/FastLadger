@@ -996,18 +996,18 @@ func boolToInt(b bool) int {
 	return 0
 }
 
-// insertAudit 写入一条审计日志（append-only）。before 为变更前实体的序列化；
-// create 没有"变更前"状态，传 nil 即 before_json 留空（实体本身仍在库里可查）。
-func insertAudit(sess *xorm.Session, bookID, actorUid int64, action, entityType string, entityID int64, before interface{}, source string) error {
+// newAuditLog 组装一条审计日志。before 为变更前实体的序列化；
+// create / login 没有"变更前"状态，传 nil 即 before_json 留空。
+func newAuditLog(bookID, actorUid int64, action, entityType string, entityID int64, before interface{}, source string) (*model.AuditLog, error) {
 	var beforeJSON string
 	if before != nil {
 		b, err := json.Marshal(before)
 		if err != nil {
-			return fmt.Errorf("审计 before_json 序列化失败：%w", err)
+			return nil, fmt.Errorf("审计 before_json 序列化失败：%w", err)
 		}
 		beforeJSON = string(b)
 	}
-	a := &model.AuditLog{
+	return &model.AuditLog{
 		BookId:     bookID,
 		ActorUid:   actorUid,
 		Action:     action,
@@ -1016,8 +1016,39 @@ func insertAudit(sess *xorm.Session, bookID, actorUid int64, action, entityType 
 		BeforeJson: beforeJSON,
 		At:         time.Now().Unix(),
 		Source:     source,
+	}, nil
+}
+
+// insertAudit 在【调用方事务内】写一条审计日志（append-only）。
+// 与业务写入同事务，保证不会出现"改了但没留痕"（失败即整体回滚）。
+func insertAudit(sess *xorm.Session, bookID, actorUid int64, action, entityType string, entityID int64, before interface{}, source string) error {
+	a, err := newAuditLog(bookID, actorUid, action, entityType, entityID, before, source)
+	if err != nil {
+		return err
 	}
 	if _, err := sess.Insert(a); err != nil {
+		return fmt.Errorf("写入审计日志失败：%w", err)
+	}
+	return nil
+}
+
+// AppendAudit 独立写一条审计日志（不在调用方事务中）。
+//
+// 供 WBS 4.3 的非交易写入点使用：登录、权限变更、配置变更、备份恢复。
+// 这些路径要么本来就是单条 UPDATE（无事务），要么跨介质（备份恢复要写文件），
+// 无法与业务写入共享事务边界。
+//
+// 调用方必须【先落业务、再调本函数】，且把本函数的错误当作操作失败处理——
+// 否则会产生"配置已改但审计缺失"的静默状态。
+func AppendAudit(engine *xorm.Engine, bookID, actorUid int64, action, entityType string, entityID int64, before interface{}, source string) error {
+	if engine == nil {
+		return fmt.Errorf("%w：engine 缺失", ErrInvalidArgument)
+	}
+	a, err := newAuditLog(bookID, actorUid, action, entityType, entityID, before, source)
+	if err != nil {
+		return err
+	}
+	if _, err := engine.Insert(a); err != nil {
 		return fmt.Errorf("写入审计日志失败：%w", err)
 	}
 	return nil

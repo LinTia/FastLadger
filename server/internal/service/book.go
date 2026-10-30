@@ -228,10 +228,21 @@ func (s *BookService) SetVisibility(actor, bookID int64, canView bool) (bool, er
 		// 幂等：没有实际变化就不写库、不广播
 		return false, nil
 	}
+	// 变更前的旧值必须在 b 被改写【之前】取，否则 before_json 记不到原状态
+	oldCanView := b.MembersCanViewOthers
 	now := time.Now().Unix()
 	b.MembersCanViewOthers = canView
 	b.UpdatedAt = now
-	n, err := s.engine.ID(bookID).Where("deleted = 0").
+
+	// 配置变更与审计在同一事务：不允许"开关已改但审计缺失"（WBS 4.3 / 4.6）
+	sess := s.engine.NewSession()
+	defer sess.Close()
+	if err := sess.Begin(); err != nil {
+		return false, err
+	}
+	defer func() { _ = sess.Rollback() }()
+
+	n, err := sess.ID(bookID).Where("deleted = 0").
 		Cols("members_can_view_others", "updated_at").Update(b)
 	if err != nil {
 		return false, err
@@ -239,6 +250,14 @@ func (s *BookService) SetVisibility(actor, bookID int64, canView bool) (bool, er
 	if n != 1 {
 		// 读与写之间账本被并发删除：0 行不能当成功返回（与 ChangeRole/Remove 同一口径）
 		return false, fmt.Errorf("%w：账本已不存在或已被删除", ErrConcurrentConflict)
+	}
+	if err := insertAudit(sess, bookID, actor, model.AuditActionConfigChange,
+		model.AuditEntityBook, bookID,
+		map[string]interface{}{"membersCanViewOthers": oldCanView}, "server"); err != nil {
+		return false, err
+	}
+	if err := sess.Commit(); err != nil {
+		return false, err
 	}
 	return true, nil
 }

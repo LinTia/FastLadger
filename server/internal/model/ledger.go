@@ -199,12 +199,44 @@ type AuditLog struct {
 func (AuditLog) TableName() string { return "audit_logs" }
 
 // 审计动作（audit_logs.action）——《枚举字典》§14
+//
+// 前四项是实体增删与交易恢复；后四项为 WBS 4.3 要求的非交易写入点。
+// 备份恢复刻意用 backup_restore 而非 restore：restore 已被"恢复一笔交易"占用，
+// 混用会让"这笔交易被恢复过"与"整个实例从备份恢复过"无法区分。
 const (
 	AuditActionCreate  = "create"
 	AuditActionUpdate  = "update"
 	AuditActionDelete  = "delete"
 	AuditActionRestore = "restore"
+
+	// 以下四类不隶属任何账本，落库时 book_id 取 AuditBookInstance（0）
+	AuditActionLogin            = "login"             // 登录
+	AuditActionPermissionChange = "permission_change" // 权限变更（改角色 / 移除成员）
+	AuditActionConfigChange     = "config_change"     // 配置变更（可见性开关等）
+	AuditActionBackupRestore    = "backup_restore"    // 备份恢复（restore_epoch 递增）
 )
+
+// 审计实体类型（audit_logs.entity_type）——《枚举字典》§14
+const (
+	AuditEntityTransaction = "transaction"
+	AuditEntityUser        = "user"
+	AuditEntityMember      = "book_member"
+	AuditEntityBook        = "book"
+	AuditEntityInstance    = "instance"
+)
+
+// AuditActorSystem 审计 actor_uid 的哨兵值：系统 / 运维操作（无登录用户）。
+//
+// 例如 CLI 执行的备份恢复（`fastledger instance bump`）。actor_uid 是 NOT NULL，
+// 没有"空"语义，故显式用 0 表示"不是某个真实用户发起的"。
+const AuditActorSystem int64 = 0
+
+// AuditBookInstance 实例级事件的 book_id 哨兵值。
+//
+// 登录与备份恢复发生在"账本之外"（登录时还不知道要进哪个账本，恢复影响整个实例），
+// 而 audit_logs.book_id 是 NOT NULL 且没有"空"语义，故显式用 0 表示"不隶属任何账本"。
+// 查询时按需过滤：book_id=0 即实例级事件，不要把它当成某个真实账本。
+const AuditBookInstance int64 = 0
 
 func (Transaction) TableName() string { return "transactions" }
 

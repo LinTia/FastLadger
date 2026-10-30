@@ -133,6 +133,12 @@ func (s *AuthService) Login(username, password string) (string, error) {
 	if err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password)); err != nil {
 		return "", ErrBadCredentials
 	}
+	// 审计（WBS 4.3）：登录是实例级事件，不隶属任何账本，book_id 取哨兵 0。
+	// 刻意放在签发令牌【之前】：审计写失败就不签发，避免出现"已通过认证却无留痕"。
+	if err := AppendAudit(s.engine, model.AuditBookInstance, u.Id,
+		model.AuditActionLogin, model.AuditEntityUser, u.Id, nil, "server"); err != nil {
+		return "", err
+	}
 	return SignJWT(s.secret, u.Id, s.ttl)
 }
 

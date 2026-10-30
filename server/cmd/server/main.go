@@ -60,7 +60,7 @@ func main() {
 	// instance 子命令不依赖数据库，必须能在"替换 db 文件之后、服务启动之前"执行：
 	// 停容器 → 替换 db → `fastledger instance bump` → 启动（《落地方案》§8.3 恢复流程）。
 	if args := os.Args[1:]; len(args) > 0 && args[0] == "instance" {
-		handleInstance(cfg.DataDir, args[1:])
+		handleInstance(cfg, args[1:])
 		return
 	}
 
@@ -156,10 +156,11 @@ func main() {
 }
 
 // handleInstance 实例元信息子命令（恢复流程使用）
-func handleInstance(dataDir string, args []string) {
+func handleInstance(cfg *config.Config, args []string) {
 	if len(args) == 0 || args[0] != "bump" {
 		log.Fatalf("用法：instance bump（恢复备份后递增 restore_epoch）")
 	}
+	dataDir := cfg.DataDir
 	before, err := instance.LoadOrCreate(dataDir)
 	if err != nil {
 		log.Fatalf("读取实例元信息失败：%v", err)
@@ -170,6 +171,36 @@ func handleInstance(dataDir string, args []string) {
 	}
 	log.Printf("restore_epoch：%d → %d（%s，文件 %s）",
 		before.RestoreEpoch, after.RestoreEpoch, after.RestoredAt, instance.Path(dataDir))
+	auditBackupRestore(cfg, before.RestoreEpoch, after.RestoreEpoch)
+}
+
+// auditBackupRestore 备份恢复的审计（WBS 4.3）。
+//
+// 刻意做成 **best-effort**：本子命令必须能在【没有数据库】时执行——
+// 《落地方案》§8.3 的恢复流程是"停容器 → 替换 db 文件 → instance bump → 启动"，
+// bump 恰恰发生在 db 刚被替换之后，此时强制连库会把恢复流程本身卡死。
+//
+// 因此审计失败只告警、不阻断；restore_epoch 与 restored_at 已落在 instance.meta
+// （不依赖数据库），构成恢复这件事的兜底留痕，不会因审计缺失而完全无据可查。
+func auditBackupRestore(cfg *config.Config, beforeEpoch, afterEpoch int64) {
+	engine, err := database.Init(cfg.DBPath)
+	if err != nil {
+		log.Printf("警告：无法打开数据库，备份恢复未写入 audit_logs（%v）；"+
+			"restore_epoch %d 已记录在 instance.meta", err, afterEpoch)
+		return
+	}
+	defer func() {
+		if cerr := engine.Close(); cerr != nil {
+			log.Printf("关闭数据库出错：%v", cerr)
+		}
+	}()
+	// actor_uid 用哨兵 0：这是运维在命令行执行的操作，没有登录用户
+	if err := service.AppendAudit(engine, model.AuditBookInstance, model.AuditActorSystem,
+		model.AuditActionBackupRestore, model.AuditEntityInstance, afterEpoch,
+		map[string]interface{}{"restoreEpoch": beforeEpoch}, "cli"); err != nil {
+		log.Printf("警告：备份恢复审计写入失败（%v）；restore_epoch %d 已记录在 instance.meta",
+			err, afterEpoch)
+	}
 }
 
 // handleDB 数据库子命令：migrate（应用迁移）/ purge（回收站与审计到期硬清除）
