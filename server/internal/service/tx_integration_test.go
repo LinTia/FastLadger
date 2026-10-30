@@ -26,6 +26,7 @@ import (
 
 // testEnv 一个干净的账本环境：真实临时库 + 应用全部迁移 + owner 成员 + 资产/负债账户 + 收/支分类。
 type testEnv struct {
+	t          *testing.T
 	engine     *xorm.Engine
 	uid        int64
 	bookID     int64
@@ -54,6 +55,7 @@ func newTestEnv(t *testing.T) *testEnv {
 	must(t, err)
 
 	return &testEnv{
+		t:          t,
 		engine:     engine,
 		uid:        uid,
 		bookID:     bookID,
@@ -104,7 +106,7 @@ func (e *testEnv) balance(accountID int64) int64 {
 	var a model.Account
 	has, err := e.engine.Where("id = ? AND deleted = 0", accountID).Get(&a)
 	if err != nil || !has {
-		t.Fatalf("读账户失败 id=%d err=%v has=%v", accountID, err, has)
+		e.t.Fatalf("读账户失败 id=%d err=%v has=%v", accountID, err, has)
 	}
 	return a.Balance
 }
@@ -112,7 +114,7 @@ func (e *testEnv) balance(accountID int64) int64 {
 func (e *testEnv) txCount() int64 {
 	var n int64
 	if _, err := e.engine.SQL("SELECT COUNT(1) FROM transactions WHERE book_id = ? AND deleted = 0", e.bookID).Get(&n); err != nil {
-		t.Fatalf("统计交易失败：%v", err)
+		e.t.Fatalf("统计交易失败：%v", err)
 	}
 	return n
 }
