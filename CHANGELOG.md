@@ -2,6 +2,20 @@
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.38] - 2026-10-30
+
+### GPT v1.7 阶段 4 严格代码审查（GPT-R26–GPT-R30，待 owner 裁决）
+
+- **审查基线**：main HEAD `be5439d6`；最新业务代码提交 `1a7d07ad`；相对阶段 4 前基线 `9d45a449` 比较 5 个提交、14 个变更文件。
+- **GPT-R26 / P1 / 待确认**：`collectTransferGroup` 在转账对侧缺失或状态不符时返回单行继续执行，且未校验对侧是否反向互指、类型/方向/金额/账户是否匹配；异常配对可能单边修改或误操作无关交易。位置 `server/internal/service/tx.go:953–970`，违反 WBS 4.2「禁止单边路径」。
+- **GPT-R27 / P1 / 待确认**：回收站/审计保留天数仅校验正数，`days * 86400` 可发生 int64 溢出，使 cutoff 变成未来时间并批量清除墓碑/审计。位置 `server/cmd/server/main.go:286–290`、`server/internal/service/recycle.go:58–68,79–90`。
+- **GPT-R28 / P1 / 待确认**：Delete/Restore、ChangeRole/Remove、SetVisibility 的角色授权读取在事务外，授权检查与写入之间存在撤权/降权 TOCTOU；事务内未重新验证当前成员关系/角色。位置 `server/internal/service/tx.go:756–774`、`member.go:118–198`、`book.go:216–246`。
+- **GPT-R29 / P2 / 待确认**：SetVisibility 与成员变更的 `before_json` 旧状态在事务外读取，并发操作可能写入过期快照或对无实际变化写审计。位置 `server/internal/service/book.go:216–257`、`member.go:130–209`。
+- **GPT-R30 / P2 / 待确认**：WBS 4.3 明确要求交易 `update` 审计，但当前仅定义 `AuditActionUpdate` 常量，无交易 Update 服务/路由/审计调用。需 owner 裁决延期还是补齐。位置 WBS:99、`model/ledger.go:206–210`、`api/router.go:94–101`。
+- **验收建议**：GPT-R26–R28 为阻断项，修复并增加真实 SQLite/并发回归测试前，不建议将阶段 4 标记为验收通过。
+- **验证边界**：本轮通过 GitHub 文件读取进行静态审查，未在本会话重新运行 Go/SQLite/race。当前导读记录 Actions run `41034510229` 为 170 PASS / 0 FAIL，但不能证明本轮指出的异常配对、整数溢出与 TOCTOU 场景已覆盖。
+- **交付物**：`gpt/v1.7/审核结果.md`、`gpt/v1.7/findings.json`、`gpt/v1.7/verification/runtime-results.json`。所有新 finding 初始状态为「待确认」，等待 owner 裁决。
+
 ## [1.37] - 2026-10-30
 
 ### 补齐 WBS 4.3 剩余审计写入点：登录 / 权限变更 / 配置变更 / 备份恢复
