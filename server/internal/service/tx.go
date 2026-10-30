@@ -986,6 +986,13 @@ func loadTxRowByState(sess *xorm.Session, bookID, txID int64, expectLive bool) (
 // 单笔（type≠3）不参与配对校验，仍按单行处理。
 func collectTransferGroup(sess *xorm.Session, bookID int64, row *model.Transaction, wantLive bool) ([]*model.Transaction, error) {
 	if row.TxType != model.TxTypeTransfer {
+		// 单笔（收入/支出）本不该有配对。若 related_id 却被设了值，说明这条数据的
+		// 配对信息已损坏——此时按单边处理会在对侧留下悬空引用，等价于静默退化为
+		// 单边删除，正是 GPT-R26 禁止的行为。故必须整笔拒绝。
+		if row.RelatedId > 0 {
+			return nil, fmt.Errorf("%w：记录 %d 不是转账（type=%d）却带有 related_id=%d，配对数据已损坏",
+				ErrTransferGroupIncomplete, row.Id, row.TxType, row.RelatedId)
+		}
 		return []*model.Transaction{row}, nil
 	}
 	if row.RelatedId <= 0 {

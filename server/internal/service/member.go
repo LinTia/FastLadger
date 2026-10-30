@@ -190,12 +190,15 @@ func (s *MemberService) List(bookID int64) ([]MemberDTO, error) {
 // 本函数服务的是那些【不经过成员资格判定】的入口（List、JoinViaInvite），
 // 以及需要把"账本没了"独立于权限错误表达出来的入口（CreateInvite）。
 func requireActiveBookTx(sess *xorm.Session, bookID int64) error {
-	var deleted int64
-	has, err := sess.SQL("SELECT deleted FROM books WHERE id = ?", bookID).Get(&deleted)
+	// books.deleted 声明为 BOOLEAN，驱动会返回 bool；【不要】把它扫进 int64
+	// 再在 Go 侧判等——那会直接 Scan 失败（真实 SQLite 上已复现，见 CI）。
+	// 刻意把条件写进 SQL、用 COUNT 取整数，避开对列类型的依赖。
+	var n int64
+	has, err := sess.SQL("SELECT COUNT(1) FROM books WHERE id = ? AND deleted = 0", bookID).Get(&n)
 	if err != nil {
 		return err
 	}
-	if !has || deleted != 0 {
+	if !has || n != 1 {
 		return fmt.Errorf("%w：账本不存在或已被删除", ErrEntityDeleted)
 	}
 	return nil

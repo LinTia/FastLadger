@@ -712,8 +712,14 @@ func TestR31RestoreRejectedWhenAccountDeleted(t *testing.T) {
 	if d := txRow(t, e, res.TransactionIds[0]).Deleted; !d {
 		t.Fatal("失败的恢复不得把交易变回存活态")
 	}
-	if got := e.balance(acct.Id); got != 0 {
-		t.Fatalf("失败的恢复不得改动余额，应仍为 0，实际 %d", got)
+	// 账户已被软删，e.balance() 按 deleted=0 过滤会取不到该行；
+	// 这里直接读该行的 balance 列，断言本身不变（失败的恢复不得改动余额）。
+	var bal int64
+	if _, err := e.engine.SQL("SELECT balance FROM accounts WHERE id = ?", acct.Id).Get(&bal); err != nil {
+		t.Fatalf("读取账户余额失败：%v", err)
+	}
+	if bal != 0 {
+		t.Fatalf("失败的恢复不得改动余额，应仍为 0，实际 %d", bal)
 	}
 	if n := auditCount(e, model.AuditActionRestore); n != 0 {
 		t.Fatalf("失败的恢复不应写审计，实际 %d 行", n)
