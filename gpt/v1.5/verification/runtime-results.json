@@ -1,0 +1,69 @@
+{
+  "review": "GPT v1.5 third code-stage review",
+  "repository": "LinTia/FastLadger",
+  "status": "not_run",
+  "reason": "This review session had GitHub file read/write access but no local repository checkout or shell execution environment. No Go, CGO, SQLite, race, Gin, or WebSocket tests were executed. All not_run entries are explicit and are not test passes.",
+  "static_finding": "GPT-R24",
+  "tests": [
+    {
+      "id": 1,
+      "name": "same clientUuid retry idempotency",
+      "status": "not_run"
+    },
+    {
+      "id": 2,
+      "name": "same clientUuid changed payload returns 409",
+      "status": "not_run"
+    },
+    {
+      "id": 3,
+      "name": "SQLite UPSERT RowsAffected first=1 replay=0",
+      "status": "not_run"
+    },
+    {
+      "id": 4,
+      "name": "liability sign and net asset conservation",
+      "status": "not_run"
+    },
+    {
+      "id": 5,
+      "name": "transfer second-leg failure atomic rollback",
+      "status": "not_run"
+    },
+    {
+      "id": 6,
+      "name": "related_id bidirectional pairing and shared sync_version",
+      "status": "not_run"
+    },
+    {
+      "id": 7,
+      "name": "quoted type column and zero-value/creator_uid persistence",
+      "status": "not_run"
+    },
+    {
+      "id": 8,
+      "name": "0002 to 0003 migration execution and idempotency",
+      "status": "not_run"
+    },
+    {
+      "id": 9,
+      "name": "concurrent requests serialization and balance integrity",
+      "status": "not_run"
+    },
+    {
+      "id": 10,
+      "name": "Hub member_removed delivery regression",
+      "status": "not_run"
+    },
+    {
+      "id": 11,
+      "name": "Go build, vet, test and race detector",
+      "status": "not_run"
+    },
+    {
+      "id": 12,
+      "name": "Gin and real WebSocket lifecycle integration",
+      "status": "not_run"
+    }
+  ]
+}
