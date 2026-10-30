@@ -2,6 +2,16 @@
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.41] - 2026-10-30
+
+### GPT v1.9 阶段 0–3 第二轮补充复核（GPT-R53）
+
+- **GPT-R53 / P2 / 待确认**：AccountService.Delete 只检查活跃交易引用，没有检查活跃子账户；删除仍有子账户的父账户后，子账户会保留指向已删除父账户的 parent_id。对照 CategoryService.Delete 已有活跃子分类检查。位置 `server/internal/service/account.go:202–251`、`category.go:251–259`。
+- **与既有问题区分**：R53（父账户删除造成悬空层级）不同于 R47（parent_id 可形成环）和 R31（交易墓碑依赖已删除账户而无法恢复）。
+- **复核范围**：重新抽查 v1.8 的 GPT-R35–R52；没有足够证据新增其他 Finding，不代表这些风险已排除。各项复核意见与新增回归测试见 `gpt/v1.9/审核结果.md`。
+- **验证边界**：静态审查；未运行 Go/SQLite/race/WebSocket/断电测试；未修改业务代码。
+- **交付物**：`gpt/v1.9/审核结果.md`、`findings.json`、`verification/runtime-results.json`。
+
 ## [1.40] - 2026-10-30
 
 ### GPT v1.8 阶段 0–3 回溯式代码复核（GPT-R35–GPT-R52）
