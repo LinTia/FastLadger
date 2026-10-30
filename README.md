@@ -28,6 +28,7 @@
 | [`CHANGELOG.md`](CHANGELOG.md) | 更新日志 | 各版本变更记录 |
 | [`workbuddy/第三方审阅者导读.md`](workbuddy/第三方审阅者导读.md) | 第三方审阅者导读 | **新来审阅 / 提意见者的对齐入口**（背景、迭代史、审阅约定） |
 | [`workbuddy/FastLedger-文档评审-D.md`](workbuddy/FastLedger-文档评审-D.md) | 第四个审阅者 D 工程评审 | D-R01–D-R06（2×P1+4×P2），聚焦 Gin/WS/Flutter/OCR/同步/迁移删除恢复 |
+| [`workbuddy/FastLedger-D二次核查报告.md`](workbuddy/FastLedger-D二次核查报告.md) | D 第二轮工程实现核查 | D-R07–D-R09（2×P2+1×P3），真实 Go 后端 9 焦点核对 + 成员/邀请健壮性 |
 
 ### 文档分工（避免内容重复漂移）
 

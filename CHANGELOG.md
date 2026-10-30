@@ -2,6 +2,19 @@
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.25] - 2026-10-30
+
+### D 第二轮工程实现核查：核心 9 焦点无错，成员/邀请服务 3 条新缺口（D-R07–D-R09）
+
+- **新增 `workbuddy/FastLedger-D二次核查报告.md`**：D（同一审阅者，非新 AI）对真实可编译 Go 后端 `server/`（基线 `67da52a`，复跑 build/vet 通过、41 测试全绿）做第二轮核查。
+- **卡片第 6 节 9 个焦点经逐行核对全部正确，无新 finding**：tx.go 事务边界、幂等四项核对、BETWEEN 边界数学、转账禁单边、15 类符号、400/409 错误映射、0003 迁移合法性、无隐藏入口、新建 creator_uid 强制 >0。
+- **新发现 3 条，均为"代码没照设计做"（非设计文档错），无 P0/P1**：
+  - `D-R07`（P2）：`JoinViaInvite` 先调 `auth.Register`（独立事务已提交 user），再另开事务写成员；第二步失败回滚但 user 不回滚，产生无账本孤儿用户，重试用户名冲突。设计要求"原子同事务建 user + book_members"（PRD L573/WBS L227）。
+  - `D-R08`（P2）：标记邀请已用的 `UPDATE ... WHERE used_at=0` 不校验 RowsAffected，0002 邀请表又无"单次使用"库约束；并发竞争下一个未绑定用户名的邀请码可被两个不同用户重复使用。
+  - `D-R09`（P3）：`ChangeRole`/`Remove` 的 UPDATE 丢弃影响行数，目标在并发中已被移除时影响 0 行却返回 nil 被当成功（对比 account.go 已核对 RowsAffected==1）。
+- **落地判断**：不阻塞阶段 3 开工；建议 D-R07+D-R08 合并修复（JoinViaInvite 收敛单一事务 + 两处 RowsAffected 硬校验），D-R09 随阶段 3 成员管理改。
+- **验证边界**：本轮为静态核查；构建机无 gcc，事务真实回滚、UPSERT RowsAffected、并发、0002/0003 真实迁移、PRD §10.1/10.3/10.4 端到端、`go test -race` 仍无运行时证据，需在带 gcc 环境补真实 SQLite 集成测试。
+
 ## [1.24] - 2026-10-30
 
 ### 新增：GPT 第三次核查对齐卡片（`GPT-R24` 起）
