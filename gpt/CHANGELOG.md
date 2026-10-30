@@ -1,3 +1,11 @@
+## 2026-10-30 · v1.8 阶段 0–3 回溯式代码复核
+
+重新检查当前阶段 0–3 代码、PRD/WBS 契约与历史 Finding，新增 GPT-R35–GPT-R52 共 18 项（1 P1、15 P2、2 P3）。重点涉及 SQLite 文件权限/外键/迁移校验、恢复世代持久性、邀请撤销/邮箱绑定/审计、删除账本后的成员管理、限流器内存增长、认证输入边界、账户分组环、Pull 多实体分页与 WebSocket 订阅/鉴权生命周期。GPT-R52 为 PRD 会话撤销要求与 WBS 阶段分配不一致，等待 owner 裁决。
+
+另扩展 GPT-R27（邀请 TTL 秒数乘法溢出）与 GPT-R34（环境变量非法值静默回退默认值）的适用范围。已复核 D-R07–D-R09、WB-R01、GPT-R24–R25 的历史修复，不重复登记；已知 [1.28] WebSocket 软删订阅遗留也不重复计数。
+
+完整 13 字段报告、结构化 findings 与 not_run 验证计划见 [v1.8](v1.8/审核结果.md)、[findings.json](v1.8/findings.json)、[runtime-results.json](v1.8/verification/runtime-results.json)。本轮只提交审查文档，未修改业务代码；未执行本地 Go/SQLite/race/WebSocket 测试。
+
 ## 2026-10-30 · v1.7 阶段 4扩展复核
 
 用户尚未安排 Workbuddy 修复；GPT 在原 GPT-R26–GPT-R30 基础上继续扩查，新增 GPT-R31–GPT-R34：P1 账户软删后交易无法恢复；P2 Restore 未清空 deleted_at；P2 账本名称+可见性组合更新非原子；P2 db purge 非法参数静默回退默认 TTL。另扩展 GPT-R28 授权 TOCTOU 涉及 BookService.Update/Delete 与 MemberService.CreateInvite。完整 13 字段与范围排除说明见 [v1.7 审核报告](v1.7/审核结果.md)，结构化数据见 [findings](v1.7/findings.json)。根 CHANGELOG 新增 [1.39]。
