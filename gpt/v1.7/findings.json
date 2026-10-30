@@ -51,21 +51,24 @@
     "location": [
       "server/internal/service/tx.go:756-774",
       "server/internal/service/member.go:118-150,172-198",
-      "server/internal/service/book.go:216-246"
+      "server/internal/service/book.go:216-246",
+      "server/internal/service/book.go:143-183,211-263",
+      "server/internal/service/member.go:215-245"
     ],
     "quote": [
       "role, err := RoleOf(s.engine, bookID, uid)",
       "canEditOthers := CanEditOthersTx(role)",
-      "sess.Begin() occurs after RoleOf"
+      "sess.Begin() occurs after RoleOf",
+      "BookService.Update/Delete and MemberService.CreateInvite call RoleOf(engine, ...) before writes"
     ],
-    "problem": "授权依据在事务外读取；读取后到写事务开始前，成员可能被移除或降权，敏感操作仍使用旧角色。",
-    "reproduce": "在 RoleOf 返回后、sess.Begin 前设置 barrier；并发 Remove/demote actor，再放行 Delete/ChangeRole/SetVisibility。",
+    "problem": "授权依据在事务外读取；读取后到写事务开始前，成员可能被移除或降权，敏感操作仍使用旧角色。 扩展复核确认同类事务外授权读取还出现在 BookService.Update、BookService.Delete 与 MemberService.CreateInvite。",
+    "reproduce": "在 RoleOf 返回后、sess.Begin 前设置 barrier；并发 Remove/demote actor，再放行 Delete/ChangeRole/SetVisibility。 另对 Update/Delete/CreateInvite 在角色读取后设置 barrier，并发撤销或降权 actor，再放行写入，检查敏感操作是否仍成功。",
     "actual": "业务事务未重新验证 actor 的当前成员关系与角色，可能继续写入。",
-    "expected": "同一事务内读取当前角色并授权，撤权已提交后操作必须失败且不产生业务写入。",
-    "impact": "被移除成员仍可能删除/恢复交易；被降权管理员仍可能管理成员或配置。",
-    "suggestion": "将 actor membership/role 读取移入写事务同一 session；补 barrier 控制的并发回归测试。",
+    "expected": "同一事务内读取当前角色并授权，撤权已提交后操作必须失败且不产生业务写入。 所有敏感写入口（包括账本名称/删除、邀请创建）均应在事务内重验当前角色。",
+    "impact": "被移除成员仍可能删除/恢复交易；被降权管理员仍可能管理成员或配置。 被撤权的 admin 还可能在撤权后创建邀请、修改账本名称或删除账本。",
+    "suggestion": "将 actor membership/role 读取移入写事务同一 session；补 barrier 控制的并发回归测试。 全仓盘点 CreateInvite、BookService.Update/Delete 等管理写入口，统一改为 session 内授权与写入。",
     "status": "待确认",
-    "evidence": "tx.go:757 早于 Begin L771；member.go:119/173、book.go:220 均早于各自 Begin。"
+    "evidence": "tx.go:757 早于 Begin L771；member.go:119/173、book.go:220 均早于各自 Begin。 book.go:143-183/211-263 与 member.go:215-245 也在 engine 上先查 RoleOf，后直接写库或插入邀请；未在写事务内重验。"
   },
   {
     "id": "GPT-R29",
