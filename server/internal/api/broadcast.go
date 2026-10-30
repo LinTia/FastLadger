@@ -67,13 +67,11 @@ type bookEventEnvelope struct {
 	Data map[string]interface{} `json:"data"`
 }
 
-// broadcastBookEvent 向订阅该账本的在线成员推一条脱敏事件。
+// marshalBookEvent 规范化并序列化事件信封（补齐 bookId 与 data，保证五个字段恒定出现）。
 //
-// 出错只记日志：WS 只是"尽力通知"，客户端有周期性 pull 与重连必 pull 兜底（指南 §14.1 约定 5）。
-func broadcastBookEvent(bookID int64, env bookEventEnvelope) {
-	if bookID <= 0 {
-		return
-	}
+// 抽出来供"定向投递"复用：清理通知既要发给目标用户（DeliverToUser），
+// 又要发给其余订阅者（BroadcastToBook），两条路径必须用**同一份**字节。
+func marshalBookEvent(bookID int64, env bookEventEnvelope) ([]byte, error) {
 	env.BookId = bookID
 	if env.Data == nil {
 		env.Data = map[string]interface{}{}
@@ -81,6 +79,20 @@ func broadcastBookEvent(bookID int64, env bookEventEnvelope) {
 	msg, err := json.Marshal(env)
 	if err != nil {
 		log.Printf("ws 广播序列化失败：book_id=%d event=%s err=%v", bookID, env.Event, err)
+		return nil, err
+	}
+	return msg, nil
+}
+
+// broadcastBookEvent 向订阅该账本的在线成员推一条脱敏事件。
+//
+// 出错只记日志：WS 只是"尽力通知"，客户端有周期性 pull 与重连必 pull 兜底（指南 §14.1 约定 5）。
+func broadcastBookEvent(bookID int64, env bookEventEnvelope) {
+	if bookID <= 0 {
+		return
+	}
+	msg, err := marshalBookEvent(bookID, env)
+	if err != nil {
 		return
 	}
 	// 事件已脱敏：完整载荷与脱敏载荷相同
@@ -128,18 +140,39 @@ func notifyVisibilityChanged(bookID, version int64) {
 	})
 }
 
-// notifyMemberRemoved 成员被移除：客户端应主动清除该账本本地数据并停止订阅（决策 5）。
+// notifyMemberRemoved 成员被移除：目标客户端须主动清除该账本本地数据并停止订阅（决策 5）。
 //
-// RefreshVisibility 会顺带把已非成员的连接从订阅表里摘掉（见 internal/ws/hub.go），
-// 否则被移除者仍会收到该账本的 `data_changed`——那等于持续泄露"账本仍活跃"。
+// **顺序是这条逻辑的全部要点**（GPT-R24）：
+//
+//  1. `RefreshVisibility` —— 它会把已非成员的连接从 `BookIds` 摘掉。这保证**此后**目标
+//     不再收到该账本的任何普通广播（[1.27] 的不变量：不能继续泄露"账本仍活跃"）。
+//  2. `DeliverToUser` —— 定向投递一次清理通知，**不依赖订阅状态**。
+//     若没有这一步（或把它放在第 3 步），目标已经被摘订阅，`BroadcastToBook` 会因
+//     `!sub` 直接跳过，目标**永远收不到**本该触发"清本地数据"的那条事件。
+//  3. 最后向其余有效订阅者广播同一份字节（目标已被摘除，不会重复收到）。
+//
+// 两条约束方向相反、必须同时成立：**不能继续收到后续事件** + **必须收到一次清理通知**。
 func notifyMemberRemoved(bookID, version, targetUid int64) {
-	ws.DefaultHub.RefreshVisibility(bookID)
-	broadcastBookEvent(bookID, bookEventEnvelope{
+	if bookID <= 0 {
+		return
+	}
+	msg, err := marshalBookEvent(bookID, bookEventEnvelope{
 		Event:           eventMemberRemoved,
 		Version:         version,
 		ForceFullResync: true,
 		Data:            map[string]interface{}{"targetUid": targetUid},
 	})
+	if err != nil {
+		return
+	}
+	ws.DefaultHub.RefreshVisibility(bookID)
+	if n := ws.DefaultHub.DeliverToUser(targetUid, msg); n == 0 {
+		// 目标当前无在线连接（或发送缓冲已满）：清理事件无法入队。
+		// 客户端契约：重连后订阅会被拒绝（已非成员），此时必须删除该账本本地缓存。
+		// 记日志便于排查"某设备仍残留已退出账本数据"。
+		log.Printf("member_removed 未送达目标：book_id=%d target_uid=%d（离线或缓冲满）", bookID, targetUid)
+	}
+	ws.DefaultHub.BroadcastToBook(bookID, msg, msg)
 }
 
 // notifyMemberRoleChanged 成员角色变化：可见范围可能变化，要求定向全量重拉

@@ -272,6 +272,45 @@ func (h *Hub) BroadcastToBook(bookID int64, fullMsg, sensitiveMsg []byte) {
 	}
 }
 
+// DeliverToUser 向指定 uid 的**全部在线连接**定向投递一条消息，**不经订阅过滤**。
+//
+// 用途：成员被移除时的清理通知（`member_removed`，GPT-R24）。
+// 该时刻目标已不再是账本成员，其订阅在 RefreshVisibility 中已被摘除；若仍走
+// BroadcastToBook，会被 `!sub` 过滤掉，目标将永远收不到那条本该触发"清除该账本本地数据"
+// 的事件。因此清理通知必须走一条**不依赖订阅状态**的投递路径。
+//
+// 锁顺序与 BroadcastToBook 一致（Hub.mu 读 → Client.mu），不引入反向路径。
+// 非阻塞投递：Send 满则丢弃并累加 Dropped（与普通广播同策略——WS 只是尽力通知，
+// 客户端还有"重连必 pull / 周期 pull"兜底）。
+// 返回实际入队的连接数：0 通常表示目标当前离线（调用方可据此记日志）。
+func (h *Hub) DeliverToUser(uid int64, msg []byte) int {
+	if uid <= 0 || msg == nil {
+		return 0
+	}
+	delivered := 0
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	for c := range h.clients {
+		c.mu.Lock()
+		c.ensureLocked()
+		match := c.UID == uid
+		send := c.Send
+		c.mu.Unlock()
+		if !match || send == nil {
+			continue
+		}
+		select {
+		case send <- msg:
+			delivered++
+		default:
+			c.mu.Lock()
+			c.Dropped++
+			c.mu.Unlock()
+		}
+	}
+	return delivered
+}
+
 // RefreshVisibility 可见性/成员关系变化后，批量重算受影响连接的 canView 缓存。
 //
 // 调用时机（api 层）：SetVisibility 成功后、成员被移除/改角色/账本删除后。

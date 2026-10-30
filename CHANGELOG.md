@@ -1,3 +1,27 @@
+# 更新日志（CHANGELOG）
+
+本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
+
+## [1.30] - 2026-10-30
+
+### 修复 GPT-R24（P1）：成员移除的清理通知被自己的"摘订阅"逻辑截断
+
+- **问题（GPT 审查，经我逐行取证确认属实）**：`notifyMemberRemoved` 先调 `RefreshVisibility`（把已非成员的连接从 `BookIds` 摘除），再走普通 `BroadcastToBook`；后者对 `!sub` 的连接直接跳过 —— 于是**仍在线的被移除用户收不到 `member_removed`**，客户端不会执行"清除该账本本地数据"，违反 PRD §7.3 / §12.1 决策 5。
+- **这是我自己在 [1.27] 修 P3「被移除者仍收到后续事件」时引入的反向缺陷**。两条约束方向相反、必须同时成立：
+  1. 被移除者**不能再收到**该账本的任何后续事件；
+  2. 被移除者**必须收到一次**清理通知。
+  只满足其中一条都是错的。
+- **修复**：
+  - `internal/ws/hub.go` 新增 `DeliverToUser(uid, msg) int`：向该 uid 的**全部在线连接**定向投递，**不经订阅过滤**；锁序仍为 `Hub.mu(读) → Client.mu`（不引入反向路径）；非阻塞，`Send` 满则 `Dropped++`；返回实际入队连接数（`0` 表示目标离线或缓冲满）。
+  - `internal/api/broadcast.go` 的 `notifyMemberRemoved` 改为**三段固定顺序**：① `RefreshVisibility` 撤销订阅（此后不再收普通事件）→ ② `DeliverToUser` 定向投递一次清理通知（不依赖订阅状态）→ ③ `BroadcastToBook` 发给其余有效订阅者（目标已被摘除，**不会重复收到**）。
+  - 抽出 `marshalBookEvent`，让"定向投递"与"普通广播"复用**同一份字节**，避免两条路径的信封出现差异。
+  - 目标离线/缓冲满时记日志；并明确客户端契约：重连后若订阅被拒（已非成员），必须删除该账本本地缓存。
+- **测试（7 个新用例）**：
+  - `internal/ws/deliver_to_user_test.go`（5 例）：不依赖订阅、只投目标 uid、同用户多连接全投、离线/非法 uid 返回 0、缓冲满丢弃并计数。
+  - `internal/api/member_removed_broadcast_test.go`（2 例）：目标必收且字段正确、只收一次、其他成员照常收、目标随后**收不到** `data_changed`；同用户多设备均收到。
+  - **非空转已证明**：临时把 `DeliverToUser` 改为 no-op → 目标用例立刻失败并打印"目标未收到 member_removed —— GPT-R24 未修复"；恢复后通过。
+- **文档格式修正**：GPT 在 `[1.29]` 落盘时把文件标题与前言挤到了条目之后（`## [1.29]` 出现在 `# 更新日志` 之前）。已将标题与前言移回文件首行；`[1.29]` 正文内容一字未改（属评审记录，不篡改）。
+
 ## [1.29] - 2026-10-30
 
 ### GPT 第三次代码阶段审查（规范对齐版）
@@ -9,10 +33,6 @@
   - 建议增加按 `targetUid` 定向投递清理事件的 Hub 能力，并确保事件入队后撤销订阅；补充目标收到清理事件、后续事件不达、其他成员正常收到及断线/并发回归。
   - 状态：**待确认，等待 owner 裁决**；本轮未改业务代码。
 - **验证边界**：本轮为 GitHub 文件接口静态审查；未执行 Go build/vet/test、GPT 核查卡片要求的 9 项 SQLite 断言、race 或真实 Gin/WS 端到端测试。不得据此宣称阶段 3 运行验收通过。详细 13 字段见 `gpt/v1.5/审核结果.md`，结构化记录见 `gpt/v1.5/findings.json`；未执行测试清单见 `gpt/v1.5/verification/runtime-results.json`。
-
-# 更新日志（CHANGELOG）
-
-本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
 ## [1.28] - 2026-10-30
 
