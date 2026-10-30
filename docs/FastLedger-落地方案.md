@@ -867,6 +867,14 @@ CREATE INDEX idx_audit_entity ON audit_logs(entity_type, entity_id);
 |  | DELETE `/books/{id}/recycle/{entityType}/{entityId}` | 硬清除（立即，跳过保留期） |
 | 审计 | GET `/books/{id}/audit-logs` | 审计查询（参数：actorUid、action、entityType、startTime、endTime、page、count） |
 
+**创建校验（服务端强制）**：
+
+- `amount` 为**整数分**，取值范围 `1 ≤ amount ≤ 10_000_000_000`（即 **1 亿元/笔**）；超出返回 **400**。
+- `clientUuid` 必填（服务层校验，非仅 handler），长度 ≤ 64 字节；缺失/空白/超长返回 400。
+- 转账（`type=3`）必须提供 `toAccountId` 且 `categoryId = 0`，两侧账户须同账本。
+- 余额溢出（累加后超出 int64）返回 **400**（不是 409，重试无意义）；账户已删/并发冲突返回 **409**。
+- ⚠️ 客户端必须同步做上述输入校验与提示，否则用户只会看到 400 而无预提示。
+
 **统一响应包**：
 
 ```json
