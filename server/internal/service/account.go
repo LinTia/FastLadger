@@ -32,7 +32,19 @@ var (
 	// GPT-R53：直接删父账户会让子账户留下悬空的 parent_id——列表/j树组装时父节点
 	// 不存在，前端只能把子账户当孤儿节点展示，父子层级（净资产分组）就此失真。
 	ErrAccountHasChildren = errors.New("该账户下仍有子账户，无法删除")
+	// ErrAccountCycle 账户层级形成环（GPT-R47）。
+	//
+	// 旧实现只挡住"parent_id 指向自己"，挡不住"指向自己的后代"（A→B→C→A）。
+	// 层级一旦成环，树组装会无限递归，净资产分组的汇总口径也彻底失真——
+	// 分组只是 UI 呈现，但它是净资产视图的结构，成环即数据损坏。
+	ErrAccountCycle = errors.New("账户层级存在环：上级不能是自己的下级")
 )
+
+// maxAccountDepth 层级回溯的最大步数。
+//
+// 正常账本的分组层级是个位数；这个上限只是防御"历史脏数据里已存在环"时
+// 回溯变成死循环——检出环要报错，而不是把请求线程挂死。
+const maxAccountDepth = 1000
 
 // AccountService 账户服务
 type AccountService struct {
@@ -115,6 +127,11 @@ func (s *AccountService) Create(uid, bookID int64, in AccountCreateInput) (*mode
 		if err := ensureAccountInBook(sess, bookID, in.ParentId); err != nil {
 			return nil, err
 		}
+		// GPT-R47：新账户还没有子账户，无人能指向它，因此这里只需确认【父链本身有限】
+		// ——历史脏数据里若已存在环（A→B→A），不能再往里挂新账户，否则环只会变大。
+		if err := assertNoAccountCycle(sess, bookID, 0, in.ParentId); err != nil {
+			return nil, err
+		}
 	}
 	ver, err := s.versions.Next(sess, bookID)
 	if err != nil {
@@ -174,12 +191,18 @@ func (s *AccountService) Update(uid, bookID, accountID int64, in AccountUpdateIn
 	if in.ParentId != nil {
 		parentID := *in.ParentId
 		if parentID == accountID {
-			return nil, fmt.Errorf("%w：账户的上级不能是自身", ErrAccountInvalid)
+			// 1 节点环：与更长的环同一个哨兵（HTTP 层统一 400）
+			return nil, fmt.Errorf("%w：账户的上级不能是自身", ErrAccountCycle)
 		}
 		if parentID != 0 {
 			if err := ensureAccountInBook(sess, bookID, parentID); err != nil {
 				return nil, err
 			}
+		}
+		// GPT-R47：必须沿父链一路回溯到根，检测【任意长度】的环。
+		// 只看一层（"上级是不是我的下级"）挡不住 A→B→C→A。
+		if err := assertNoAccountCycle(sess, bookID, accountID, parentID); err != nil {
+			return nil, err
 		}
 		a.ParentId = parentID
 	}
@@ -273,6 +296,69 @@ func (s *AccountService) Delete(uid, bookID, accountID int64) (int64, error) {
 		return 0, err
 	}
 	return ver, nil
+}
+
+// assertNoAccountCycle 在【调用方事务内】沿 parent_id 向上回溯到根，确认
+// 「把 accountID 挂到 parentID 下」不会形成环（GPT-R47）。
+//
+// 为什么必须一路回溯而不是只查一两层：环可以是任意长度（A→B→C→…→A），
+// 只查一层挡不住 B→C→A 这种"隔代"回指。
+//
+// 并发保护（与写入同一事务）：
+// 本函数只在 Create / Update 已开启的写事务内被调用，检查与随后的 INSERT/UPDATE
+// 共享同一个事务与同一份快照；SQLite 是单写者（本库 MaxOpenConns=1），
+// 别的写事务不可能插进"检查通过之后、写入之前"的窗口里插入一条指向本账户的
+// parent_id——要么它先提交（本事务随后读到的是它的结果，照样检出环），
+// 要么它后提交（会被写锁挡住，或本事务先拿到写锁、它拿到 SQLITE_BUSY）。
+// 因此不存在"检查通过 → 并发插入环 → 写入落库"的 TOCTOU。
+//
+// accountID == 0 表示【新建】账户（尚无 ID，不可能有人指向它）：此时只校验父链本身
+// 是有限的（不含历史脏数据留下的既存环）。
+func assertNoAccountCycle(sess *xorm.Session, bookID, accountID, parentID int64) error {
+	if parentID == 0 {
+		return nil // 0 = 顶层账户，无上级，不可能成环
+	}
+	who := fmt.Sprintf("账户 %d", accountID)
+	if accountID == 0 {
+		who = "新账户"
+	}
+	if parentID == accountID {
+		return fmt.Errorf("%w：%s的上级不能是自身", ErrAccountCycle, who)
+	}
+
+	seen := make(map[int64]struct{}, 8)
+	cur := parentID
+	for step := 0; step < maxAccountDepth; step++ {
+		if cur == accountID {
+			return fmt.Errorf("%w：%s的上级链路回到了自身（长度 ≥%d 的环）",
+				ErrAccountCycle, who, step+1)
+		}
+		if _, dup := seen[cur]; dup {
+			// 父链里存在既存环（历史脏数据）：不能再往里挂账户，否则环只会变大
+			return fmt.Errorf("%w：%s的上级链路存在既存环（账户 %d 被重复访问）",
+				ErrAccountCycle, who, cur)
+		}
+		seen[cur] = struct{}{}
+
+		var next int64
+		has, err := sess.SQL(
+			`SELECT parent_id FROM accounts WHERE id = ? AND book_id = ? AND deleted = 0`,
+			cur, bookID).Get(&next)
+		if err != nil {
+			return err
+		}
+		if !has {
+			// 上级链路上出现"已删除 / 不属于本账本"的账户：这是悬空引用（GPT-R53 的
+			// 对偶面）。挂上去只会让层级更乱，直接拒绝。
+			return fmt.Errorf("%w：%s的上级 %d 已删除或不属于本账本", ErrAccountInvalid, who, cur)
+		}
+		if next == 0 {
+			return nil // 回溯到顶层：链是有限的，无环
+		}
+		cur = next
+	}
+	return fmt.Errorf("%w：%s的上级链路超过 %d 层（疑似数据损坏）",
+		ErrAccountCycle, who, maxAccountDepth)
 }
 
 // ensureAccountInBook 校验账户归属本账本且未删除（防越权引用他人账本账户）

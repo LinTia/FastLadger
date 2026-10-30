@@ -74,6 +74,9 @@ func mapSvcErr(c *gin.Context, err error) {
 		errors.Is(err, service.ErrAccountInvalid),
 		errors.Is(err, service.ErrCategoryInvalid):
 		fail(c, http.StatusBadRequest, "请求参数非法")
+	case errors.Is(err, service.ErrAccountCycle):
+		// GPT-R47：任意长度的层级环（含"上级指向自身"）→ 400，客户端应换一个上级
+		fail(c, http.StatusBadRequest, "账户层级不能成环：上级不能是自己的下级")
 	case errors.Is(err, service.ErrAccountInUse):
 		fail(c, http.StatusConflict, "账户仍存在交易记录，无法删除")
 	case errors.Is(err, service.ErrAccountHasChildren):
