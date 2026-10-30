@@ -51,6 +51,17 @@ var (
 	ErrConcurrentConflict = errors.New("并发冲突，请重试")
 	// ErrInvalidArgument 通用入参非法（HTTP 400）
 	ErrInvalidArgument = errors.New("请求参数非法")
+	// ErrEntityDeleted 目标实体已被删除（HTTP 409）。
+	//
+	// WBS 4.5 旧离线数据回流：必须与"目标不存在"（404）区分开——
+	// 已删是【冲突】，客户端应丢弃该条或转"冲突 / 另存"，
+	// 服务端绝不静默复活已删数据。
+	ErrEntityDeleted = errors.New("目标已被删除")
+	// ErrTxDirectionMissing 转账记录缺少方向标记（direction=0），无法精确反向余额（HTTP 409）。
+	//
+	// 迁移 0006 会回填历史转账行；若仍出现 0，说明数据需要修复。
+	// 此时删除/恢复【必须失败】而不是把余额增量算成 0（那会"钱没回滚却不报错"）。
+	ErrTxDirectionMissing = errors.New("转账记录缺少方向标记")
 )
 
 const (
@@ -64,6 +75,9 @@ const (
 	maxAmountCents int64 = 10_000_000_000
 	// txHashDomain 请求摘要的域标签（《转账入口裁决》§3）
 	txHashDomain = "transaction.create/v1"
+	// txMutateHashDomain 删除/恢复请求摘要的域标签；与 create 域分离，
+	// 使同一 clientUuid 的 create 与 delete/restore 摘要天然不同（WBS 4.4）
+	txMutateHashDomain = "transaction.mutate/v1"
 
 	defaultTxPageSize = 20
 	maxTxPageSize     = 200
@@ -151,12 +165,12 @@ func (s *TxService) Create(ctx context.Context, uid, bookID int64, req CreateReq
 		return nil, err
 	}
 
-	// 2) 幂等占位：只吞掉 (book_id,uid,client_uuid) 唯一键冲突，其余错误直接失败并回滚
+	// 2) 幂等占位：只吞掉 (book_id,uid,op,client_uuid) 唯一键冲突，其余错误直接失败并回滚
 	res, err := sess.Exec(`INSERT INTO idempotency_records
-		(book_id, uid, client_uuid, request_hash, result_type, result_ids, result_version, created_at)
-		VALUES (?, ?, ?, ?, ?, '', 0, ?)
-		ON CONFLICT(book_id, uid, client_uuid) DO NOTHING`,
-		bookID, uid, r.ClientUuid, hash, kind, time.Now().Unix())
+		(book_id, uid, client_uuid, op, request_hash, result_type, result_ids, result_version, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, '', 0, ?)
+		ON CONFLICT(book_id, uid, op, client_uuid) DO NOTHING`,
+		bookID, uid, r.ClientUuid, model.IdemOpCreate, hash, kind, time.Now().Unix())
 	if err != nil {
 		return nil, fmt.Errorf("写入幂等回执占位失败：%w", err)
 	}
@@ -166,7 +180,7 @@ func (s *TxService) Create(ctx context.Context, uid, bookID int64, req CreateReq
 	}
 	if inserted == 0 {
 		// 同键命中：重读完整回执并核对，一致返回原结果，不一致报冲突
-		return s.replayReceipt(sess, bookID, uid, r.ClientUuid, hash, kind)
+		return s.replayReceipt(sess, bookID, uid, r.ClientUuid, model.IdemOpCreate, hash, kind)
 	}
 	if inserted != 1 {
 		return nil, ErrIncompleteReceipt
@@ -213,8 +227,8 @@ func (s *TxService) Create(ctx context.Context, uid, bookID int64, req CreateReq
 
 	// 5) 回写完整回执（result_ids + result_version）；影响行数不是 1 即整笔回滚
 	res, err = sess.Exec(`UPDATE idempotency_records SET result_ids = ?, result_version = ?
-		WHERE book_id = ? AND uid = ? AND client_uuid = ? AND request_hash = ? AND result_type = ?`,
-		encodeResultIDs(ids), ver, bookID, uid, r.ClientUuid, hash, kind)
+		WHERE book_id = ? AND uid = ? AND op = ? AND client_uuid = ? AND request_hash = ? AND result_type = ?`,
+		encodeResultIDs(ids), ver, bookID, uid, model.IdemOpCreate, r.ClientUuid, hash, kind)
 	if err != nil {
 		return nil, fmt.Errorf("回写幂等回执失败：%w", err)
 	}
@@ -235,12 +249,12 @@ func (s *TxService) Create(ctx context.Context, uid, bookID int64, req CreateReq
 //
 // 回执不完整（result_type=0 / result_ids 缺失 / result_version<=0）不是成功；
 // 内容或类型不一致返回 ErrCreateConflict（409）。
-func (s *TxService) replayReceipt(sess *xorm.Session, bookID, uid int64, clientUUID, hash string, kind int8) (*CreateResult, error) {
+func (s *TxService) replayReceipt(sess *xorm.Session, bookID, uid int64, clientUUID, op, hash string, kind int8) (*CreateResult, error) {
 	rec := &model.IdempotencyRecord{}
 	has, err := sess.SQL(
-		`SELECT id, book_id, uid, client_uuid, request_hash, result_ids, result_type, result_version, created_at
-		 FROM idempotency_records WHERE book_id = ? AND uid = ? AND client_uuid = ?`,
-		bookID, uid, clientUUID).Get(rec)
+		`SELECT id, book_id, uid, client_uuid, op, request_hash, result_ids, result_type, result_version, created_at
+		 FROM idempotency_records WHERE book_id = ? AND uid = ? AND op = ? AND client_uuid = ?`,
+		bookID, uid, op, clientUUID).Get(rec)
 	if err != nil {
 		return nil, err
 	}
@@ -280,6 +294,10 @@ func (s *TxService) createSingleInTx(sess *xorm.Session, uid, bookID int64, r Cr
 	row.AccountId = account.Id
 	row.CategoryId = r.CategoryId
 	if err := insertTxRow(sess, row); err != nil {
+		return 0, err
+	}
+	// 审计（WBS 4.3）：create 无"变更前"状态，before_json 留空
+	if err := insertAudit(sess, bookID, uid, model.AuditActionCreate, "transaction", row.Id, nil, "server"); err != nil {
 		return 0, err
 	}
 	return row.Id, nil
@@ -326,6 +344,12 @@ func (s *TxService) createTransferInTx(sess *xorm.Session, uid, bookID int64, r 
 		return nil, ErrIncompleteReceipt
 	}
 	out.RelatedId = in.Id
+	// 审计（WBS 4.3）：转账两侧各留一条 create
+	for _, r2 := range []*model.Transaction{out, in} {
+		if err := insertAudit(sess, bookID, uid, model.AuditActionCreate, "transaction", r2.Id, nil, "server"); err != nil {
+			return nil, err
+		}
+	}
 	return []int64{out.Id, in.Id}, nil
 }
 
@@ -422,12 +446,18 @@ func insertTxRow(sess *xorm.Session, row *model.Transaction) error {
 // loadTxAccount 读取本账本内未删除的账户；MVP 仅支持 CNY 账户
 func loadTxAccount(sess *xorm.Session, bookID, accountID int64) (*model.Account, error) {
 	a := &model.Account{}
-	has, err := sess.Where("id = ? AND book_id = ? AND deleted = 0", accountID, bookID).Get(a)
+	// 不过滤 deleted：必须把"从未存在"与"已删除"区分开（WBS 4.5）。
+	// 若继续用 deleted=0 过滤，离线补传引用已删账户时只能报"不存在"，
+	// 客户端无法据此判断该丢弃还是另存，也无法阻止已删数据被静默复活。
+	has, err := sess.Where("id = ? AND book_id = ?", accountID, bookID).Get(a)
 	if err != nil {
 		return nil, err
 	}
 	if !has {
 		return nil, fmt.Errorf("%w：账户 %d 不存在", ErrAccountNotFound, accountID)
+	}
+	if a.Deleted {
+		return nil, fmt.Errorf("%w：账户 %d 已被删除", ErrEntityDeleted, accountID)
 	}
 	if !model.IsValidAccountCategory(a.Category) {
 		return nil, fmt.Errorf("%w：账户 %d 分类非法", ErrInvalidCreate, accountID)
@@ -441,12 +471,16 @@ func loadTxAccount(sess *xorm.Session, bookID, accountID int64) (*model.Account,
 // loadCategoryForType 校验分类：属于本账本、未删除、且 cat_type 与交易类型一致
 func loadCategoryForType(sess *xorm.Session, bookID, categoryID int64, txType int8) error {
 	var c model.Category
-	has, err := sess.Where("id = ? AND book_id = ? AND deleted = 0", categoryID, bookID).Get(&c)
+	// 同 loadTxAccount：区分"从未存在"与"已删除"（WBS 4.5）
+	has, err := sess.Where("id = ? AND book_id = ?", categoryID, bookID).Get(&c)
 	if err != nil {
 		return err
 	}
 	if !has {
 		return fmt.Errorf("%w：分类 %d 不存在", ErrCategoryNotFound, categoryID)
+	}
+	if c.Deleted {
+		return fmt.Errorf("%w：分类 %d 已被删除", ErrEntityDeleted, categoryID)
 	}
 	if c.CatType != txType {
 		return fmt.Errorf("%w：分类收支类型与交易类型不一致", ErrInvalidCreate)
@@ -695,21 +729,29 @@ func likePattern(kw string) string {
 // 余额反向依赖 transactions.direction（0004 补入）：转出侧 flow=-amount、转入侧
 // flow=+amount；单笔按 type 判定。createChangeBalance 复用同一原子 UPDATE，
 // 全组共享一个递增版本（WBS 4.6：单一事务边界）。
-func (s *TxService) Delete(ctx context.Context, uid, bookID, txID int64) (int64, error) {
-	return s.mutateVisibility(ctx, uid, bookID, txID, true, model.AuditActionDelete)
+func (s *TxService) Delete(ctx context.Context, uid, bookID, txID int64, clientUuid string) (int64, error) {
+	return s.mutateVisibility(ctx, uid, bookID, txID, clientUuid, true, model.AuditActionDelete, model.IdemOpDelete)
 }
 
 // Restore 恢复一笔已软删的交易（整笔）。与 Delete 对称：余额回滚到删除前、deleted 复位、
 // 版本递增、写审计，复用同一事务与版本来源（WBS 4.4）。
-func (s *TxService) Restore(ctx context.Context, uid, bookID, txID int64) (int64, error) {
-	return s.mutateVisibility(ctx, uid, bookID, txID, false, model.AuditActionRestore)
+func (s *TxService) Restore(ctx context.Context, uid, bookID, txID int64, clientUuid string) (int64, error) {
+	return s.mutateVisibility(ctx, uid, bookID, txID, clientUuid, false, model.AuditActionRestore, model.IdemOpRestore)
 }
 
 // mutateVisibility Delete/Restore 的统一实现。wantDeleted=true 表示本次要把目标置为"已删"。
-func (s *TxService) mutateVisibility(ctx context.Context, uid, bookID, txID int64, wantDeleted bool, action string) (int64, error) {
+//
+// clientUuid 必填（服务层强制，不依赖 handler）：删除/恢复若失去幂等，客户端离线重试
+// 会把余额反向两次。回执与 Create 共用 idempotency_records，靠 op 列区分（迁移 0005）。
+func (s *TxService) mutateVisibility(ctx context.Context, uid, bookID, txID int64, clientUuid string, wantDeleted bool, action, op string) (int64, error) {
+	clientUuid = strings.TrimSpace(clientUuid)
 	if uid <= 0 || bookID <= 0 || txID <= 0 {
 		return 0, fmt.Errorf("%w：用户/账本/交易 ID 缺失", ErrInvalidArgument)
 	}
+	if clientUuid == "" || len(clientUuid) > maxClientUUIDLen {
+		return 0, fmt.Errorf("%w：clientUuid 必填且不超过 %d 字节", ErrInvalidArgument, maxClientUUIDLen)
+	}
+	hash := mutateRequestHash(op, bookID, uid, txID)
 
 	// 权限：非成员直接失败；member 仅能操作本人（creator_uid 哨兵：0 视为仅 owner/admin 可见/可改）
 	role, err := RoleOf(s.engine, bookID, uid)
@@ -731,7 +773,29 @@ func (s *TxService) mutateVisibility(ctx context.Context, uid, bookID, txID int6
 	}
 	defer func() { _ = sess.Rollback() }()
 
-	// 目标当前必须处于与操作相反的删除态（删前须存活、恢复前须已删），否则 404
+	// 1) 幂等占位（与 Create 对称）：同键命中即重放原回执，绝不重复反转余额。
+	// 失败路径（404/无权限）会整体回滚，占位一并撤销，客户端可用同一键重试。
+	now := time.Now().Unix()
+	res, err := sess.Exec(`INSERT INTO idempotency_records
+		(book_id, uid, client_uuid, op, request_hash, result_type, result_ids, result_version, created_at)
+		VALUES (?, ?, ?, ?, ?, 0, '', 0, ?)
+		ON CONFLICT(book_id, uid, op, client_uuid) DO NOTHING`,
+		bookID, uid, clientUuid, op, hash, now)
+	if err != nil {
+		return 0, fmt.Errorf("写入幂等回执占位失败：%w", err)
+	}
+	inserted, err := res.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	if inserted == 0 {
+		return replayMutateReceipt(sess, bookID, uid, clientUuid, op, hash)
+	}
+	if inserted != 1 {
+		return 0, ErrIncompleteReceipt
+	}
+
+	// 2) 目标当前必须处于与操作相反的删除态（删前须存活、恢复前须已删），否则 404
 	row, err := loadTxRowByState(sess, bookID, txID, wantDeleted)
 	if err != nil {
 		return 0, err
@@ -751,8 +815,12 @@ func (s *TxService) mutateVisibility(ctx context.Context, uid, bookID, txID int6
 		return 0, err
 	}
 
-	now := time.Now().Unix()
 	for _, r := range group {
+		// 失败关闭：转账若缺方向标记，无法判定该侧是转出还是转入，
+		// 余额反向会静默算成 0（钱不回滚却不报错）。迁移 0006 负责回填。
+		if r.TxType == model.TxTypeTransfer && r.Direction == model.TxDirectionSingle {
+			return 0, fmt.Errorf("%w：转账记录 %d 缺少方向标记，无法精确反向余额", ErrTxDirectionMissing, r.Id)
+		}
 		acct, err := loadTxAccount(sess, bookID, r.AccountId)
 		if err != nil {
 			return 0, err
@@ -789,10 +857,78 @@ func (s *TxService) mutateVisibility(ctx context.Context, uid, bookID, txID int6
 		}
 	}
 
+	// 3) 回写完整回执（result_ids / result_type / result_version）；影响行数不是 1 即整笔回滚。
+	// result_type 复用 Single/Transfer 语义：单笔 1 个 ID、整笔转账 2 个 ID，
+	// 重放时 decodeResultIDs 才能按预期个数校验。
+	kind := model.IdempotencyResultSingle
+	if len(group) == 2 {
+		kind = model.IdempotencyResultTransfer
+	}
+	ids := make([]int64, 0, len(group))
+	for _, r := range group {
+		ids = append(ids, r.Id)
+	}
+	res, err = sess.Exec(`UPDATE idempotency_records
+		SET result_ids = ?, result_type = ?, result_version = ?
+		WHERE book_id = ? AND uid = ? AND op = ? AND client_uuid = ? AND request_hash = ?`,
+		encodeResultIDs(ids), kind, ver, bookID, uid, op, clientUuid, hash)
+	if err != nil {
+		return 0, fmt.Errorf("回写幂等回执失败：%w", err)
+	}
+	updated, err := res.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	if updated != 1 {
+		return 0, ErrIncompleteReceipt
+	}
+
 	if err := sess.Commit(); err != nil {
 		return 0, err
 	}
 	return ver, nil
+}
+
+// replayMutateReceipt 删除/恢复的同键重放：核对请求摘要后返回原版本，不重复反转余额。
+func replayMutateReceipt(sess *xorm.Session, bookID, uid int64, clientUuid, op, hash string) (int64, error) {
+	rec := &model.IdempotencyRecord{}
+	has, err := sess.SQL(
+		`SELECT request_hash, result_ids, result_type, result_version
+		 FROM idempotency_records WHERE book_id = ? AND uid = ? AND op = ? AND client_uuid = ?`,
+		bookID, uid, op, clientUuid).Get(rec)
+	if err != nil {
+		return 0, err
+	}
+	if !has {
+		return 0, ErrIncompleteReceipt
+	}
+	if rec.RequestHash != hash {
+		return 0, ErrCreateConflict
+	}
+	if _, err := decodeResultIDs(rec.ResultIds, rec.ResultType); err != nil || rec.ResultVersion <= 0 {
+		log.Printf("幂等回执不完整：book_id=%d uid=%d op=%q client_uuid=%q result_type=%d result_ids=%q result_version=%d",
+			bookID, uid, op, clientUuid, rec.ResultType, rec.ResultIds, rec.ResultVersion)
+		return 0, fmt.Errorf("%w：该 clientUuid 已有不完整回执，请更换 clientUuid 或联系实例管理员处理",
+			ErrIncompleteReceipt)
+	}
+	if err := sess.Commit(); err != nil {
+		return 0, err
+	}
+	return rec.ResultVersion, nil
+}
+
+// mutateRequestHash 删除/恢复的请求摘要。clientUuid 不参与（它只是定位回执的键）。
+func mutateRequestHash(op string, bookID, uid, txID int64) string {
+	payload := struct {
+		Domain string `json:"domain"`
+		Op     string `json:"op"`
+		BookID int64  `json:"bookId"`
+		Uid    int64  `json:"uid"`
+		TxID   int64  `json:"txId"`
+	}{txMutateHashDomain, op, bookID, uid, txID}
+	b, _ := json.Marshal(payload) // 仅字符串与整数字段，不会失败
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:])
 }
 
 // loadTxRowByState 按"是否已删除"加载交易行；状态不符返回 ErrTransactionNotFound（→HTTP 404）。
@@ -860,11 +996,16 @@ func boolToInt(b bool) int {
 	return 0
 }
 
-// insertAudit 写入一条审计日志（append-only）。before 为变更前实体的序列化。
+// insertAudit 写入一条审计日志（append-only）。before 为变更前实体的序列化；
+// create 没有"变更前"状态，传 nil 即 before_json 留空（实体本身仍在库里可查）。
 func insertAudit(sess *xorm.Session, bookID, actorUid int64, action, entityType string, entityID int64, before interface{}, source string) error {
-	b, err := json.Marshal(before)
-	if err != nil {
-		return fmt.Errorf("审计 before_json 序列化失败：%w", err)
+	var beforeJSON string
+	if before != nil {
+		b, err := json.Marshal(before)
+		if err != nil {
+			return fmt.Errorf("审计 before_json 序列化失败：%w", err)
+		}
+		beforeJSON = string(b)
 	}
 	a := &model.AuditLog{
 		BookId:     bookID,
@@ -872,7 +1013,7 @@ func insertAudit(sess *xorm.Session, bookID, actorUid int64, action, entityType 
 		Action:     action,
 		EntityType: entityType,
 		EntityId:   entityID,
-		BeforeJson: string(b),
+		BeforeJson: beforeJSON,
 		At:         time.Now().Unix(),
 		Source:     source,
 	}

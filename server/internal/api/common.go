@@ -48,6 +48,12 @@ func mapSvcErr(c *gin.Context, err error) {
 		fail(c, http.StatusForbidden, "不能对账本所有者执行该操作")
 	case errors.Is(err, service.ErrCreateConflict):
 		fail(c, http.StatusConflict, "同一 clientUuid 已用于不同内容，请检查请求或更换 clientUuid")
+	case errors.Is(err, service.ErrEntityDeleted):
+		// WBS 4.5：目标已删 → 409 ENTITY_DELETED，绝不静默复活
+		fail(c, http.StatusConflict, "目标已被删除，无法对该数据进行操作")
+	case errors.Is(err, service.ErrTxDirectionMissing):
+		// 失败关闭：宁可报错也不静默算错余额
+		fail(c, http.StatusConflict, "该转账记录缺少方向标记，无法删除或恢复，请联系实例管理员修复数据")
 	case errors.Is(err, service.ErrIncompleteReceipt):
 		fail(c, http.StatusConflict, "该 clientUuid 已有不完整回执，请更换 clientUuid 或联系实例管理员处理")
 	case errors.Is(err, service.ErrConcurrentConflict):

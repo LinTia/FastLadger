@@ -72,10 +72,14 @@ const (
 	ErrCodeForbidden = "FORBIDDEN"
 	// ErrCodeInvalidRequest 请求非法
 	ErrCodeInvalidRequest = "INVALID_REQUEST"
-	// ErrCodeAccountNotFound 账户不存在/已删除（该条离线命令应作废或改投其它账户）
+	// ErrCodeAccountNotFound 账户不存在（该条离线命令应作废或改投其它账户）
 	ErrCodeAccountNotFound = "ACCOUNT_NOT_FOUND"
-	// ErrCodeCategoryNotFound 分类不存在/已删除
+	// ErrCodeCategoryNotFound 分类不存在
 	ErrCodeCategoryNotFound = "CATEGORY_NOT_FOUND"
+	// ErrCodeEntityDeleted 目标实体【已被删除】（WBS 4.5 旧离线数据回流）。
+	// 与 *_NOT_FOUND 的区别：已删是冲突（HTTP 409），客户端应丢弃该条或转
+	// "冲突 / 另存"，服务端绝不静默复活已删数据。
+	ErrCodeEntityDeleted = "ENTITY_DELETED"
 )
 
 // SyncBatch 一次 pull 的完整结果。
@@ -397,10 +401,14 @@ func pushStatusOf(err error) (status, code, message string) {
 		return PushStatusConflict, ErrCodeIncompleteReceipt, "该 clientUuid 已有不完整回执，请更换 clientUuid 或联系实例管理员处理"
 	case errors.Is(err, ErrConcurrentConflict):
 		return PushStatusConflict, ErrCodeConcurrentConflict, "数据已被并发修改，请重试"
+	// WBS 4.5：已删实体是【冲突】（409），不是"请求非法"——客户端据此丢弃或另存，
+	// 而不是当成可修正的命令重试。必须排在 *_NOT_FOUND 之前判定（二者互斥，但顺序更稳）。
+	case errors.Is(err, ErrEntityDeleted):
+		return PushStatusConflict, ErrCodeEntityDeleted, "目标已被删除：请丢弃该条或另存副本，服务端不会自动恢复已删数据"
 	case errors.Is(err, ErrAccountNotFound):
-		return PushStatusInvalid, ErrCodeAccountNotFound, "账户不存在或已删除"
+		return PushStatusInvalid, ErrCodeAccountNotFound, "账户不存在"
 	case errors.Is(err, ErrCategoryNotFound):
-		return PushStatusInvalid, ErrCodeCategoryNotFound, "分类不存在或已删除"
+		return PushStatusInvalid, ErrCodeCategoryNotFound, "分类不存在"
 	case errors.Is(err, ErrInvalidCreate), errors.Is(err, ErrInvalidArgument):
 		return PushStatusInvalid, ErrCodeInvalidRequest, "该条命令非法（请检查 clientUuid/金额/账户/分类）"
 	default:

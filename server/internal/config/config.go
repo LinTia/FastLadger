@@ -22,6 +22,9 @@ const (
 
 	// minJWTSecretLen JWT 密钥最短长度，短于此视为不安全
 	minJWTSecretLen = 32
+
+	// DefaultAuditRetentionDays 审计日志默认保留天数（PRD §12.1：保留 1 年）
+	DefaultAuditRetentionDays = 365
 )
 
 // jwtPlaceholders 常见的"没改过"的占位值
@@ -45,6 +48,8 @@ type Config struct {
 	RecycleTTLDays int
 	// InviteTTLDays 邀请码有效期天数（PRD §12.1 决策：默认 7）
 	InviteTTLDays int
+	// AuditRetentionDays 审计日志保留天数（PRD §12.1 决策：保留 1 年）
+	AuditRetentionDays int
 }
 
 // Load 从环境变量加载配置并校验
@@ -57,6 +62,8 @@ func Load() (*Config, error) {
 		EnableRegister: envBool("EBK_ENABLE_REGISTER", false),
 		RecycleTTLDays: envInt("EBK_RECYCLE_TTL_DAYS", 30),
 		InviteTTLDays:  envInt("EBK_INVITE_TTL_DAYS", 7),
+		// 审计保留 1 年（PRD §12.1）；到期由 PurgeAuditLogs 硬清除
+		AuditRetentionDays: envInt("EBK_AUDIT_RETENTION_DAYS", DefaultAuditRetentionDays),
 	}
 	if err := c.validate(); err != nil {
 		return nil, err
@@ -82,6 +89,9 @@ func (c *Config) validate() error {
 	}
 	if c.InviteTTLDays <= 0 {
 		return fmt.Errorf("EBK_INVITE_TTL_DAYS 必须为正整数，当前=%d", c.InviteTTLDays)
+	}
+	if c.AuditRetentionDays <= 0 {
+		return fmt.Errorf("EBK_AUDIT_RETENTION_DAYS 必须为正整数，当前=%d", c.AuditRetentionDays)
 	}
 	return nil
 }

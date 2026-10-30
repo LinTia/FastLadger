@@ -164,7 +164,7 @@ type Transaction struct {
 	TimezoneOffset int    `xorm:"notnull default 0" json:"timezoneOffset"`
 	Source         int8   `xorm:"notnull default 0" json:"source"`
 	RelatedId      int64  `xorm:"default 0" json:"relatedId"`
-	Direction       int8   `xorm:"notnull default 0" json:"direction"` // 0=单笔 1=转出侧 2=转入侧（仅转账）；删除/恢复时据其精确反向余额
+	Direction      int8   `xorm:"notnull default 0" json:"direction"` // 0=单笔 1=转出侧 2=转入侧（仅转账）；删除/恢复时据其精确反向余额
 	ClientUuid     string `xorm:"varchar(64) default ''" json:"clientUuid"`
 	SyncVersion    int64  `xorm:"notnull default 0" json:"syncVersion"`
 	Deleted        bool   `xorm:"notnull default 0" json:"deleted"` // 同步墓碑标识：客户端须以 deleted=true 覆盖本地行
@@ -208,7 +208,10 @@ const (
 
 func (Transaction) TableName() string { return "transactions" }
 
-// IdempotencyRecord 幂等回执（唯一键 book_id + uid + client_uuid）
+// IdempotencyRecord 幂等回执（唯一键 book_id + uid + op + client_uuid）
+//
+// op 由迁移 0005 补入，用于区分 create / delete / restore：没有它时同一个
+// clientUuid 先删后恢复会互相命中回执（WBS 4.2 / 4.4）。
 //
 // 老库升级【不得删除旧回执】，否则离线重试会产生重复账（0001 注释）。
 type IdempotencyRecord struct {
@@ -216,11 +219,19 @@ type IdempotencyRecord struct {
 	BookId        int64  `xorm:"notnull"`
 	Uid           int64  `xorm:"notnull"`
 	ClientUuid    string `xorm:"varchar(64) notnull"`
+	Op            string `xorm:"varchar(16) notnull default 'create'"`
 	RequestHash   string `xorm:"varchar(128) notnull"`
 	ResultIds     string `xorm:"text"`
 	ResultType    int8   `xorm:"default 0"`
 	ResultVersion int64  `xorm:"default 0"`
 	CreatedAt     int64
 }
+
+// 幂等操作类型（idempotency_records.op）——由迁移 0005 引入
+const (
+	IdemOpCreate  = "create"
+	IdemOpDelete  = "delete"
+	IdemOpRestore = "restore"
+)
 
 func (IdempotencyRecord) TableName() string { return "idempotency_records" }

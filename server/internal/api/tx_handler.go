@@ -115,7 +115,10 @@ func (h *ledgerHandler) getTransaction(c *gin.Context) {
 }
 
 // deleteTransaction 阶段 4：删除一笔交易（整笔，含转账对侧）。
-// 软删 + 余额精确反向 + 版本递增 + 审计，均在服务层完成。
+// 软删 + 余额精确反向 + 版本递增 + 审计 + 幂等回执，均在服务层完成。
+//
+// clientUuid 经查询参数传入（DELETE 携带 body 在部分代理/客户端下不可靠）；
+// 缺失即 400（服务层强制，避免重试把余额反向两次）。
 func (h *ledgerHandler) deleteTransaction(c *gin.Context) {
 	bookID, good := bookID(c)
 	if !good {
@@ -125,7 +128,7 @@ func (h *ledgerHandler) deleteTransaction(c *gin.Context) {
 	if !good {
 		return
 	}
-	ver, err := h.txs.Delete(c.Request.Context(), currentUID(c), bookID, txID)
+	ver, err := h.txs.Delete(c.Request.Context(), currentUID(c), bookID, txID, c.Query("clientUuid"))
 	if err != nil {
 		mapSvcErr(c, err)
 		return
@@ -145,11 +148,37 @@ func (h *ledgerHandler) restoreTransaction(c *gin.Context) {
 	if !good {
 		return
 	}
-	ver, err := h.txs.Restore(c.Request.Context(), currentUID(c), bookID, txID)
+	ver, err := h.txs.Restore(c.Request.Context(), currentUID(c), bookID, txID, c.Query("clientUuid"))
 	if err != nil {
 		mapSvcErr(c, err)
 		return
 	}
 	notifyDataChanged(bookID, ver)
 	ok(c, gin.H{"version": ver})
+}
+
+// listRecycleBin 回收站视图（WBS 4.1）：列出本账本已软删的交易（墓碑）。
+//
+// 路径刻意取 /books/:id/recycle 而非 /books/:id/transactions/recycle：
+// 后者与已注册的 GET /books/:id/transactions/:txId 的通配段冲突，gin 注册时会 panic。
+func (h *ledgerHandler) listRecycleBin(c *gin.Context) {
+	bookID, good := bookID(c)
+	if !good {
+		return
+	}
+	page, good := queryInt(c, "page")
+	if !good {
+		return
+	}
+	count, good := queryInt(c, "count")
+	if !good {
+		return
+	}
+	list, total, err := h.txs.ListDeleted(currentUID(c), bookID, page, count)
+	if err != nil {
+		mapSvcErr(c, err)
+		return
+	}
+	effPage, effCount := service.NormalizePaging(page, count)
+	ok(c, gin.H{"items": list, "total": total, "page": effPage, "count": effCount})
 }
