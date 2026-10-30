@@ -868,12 +868,12 @@ CREATE INDEX idx_audit_entity ON audit_logs(entity_type, entity_id);
 
 ```json
 { "code": 0, "data": { "results": [
-  { "clientUuid": "u-1", "status": "created",  "id": 101, "transactionIds": [101],      "version": 57 },
-  { "clientUuid": "u-2", "status": "replayed", "id": 88,  "transactionIds": [88],       "version": 51 },
-  { "clientUuid": "u-3", "status": "conflict", "errorCode": "CONFLICT", "message": "…" },
-  { "clientUuid": "u-4", "status": "invalid",  "errorCode": "INVALID_REQUEST", "message": "…" },
-  { "clientUuid": "u-5", "status": "forbidden","errorCode": "FORBIDDEN", "message": "…" },
-  { "clientUuid": "u-6", "status": "error",    "errorCode": "INTERNAL_ERROR", "message": "…" }
+  { "clientUuid": "u-1", "status": "created",  "id": 101, "transactionIds": [101], "version": 57 },
+  { "clientUuid": "u-2", "status": "replayed", "id": 88,  "transactionIds": [88],  "version": 51 },
+  { "clientUuid": "u-3", "status": "conflict", "errorCode": "CLIENT_UUID_CONFLICT", "message": "…" },
+  { "clientUuid": "u-4", "status": "invalid",  "errorCode": "INVALID_REQUEST",      "message": "…" },
+  { "clientUuid": "u-5", "status": "forbidden","errorCode": "FORBIDDEN",            "message": "…" },
+  { "clientUuid": "u-6", "status": "error",    "errorCode": "INTERNAL_ERROR",       "message": "…" }
 ] } }
 ```
 
@@ -885,6 +885,19 @@ CREATE INDEX idx_audit_entity ON audit_logs(entity_type, entity_id);
 | `invalid` | 参数非法（如缺 clientUuid、金额越界、转账缺对手账户） | 标记该项为需人工修正，**不自动重试** |
 | `forbidden` | 无权（非成员 / 编辑他人记录） | 提示无权限，丢弃该项 |
 | `error` | **服务端内部错误**（磁盘满、`database is locked` 等） | **原样重试，禁止换 clientUuid** |
+
+**`errorCode` 枚举（机器可判，`message` 仅供人读）**：
+
+| `errorCode` | 通常伴随 `status` | 含义 | 客户端动作 |
+|---|---|---|---|
+| `CLIENT_UUID_CONFLICT` | `conflict` | 同一 `clientUuid` 被用于**不同**请求内容 | 换新 clientUuid 另存，或放弃 |
+| `INCOMPLETE_RECEIPT` | `conflict` | 该 `clientUuid` 已有**损坏/不完整**回执（占位成功但结果未写全） | **换新 clientUuid** 或人工介入；用同一键重试永不成功 |
+| `CONCURRENT_CONFLICT` | `conflict` | 目标实体被并发修改 | 拉取最新后由用户决定覆盖/放弃 |
+| `INVALID_REQUEST` | `invalid` | 请求校验失败（缺 `clientUuid`、金额越界、转账缺对手账户等） | 标记人工修正，不自动重试 |
+| `ACCOUNT_NOT_FOUND` | `invalid` | 账户不存在或已删除 | 该条离线命令作废或改投其它账户 |
+| `CATEGORY_NOT_FOUND` | `invalid` | 分类不存在或已删除 | 同上 |
+| `FORBIDDEN` | `forbidden` | 非账本成员 | 丢弃该项 |
+| `INTERNAL_ERROR` | `error` | 服务内部错误（**不外露**实现细节） | **原样重试**，保留离线队列 |
 
 > ⚠️ **`conflict` 与 `error` 必须区分**：`conflict` 会触发"另存副本"（通常意味着换新 `clientUuid` 重试）；若把内部错误也标成 `conflict`，客户端换键重试就会**把同一笔钱记两遍**。这是 P1 级会计后果，不是文案问题。
 

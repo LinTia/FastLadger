@@ -364,3 +364,71 @@ func TestQAS3KnownRaceRefreshOverwritesNewerSubscribe(t *testing.T) {
 		t.Fatal("旧 Refresh 结果覆盖了更新的 Subscribe 结果：该连接会按过期权限收发明细（P3-1 回归）")
 	}
 }
+
+// TestQAS3KickOutScopedToBook 被移除成员只应丢失"被移除的那个账本"的订阅，
+// 其他账本的订阅与可见性缓存必须原样保留。
+//
+// 为什么单独加这条：N2 的摘除动作是 `delete(c.BookIds, bookID)`，一旦有人写成
+// 清空整张表（或漏带 bookID），该成员会被踢出**所有**账本——多账本用户直接失联，
+// 而且现象是"某些账本突然不实时了"，极难定位。
+func TestQAS3KickOutScopedToBook(t *testing.T) {
+	chk := newQAChecker()
+	chk.set(100, 1, true)  // 账本 1：成员
+	chk.set(100, 2, false) // 账本 2：成员但关闭互看
+	hub := NewHub(chk.check)
+
+	c := NewClient()
+	hub.Register(c)
+	hub.Subscribe(c, []int64{1, 2}, 100)
+
+	// 从账本 1 移除（只影响 1）
+	chk.notMember(100, 1)
+	hub.RefreshVisibility(1)
+
+	if c.Subscribed(1) {
+		t.Fatal("被移除的账本 1 应被摘除订阅")
+	}
+	if c.CanView(1) {
+		t.Fatal("被移除账本的可见性缓存必须清除")
+	}
+	if !c.Subscribed(2) {
+		t.Fatal("账本 2 的订阅不得被误删（摘除必须带 bookID）")
+	}
+	if c.CanView(2) {
+		t.Fatal("账本 2 的 canView 应保持 false（原本就关闭互看），不得被改成 true")
+	}
+
+	// 账本 2 的广播照常送达，账本 1 不再送达
+	hub.BroadcastToBook(2, []byte("full-2"), []byte("sensitive-2"))
+	select {
+	case m := <-c.Send:
+		if string(m) != "sensitive-2" {
+			t.Fatalf("账本 2 应继续收到脱敏载荷，实际 %s", m)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("账本 2 的订阅被误删：收不到广播")
+	}
+	hub.BroadcastToBook(1, []byte("full-1"), []byte("sensitive-1"))
+	select {
+	case m := <-c.Send:
+		t.Fatalf("被移除的账本 1 不得再投递：%s", m)
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	// 重新加入账本 1：订阅与可见性都要恢复（且取当时的实时判定）
+	chk.set(100, 1, true)
+	hub.Subscribe(c, []int64{1}, 100)
+	if !c.Subscribed(1) || !c.CanView(1) {
+		t.Fatalf("重新加入后订阅/可见性应恢复，实际 sub=%v canView=%v",
+			c.Subscribed(1), c.CanView(1))
+	}
+	hub.BroadcastToBook(1, []byte("full-1"), []byte("sensitive-1"))
+	select {
+	case m := <-c.Send:
+		if string(m) != "full-1" {
+			t.Fatalf("重新加入后应收到完整载荷，实际 %s", m)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("重新加入后未收到广播")
+	}
+}

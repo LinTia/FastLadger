@@ -2,6 +2,28 @@
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.28] - 2026-10-30
+
+### 阶段 3 定向回归通过 + 契约文档补全（收尾）
+
+- **QA 定向回归判定 `NoOne`**：6 个复核点全部通过，无 P0/P1/P2。关键不变量现有**可执行断言**兜底，其中 3 条为 QA 本轮新增的**全仓级守卫**（且已证明非空转：注入违规立刻红）：
+  - `TestQAS3SingleVisibilityWritePathRepoWide`：递归扫描 `server/internal/**` 生产代码，凡"引用 `MembersCanViewOthers` 且调用 `Cols`/`Exec`"的函数**只允许 `SetVisibility`**；
+  - `TestQAS3NoHubLockWhileHoldingClientLock` / `TestQAS3ClientMutexNeverNests`：持 `c.mu` 期间不得访问任何 `h.*`、同一函数内不得嵌套加锁；
+  - `TestQAS3SetVisibilityIdempotentGuardPrecedesWrite`：补上文档第 3 条硬约束里原先缺断言的"**不写库**"半边。
+  - 另核实 `RefreshVisibility` 踢出**仅限目标账本**（多账本用户不会被整体踢掉），且重新加入可恢复订阅。
+- **P3-1 修复（文档）**：`落地方案 §5.1` 的 `sync/push` 示例原写 `"errorCode": "CONFLICT"`，但实现**从不发该值**。已改为真实取值，并补 **`errorCode` 8 值枚举表**（`CLIENT_UUID_CONFLICT` / `INCOMPLETE_RECEIPT` / `CONCURRENT_CONFLICT` / `INVALID_REQUEST` / `ACCOUNT_NOT_FOUND` / `CATEGORY_NOT_FOUND` / `FORBIDDEN` / `INTERNAL_ERROR`），逐项标注伴随 `status` 与客户端动作。
+- **澄清一次"偶发失败"误报**：此前记录的"`go test ./internal/api/` 出现 1 次 `--- FAIL`"经 QA 约 40 次连跑与主理人复验，判定为**测量假象**——被 Application Control 拦截时测试可执行文件根本不启动（本次复现：`blocked=1` 且 `PASS=0`），而我的统计脚本把两次不同运行的 PASS/FAIL 拼在了一起。**诊断规则已确立：真失败必有 `--- FAIL: <TestName>`；只出现裸 `FAIL <pkg>` 且伴随 `An Application Control policy has blocked this file` → 判"未执行"，重跑即可。**
+- **测试基线（主理人实测，逐包单次运行内同时统计）**：`service 61 + api 29 + ws 24 + instance 11 + model 3` = **128 PASS / 0 FAIL / 1 SKIP**（SKIP = Windows 无 POSIX 权限位）；`gofmt -l .` 空、`go build ./...`、`go vet ./...` 通过。
+
+#### 登记项（已知、暂不修，不阻塞收尾）
+
+| 编号 | 内容 | 判断 |
+|---|---|---|
+| P3-3 | `BookService.Update` 的"改名"与"可见性"是**两次独立写、无共同事务**：并发软删账本时可能出现"名字已写成功、随后 `SetVisibility` 返 409" | 既有非事务风格（非本轮引入），概率极低；阶段 4 若统一审计/事务边界时顺手合并 |
+| P3-4 | 账本**软删后其订阅者不会被摘除**（`CanViewDetail` 对已删账本返回 `(false,nil)` → `member=true` → 只降 `canView` 不踢） | 不泄露：已删账本的任何写路径都会 403；客户端按 `book_deleted` 自行停订阅。若将来收紧，可让 `CanViewDetail` 对已删账本返回错误 |
+| P3-5 | 协调事件的 `version` 在 `currentBookVersion` 读失败时回落 `0` | 已记日志；客户端按 §5.2"缺失/异常按有更新处理"fail-safe，可接受 |
+| — | holdings 无写接口故无 `data_changed` | 已在 `ledger_handler.go` 留 TODO，上线时必接 |
+
 ## [1.27] - 2026-10-30
 
 ### 新增：**阶段 3（同步与家庭协同）** 落地 + QA 验收整改
