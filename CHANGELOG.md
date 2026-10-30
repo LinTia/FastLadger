@@ -2,6 +2,35 @@
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.40] - 2026-10-30
+
+### GPT v1.8 阶段 0–3 回溯式代码复核（GPT-R35–GPT-R52）
+
+- **审查基线**：业务代码基线 be5439d6；最新业务代码提交 1a7d07ad；本轮只审查代码与契约，不修改业务实现。
+- **统计**：新增 18 项 Finding：1 项 P1、15 项 P2、2 项 P3。详见 gpt/v1.8/审核结果.md 与 gpt/v1.8/findings.json。
+- **GPT-R35 / P2**：SQLite DB/WAL/SHM 权限未显式收紧；常见 umask 0022 下可能以 0644 创建，需部署环境验证。
+- **GPT-R36 / P2**：6 个迁移脚本均未定义 FOREIGN KEY；foreign_keys=on 目前没有实际关系约束可执行。
+- **GPT-R37 / P3**：migrate.Check 调用 ensureVersionTable，启动检查会创建 schema_migrations，与只读约定不一致。
+- **GPT-R38 / P2**：迁移框架不拒绝重复版本，也不验证已应用版本集合完整性。
+- **GPT-R39 / P2**：instance.meta 写入只 WriteFile+Rename，没有 fsync 文件和目录；恢复世代存在断电持久性窗口。
+- **GPT-R40 / P1**：邀请码可授予 admin，但没有列出/撤销接口，泄漏邀请无法提前失效。
+- **GPT-R41 / P2**：bound_email 字段存在，但邀请 API/兑换流程只实现用户名绑定。
+- **GPT-R42 / P2**：邀请创建、使用、失败尝试、过期未按 PRD 写入生命周期审计。
+- **GPT-R43 / P2**：账本软删除后，成员列表、创建邀请和使用旧邀请的路径仍可操作该账本。
+- **GPT-R44 / P2**：限流器不删除过期 key，不同 IP 持续出现时 hits map 可无界增长。
+- **GPT-R45 / P2**：注册未限制用户名长度；超过 bcrypt 72 字节的密码走通用错误路径。
+- **GPT-R46 / P3**：登录 handler 将所有错误（含 DB/审计/签名故障）统一映射为 401。
+- **GPT-R47 / P2**：账户 parent_id 可通过把后代设为上级形成循环。
+- **GPT-R48 / P2**：Sync.Pull 水位主要按交易行计算，账户/分类/持仓行可使批次大幅超过 limit。
+- **GPT-R49 / P2**：WebSocket 订阅消息没有账本 ID 数量上限或去重，单帧可触发大量数据库鉴权查询。
+- **GPT-R50 / P2**：pending Subscribe 与 RefreshVisibility 存在撤权竞态，旧授权结果可能在撤权后写回。
+- **GPT-R51 / P2**：WebSocket 只在握手时校验 JWT，连接可超过 24 小时 token 有效期继续存活。
+- **GPT-R52 / P2 / 待 owner 裁决**：PRD 要求多端会话查看/撤销，但 jti 未持久化、没有会话管理 API；WBS 未明确阶段归属。
+- **既有 Finding 范围补充**：GPT-R27 增补 NewMemberService inviteTTLDays 秒数乘法溢出；GPT-R34 增补 config.envInt 对非法环境变量静默回退默认值，错误配置回退 30 天可能导致早于预期的回收站清理。
+- **历史去重**：重新确认 D-R07–D-R09、WB-R01、GPT-R24–R25 已有对应实现/测试，不重复登记；[1.28] 已知“账本软删不摘 WebSocket 订阅”也未重复计数。GPT-R43 只覆盖 HTTP 成员/邀请路径。
+- **验证边界**：静态审查；未在本轮本地运行 Go/SQLite/race/WebSocket/断电测试。历史 Actions run 41034510229 的 170 PASS / 0 FAIL 不覆盖本轮新增场景。
+- **交付物**：gpt/v1.8/审核结果.md、gpt/v1.8/findings.json、gpt/v1.8/verification/runtime-results.json。
+
 ## [1.39] - 2026-10-30
 
 ### GPT v1.7 扩展复核（GPT-R31–GPT-R34，待 owner 裁决）
