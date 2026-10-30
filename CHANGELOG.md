@@ -2,6 +2,24 @@
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.36] - 2026-10-30
+
+### 修复 CI 连续 4 次失败：阶段 4 的新路径未登记进既有【架构守卫用例】
+
+run #16（`644ddab`）起连续 4 次失败。**守卫本身是对的，漏登记的是我**——阶段 4 新增的写/读路径必须在守卫白名单里显式登记，不能靠"绕过"。
+
+1. **gofmt 失败**（run #16）：`internal/model/ledger.go` 未格式化（`Direction` 字段对齐破坏）。已在 `d45f88b` 修掉。
+2. **`TestQAS3SingleCreateEntry`（余额写入闭环守卫）**：`mutateVisibility` 直接调 `createChangeBalance`，被判"绕过单一创建入口"。
+   修：改为**按原语区分授权白名单**——`createChangeBalance` 额外授权 `mutateVisibility`（删除/恢复是【变更】不是【创建】，必须复用同一条原子 UPDATE 做精确反向）；`insertTxRow` 仍**严格只许**两个创建 helper，因为删除/恢复不新增行。
+3. **`TestQAS3VisibilityCondWiredIntoAllReadPaths`（可见性读路径守卫）**：回收站 `ListDeleted` 是第四处读路径却未登记。
+   修：加入"必须调用 `txVisibilityCond`"的读路径清单与授权使用方白名单，并把用例重命名（原名写死"三处"）。**回收站同样受可见性约束**——否则关闭互看后，成员仍能从回收站看到他人已删账目。
+4. **`TestQATransactionRoutesContract`（原 `...CreateAndQueryOnly`，路由契约守卫）**：`DELETE` 曾被明令禁止，理由是"提前注册却未实现，会变成能删但余额不回滚的隐患"。阶段 4 已实现（整笔、余额精确反向、审计、幂等回执），故转入 allowed，并登记 `restore` 与 `recycle` 路由；`PUT`（改交易）未实现继续禁止，`/transfer`、`/batch` 等第二条创建路径**永远禁止**。
+
+以上均为"把合法新路径显式登记进白名单"，**未删除或放宽任何一条守卫断言**。
+
+- **验证**：Actions run [41029584197](https://github.com/LinTia/FastLadger/actions/runs/41029584197) **全绿**——gofmt / vet / build / SQLite 冒烟 / 全量测试 / `-race` 六步全 success；**164 PASS / 0 FAIL**，无 race。至此 [1.35] 的"运行时正确性以 CI 为准"已由真机证据闭合。
+- **值得记一笔的教训**：本项目用"调用图/路由白名单"类用例来固化架构不变量（《转账入口裁决》的单一创建入口等）。**任何新增写入或读取路径都会触发这些用例**——这是特性而非障碍，新增路径时应主动更新守卫，而不是等 CI 报错。
+
 ## [1.35] - 2026-10-30
 
 ### 阶段 4 补全：删除/恢复幂等回执、回收站 TTL、审计写入点与保留期、4.5 已删实体拦截
