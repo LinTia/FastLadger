@@ -21,6 +21,42 @@ import (
 	"fastledger/internal/model"
 )
 
+// remediationRefsIdent 判断函数体内是否引用了某个标识符（含返回值、变量、常量）
+func remediationRefsIdent(fn *ast.FuncDecl, name string) bool {
+	found := false
+	ast.Inspect(fn.Body, func(n ast.Node) bool {
+		if id, ok := n.(*ast.Ident); ok && id.Name == name {
+			found = true
+			return false
+		}
+		return true
+	})
+	return found
+}
+
+// remediationCallCount 统计函数体内对 callee 的调用次数（选择器取 Sel，标识符取本身）
+func remediationCallCount(fn *ast.FuncDecl, callee string) int {
+	n := 0
+	ast.Inspect(fn.Body, func(node ast.Node) bool {
+		call, ok := node.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		switch fun := call.Fun.(type) {
+		case *ast.SelectorExpr:
+			if fun.Sel.Name == callee {
+				n++
+			}
+		case *ast.Ident:
+			if fun.Name == callee {
+				n++
+			}
+		}
+		return true
+	})
+	return n
+}
+
 // ---------------------------------------------------------------------------
 // GPT-R26：转账配对校验（纯函数部分）
 // ---------------------------------------------------------------------------
@@ -325,6 +361,169 @@ func TestR28NoEngineRoleReadInWritePaths(t *testing.T) {
 			}
 			t.Errorf("%s.%s 调用了 RoleOf（engine 版本）：写路径必须改用 roleOfTx", name, fn.Name.Name)
 		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// GPT-R29：before_json 必须在事务内读取（源码顺序断言）
+// ---------------------------------------------------------------------------
+
+// TestR29BeforeJSONReadInsideWriteTransaction 写审计的"变更前状态"必须在事务内取。
+//
+// 断言：insertAudit（或 Update 委托的 SetVisibility）必须晚于 Begin，
+// 且晚于事务内的状态读取（roleOfTx / loadBookTx）——否则 before_json 记的是
+// 事务外那份可能已经过期的旧值（GPT-R29）。
+func TestR29BeforeJSONReadInsideWriteTransaction(t *testing.T) {
+	cases := []struct {
+		file     string
+		fn       string
+		readCall string // 事务内的"变更前状态"读取
+	}{
+		{"member.go", "ChangeRole", "roleOfTx"},
+		{"member.go", "Remove", "roleOfTx"},
+		{"book.go", "SetVisibility", "loadBookTx"},
+	}
+	for _, c := range cases {
+		f, fset := remediationParse(t, c.file)
+		fn := qas3Func(f, c.fn)
+		if fn == nil {
+			t.Errorf("%s 中找不到 %s", c.file, c.fn)
+			continue
+		}
+		beginLine := remediationFirstCallLine(fn, fset, "Begin")
+		readLine := remediationFirstCallLine(fn, fset, c.readCall)
+		auditLine := remediationFirstCallLine(fn, fset, "insertAudit")
+		if beginLine == 0 || readLine == 0 || auditLine == 0 {
+			t.Errorf("%s.%s 缺少 Begin / %s / insertAudit 之一（begin=%d read=%d audit=%d）",
+				c.file, c.fn, c.readCall, beginLine, readLine, auditLine)
+			continue
+		}
+		if !(beginLine < readLine && readLine < auditLine) {
+			t.Errorf("%s.%s 的顺序应为 Begin(L%d) → %s(L%d) → insertAudit(L%d)，实际顺序不符："+
+				"before_json 可能记到事务外的旧值",
+				c.file, c.fn, beginLine, c.readCall, readLine, auditLine)
+		}
+	}
+
+	// Update 自身不写审计，它把可见性审计委托给 SetVisibility——
+	// 委托调用也必须在本事务内（Begin 之后、Commit 之前），见 R33 的顺序断言。
+	f, fset := remediationParse(t, "book.go")
+	upd := qas3Func(f, "Update")
+	if upd == nil {
+		t.Fatal("book.go 中找不到 Update")
+	}
+	beginLine := remediationFirstCallLine(upd, fset, "Begin")
+	readLine := remediationFirstCallLine(upd, fset, "loadBookTx")
+	setVisLine := remediationFirstCallLine(upd, fset, "SetVisibility")
+	if !(beginLine < readLine && readLine < setVisLine) {
+		t.Fatalf("Update 的顺序应为 Begin(L%d) → loadBookTx(L%d) → SetVisibility(L%d)，实际不符",
+			beginLine, readLine, setVisLine)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// GPT-R33：PUT /books/:id 名称 + 可见性必须同一事务（源码顺序断言）
+// ---------------------------------------------------------------------------
+
+// TestR33BookUpdateSingleTransaction Update 必须只开一个事务，且名称写入、可见性委托、
+// 提交都在这个事务内完成；不得出现"名称先提交、开关后提交"的两段式。
+func TestR33BookUpdateSingleTransaction(t *testing.T) {
+	f, fset := remediationParse(t, "book.go")
+	fn := qas3Func(f, "Update")
+	if fn == nil {
+		t.Fatal("book.go 中找不到 Update")
+	}
+	if got := remediationCallCount(fn, "Begin"); got != 1 {
+		t.Fatalf("Update 应只开启 1 个写事务，实际 Begin 调用 %d 次", got)
+	}
+	if got := remediationCallCount(fn, "Commit"); got != 1 {
+		t.Fatalf("Update 应只提交 1 次，实际 Commit 调用 %d 次", got)
+	}
+	beginLine := remediationFirstCallLine(fn, fset, "Begin")
+	nameLine := remediationFirstCallLine(fn, fset, "Cols")
+	setVisLine := remediationFirstCallLine(fn, fset, "SetVisibility")
+	commitLine := remediationFirstCallLine(fn, fset, "Commit")
+	if nameLine == 0 || setVisLine == 0 {
+		t.Fatalf("Update 必须同时处理名称（Cols）与可见性（SetVisibility）：name=%d vis=%d", nameLine, setVisLine)
+	}
+	if !(beginLine < nameLine && nameLine < setVisLine && setVisLine < commitLine) {
+		t.Fatalf("Update 的顺序应为 Begin(L%d) → 名称写入(L%d) → SetVisibility(L%d) → Commit(L%d)，"+
+			"实际顺序不符（会留下半截状态）", beginLine, nameLine, setVisLine, commitLine)
+	}
+	// 名称写入与可见性写入之间不得出现提交（同事务）。
+	// 注意：`defer func(){ _ = sess.Rollback() }()` 是失败路径的清理，它必然早于写入，
+	// 因此这里只看 Commit——提前 Commit 才是"两段式提交"。
+	if commitLine < setVisLine {
+		t.Fatalf("Update 在 SetVisibility（L%d）之前就 Commit（L%d）：两处写入不在同一事务",
+			setVisLine, commitLine)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// GPT-R31 / R53：引用检查口径（源码断言）
+// ---------------------------------------------------------------------------
+
+// TestR31ReferenceCheckCoversTombstones 账户 / 分类删除的"被引用"统计不得再用
+// `deleted = 0` 过滤交易——那会把回收站里的软删交易漏掉（GPT-R31）。
+func TestR31ReferenceCheckCoversTombstones(t *testing.T) {
+	for _, c := range []struct{ file, fn, table string }{
+		{"account.go", "Delete", "transactions"},
+		{"category.go", "Delete", "transactions"},
+	} {
+		f, _ := remediationParse(t, c.file)
+		fn := qas3Func(f, c.fn)
+		if fn == nil {
+			t.Fatalf("%s 中找不到 %s", c.file, c.fn)
+		}
+		sql := ""
+		ast.Inspect(fn.Body, func(n ast.Node) bool {
+			lit, ok := n.(*ast.BasicLit)
+			if !ok || lit.Kind != token.STRING {
+				return true
+			}
+			if strings.Contains(lit.Value, "FROM "+c.table) {
+				sql += lit.Value
+			}
+			return true
+		})
+		if sql == "" {
+			t.Fatalf("%s.%s 未找到统计 %s 引用的 SQL", c.file, c.fn, c.table)
+		}
+		if strings.Contains(sql, "deleted = 0") {
+			t.Errorf("%s.%s 的交易引用统计仍带 `deleted = 0`：软删（回收站）交易被漏掉，"+
+				"恢复时会指向已删资源。SQL=%s", c.file, c.fn, sql)
+		}
+	}
+}
+
+// TestR53AccountDeleteRejectsActiveChildren 账户删除必须先拒绝"仍有活跃子账户"。
+func TestR53AccountDeleteRejectsActiveChildren(t *testing.T) {
+	f := qas3Parse(t, "account.go")
+	fn := qas3Func(f, "Delete")
+	if fn == nil {
+		t.Fatal("account.go 中找不到 Delete")
+	}
+	// 必须统计 parent_id 指向本账户的活跃子账户，并在 >0 时拒绝
+	found := false
+	ast.Inspect(fn.Body, func(n ast.Node) bool {
+		lit, ok := n.(*ast.BasicLit)
+		if !ok || lit.Kind != token.STRING {
+			return true
+		}
+		if strings.Contains(lit.Value, "parent_id = ?") {
+			found = true
+			return false
+		}
+		return true
+	})
+	if !found {
+		t.Fatal("account.Delete 未统计 parent_id 子账户：删父账户会留下悬空 parent_id（GPT-R53）")
+	}
+	if !remediationRefsIdent(fn, "ErrAccountHasChildren") {
+		t.Fatal("account.Delete 必须在存在活跃子账户时返回 ErrAccountHasChildren（GPT-R53）")
+	}
+	if !remediationRefsIdent(fn, "children") {
+		t.Fatal("account.Delete 缺少子账户计数变量 children（实现已变化，请更新用例）")
 	}
 }
 

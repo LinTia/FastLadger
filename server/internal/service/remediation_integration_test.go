@@ -12,6 +12,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -531,5 +532,304 @@ func TestR32RestoreTransferClearsDeletedAtBothSides(t *testing.T) {
 	}
 	if e.balance(e.assetID) != -4000 || e.balance(e.toAssetID) != 4000 {
 		t.Fatalf("恢复后余额应回到 -4000/4000，实际 %d/%d", e.balance(e.assetID), e.balance(e.toAssetID))
+	}
+}
+
+// ---------------------------------------------------------------------------
+// GPT-R29：before_json 必须记录"提交时刻"的变更前状态
+// ---------------------------------------------------------------------------
+
+// TestR29BeforeJSONReflectsLatestStateInTx 连续两次变更：第二次的 before_json 必须是
+// 【第一次变更之后】的状态，而不是事务外读到的初始值（GPT-R29）。
+func TestR29BeforeJSONReflectsLatestStateInTx(t *testing.T) {
+	e := newTestEnv(t)
+	ms := newMemberSvc(t, e)
+	bs := NewBookService(e.engine, version.NewRepo())
+	target := insertUser(t, e, "r29-target")
+	addMember(t, e, target, model.RoleMember)
+
+	// ① member(3) → admin(2)：before_json 必须是 member
+	must(t, ms.ChangeRole(e.uid, e.bookID, target, model.RoleAdmin))
+	if b := auditBeforeJSON(e, model.AuditActionPermissionChange, target); !strings.Contains(b, `"role":3`) {
+		t.Fatalf("第一次改角色的 before_json 应记录 member(3)，实际 %q", b)
+	}
+	// ② admin(2) → member(3)：before_json 必须是 admin，不能还是最初的 member
+	must(t, ms.ChangeRole(e.uid, e.bookID, target, model.RoleMember))
+	if b := auditBeforeJSON(e, model.AuditActionPermissionChange, target); !strings.Contains(b, `"role":2`) {
+		t.Fatalf("第二次改角色的 before_json 应记录 admin(2)（变更前状态），实际 %q", b)
+	}
+	// ③ 移除：before_json 必须是 member
+	must(t, ms.Remove(e.uid, e.bookID, target))
+	if b := auditBeforeJSON(e, model.AuditActionPermissionChange, target); !strings.Contains(b, `"role":3`) {
+		t.Fatalf("移除成员的 before_json 应记录 member(3)，实际 %q", b)
+	}
+
+	// ④ 可见性连切两次：第二次的 before_json 必须是第一次切换后的值
+	old, err := bs.Get(e.bookID)
+	must(t, err)
+	changed, err := bs.SetVisibility(e.uid, e.bookID, !old.MembersCanViewOthers)
+	must(t, err)
+	if !changed {
+		t.Fatal("第一次切换应产生实际变更")
+	}
+	switched := !old.MembersCanViewOthers
+	if b := auditBeforeJSON(e, model.AuditActionConfigChange, e.bookID); !strings.Contains(b, fmt.Sprintf(`"membersCanViewOthers":%t`, old.MembersCanViewOthers)) {
+		t.Fatalf("第一次切换的 before_json 应记录原值 %t，实际 %q", old.MembersCanViewOthers, b)
+	}
+	changed, err = bs.SetVisibility(e.uid, e.bookID, old.MembersCanViewOthers)
+	must(t, err)
+	if !changed {
+		t.Fatal("第二次切换应产生实际变更")
+	}
+	if b := auditBeforeJSON(e, model.AuditActionConfigChange, e.bookID); !strings.Contains(b, fmt.Sprintf(`"membersCanViewOthers":%t`, switched)) {
+		t.Fatalf("第二次切换的 before_json 应记录第一次切换后的值 %t，实际 %q", switched, b)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// GPT-R31：软删（回收站）交易所依赖的账户 / 分类不可删除
+// ---------------------------------------------------------------------------
+
+// TestR31AccountDeleteBlockedBySoftDeletedTx 单笔软删后账户不可删；TTL 到期清理后可删。
+func TestR31AccountDeleteBlockedBySoftDeletedTx(t *testing.T) {
+	e := newTestEnv(t)
+	ctx := context.Background()
+	as := NewAccountService(e.engine, version.NewRepo())
+
+	acct, err := as.Create(e.uid, e.bookID, AccountCreateInput{Name: "待清理账户", Category: model.CategoryCash, Currency: "CNY"})
+	must(t, err)
+	res, err := e.txs.Create(ctx, e.uid, e.bookID, CreateRequest{
+		ClientUuid: "r31-single", TxType: int(model.TxTypeExpense),
+		AccountId: acct.Id, Amount: 1000, CategoryId: e.expenseCat,
+		PaymentChannel: 0, TxTime: time.Now().Unix(), Source: 0,
+	})
+	must(t, err)
+	// 软删交易 → 账户仍在被回收站里的那笔交易引用
+	_, err = e.txs.Delete(ctx, e.uid, e.bookID, res.TransactionIds[0], "r31-del")
+	must(t, err)
+	if _, err := as.Delete(e.uid, e.bookID, acct.Id); !errors.Is(err, ErrAccountInUse) {
+		t.Fatalf("回收站内交易仍引用该账户，删除必须被拒，实际 err=%v", err)
+	}
+	// TTL 到期硬清理之后，账户才可正常删除
+	now := time.Now().Unix()
+	execSQL(t, e, "UPDATE transactions SET deleted_at = ? WHERE id = ?", now-60*24*3600, res.TransactionIds[0])
+	n, err := e.txs.PurgeExpiredTransactions(e.bookID, 30, now)
+	must(t, err)
+	if n != 1 {
+		t.Fatalf("到期墓碑应被清除 1 条，实际 %d", n)
+	}
+	if _, err := as.Delete(e.uid, e.bookID, acct.Id); err != nil {
+		t.Fatalf("墓碑清理后账户应可正常删除，实际 err=%v", err)
+	}
+}
+
+// TestR31AccountDeleteBlockedByTransferEitherSide 转账软删后，两侧账户都不可删。
+func TestR31AccountDeleteBlockedByTransferEitherSide(t *testing.T) {
+	e := newTestEnv(t)
+	ctx := context.Background()
+	as := NewAccountService(e.engine, version.NewRepo())
+	from, err := as.Create(e.uid, e.bookID, AccountCreateInput{Name: "转出户", Category: model.CategoryCash, Currency: "CNY"})
+	must(t, err)
+	to, err := as.Create(e.uid, e.bookID, AccountCreateInput{Name: "转入户", Category: model.CategoryDemandDeposit, Currency: "CNY"})
+	must(t, err)
+
+	ids := newTransfer(t, e, "r31-xfer", from.Id, to.Id, 7000)
+	_, err = e.txs.Delete(ctx, e.uid, e.bookID, ids[0], "r31-xfer-del")
+	must(t, err)
+
+	// 转出侧（走 account_id）
+	if _, err := as.Delete(e.uid, e.bookID, from.Id); !errors.Is(err, ErrAccountInUse) {
+		t.Fatalf("转账转出侧账户应被引用保护，实际 err=%v", err)
+	}
+	// 转入侧（走 to_account_id）
+	if _, err := as.Delete(e.uid, e.bookID, to.Id); !errors.Is(err, ErrAccountInUse) {
+		t.Fatalf("转账转入侧账户应被引用保护，实际 err=%v", err)
+	}
+	// 恢复后账户仍被存活交易引用，同样不可删（原有行为保持）
+	_, err = e.txs.Restore(ctx, e.uid, e.bookID, ids[0], "r31-xfer-restore")
+	must(t, err)
+	if _, err := as.Delete(e.uid, e.bookID, from.Id); !errors.Is(err, ErrAccountInUse) {
+		t.Fatalf("恢复后账户仍被引用，删除应被拒，实际 err=%v", err)
+	}
+}
+
+// TestR31CategoryDeleteBlockedBySoftDeletedTx 分类同样被回收站里的交易保护。
+func TestR31CategoryDeleteBlockedBySoftDeletedTx(t *testing.T) {
+	e := newTestEnv(t)
+	ctx := context.Background()
+	cs := NewCategoryService(e.engine, version.NewRepo())
+	cat, err := cs.Create(e.uid, e.bookID, CategoryCreateInput{Name: "待清理分类", CatType: model.CategoryTypeExpense})
+	must(t, err)
+	res, err := e.txs.Create(ctx, e.uid, e.bookID, CreateRequest{
+		ClientUuid: "r31-cat", TxType: int(model.TxTypeExpense),
+		AccountId: e.assetID, Amount: 1500, CategoryId: cat.Id,
+		PaymentChannel: 0, TxTime: time.Now().Unix(), Source: 0,
+	})
+	must(t, err)
+	_, err = e.txs.Delete(ctx, e.uid, e.bookID, res.TransactionIds[0], "r31-cat-del")
+	must(t, err)
+
+	if _, err := cs.Delete(e.uid, e.bookID, cat.Id); !errors.Is(err, ErrCategoryInUse) {
+		t.Fatalf("回收站内交易仍引用该分类，删除必须被拒，实际 err=%v", err)
+	}
+	now := time.Now().Unix()
+	execSQL(t, e, "UPDATE transactions SET deleted_at = ? WHERE id = ?", now-60*24*3600, res.TransactionIds[0])
+	if _, err := e.txs.PurgeExpiredTransactions(e.bookID, 30, now); err != nil {
+		t.Fatalf("清理墓碑失败：%v", err)
+	}
+	if _, err := cs.Delete(e.uid, e.bookID, cat.Id); err != nil {
+		t.Fatalf("墓碑清理后分类应可正常删除，实际 err=%v", err)
+	}
+}
+
+// TestR31RestoreRejectedWhenAccountDeleted 恢复时校验引用有效：
+// 账户已删（历史遗留的坏数据）时恢复必须整笔失败，不得部分恢复出悬空引用。
+func TestR31RestoreRejectedWhenAccountDeleted(t *testing.T) {
+	e := newTestEnv(t)
+	ctx := context.Background()
+	as := NewAccountService(e.engine, version.NewRepo())
+	acct, err := as.Create(e.uid, e.bookID, AccountCreateInput{Name: "会被删的账户", Category: model.CategoryCash, Currency: "CNY"})
+	must(t, err)
+	res, err := e.txs.Create(ctx, e.uid, e.bookID, CreateRequest{
+		ClientUuid: "r31-dangling", TxType: int(model.TxTypeExpense),
+		AccountId: acct.Id, Amount: 2000, CategoryId: e.expenseCat,
+		PaymentChannel: 0, TxTime: time.Now().Unix(), Source: 0,
+	})
+	must(t, err)
+	_, err = e.txs.Delete(ctx, e.uid, e.bookID, res.TransactionIds[0], "r31-dangling-del")
+	must(t, err)
+	// 模拟修复前遗留的坏数据：交易还在回收站，账户却已被软删
+	execSQL(t, e, "UPDATE accounts SET deleted = 1, deleted_at = ? WHERE id = ?", time.Now().Unix(), acct.Id)
+
+	_, err = e.txs.Restore(ctx, e.uid, e.bookID, res.TransactionIds[0], "r31-dangling-restore")
+	if err == nil {
+		t.Fatal("账户已删时恢复必须失败，否则会恢复出悬空引用")
+	}
+	if !errors.Is(err, ErrEntityDeleted) {
+		t.Fatalf("应返回 ErrEntityDeleted，实际 err=%v", err)
+	}
+	// 不得部分恢复：交易仍是已删态、余额仍是 0
+	if d := txRow(t, e, res.TransactionIds[0]).Deleted; !d {
+		t.Fatal("失败的恢复不得把交易变回存活态")
+	}
+	if got := e.balance(acct.Id); got != 0 {
+		t.Fatalf("失败的恢复不得改动余额，应仍为 0，实际 %d", got)
+	}
+	if n := auditCount(e, model.AuditActionRestore); n != 0 {
+		t.Fatalf("失败的恢复不应写审计，实际 %d 行", n)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// GPT-R33：PUT /books/:id 名称 + 可见性原子更新
+// ---------------------------------------------------------------------------
+
+// TestR33BookUpdateNameAndVisibilityAtomic 名称与可见性一次提交；无变化幂等；
+// 无权限时两者都不落库、不写审计（广播由 handler 在 Update 成功返回后执行）。
+func TestR33BookUpdateNameAndVisibilityAtomic(t *testing.T) {
+	e := newTestEnv(t)
+	bs := NewBookService(e.engine, version.NewRepo())
+
+	old, err := bs.Get(e.bookID)
+	must(t, err)
+	wantVis := !old.MembersCanViewOthers
+
+	res, err := bs.Update(e.uid, e.bookID, "整改后的账本名", &wantVis)
+	must(t, err)
+	if !res.NameChanged {
+		t.Fatal("名称应发生实际变更")
+	}
+	if !res.VisibilityChanged {
+		t.Fatal("可见性应发生实际变更")
+	}
+	got, err := bs.Get(e.bookID)
+	must(t, err)
+	if got.Name != "整改后的账本名" {
+		t.Fatalf("名称未落库，实际 %q", got.Name)
+	}
+	if got.MembersCanViewOthers != wantVis {
+		t.Fatalf("可见性未落库，实际 %t", got.MembersCanViewOthers)
+	}
+	// 审计与变更同事务：一次切换一条审计，且记录变更前的旧值
+	if n := auditCountAction(e, model.AuditActionConfigChange); n != 1 {
+		t.Fatalf("配置变更审计应为 1 行，实际 %d", n)
+	}
+	if b := auditBeforeJSON(e, model.AuditActionConfigChange, e.bookID); !strings.Contains(b, fmt.Sprintf(`"membersCanViewOthers":%t`, old.MembersCanViewOthers)) {
+		t.Fatalf("before_json 应记录变更前值 %t，实际 %q", old.MembersCanViewOthers, b)
+	}
+
+	// 幂等：同值再提交 → 既不改名也不改开关，且不再写审计
+	res2, err := bs.Update(e.uid, e.bookID, "整改后的账本名", &wantVis)
+	must(t, err)
+	if res2.NameChanged || res2.VisibilityChanged {
+		t.Fatalf("同值提交不应产生变更：name=%v vis=%v", res2.NameChanged, res2.VisibilityChanged)
+	}
+	if n := auditCountAction(e, model.AuditActionConfigChange); n != 1 {
+		t.Fatalf("幂等提交不应再写审计，实际 %d 行", n)
+	}
+
+	// 无权限：名称与开关必须"都不变"（整体回滚），且不写审计
+	member := insertUser(t, e, "r33-member")
+	addMember(t, e, member, model.RoleMember)
+	other := !wantVis
+	if _, err := bs.Update(member, e.bookID, "不该生效的名字", &other); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("普通成员改账本设置应返回 ErrForbidden，实际 err=%v", err)
+	}
+	after, err := bs.Get(e.bookID)
+	must(t, err)
+	if after.Name != "整改后的账本名" {
+		t.Fatalf("被拒后名称不得改变，实际 %q", after.Name)
+	}
+	if after.MembersCanViewOthers != wantVis {
+		t.Fatalf("被拒后可见性不得改变，实际 %t", after.MembersCanViewOthers)
+	}
+	if n := auditCountAction(e, model.AuditActionConfigChange); n != 1 {
+		t.Fatalf("被拒的请求不应写审计，实际 %d 行", n)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// GPT-R53：父账户不得在仍有活跃子账户时被删除
+// ---------------------------------------------------------------------------
+
+// TestR53DeleteParentWithActiveChildrenRejected 有活跃子账户时拒绝删父；子账户先删后可删。
+func TestR53DeleteParentWithActiveChildrenRejected(t *testing.T) {
+	e := newTestEnv(t)
+	as := NewAccountService(e.engine, version.NewRepo())
+
+	parent, err := as.Create(e.uid, e.bookID, AccountCreateInput{Name: "父账户", Category: model.CategoryCash, Currency: "CNY"})
+	must(t, err)
+	child, err := as.Create(e.uid, e.bookID, AccountCreateInput{Name: "子账户", Category: model.CategoryCash, Currency: "CNY", ParentId: parent.Id})
+	must(t, err)
+
+	// 有活跃子账户 → 明确拒绝（不能留下悬空 parent_id）
+	if _, err := as.Delete(e.uid, e.bookID, parent.Id); !errors.Is(err, ErrAccountHasChildren) {
+		t.Fatalf("仍有活跃子账户时删除父账户必须被拒，实际 err=%v", err)
+	}
+	var alive int64
+	if _, err := e.engine.SQL("SELECT COUNT(1) FROM accounts WHERE id = ? AND deleted = 0", parent.Id).Get(&alive); err != nil {
+		t.Fatal(err)
+	}
+	if alive != 1 {
+		t.Fatal("被拒后父账户必须仍存活")
+	}
+
+	// 子账户先删 → 父账户可正常删除（此时不存在指向它的活跃子账户）
+	if _, err := as.Delete(e.uid, e.bookID, child.Id); err != nil {
+		t.Fatalf("删除子账户失败：%v", err)
+	}
+	if _, err := as.Delete(e.uid, e.bookID, parent.Id); err != nil {
+		t.Fatalf("子账户已删后父账户应可删除，实际 err=%v", err)
+	}
+	// 不变量：不存在"活跃子账户指向已删父账户"的悬空引用
+	var dangling int64
+	if _, err := e.engine.SQL(
+		`SELECT COUNT(1) FROM accounts c
+		 INNER JOIN accounts p ON p.id = c.parent_id
+		 WHERE c.book_id = ? AND c.deleted = 0 AND p.deleted = 1`, e.bookID).Get(&dangling); err != nil {
+		t.Fatal(err)
+	}
+	if dangling != 0 {
+		t.Fatalf("出现 %d 条悬空 parent_id（活跃子账户指向已删父账户）", dangling)
 	}
 }
