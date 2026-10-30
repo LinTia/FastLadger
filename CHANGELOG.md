@@ -2,6 +2,17 @@
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.31] - 2026-10-30
+
+### 路径 1 落地：GitHub Actions CI（真实 CGO + 真库 + -race）全绿，并修复一处 -race data race
+
+- **动机**：本地构建机无 C 编译器，`mattn/go-sqlite3` 只能编译不能运行、`go test -race` 无法执行，导致阶段 3 的"运行证据"一直是盲区（GPT 卡片里 9 项 SQLite 断言从未真正跑过）。
+- **新增 `.github/workflows/ci.yml`**：`on: [push, pull_request, workflow_dispatch]`，`ubuntu-latest`（自带 gcc）。步骤：Toolchain（断言 `CGO_ENABLED=1`，否则失败——**防静默退化为 stub**）→ gofmt → vet → build → **SQLite 驱动冒烟**（`internal/migrate` + `internal/database` 真库测试）→ `go test ./...` 全量 → `go test -race`（仅 `ws`/`service`/`api`）。
+- **首次运行（run 41010979053，commit `cf4c4de`）全绿**：`CGO_ENABLED='1'` + `gcc (Ubuntu 13.3.0)`；真 SQLite 测试通过；`go test ./...` 在真实 Linux 上 **140 PASS / 0 FAIL / 0 SKIP**；`ws`+`service`+`api` 在 **`-race` 下全部 `ok`**。运行证据从此每次 push 自动留存（附录有 run 链接）。
+- **修复一处真实 data race（测试桩）**：`TestQAS3ServeWSRejectsSubscribeWithoutChecker` 用 `defer conn.Close()`，导致连接关闭发生在函数返回后，服务端注销 goroutine 与 `t.Cleanup` 恢复全局 `DefaultHub` 并发读写同一全局指针，`-race` 下 CI 失败。改为：显式 `conn.Close()` + `waitCount(0)`（确认服务端已完成 `Unregister` 对全局的读取）后再由 cleanup 恢复；并把 `RUnlock` 提前（否则 `waitCount` 内再次 `RLock` 会因 RWMutex 不可重入死锁）。
+  - 该 race **仅存在于测试桩**：生产 `DefaultHub` 只在 init 设一次、运行期不替换，非生产 bug。
+- **盲区状态**：之前长期无法验证的 9 项 SQLite 断言（幂等迁移、负债符号、转账回滚、`related_id` 配对、`busy_timeout` 并发等）现已在真库上跑通并通过；`-race` 对 Hub/事务边界的并发保证也首次被证明。
+
 ## [1.30] - 2026-10-30
 
 ### 修复 GPT-R24（P1）：成员移除的清理通知被自己的"摘订阅"逻辑截断

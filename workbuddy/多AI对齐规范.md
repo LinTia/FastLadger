@@ -216,6 +216,7 @@
 | [1.28] | 阶段 3 定向回归通过（QA `NoOne`） | 补 `§5.1` push `errorCode` 8 值枚举表；登记 3 项已知遗留（`Update` 两次独立写 / 账本软删不摘订阅 / 协调事件 version 回落 0） | 已合 |
 | [1.29] | **GPT 第三次代码阶段审查** | `gpt/v1.5/`（`GPT-R24` 起）：**`GPT-R24`（P1）**——移除成员时先摘订阅再广播，目标收不到 `member_removed` 清理通知；**下一步 GPT 编号从 `GPT-R25` 起** | 已记录，[1.30] 已修 |
 | [1.30] | **修复 GPT-R24** | `ws.Hub.DeliverToUser` 定向投递（不经订阅过滤）+ `notifyMemberRemoved` 三段固定顺序（撤销订阅 → 定向投递 → 普通广播）；7 个回归用例并**证明非空转**；`落地方案 §5.2` 补「`member_removed` 投递保证与客户端契约」；修正 `[1.29]` 条目把文件标题挤到后面的格式问题 | 已合 |
+| [1.31] | **路径 1 落地：GitHub Actions CI 全绿 + 修一处 -race** | 新增 `.github/workflows/ci.yml`（ubuntu-latest 自带 gcc）：Toolchain 断言 `CGO_ENABLED=1` → gofmt/vet/build → 真 SQLite 冒烟（`migrate`+`database`）→ `go test ./...` → `go test -race`（`ws`/`service`/`api`）；首次运行 run `41010979053` **全绿**：真 CGO + 真库 **140 PASS/0 FAIL/0 SKIP** + `-race` 全 `ok`；修 `TestQAS3ServeWSRejectsSubscribeWithoutChecker` 对全局 `DefaultHub` 的并发读写 race（仅测试桩，非生产 bug）；**9 项 SQLite 盲区首次在真库跑通** | 已合 |
 
 > **当前口径**：R01–R18 的采纳/历轮改动继续保留，不重排编号；“已采纳/文本已落地”不能替代运行证据。本次以原编号复核 GPT-R03/GPT-R06/GPT-R16，实测发现未闭合分支并修订参考骨架。其他历史项的状态沿用已有记录，本轮不为未覆盖的完整链路背书。
 >
@@ -228,7 +229,7 @@
 > **【1.21】之后的当前口径（D 二次核查 / GPT 三次核查请注意）**：项目已从"文档阶段"进入"**真实代码阶段**"。PRD §12 + §12.1 全部【决策】、无遗留待确认；`server/` 已落地 **阶段 0/1/2**（脚手架、认证/账本/成员、记账核心），**41 个单元测试全绿**。
 > - **不要再重开**已裁决的产品 / 技术口径（除非有新证据）；
 > - **审代码请直接读 `server/`**：重点 `internal/service/tx.go`（唯一 Create / 转账双边 / 幂等）、`internal/database`（PRAGMA）、`internal/api`（400/409）、`internal/migrate`（迁移）；
-> - **最该盯的盲区**：本机无 gcc，**没有任何真实 SQLite 运行时证据**——事务真实回滚、UPSERT 的 `RowsAffected` 语义、并发（`busy_timeout` + `MaxOpenConns=1`）、`related_id` 双向落库、`0003` 迁移可执行性、PRD §10.1/§10.3/§10.4 端到端、`go test -race`、Gin 全链路集成；
+> - **最该盯的盲区（[1.31] 已由 CI 关闭）**：本机无 gcc，但 **GitHub Actions（`ubuntu-latest` 自带 gcc）已补齐真实 SQLite 运行时证据**——事务真实回滚、UPSERT 的 `RowsAffected` 语义、并发（`busy_timeout` + `MaxOpenConns=1`）、`related_id` 双向落库、`0003` 迁移可执行性、`go test -race` 均在每次 push 自动跑通并存档（run `41010979053` 全绿：真 CGO + 真库 **140 PASS/0 FAIL/0 SKIP** + `-race` 全 `ok`）。**后续审查者无需再重复追这一条盲区**；Gin 全链路集成仍依赖人工/部署环境。
 > - **已知非阻塞遗留**：P2-2（§7.3 可见性过滤，阶段 3）、P3-3（`merchant` 死列，阶段 5）、`creator_uid=0` 历史归属须在阶段 3/4 显式处理（见 WBS 阶段 4 注）；
-> - **⚠️ 分工差异（关键）**：**D 只能静态审查**（同一构建机，无 gcc），**GPT 有 CGO + 真实 SQLite 运行能力**（见其 `gpt/v1.4/verification/`）。因此**上述"最该盯的盲区"应由 GPT 实测关闭**，D 侧重逻辑与契约审查——两份卡片已按此分工编写，避免重复劳动。
+> - **⚠️ 分工差异（关键，存量描述保留）**：**D 只能静态审查**（同一构建机，无 gcc），**GPT 有 CGO + 真实 SQLite 运行能力**（见其 `gpt/v1.4/verification/`）。盲区现已改由 **CI 常态化覆盖**，GPT/D 的分工侧重不变——GPT 仍可做更深的事务/并发实测，D 侧重逻辑与契约审查。
 > - **【1.25】之后新增（D 第三轮请注意，勿重复提）**：`MemberService.JoinViaInvite` 签名已变为 **`(bookID, code, username, password, clientIP)`**；邀请入户限流已改为**按 IP 分桶**（原全局 key 属缺陷 `WB-R01`，已修）；`ChangeRole`/`Remove` 已校验 `RowsAffected==1`（`D-R09` 已修）；`D-R07`/`D-R08` 已修。D 第三轮编号从 **`D-R10` 起**。
