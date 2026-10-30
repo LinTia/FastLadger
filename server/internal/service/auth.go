@@ -157,20 +157,30 @@ func (s *AuthService) GetByID(uid int64) (*model.User, error) {
 
 // Verify 校验 token 且确认账号仍有效（删除/禁用即失效）
 func (s *AuthService) Verify(token string) (*model.User, error) {
+	_, u, err := s.VerifyWithClaims(token)
+	return u, err
+}
+
+// VerifyWithClaims 同 Verify，额外返回解析出的 claims。
+//
+// 用途（GPT-R51）：WebSocket 是长连接，握手之后不再经过任何中间件，
+// 服务端必须在握手时把 JWT 的 exp 交下去，让连接有一个生命周期上限。
+// 独立成方法而不是改 Verify 的签名，是为了不动既有调用点；两者判定逻辑完全同一份。
+func (s *AuthService) VerifyWithClaims(token string) (*Claims, *model.User, error) {
 	claims, err := ParseJWT(s.secret, token)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var u model.User
 	has, err := s.engine.ID(claims.Uid).Where("deleted = 0").Get(&u)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if !has {
-		return nil, ErrBadCredentials
+		return nil, nil, ErrBadCredentials
 	}
 	if u.Disabled {
-		return nil, ErrAccountDisabled
+		return nil, nil, ErrAccountDisabled
 	}
-	return &u, nil
+	return claims, &u, nil
 }

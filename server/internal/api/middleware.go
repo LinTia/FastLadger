@@ -10,6 +10,7 @@ import (
 
 	"fastledger/internal/model"
 	"fastledger/internal/service"
+	"fastledger/internal/ws"
 
 	"github.com/gin-gonic/gin"
 )
@@ -72,13 +73,17 @@ func wsAuth(authSvc *service.AuthService) gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-		u, err := authSvc.Verify(raw)
+		claims, u, err := authSvc.VerifyWithClaims(raw)
 		if err != nil {
 			fail(c, http.StatusUnauthorized, "登录已失效，请重新登录")
 			c.Abort()
 			return
 		}
 		c.Set(uidKey, u.Id)
+		// GPT-R51：把 JWT 的 exp 交下去作为这条长连接的生命周期上限。
+		// WS 握手之后不再经过任何中间件，ServeWS 只能凭这个 exp 在令牌到期时
+		// 主动关闭连接并清理订阅；缺失它连接就能永远活着。
+		c.Set(ws.TokenExpContextKey, claims.Exp)
 		c.Next()
 	}
 }

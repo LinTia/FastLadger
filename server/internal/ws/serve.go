@@ -33,6 +33,14 @@ const (
 	// 与 api 包的 uidKey 字面量一致；ws **不能**导入 api（api 已导入 ws，会形成循环依赖），
 	// 故这里以常量形式声明同一契约，改动时必须同步 api.uidKey。
 	uidContextKey = "uid"
+	// TokenExpContextKey 认证中间件写入上下文的 JWT exp（Unix 秒）。
+	// 与 uidContextKey 同理：ws 不能导入 api，故由 ws 导出该契约常量，
+	// api.wsAuth 直接引用它（而不是各写一份字面量），避免两边漂移。
+	TokenExpContextKey = "token_exp"
+	// closeTokenExpired 令牌到期时服务端主动发送的关闭码。
+	// 4000-4999 是 WebSocket 规范留给应用层自定义的区间；
+	// 客户端据此"重新登录后再重连"，而不是当成网络抖动无脑重连。
+	closeTokenExpired = 4001
 )
 
 // wsErrorMsg 服务端主动下行的错误通知（订阅被拒等）。
@@ -86,6 +94,11 @@ type subscribeMsg struct {
 //
 // 鉴权由 api.wsAuth 中间件完成（浏览器 WS 无法设置 Authorization 头，故 wsAuth
 // 优先读 Header，回退读 ?token=）。这里只做"取凭证 → 升级 → 读写循环"。
+//
+// GPT-R51：握手只发生一次，Upgrade 之后这条连接上不再有任何 HTTP 中间件，
+// token 将被永久信任——连接可以靠 ping/pong 一直活到远超 exp 之后。
+// 因此 wsAuth 必须把 JWT 的 exp 一并放进上下文（TokenExpContextKey），
+// 由本函数把它作为**连接生命周期的硬上限**：到期即主动关闭并清理订阅。
 func ServeWS(c *gin.Context) {
 	uidVal, ok := c.Get(uidContextKey)
 	if !ok {
@@ -96,6 +109,22 @@ func ServeWS(c *gin.Context) {
 	uid, ok := uidVal.(int64)
 	if !ok || uid <= 0 {
 		c.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "msg": "缺少登录凭证"})
+		return
+	}
+	// 令牌有效期（exp）同样是"凭证的一部分"：缺了它就无法给连接设上限，
+	// 一律 fail-closed 拒绝升级（宁可让客户端重新登录，也不放一条永生连接进来）。
+	expVal, ok := c.Get(TokenExpContextKey)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "msg": "缺少登录凭证"})
+		return
+	}
+	expUnix, ok := expVal.(int64)
+	if !ok || expUnix <= 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "msg": "缺少登录凭证"})
+		return
+	}
+	if expUnix <= time.Now().Unix() {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "msg": "登录已失效，请重新登录"})
 		return
 	}
 
@@ -121,10 +150,13 @@ func ServeWS(c *gin.Context) {
 
 	// 读/写循环共用一个取消上下文，任一方结束都恰好清理一次（R18）。
 	//
-	ctx, cancel := context.WithCancel(context.Background())
+	// GPT-R51：上下文的截止时间就是令牌过期时刻 —— 到期后 ctx.Done() 触发，
+	// 写循环退出 → defer 注销订阅并关闭 conn → 阻塞在 ReadMessage 的读循环也随之报错退出。
+	ctx, cancel := context.WithDeadline(context.Background(), time.Unix(expUnix, 0))
 	defer func() {
 		cancel()
 		DefaultHub.Unregister(client)
+		client.ClearSubscriptions() // 令牌到期/连接结束：订阅不留残余
 		_ = conn.Close()
 	}()
 
@@ -153,6 +185,11 @@ func ServeWS(c *gin.Context) {
 	for {
 		select {
 		case <-ctx.Done():
+			// 令牌到期（或读循环已结束）：主动发一次关闭帧告知客户端"必须重新鉴权"，
+			// 而不是让它把这次断开当成网络抖动去无脑重连。
+			_ = conn.WriteControl(websocket.CloseMessage,
+				websocket.FormatCloseMessage(closeTokenExpired, "token expired"),
+				time.Now().Add(writeWait))
 			return
 		case m := <-client.Send: // Send 永不 close，无需 ok 分支
 			if err := conn.SetWriteDeadline(time.Now().Add(writeWait)); err != nil {

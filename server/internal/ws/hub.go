@@ -224,6 +224,25 @@ func (c *Client) consumeSubscribeTokenLocked(now time.Time) bool {
 	return true
 }
 
+// ClearSubscriptions 清空该连接的全部订阅与可见性缓存。
+//
+// 调用时机：令牌到期 / 连接结束（GPT-R51）。Unregister 只把连接移出注册表，
+// 但 BroadcastToBook 与 RefreshVisibility 可能已经取到该 client 的指针，
+// 清空能让它们在锁下看到"无任何订阅"，从而不再投递、不再查库。
+func (c *Client) ClearSubscriptions() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for b := range c.BookIds {
+		delete(c.BookIds, b)
+	}
+	for b := range c.canView {
+		delete(c.canView, b)
+	}
+	for b := range c.visSeq {
+		delete(c.visSeq, b)
+	}
+}
+
 // Hub 客户端注册表。
 type Hub struct {
 	// mu 保护 clients / checker / gen（锁顺序的第一层）

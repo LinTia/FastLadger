@@ -17,12 +17,23 @@ import (
 )
 
 // newQATestServer 起一个只挂 /ws 的测试服务（uid 由假中间件注入，绕开 JWT）
+//
+// 同时注入 exp（TokenExpContextKey）：GPT-R51 之后 ServeWS 对"没有 exp"一律
+// fail-closed 拒绝升级，测试服务必须像真实 wsAuth 那样把有效期一并写进上下文。
+// 这里给一个很远的到期时间，等价于"长期有效令牌"，不改变本文件原有用例的语义。
 func newQATestServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	return newQATestServerWithExpiry(t, time.Now().Add(24*time.Hour))
+}
+
+// newQATestServerWithExpiry 与 newQATestServer 相同，但可指定令牌到期时刻
+func newQATestServerWithExpiry(t *testing.T, expiry time.Time) *httptest.Server {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	r.GET("/ws", func(c *gin.Context) {
 		c.Set("uid", int64(7))
+		c.Set(TokenExpContextKey, expiry.Unix())
 		ServeWS(c)
 	})
 	srv := httptest.NewServer(r)
