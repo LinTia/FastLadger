@@ -57,6 +57,11 @@ const (
 	subscribeBurst = 32
 	// subscribeRefill 令牌桶补充速率（每秒补充的令牌数）
 	subscribeRefill = 10
+	// maxSubscribeAttempts 因权限 generation 变化而重新鉴权的最大次数。
+	//
+	// 取有限值而不是无限重试：恶意/异常路径下 generation 可能被持续推进，
+	// 无限重试会把唯一的 SQLite 连接占满；达到上限即返回明确错误让客户端稍后重试。
+	maxSubscribeAttempts = 4
 )
 
 // 订阅被拒的原因（ServeWS 会把它转成显式错误帧回给客户端，**绝不静默截断**）。
@@ -71,8 +76,12 @@ var (
 	ErrSubscriptionLimitPerUser = errors.New("单用户订阅的账本数量超过上限")
 	// ErrSubscribeRateLimited 订阅消息过于频繁（GPT-R49）
 	ErrSubscribeRateLimited = errors.New("订阅消息过于频繁，请稍后重试")
+	// ErrSubscribeGenerationStale 鉴权期间账本权限反复变更，重试次数耗尽（GPT-R50）
+	ErrSubscribeGenerationStale = errors.New("订阅期间账本权限持续变更，请稍后重新订阅")
 	// ErrSubscribeClientGone 连接已注销，不再接受订阅写入
 	ErrSubscribeClientGone = errors.New("连接已注销")
+	// errStaleGeneration 内部哨兵：本次鉴权结果已过期，需重新鉴权（不外泄给调用方）
+	errStaleGeneration = errors.New("stale book permission generation")
 )
 
 // VisibilityChecker 订阅资格 + 可见性校验。
@@ -222,11 +231,19 @@ type Hub struct {
 	clients map[*Client]bool
 	// checker 可见性/成员资格校验；未注入时 **fail-closed**（拒绝全部订阅）
 	checker VisibilityChecker
+	// gen 账本 → 权限 generation（成员/可见性每次变更 +1，见 GPT-R50）。
+	//
+	// 为什么需要它：Subscribe 的查库发生在 Hub 锁**外**（不能在锁内查库），
+	// 于是"鉴权完成 → 写入订阅"之间存在窗口。期间若发生撤权，
+	// RefreshVisibility 看不到这个"还没写 BookIds"的 pending 连接（它不在任何订阅表里），
+	// 旧的 allow=true 随后被写回，等于撤权后订阅又被恢复。
+	// generation 让 Subscribe 能在写入【前】发现自己拿到的是过期结论并重新鉴权。
+	gen map[int64]uint64
 }
 
 // NewHub 构造 Hub（checker 允许为 nil，此时订阅一律被拒绝并记日志）。
 func NewHub(checker VisibilityChecker) *Hub {
-	return &Hub{clients: make(map[*Client]bool), checker: checker}
+	return &Hub{clients: make(map[*Client]bool), checker: checker, gen: make(map[int64]uint64)}
 }
 
 // DefaultHub 进程级默认 Hub（api 适配层广播、ServeWS 注册都用它）。
@@ -264,6 +281,38 @@ func (h *Hub) Count() int {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	return len(h.clients)
+}
+
+// Generation 读取某账本当前的权限 generation（观测/测试用）。
+//
+// 每次 RefreshVisibility（成员移除/角色变更/可见性变更/账本删除）都会 +1，
+// **包括没有任何订阅者时**——那正是 pending Subscribe 需要被作废的时刻（GPT-R50）。
+func (h *Hub) Generation(bookID int64) uint64 {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.gen[bookID] // nil map 读取安全，返回 0
+}
+
+// bumpGenerationLocked 递增某账本的权限 generation（**必须在持有 h.mu 写锁时调用**）。
+func (h *Hub) bumpGenerationLocked(bookID int64) {
+	if h.gen == nil {
+		// 字面量构造的 Hub（&Hub{}）：补出来，避免"assignment to entry in nil map"
+		h.gen = make(map[int64]uint64)
+	}
+	h.gen[bookID]++
+}
+
+// generationSnapshot 读取若干账本当前的 generation（读锁，不做 IO）。
+//
+// 在鉴权【之前】取快照：Subscribe 写入前用它判断"期间是否发生过权限变更"。
+func (h *Hub) generationSnapshot(ids []int64) map[int64]uint64 {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	snap := make(map[int64]uint64, len(ids))
+	for _, id := range ids {
+		snap[id] = h.gen[id]
+	}
+	return snap
 }
 
 // userSubscriptionCountLocked 统计某用户在**全部在线连接**上的订阅条目总数
@@ -319,6 +368,15 @@ func normalizeBookIDs(bookIDs []int64) ([]int64, error) {
 //  3. 写入前再校验单连接 / 单用户订阅总数上限。
 //     绝不静默截断：截断会让客户端以为订阅成功，之后永远等不到事件，
 //     现象是"偶尔不实时"这种极难定位的问题。
+//
+// GPT-R50（撤权竞态）：查库在锁外 ⇒ "鉴权完成 → 写入订阅"之间是敞开的窗口。
+// 期间一旦发生撤权，RefreshVisibility **看不到**这个还没写 BookIds 的连接，
+// 旧的 allow=true 若被直接写回，撤权就白做了。因此：
+//   - 鉴权【前】快照各账本的权限 generation；
+//   - 写入【前】在 Hub 锁内比对 —— 变了就丢弃本次结论、重新鉴权（最多 maxSubscribeAttempts 次）；
+//   - 撤权路径 RefreshVisibility **即使没有订阅者也要递增 generation**（见该方法注释）。
+//
+// 即：不得把"锁外鉴权结果"直接写回。
 func (h *Hub) Subscribe(c *Client, bookIDs []int64, uid int64) error {
 	if c == nil {
 		return ErrSubscribeClientGone
@@ -344,17 +402,31 @@ func (h *Hub) Subscribe(c *Client, bookIDs []int64, uid int64) error {
 	}
 
 	// 4) 鉴权 → 写入（写入前比对 generation，过期就整轮重来）
-	// 锁外查库校验（每个 bookID 独立判定，失败/非成员一律不订阅）
-	allowed := make(map[int64]bool, len(ids))
-	for _, b := range ids {
-		canView, cerr := checker(uid, b)
-		if cerr != nil {
-			// 非成员 / 查询失败：静默跳过，不回显"账本是否存在"
-			continue
+	var lastErr error
+	for attempt := 0; attempt < maxSubscribeAttempts; attempt++ {
+		snap := h.generationSnapshot(ids)
+		// 锁外查库校验（每个 bookID 独立判定，失败/非成员一律不订阅）
+		allowed := make(map[int64]bool, len(ids))
+		for _, b := range ids {
+			canView, cerr := checker(uid, b)
+			if cerr != nil {
+				// 非成员 / 查询失败：静默跳过，不回显"账本是否存在"
+				continue
+			}
+			allowed[b] = canView
 		}
-		allowed[b] = canView
+		settled, werr := h.writeSubscribe(c, ids, allowed, snap, uid)
+		if settled {
+			return werr
+		}
+		// 未落定 = 期间发生了权限变更，本次鉴权结论已作废 → 重新鉴权
+		lastErr = werr
 	}
-	return h.writeSubscribe(c, ids, allowed, uid)
+	// 重试次数耗尽：返回明确错误（客户端随后重试即可），绝不写回过期结论
+	if lastErr != nil {
+		return fmt.Errorf("%w：已重试 %d 次", ErrSubscribeGenerationStale, maxSubscribeAttempts)
+	}
+	return ErrSubscribeGenerationStale
 }
 
 // writeSubscribe 把一次（锁外）鉴权结论写入订阅表。
@@ -366,12 +438,19 @@ func (h *Hub) Subscribe(c *Client, bookIDs []int64, uid int64) error {
 //   - (false, errStaleGeneration)       期间权限变更：本次结论作废，调用方需重新鉴权
 //
 // 全程锁顺序 Hub.mu → Client.mu；在持有 c.mu 期间不触碰 Hub。
-func (h *Hub) writeSubscribe(c *Client, ids []int64, allowed map[int64]bool, uid int64) error {
+func (h *Hub) writeSubscribe(c *Client, ids []int64, allowed map[int64]bool,
+	snap map[int64]uint64, uid int64) (bool, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if !h.clients[c] {
 		// 连接已注销（读循环刚结束）：不再写入，避免给已回收的连接挂状态
-		return ErrSubscribeClientGone
+		return true, ErrSubscribeClientGone
+	}
+	// 写入前比对权限 generation：任一账本期间发生过成员/可见性变更 → 结论作废
+	for _, b := range ids {
+		if h.gen[b] != snap[b] {
+			return false, errStaleGeneration
+		}
 	}
 	// 订阅总数上限：先算用户维度（持 Hub.mu，逐个取 Client.mu），再落本连接的写。
 	// 必须在锁 c.mu **之前**取，避免在持有 c.mu 时访问 Hub（反向锁序）。
@@ -387,11 +466,11 @@ func (h *Hub) writeSubscribe(c *Client, ids []int64, allowed map[int64]bool, uid
 		}
 	}
 	if len(c.BookIds)+fresh > MaxSubscriptionsPerClient {
-		return fmt.Errorf("%w：已有 %d + 新增 %d > %d",
+		return true, fmt.Errorf("%w：已有 %d + 新增 %d > %d",
 			ErrSubscriptionLimitPerConnection, len(c.BookIds), fresh, MaxSubscriptionsPerClient)
 	}
 	if userTotal+fresh > MaxSubscriptionsPerUser {
-		return fmt.Errorf("%w：该用户已有 %d + 新增 %d > %d",
+		return true, fmt.Errorf("%w：该用户已有 %d + 新增 %d > %d",
 			ErrSubscriptionLimitPerUser, userTotal, fresh, MaxSubscriptionsPerUser)
 	}
 	for b, canView := range allowed {
@@ -401,7 +480,7 @@ func (h *Hub) writeSubscribe(c *Client, ids []int64, allowed map[int64]bool, uid
 		c.visSeq[b]++
 	}
 	c.UID = uid
-	return nil
+	return true, nil
 }
 
 // BroadcastToBook 给"已订阅该账本"的在线成员推消息。
@@ -501,6 +580,9 @@ func (h *Hub) DeliverToUser(uid int64, msg []byte) int {
 // 第 3 段带**乐观写保护**：若期间有 Subscribe 写入了更新鲜的结果（visSeq 变了），
 // 本次结果已过期，直接放弃写入 —— 否则会用旧权限覆盖新权限（见 Client.visSeq 注释）。
 //
+// GPT-R50：第 1 段除了快照，还必须递增该账本的权限 generation，而且
+// **即使 targets 为空也不能跳过**。理由见下方第 1 段注释。
+//
 // **非成员即摘除订阅**：checker 返回错误表示"已不是该账本成员"（被移除 / 退出 / 账本已删），
 // 此时除了把 canView 置 false，还必须 `delete(c.BookIds, bookID)`：
 // 否则被移除的连接会继续收到该账本的 data_changed，等于持续泄露"这个账本还在被使用"
@@ -530,7 +612,8 @@ func (h *Hub) RefreshVisibility(bookID int64) {
 	// 它不在任何订阅表里，快照看不见它；若这里因为"没人订阅"就提前返回，
 	// 它随后会把旧的 allow=true 写回去，刚刚完成的撤权就被抵消了。
 	// generation 递增即让它的旧结论在写入前的比对中失败并重新鉴权。
-	h.mu.RLock()
+	h.mu.Lock()
+	h.bumpGenerationLocked(bookID)
 	checker := h.checker
 	targets := make([]target, 0, len(h.clients))
 	for c := range h.clients {
@@ -544,7 +627,7 @@ func (h *Hub) RefreshVisibility(bookID int64) {
 			targets = append(targets, target{c: c, uid: uid, seq: seq})
 		}
 	}
-	h.mu.RUnlock()
+	h.mu.Unlock()
 	if len(targets) == 0 {
 		return
 	}
