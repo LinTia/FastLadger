@@ -110,5 +110,95 @@
     "suggestion": "实现 Update+同事务 before_json 审计，或在 WBS/CHANGELOG 明确延期，不将此项计为已完成。",
     "status": "待确认",
     "evidence": "WBS 4.3 明列 update；ledger.go 仅定义常量；router.go 无 PUT/PATCH 交易路由。"
+  },
+  {
+    "id": "GPT-R31",
+    "title": "删除已软删交易所引用的账户后，该交易无法在回收站恢复",
+    "severity": "P1",
+    "location": [
+      "server/internal/service/account.go:206-251",
+      "server/internal/service/tx.go:834-842,905-930",
+      "server/internal/service/recycle.go:58-72",
+      "server/internal/service/category.go:232-290"
+    ],
+    "quote": [
+      "SELECT COUNT(1) FROM transactions WHERE book_id = ? AND deleted = 0 AND (account_id = ? OR to_account_id = ?)",
+      "if a.Deleted { return nil, fmt.Errorf(\"%w：账户 %d 已被删除\", ErrEntityDeleted, accountID) }",
+      "Restore 调用 loadTxAccount 后才执行余额回滚"
+    ],
+    "problem": "账户删除只检查仍存活的交易，因此先删除交易后即可软删其账户；但交易恢复必须通过 loadTxAccount，且该函数拒绝已删除账户。账户没有恢复入口，导致该交易在回收站保留期内也无法恢复。分类存在相近问题：分类删除只检查 deleted=0 的交易，已删除交易恢复后会重新指向已删除分类，而 Restore 不验证分类状态。",
+    "reproduce": "1. 创建一笔收入/支出交易；2. 调用 TxService.Delete 将交易软删；3. 调用 AccountService.Delete 删除该交易引用的账户（当前 deleted=0 计数为 0，允许成功）；4. 调用 TxService.Restore 恢复原交易；5. loadTxAccount 读取到 Deleted=true，返回 ErrEntityDeleted，恢复失败。另测分类：删除交易→删除分类→恢复交易，恢复成功但 CategoryId 指向 deleted=1 的分类。",
+    "actual": "账户被软删后交易恢复返回 ENTITY_DELETED；分类被软删后交易可恢复，但其分类引用指向不可见的已删除分类。",
+    "expected": "在交易回收站 TTL 内，系统必须保持交易恢复所需的依赖可用。至少应阻止删除仍被任何未硬清除交易（包括墓碑）引用的账户/分类；或实现经过明确审计和事务保护的依赖恢复策略。恢复前还应验证账户、分类引用一致性。",
+    "impact": "用户可能先清理账户，再发现误删交易无法恢复；或恢复后出现交易分类悬空。破坏阶段 4 的可恢复性和账务数据完整性。",
+    "suggestion": "建议账户/分类删除检查所有仍存在的交易引用（包括 deleted=1 墓碑），直到交易被 TTL 硬清除后才允许删除；若业务确实允许先删账户，应设计账户恢复/依赖恢复并保证同事务处理。补真实 SQLite 集成测试覆盖单笔与转账两侧账户、分类及 TTL 清理后的行为。",
+    "status": "待确认",
+    "evidence": "account.go Delete 查询明确限定 transactions.deleted=0；tx.go Restore 对每个交易行调用 loadTxAccount；loadTxAccount 对 Deleted=true 返回 ErrEntityDeleted。category.go Delete 同样只统计 deleted=0 交易，而 Restore 未检查 CategoryId。静态代码链路可直接证明，未运行测试。"
+  },
+  {
+    "id": "GPT-R32",
+    "title": "恢复交易时把 deleted_at 写成恢复时间，而不是清零",
+    "severity": "P2",
+    "location": [
+      "server/internal/service/tx.go:834-856",
+      "server/internal/model/ledger.go:168-180",
+      "server/internal/service/tx_delete_integration_test.go:119-150"
+    ],
+    "quote": [
+      "UPDATE transactions SET deleted = ?, deleted_at = ?, sync_version = ?",
+      "newDeleted := 0; if wantDeleted { newDeleted = 1 }",
+      "DeletedAt int64 `json:\"deletedAt,omitempty\"` // 墓碑时间（未删除时为 0，不输出）"
+    ],
+    "problem": "删除与恢复共用同一条 UPDATE，deleted_at 参数始终传 now。恢复时 newDeleted=0，但 deleted_at 仍被设置为当前时间；这与模型注释“未删除时为 0，不输出”相矛盾。",
+    "reproduce": "创建交易→Delete→Restore→直接查询 transactions.deleted/deleted_at，或调用 GET /transactions/:txId。当前结果为 deleted=0 且 deleted_at>0，API JSON 仍输出 deletedAt。",
+    "actual": "恢复后的活交易携带非零 deletedAt（恢复时刻），而不是 0；当前测试只断言余额/状态等，没有断言 deleted_at 清零。",
+    "expected": "删除时 deleted_at=now；恢复时 deleted_at=0。两者均应在同一事务内更新 sync_version 并写审计。",
+    "impact": "客户端/报表/运维若以 deletedAt 是否存在辅助判断墓碑，会把已恢复交易误判为曾处于删除状态；字段契约和数据语义不一致。",
+    "suggestion": "按 wantDeleted 构造 deletedAt 参数：删除传 now，恢复传 0；增加真实 SQLite 测试断言数据库列、REST JSON、Pull 墓碑字段在删除/恢复前后的值。",
+    "status": "待确认",
+    "evidence": "tx.go 更新语句无条件传 now；model/ledger.go 对 DeletedAt 的注释明确未删除时为 0；现有 tx_delete_integration_test.go 的恢复用例未检查 deleted_at。本轮未执行测试。"
+  },
+  {
+    "id": "GPT-R33",
+    "title": "PUT /books/:id 同时修改名称和可见性时不是原子操作，可能部分成功却返回失败",
+    "severity": "P2",
+    "location": [
+      "server/internal/api/book_handler.go:77-97",
+      "server/internal/service/book.go:143-183,211-263"
+    ],
+    "quote": [
+      "out.NameChanged = true",
+      "s.engine.ID(bookID).Where(\"deleted = 0\").Cols(\"name\", \"updated_at\").Update(b)",
+      "changed, cerr := s.SetVisibility(actor, bookID, *canViewOthers); if cerr != nil { return nil, cerr }"
+    ],
+    "problem": "BookService.Update 先通过 engine 直接提交名称 UPDATE，随后才调用自行开启事务的 SetVisibility。两个写入没有共同事务；若第二步权限复核、数据库更新或审计插入失败，第一步名称已提交，但 handler 返回错误。",
+    "reproduce": "调用 PUT /api/v1/books/:id，同时提交新 name 和 membersCanViewOthers；在测试库用 SQLite trigger 让 config_change audit_logs INSERT 失败，或注入 SetVisibility 更新失败。当前名称 UPDATE 已先提交，随后接口返回错误。",
+    "actual": "同一个 HTTP 请求可能以错误响应结束，但账本名称已经改变；客户端重试时可能看到部分状态已生效。",
+    "expected": "组合更新应具备原子性：要么名称与可见性及对应审计全部提交，要么全部回滚。若产品决定两个字段独立提交，API 也必须提供可识别的部分成功响应，而不是普通失败。",
+    "impact": "客户端状态与服务端状态分叉；用户重试可能造成误判，审计/广播也可能只覆盖部分变更。",
+    "suggestion": "将 BookService.Update 重构为单一事务；在该事务内读取账本和 actor 当前角色，写名称、写可见性、记录审计，提交后再由 handler 根据结果广播。避免在事务内调用会自行 Begin/Commit 的 SetVisibility，可抽出 session 版本的内部函数。",
+    "status": "待确认",
+    "evidence": "book_handler.go:89 将两个字段交给 BookService.Update；book.go 先执行 s.engine.ID(...).Update，再调用 SetVisibility；SetVisibility 自己创建 session 并 Begin/Commit，失败时无法回滚前面的名称 UPDATE。静态审查，未运行故障注入。"
+  },
+  {
+    "id": "GPT-R34",
+    "title": "db purge 对非法或缺失的 CLI 参数静默回退默认值，仍继续执行破坏性清理",
+    "severity": "P2",
+    "location": [
+      "server/cmd/server/main.go:249-262,279-290"
+    ],
+    "quote": [
+      "recycleTTL = parsePositiveInt(args[i+1], recycleTTL)",
+      "func parsePositiveInt(s string, def int) int { if n, err := strconv.Atoi(s); err == nil && n > 0 { return n }; return def }",
+      "case args[i] == \"--recycle-ttl-days\" && i+1 < len(args):"
+    ],
+    "problem": "用户显式传入非数字、0、负数，或 flag 缺少参数时，解析器不报错，而是静默使用环境变量/默认值；未知参数也被忽略。db purge 随后继续执行 DELETE。运维人员可能以为自己指定了较长保留期，实际却按默认 30/365 天清理。",
+    "reproduce": "运行 fastledger db purge --recycle-ttl-days 3650x；或运行 fastledger db purge --recycle-ttl-days（缺少值）。当前 parsePositiveInt 返回原有默认值，handleDBPurge 不会中止。",
+    "actual": "显式参数错误不会阻止清理，而是按另一个 TTL 执行真实 DELETE。",
+    "expected": "显式 flag 缺值、格式错误、越界或未知参数都必须 fail-fast；在参数完全验证通过前不得执行任何清理。环境变量非法也应明确告警或退出，不能静默替换成更短的默认保留期。",
+    "impact": "运维误操作可提前硬删除回收站记录或审计历史；由于是硬删除，无法通过回收站恢复。",
+    "suggestion": "用标准 flag 包或严格手写解析器；区分“未提供”与“提供但非法”；解析函数返回 (value,error)，拒绝未知参数/缺值/非正数/越界值；在执行任何 DELETE 前完成全部配置校验。增加 CLI 单测并断言非法输入下数据库行数不变。",
+    "status": "待确认",
+    "evidence": "main.go:249-262 只在 flag 与后续参数均存在时处理，否则忽略；parsePositiveInt 在非法时返回 def；之后仅检查结果是否 <=0，默认值为正，因此错误参数仍会进入清理流程。静态代码链路，未执行 CLI。"
   }
 ]
