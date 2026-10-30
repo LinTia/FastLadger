@@ -28,19 +28,19 @@ const migrationsDir = "migrations"
 
 // Status 迁移状态：Current 为库当前版本，Expected 为程序期望版本
 type Status struct {
-	Current  int
-	Expected int
+	Current  int64
+	Expected int64
 	OK       bool
 }
 
 type migration struct {
-	version  int
+	version  int64
 	filename string
 }
 
 // Check 只检查版本，不改表。服务启动时调用。
 func Check(engine *xorm.Engine) (*Status, error) {
-	db := engine.DB().DB // engine.DB() 返回 *core.DB（内嵌 *sql.DB），取底层句柄
+	db := engine.DB().DB
 	if err := ensureVersionTable(db); err != nil {
 		return nil, err
 	}
@@ -57,7 +57,7 @@ func Check(engine *xorm.Engine) (*Status, error) {
 
 // Apply 应用所有未执行的迁移，返回本次应用的个数。CLI 调用。
 func Apply(engine *xorm.Engine) (int, error) {
-	db := engine.DB().DB // engine.DB() 返回 *core.DB（内嵌 *sql.DB），取底层句柄
+	db := engine.DB().DB
 	if err := ensureVersionTable(db); err != nil {
 		return 0, err
 	}
@@ -87,7 +87,7 @@ func Apply(engine *xorm.Engine) (int, error) {
 }
 
 // execInTx 单个迁移在事务内执行，任一语句失败即整体回滚
-func execInTx(db *sql.DB, version int, name, script string) error {
+func execInTx(db *sql.DB, version int64, name, script string) error {
 	tx, err := db.Begin()
 	if err != nil {
 		return fmt.Errorf("开启事务失败：%w", err)
@@ -129,17 +129,17 @@ func listMigrations() ([]migration, error) {
 }
 
 // parseVersion 文件名形如 0001_init.up.sql，取前导数字为版本号
-func parseVersion(filename string) (int, error) {
+func parseVersion(filename string) (int64, error) {
 	base := strings.TrimSuffix(filename, ".up.sql")
 	parts := strings.SplitN(base, "_", 2)
-	n, err := strconv.Atoi(parts[0])
+	n, err := strconv.ParseInt(parts[0], 10, 64)
 	if err != nil {
 		return 0, fmt.Errorf("迁移文件名须以版本号开头（如 0001_init.up.sql）：%s", filename)
 	}
 	return n, nil
 }
 
-func latestVersion() (int, error) {
+func latestVersion() (int64, error) {
 	ms, err := listMigrations()
 	if err != nil {
 		return 0, err
@@ -159,15 +159,15 @@ func ensureVersionTable(db *sql.DB) error {
 	return err
 }
 
-func currentVersion(db *sql.DB) (int, error) {
-	var v int
+func currentVersion(db *sql.DB) (int64, error) {
+	var v int64
 	if err := db.QueryRow(`SELECT COALESCE(MAX(version), 0) FROM schema_migrations`).Scan(&v); err != nil {
 		return 0, err
 	}
 	return v, nil
 }
 
-func isApplied(db *sql.DB, version int) (bool, error) {
+func isApplied(db *sql.DB, version int64) (bool, error) {
 	var n int
 	if err := db.QueryRow(`SELECT COUNT(1) FROM schema_migrations WHERE version = ?`, version).Scan(&n); err != nil {
 		return false, err

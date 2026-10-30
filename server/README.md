@@ -82,11 +82,28 @@ go build -o fastledger ./cmd/server
 | `audit_logs`（append-only）、`idempotency_records`、`book_versions` | `0001_init.up.sql` |
 | 优雅关机（配合部署 `stop_grace_period ≥ 30s`） | `cmd/server/main.go` |
 
+## 阶段 1 已实现（认证 / 账本 / 成员）
+
+- **认证**：`POST /api/v1/auth/register`（受 `EBK_ENABLE_REGISTER` 控制）、`POST /api/v1/auth/login`（返回 accessToken，含 jti）、`GET /api/v1/users/me`
+- **JWT**：手写 HS256 实现——限定 HS256、**拒绝 `alg=none`**、拒绝篡改/过期/错误密钥、安全读取 uid（非法 claims 返 401 而非 panic）、登录校验账号是否删除/禁用（R08/R09）
+- **账本**：`GET/POST /api/v1/books`、`GET/PUT/DELETE /api/v1/books/:id`（**删除仅 owner**，admin 不可）
+- **成员**：`GET /books/:id/members`、`POST /books/:id/members/invite`、`PUT/DELETE /books/:id/members/:uid`（软删保留历史）
+- **邀请入户**：`POST /books/:id/members/join`——不受注册开关限制；单次使用、默认 7 天、可绑角色/用户名、生成与使用限流（PRD §12.1）
+- **版本**：`internal/version` 是**唯一**的 `VersionRepo.Next` 实现，经 `VersionSource` 注入（禁止再手写）
+- **CLI**：`fastledger user create --username u --password p [--owner]`（`--owner` 仅在无任何用户时可用，建好后失效）
+
+### 运行测试
+
+```bash
+go test ./internal/service/ -v
+# 覆盖：JWT 安全（alg=none/篡改/过期/错密钥）、权限矩阵（admin ✅）、邀请限流
+# 无需数据库、无需 CGO
+```
+
 ## 尚未实现（后续阶段）
 
-- 阶段 1：注册/登录/JWT 中间件、账本 CRUD、成员与角色、邀请码入户、实例管理员
 - 阶段 2：统一 `TxService.Create`、转账双边原子、幂等回执、Gin 400/409 接线
-- 阶段 3：同步 pull/push、WebSocket Hub、可见性
+- 阶段 3：同步 pull/push、WebSocket Hub、可见性（`members_can_view_others` 字段已就位）
 - 阶段 4：删除/恢复/审计（`TxService.Delete/Restore`）
 - 阶段 5+：客户端与 OCR、报表导出、投资资产
 

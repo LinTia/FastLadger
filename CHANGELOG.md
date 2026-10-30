@@ -2,6 +2,30 @@
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.19] - 2026-10-30
+
+### 阶段 1：认证 / 账本 / 成员 + 邀请入户
+
+- **认证**：`AuthService`（注册/登录/校验）、bcrypt 口令哈希（自带盐，不另设 salt 列）；登录校验账号是否删除/禁用；签发 token 带 `jti`。
+- **JWT**：手写 HS256 实现（不引第三方库）——**限定 HS256、拒绝 `alg=none`**、拒绝篡改签名/过期/错误密钥、安全读取 `uid`（非法 claims 返 401 而非 panic）。满足 R08/R09。
+- **账本**：`BookService` 创建/列表/详情/修改/删除；创建时**同事务**初始化 `book_versions` 并写入 owner 成员；删除账本**仅 owner**（落地方案 §5.5）。
+- **成员与权限**：`RoleOf` 服务端权威判定；权限矩阵按 §5.5【修订版】——`CanEditOthersTx` owner/admin ✅（admin 由"可配置"改为 ✅，[1.9] 裁决）、member ❌；`CanManageMembers` owner/admin ✅ 且 admin 不能动 owner；移除成员为**软删保留历史**。
+- **邀请入户**（PRD §12.1）：新增 `invites` 表；邀请码单次使用（`used_at/used_by`）、默认 7 天有效期（`EBK_INVITE_TTL_DAYS`）、可绑角色与用户名；`JoinViaInvite` **原子**建 user + book_members 并标记已用；生成每账本每分钟 ≤5、使用每小时 ≤10 的限流；**不受 `EBK_ENABLE_REGISTER` 限制**（关闭注册后唯一入户通道）。
+- **版本**：`internal/version` 提供**唯一** `VersionRepo.Next`（事务内原子 +1 并回读），经 `VersionSource` 注入。
+- **CLI**：`fastledger user create --username u --password p [--owner]`；`--owner` **仅在无任何用户时可用**，建好后失效；首个 owner 自动成为实例管理员（`is_instance_admin`，与账本 owner 分离）。
+
+### 新增迁移 0002（用自建的迁移机制落地）
+
+- **修正 0001 的真实缺陷**：`UNIQUE(book_id, uid)` 与"成员退出为软删"冲突——成员被移除后唯一索引仍占位，导致**无法重新加入**。改为**部分唯一索引** `WHERE deleted = 0`。
+- 新增 `invites` 表（邀请码）。
+
+### 验证
+
+- ✅ `gofmt` / `go build ./...` / `go vet ./...` 全部通过。
+- ✅ 新增单元测试 `internal/service/jwt_test.go`，**7 项全部 PASS**（真实运行，无需数据库/CGO）：JWT 往返、`alg=none` 拒绝、篡改签名拒绝、过期拒绝、错误密钥拒绝、权限矩阵（admin ✅）、邀请限流。
+- ❌ 仍未验证：CGO 开启下 `db migrate` 实跑与 HTTP 端到端调用（本机无 gcc，MinGW 下载超时）。
+- 编码期由真实编译捕获并修复：① `Status.Current` 为 `int` 与版本号 `int64` 不一致；② 4 个文件格式未 gofmt。
+
 ## [1.18] - 2026-10-30
 
 ### 阶段 0：真实 Go 工程骨架落地（`server/`）
