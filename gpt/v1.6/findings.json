@@ -1,0 +1,26 @@
+[
+  {
+    "id": "GPT-R25",
+    "title": "SQLite 驱动冒烟步骤目标包没有测试文件，CI 实际未执行冒烟测试",
+    "severity": "P2",
+    "location": [
+      ".github/workflows/ci.yml:63-66",
+      "server/internal/database/（当前无 *_test.go）",
+      "server/internal/migrate/（当前无 *_test.go）",
+      "CHANGELOG.md [1.31]"
+    ],
+    "quote": [
+      "go test ./internal/migrate/... ./internal/database/... -count=1 -v",
+      "? fastledger/internal/migrate [no test files]",
+      "? fastledger/internal/database [no test files]"
+    ],
+    "problem": "CI 的 SQLite 专项冒烟命令目标包均没有测试文件，go test 返回成功但没有执行测试函数；因此该步骤不能证明 SQLite 驱动真实打开数据库、PRAGMA 生效或迁移成功。",
+    "reproduce": "查看 Actions run 41010979053 的 SQLite 冒烟步骤，日志两个包均为 [no test files]；递归检查当前仓库树，database 与 migrate 目录均无 *_test.go。",
+    "actual": "冒烟步骤成功结束，但实际只完成包编译/扫描，没有执行 SQLite 断言。",
+    "expected": "新增真实临时 SQLite 测试，调用 database.Init、断言 foreign_keys/journal_mode/synchronous，调用 migrate.Apply 并验证版本及重复执行；无测试文件时 CI 应失败。",
+    "impact": "CI 专项门禁可能在 SQLite 驱动不可用、PRAGMA 配置错误或迁移失败时仍通过；CHANGELOG [1.31] 对验证覆盖范围的描述因此过度。",
+    "suggestion": "新增 server/internal/database/database_test.go 与 server/internal/migrate/migrate_test.go；保留 CI 命令并确认日志出现实际测试结果；可增加测试文件存在性门禁；将全量 Go 测试与 SQLite 专项集成测试的证据分开记录。",
+    "status": "已采纳（owner 2026-10-30 确认；尚未修复 CI/测试代码）",
+    "evidence": "Actions run 41010979053: https://github.com/LinTia/FastLadger/actions/runs/41010979053；日志分别为 '? fastledger/internal/migrate [no test files]' 与 '? fastledger/internal/database [no test files]'；ci.yml:63-66；当前仓库树中两个目录均无 *_test.go。本轮未重新运行 Go 测试。"
+  }
+]
