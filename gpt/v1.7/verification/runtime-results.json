@@ -39,7 +39,23 @@
     {
       "id": "GPT-R30",
       "status": "static_scope_check"
+    },
+    {
+      "id": "GPT-R31",
+      "status": "not_run"
+    },
+    {
+      "id": "GPT-R32",
+      "status": "not_run"
+    },
+    {
+      "id": "GPT-R33",
+      "status": "not_run"
+    },
+    {
+      "id": "GPT-R34",
+      "status": "not_run"
     }
   ],
-  "note": "No test pass is claimed for this review. Existing CI evidence does not cover the newly identified edge cases unless explicit tests are added."
+  "note": "No test pass is claimed for this review. Existing CI evidence does not cover the newly identified edge cases unless explicit tests are added. Expanded static review added GPT-R31–GPT-R34; no local Go/SQLite/CLI/concurrency tests were executed."
 }
