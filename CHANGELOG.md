@@ -4,7 +4,7 @@
 
 - **审查前置对齐**：按《多 AI 对齐规范》→《第三方审阅者导读》→根 CHANGELOG `[1.6]`–`[1.12]` 的顺序重新阅读；并复核 GPT 三次核查卡片、v1.4 历史 findings / verification、当前成员移除与 WS 广播实现。
 - **GPT-R24 / P1 / 待确认**：移除成员后，`notifyMemberRemoved` 先执行 `RefreshVisibility`，非成员分支删除目标连接的 `BookIds[bookID]`；随后 `broadcastBookEvent` 仍走普通 `BroadcastToBook`，而后者只向仍订阅的连接投递。因此在线目标用户收不到 `member_removed` 清理通知，可能无法按 PRD §7.3 / §12.1 决策 5 清除本地账本数据。
-  - 证据位置：`server/internal/api/broadcast.go:73–86,135–142`；`server/internal/ws/hub.go:236–262,294–380`（摘除分支 L369–375）；需求依据 `docs/FastLedger-产品需求文档-PRD.md` §7.3 / §12.1 决策 5。
+  - 证据位置：`server/internal/api/book_handler.go:204–220`（调用点 L219）；`server/internal/api/broadcast.go:73–86,135–142`；`server/internal/ws/hub.go:236–262,294–380`（摘除分支 L369–375）；需求依据 `docs/FastLedger-产品需求文档-PRD.md:420,561`（§7.3 / §12.1 决策 5）。
   - 与 [1.27] 已修复的“移除成员仍收到后续账本事件”不同：本项指出清理事件本身在普通广播前被摘订阅截断，两项约束必须同时满足。
   - 建议增加按 `targetUid` 定向投递清理事件的 Hub 能力，并确保事件入队后撤销订阅；补充目标收到清理事件、后续事件不达、其他成员正常收到及断线/并发回归。
   - 状态：**待确认，等待 owner 裁决**；本轮未改业务代码。
