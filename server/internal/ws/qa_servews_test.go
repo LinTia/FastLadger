@@ -107,12 +107,19 @@ func TestQAS3ServeWSRejectsSubscribeWithoutChecker(t *testing.T) {
 	}
 	time.Sleep(50 * time.Millisecond)
 	DefaultHub.mu.RLock()
-	defer DefaultHub.mu.RUnlock()
 	for c := range DefaultHub.clients {
 		if c.Subscribed(1) {
+			DefaultHub.mu.RUnlock()
 			t.Fatal("没有 checker 时不得订阅成功（fail-closed）")
 		}
 	}
+	DefaultHub.mu.RUnlock()
+
+	// 显式关闭连接，等服务端注销（ServeWS 的 defer 会读 DefaultHub.Unregister）完全结束后再
+	// 由 t.Cleanup 恢复全局 DefaultHub：否则二者并发读写全局变量会触发 data race（-race 下 CI 失败）。
+	// 注意：必须在上面的 RUnlock 之后调用 waitCount——它内部会再次 RLock，而 RWMutex 不可重入。
+	_ = conn.Close()
+	waitCount(t, DefaultHub, 0)
 }
 
 // TestQAS3ServeWSRejectsUnauthenticated 上下文中没有 uid 时必须 401 且不升级
