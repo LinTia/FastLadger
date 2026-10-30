@@ -98,9 +98,12 @@ func main() {
 		}
 	}
 
-	// 正常启动：只检查版本
+	// 正常启动：只检查版本（GPT-R37：Check 纯只读，绝不建表）
 	st, err := migrate.Check(engine)
 	if err != nil {
+		if errors.Is(err, migrate.ErrNotMigrated) {
+			log.Fatalf("%v", err)
+		}
 		log.Fatalf("迁移状态检查失败：%v", err)
 	}
 	if !st.OK {

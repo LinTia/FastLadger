@@ -12,6 +12,7 @@ package migrate
 import (
 	"database/sql"
 	"embed"
+	"errors"
 	"fmt"
 	"path"
 	"sort"
@@ -26,6 +27,17 @@ var migrationFS embed.FS
 
 const migrationsDir = "migrations"
 
+// versionTableName 版本表名（Check 只读探测、Apply 才建）
+const versionTableName = "schema_migrations"
+
+// ErrNotMigrated 数据库尚未迁移：schema_migrations 表不存在。
+//
+// GPT-R37：Check 是**纯只读**检查，绝不代替 `fastledger db migrate` 建表。
+// 原先 Check 会先 CREATE TABLE IF NOT EXISTS 再判版本——服务启动就静默改了表，
+// 与本包约定第 2 条（服务启动绝不静默改表）直接冲突；而且"建表 + 版本不匹配退出"
+// 会留下一个半初始化的库，让运维误以为"迁移已经跑过一部分"。
+var ErrNotMigrated = errors.New("数据库尚未迁移")
+
 // Status 迁移状态：Current 为库当前版本，Expected 为程序期望版本
 type Status struct {
 	Current  int64
@@ -38,21 +50,53 @@ type migration struct {
 	filename string
 }
 
-// Check 只检查版本，不改表。服务启动时调用。
+// Check 只检查版本，**纯只读，不建表不改表**。服务启动时调用。
+//
+// GPT-R37：表不存在直接报 ErrNotMigrated，由 `fastledger db migrate` 负责创建。
 func Check(engine *xorm.Engine) (*Status, error) {
-	db := engine.DB().DB
-	if err := ensureVersionTable(db); err != nil {
-		return nil, err
+	if engine == nil {
+		return nil, fmt.Errorf("migrate.Check：engine 缺失")
+	}
+	return checkDB(engine.DB().DB)
+}
+
+// checkDB 版本检查的核心逻辑（便于在测试中用替身驱动验证"只读"这一性质）
+func checkDB(db *sql.DB) (*Status, error) {
+	if db == nil {
+		return nil, fmt.Errorf("migrate.Check：数据库句柄缺失")
 	}
 	expected, err := latestVersion()
 	if err != nil {
 		return nil, err
+	}
+	exists, err := versionTableExists(db)
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, fmt.Errorf("%w：缺少 %s 表，请先执行 `fastledger db migrate`（期望 v%d）",
+			ErrNotMigrated, versionTableName, expected)
 	}
 	current, err := currentVersion(db)
 	if err != nil {
 		return nil, err
 	}
 	return &Status{Current: current, Expected: expected, OK: current == expected}, nil
+}
+
+// versionTableExists 只读探测版本表是否存在（绝不创建）。
+//
+// 走 sqlite_master 查询而不是"试着 SELECT 一把、报错就当没表"：
+// 后者会把权限错误、磁盘错误也误判成"未迁移"。
+func versionTableExists(db *sql.DB) (bool, error) {
+	var n int
+	err := db.QueryRow(
+		`SELECT COUNT(1) FROM sqlite_master WHERE type = 'table' AND name = ?`,
+		versionTableName).Scan(&n)
+	if err != nil {
+		return false, fmt.Errorf("读取 sqlite_master 失败：%w", err)
+	}
+	return n > 0, nil
 }
 
 // Apply 应用所有未执行的迁移，返回本次应用的个数。CLI 调用。
@@ -150,6 +194,10 @@ func latestVersion() (int64, error) {
 	return ms[len(ms)-1].version, nil
 }
 
+// ensureVersionTable 建版本表。
+//
+// GPT-R37：**只允许出现在 Apply 路径**（`fastledger db migrate`）。
+// Check 不得调用它——服务启动必须保持纯只读。
 func ensureVersionTable(db *sql.DB) error {
 	_, err := db.Exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
 		version INTEGER PRIMARY KEY,
