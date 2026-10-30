@@ -327,6 +327,12 @@ func (s *SyncService) Pull(uid, bookID, afterVersion int64, limit int) (*SyncBat
 	// 每个实体各自只取前 limit 个版本就够了（因而单表扫描量恒 ≤ limit）：
 	// 若合并流的第 limit 个版本是 V，则全库小于 V 的版本行最多 limit-1 个，
 	// 那么任一实体小于 V 的行也最多 limit-1 个 ⇒ V 必在该实体的前 limit 个之内。
+	//
+	// 注意"同版本回扩"在真实数据里很容易触发（不是异常）：新账本的 seed
+	// （seedBookDefaults）把 3 个默认账户 + 30 个默认两级分类写在【同一个版本】里，
+	// 因此 afterVersion=0 的首批会把这 33 行整批返回，哪怕 limit 只有 5。
+	// 这是规格允许的唯一例外——该版本不能拆，客户端必须一次吃下；越过它之后
+	// 批大小立刻回到 limit（回归用例见 TestR48SeedBulkVersionIsOnlyAllowedException）。
 	streams := make([][]int64, 0, len(syncEntityTables))
 	for _, table := range syncEntityTables {
 		s, serr := syncVersionStream(sess, table, bookID, afterVersion, limit)
