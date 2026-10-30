@@ -11,10 +11,12 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
 	"fastledger/internal/model"
+	"fastledger/internal/version"
 )
 
 // ---------------------------------------------------------------------------
@@ -223,9 +225,252 @@ func TestR26SingleTxUnaffectedByPairingRules(t *testing.T) {
 	}
 }
 
+// newMemberSvc 构造成员服务（测试用，邀请有效期 7 天）
+func newMemberSvc(t *testing.T, e *testEnv) *MemberService {
+	t.Helper()
+	as := NewAuthService(e.engine, testJWTSecret, time.Hour)
+	ms, err := NewMemberService(e.engine, as, 7)
+	must(t, err)
+	return ms
+}
+
+// memberRole 读取成员当前角色（含已软删判定：deleted=0）
+func memberRole(t *testing.T, e *testEnv, uid int64) int8 {
+	t.Helper()
+	var m model.BookMember
+	has, err := e.engine.Where("book_id = ? AND uid = ? AND deleted = 0", e.bookID, uid).Get(&m)
+	if err != nil {
+		t.Fatalf("读成员角色失败：%v", err)
+	}
+	if !has {
+		t.Fatalf("成员 %d 不存在或已被移除", uid)
+	}
+	return m.Role
+}
+
+// countInvites 统计本账本已签发的邀请码条数
+func countInvites(t *testing.T, e *testEnv) int64 {
+	t.Helper()
+	var n int64
+	if _, err := e.engine.SQL("SELECT COUNT(1) FROM invites WHERE book_id = ?", e.bookID).Get(&n); err != nil {
+		t.Fatalf("统计邀请码失败：%v", err)
+	}
+	return n
+}
+
 // ---------------------------------------------------------------------------
-// GPT-R32：恢复必须把 deleted_at 清零
+// GPT-R28：权限撤销后的 TOCTOU（真实 SQLite + 确定性屏障）
 // ---------------------------------------------------------------------------
+
+// r28AfterRevocation 确定性并发屏障（严禁随机 sleep）。
+//
+// 时序全部由 channel 钉死：
+//  1. 撤销方在 goroutine 中执行并【提交】降权 / 移除（模拟并发的权限撤销）；
+//  2. 请求 A 在另一个 goroutine 中等待 revoked 信号之后才发起敏感操作。
+//
+// 为什么屏障钉在这个位置：SQLite 单写者 + MaxOpenConns=1 决定了撤销方的写不可能
+// 落进 A 的写事务内部（会被写锁挡住），因此"撤销先提交、A 后开工"是本引擎下唯一
+// 确定可达的时序——而它正是旧实现出错的场景：旧实现在事务外先读一次角色，之后无论
+// 权限怎么变都继续用那份旧快照。
+func r28AfterRevocation(t *testing.T, revoke func() error, act func() error) error {
+	t.Helper()
+	revoked := make(chan error, 1)
+	actErr := make(chan error, 1)
+	go func() { revoked <- revoke() }()
+	go func() {
+		if err := <-revoked; err != nil {
+			actErr <- fmt.Errorf("撤销权限失败：%w", err)
+			return
+		}
+		actErr <- act()
+	}()
+	return <-actErr
+}
+
+// TestR28TxDeleteRestoreRejectStaleRole 交易删除 / 恢复：降权后不得用过期权限继续操作。
+func TestR28TxDeleteRestoreRejectStaleRole(t *testing.T) {
+	e := newTestEnv(t)
+	ctx := context.Background()
+	ms := newMemberSvc(t, e)
+	admin := insertUser(t, e, "r28-tx-admin")
+	addMember(t, e, admin, model.RoleAdmin)
+
+	// owner 的三笔交易（creator 不是 admin，只有 admin 权限才能删）
+	a, err := e.txs.Create(ctx, e.uid, e.bookID, e.expense(CreateRequest{ClientUuid: "r28-a", Amount: 1000}))
+	must(t, err)
+	b, err := e.txs.Create(ctx, e.uid, e.bookID, e.expense(CreateRequest{ClientUuid: "r28-b", Amount: 2000}))
+	must(t, err)
+	c, err := e.txs.Create(ctx, e.uid, e.bookID, e.expense(CreateRequest{ClientUuid: "r28-c", Amount: 3000}))
+	must(t, err)
+
+	// ① A（admin）初始权限有效：能删他人的交易
+	if _, err := e.txs.Delete(ctx, admin, e.bookID, a.TransactionIds[0], "r28-del-a"); err != nil {
+		t.Fatalf("降权前管理员应能删除他人交易，实际 %v", err)
+	}
+	// ② 屏障：并发把 A 降权为 member 并提交 → ③ A 继续执行
+	actErr := r28AfterRevocation(t,
+		func() error { return ms.ChangeRole(e.uid, e.bookID, admin, model.RoleMember) },
+		func() error {
+			_, err := e.txs.Delete(ctx, admin, e.bookID, b.TransactionIds[0], "r28-del-b")
+			return err
+		})
+	// ④ 不得用过期权限完成删除
+	if !errors.Is(actErr, ErrForbidden) {
+		t.Fatalf("降权后不得再用过期权限删除他人交易，实际 err=%v", actErr)
+	}
+	if got := e.balance(e.assetID); got != -5000 {
+		t.Fatalf("被拒后余额应仍为 -5000（1000 已删 + 2000 + 3000 → -5000），实际 %d", got)
+	}
+	if n := auditCount(e, model.AuditActionDelete); n != 1 {
+		t.Fatalf("只应有第 1 次成功删除的 1 行审计，实际 %d", n)
+	}
+
+	// 恢复路径同口径：先恢复 admin 权限并成功恢复一笔（证明初始权限有效）
+	must(t, ms.ChangeRole(e.uid, e.bookID, admin, model.RoleAdmin))
+	if _, err := e.txs.Restore(ctx, admin, e.bookID, a.TransactionIds[0], "r28-restore-a"); err != nil {
+		t.Fatalf("恢复权限前管理员应能恢复他人交易，实际 %v", err)
+	}
+	_, err = e.txs.Delete(ctx, e.uid, e.bookID, c.TransactionIds[0], "r28-del-c")
+	must(t, err)
+	// ② 屏障降权 → ③ A 继续恢复
+	actErr = r28AfterRevocation(t,
+		func() error { return ms.ChangeRole(e.uid, e.bookID, admin, model.RoleMember) },
+		func() error {
+			_, err := e.txs.Restore(ctx, admin, e.bookID, c.TransactionIds[0], "r28-restore-c")
+			return err
+		})
+	if !errors.Is(actErr, ErrForbidden) {
+		t.Fatalf("降权后不得再用过期权限恢复他人交易，实际 err=%v", actErr)
+	}
+	// 恢复被拒：目标仍处于已删态，余额不得被"半恢复"
+	if d := txRow(t, e, c.TransactionIds[0]).Deleted; !d {
+		t.Fatal("被拒的恢复不得把交易变回存活态")
+	}
+	if got := e.balance(e.assetID); got != -3000 {
+		t.Fatalf("被拒后余额应仍为 -3000，实际 %d", got)
+	}
+}
+
+// TestR28MemberChangeRoleRejectsStaleRole 改角色：降权后不得再改他人角色。
+func TestR28MemberChangeRoleRejectsStaleRole(t *testing.T) {
+	e := newTestEnv(t)
+	ms := newMemberSvc(t, e)
+	admin := insertUser(t, e, "r28-role-admin")
+	addMember(t, e, admin, model.RoleAdmin)
+	target := insertUser(t, e, "r28-role-target")
+	addMember(t, e, target, model.RoleMember)
+	target2 := insertUser(t, e, "r28-role-target2")
+	addMember(t, e, target2, model.RoleMember)
+
+	// ① 初始权限有效
+	must(t, ms.ChangeRole(admin, e.bookID, target, model.RoleAdmin))
+	if got := memberRole(t, e, target); got != model.RoleAdmin {
+		t.Fatalf("目标角色应已被改为 admin，实际 %d", got)
+	}
+
+	// ② 屏障降权 → ③ A 继续改别人角色
+	actErr := r28AfterRevocation(t,
+		func() error { return ms.ChangeRole(e.uid, e.bookID, admin, model.RoleMember) },
+		func() error { return ms.ChangeRole(admin, e.bookID, target2, model.RoleAdmin) })
+	if !errors.Is(actErr, ErrForbidden) {
+		t.Fatalf("降权后不得再用过期权限改他人角色，实际 err=%v", actErr)
+	}
+	if got := memberRole(t, e, target2); got != model.RoleMember {
+		t.Fatalf("被拒后目标角色不得改变，应仍为 member，实际 %d", got)
+	}
+	if n := auditCountAction(e, model.AuditActionPermissionChange); n != 2 {
+		t.Fatalf("审计只应有「第 1 次改角色」与「降权」两行，实际 %d", n)
+	}
+}
+
+// TestR28MemberRemoveRejectsStaleRole 移除成员：降权后不得再移除他人。
+func TestR28MemberRemoveRejectsStaleRole(t *testing.T) {
+	e := newTestEnv(t)
+	ms := newMemberSvc(t, e)
+	admin := insertUser(t, e, "r28-rm-admin")
+	addMember(t, e, admin, model.RoleAdmin)
+	target := insertUser(t, e, "r28-rm-target")
+	addMember(t, e, target, model.RoleMember)
+	target2 := insertUser(t, e, "r28-rm-target2")
+	addMember(t, e, target2, model.RoleMember)
+
+	// ① 初始权限有效
+	must(t, ms.Remove(admin, e.bookID, target))
+
+	// ② 屏障降权 → ③ A 继续移除他人
+	actErr := r28AfterRevocation(t,
+		func() error { return ms.ChangeRole(e.uid, e.bookID, admin, model.RoleMember) },
+		func() error { return ms.Remove(admin, e.bookID, target2) })
+	if !errors.Is(actErr, ErrForbidden) {
+		t.Fatalf("降权后不得再用过期权限移除成员，实际 err=%v", actErr)
+	}
+	if got := memberRole(t, e, target2); got != model.RoleMember {
+		t.Fatalf("被拒后目标成员不得被移除，实际角色 %d", got)
+	}
+}
+
+// TestR28BookVisibilityRejectsStaleRole 账本可见性：降权后不得再改开关。
+func TestR28BookVisibilityRejectsStaleRole(t *testing.T) {
+	e := newTestEnv(t)
+	ms := newMemberSvc(t, e)
+	bs := NewBookService(e.engine, version.NewRepo())
+	admin := insertUser(t, e, "r28-vis-admin")
+	addMember(t, e, admin, model.RoleAdmin)
+
+	old, err := bs.Get(e.bookID)
+	must(t, err)
+
+	// ① 初始权限有效
+	changed, err := bs.SetVisibility(admin, e.bookID, !old.MembersCanViewOthers)
+	must(t, err)
+	if !changed {
+		t.Fatal("管理员首次切换可见性应产生实际变更")
+	}
+	// ② 屏障降权 → ③ A 继续切换开关
+	actErr := r28AfterRevocation(t,
+		func() error { return ms.ChangeRole(e.uid, e.bookID, admin, model.RoleMember) },
+		func() error {
+			_, err := bs.SetVisibility(admin, e.bookID, old.MembersCanViewOthers)
+			return err
+		})
+	if !errors.Is(actErr, ErrForbidden) {
+		t.Fatalf("降权后不得再用过期权限改可见性开关，实际 err=%v", actErr)
+	}
+	now, err := bs.Get(e.bookID)
+	must(t, err)
+	if now.MembersCanViewOthers != !old.MembersCanViewOthers {
+		t.Fatalf("被拒后开关值不得改变，应仍为 %t，实际 %t", !old.MembersCanViewOthers, now.MembersCanViewOthers)
+	}
+	if n := auditCountAction(e, model.AuditActionConfigChange); n != 1 {
+		t.Fatalf("配置变更审计只应有第 1 次成功切换的 1 行，实际 %d", n)
+	}
+}
+
+// TestR28CreateInviteRejectsStaleRole 签发邀请码：降权后不得再拉人入户。
+func TestR28CreateInviteRejectsStaleRole(t *testing.T) {
+	e := newTestEnv(t)
+	ms := newMemberSvc(t, e)
+	admin := insertUser(t, e, "r28-inv-admin")
+	addMember(t, e, admin, model.RoleAdmin)
+
+	// ① 初始权限有效
+	if _, err := ms.CreateInvite(admin, e.bookID, model.RoleMember, ""); err != nil {
+		t.Fatalf("降权前管理员应能签发邀请码，实际 %v", err)
+	}
+	// ② 屏障降权 → ③ A 继续签发
+	actErr := r28AfterRevocation(t,
+		func() error { return ms.ChangeRole(e.uid, e.bookID, admin, model.RoleMember) },
+		func() error {
+			_, err := ms.CreateInvite(admin, e.bookID, model.RoleMember, "")
+			return err
+		})
+	if !errors.Is(actErr, ErrForbidden) {
+		t.Fatalf("降权后不得再用过期权限签发邀请码，实际 err=%v", actErr)
+	}
+	if n := countInvites(t, e); n != 1 {
+		t.Fatalf("被拒后不应新增邀请码，应仍为 1 条，实际 %d", n)
+	}
+}
 
 // TestR32RestoreClearsDeletedAt 删除写墓碑时间、恢复清零；REST/Pull 读到同一口径。
 func TestR32RestoreClearsDeletedAt(t *testing.T) {

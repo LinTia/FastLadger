@@ -122,18 +122,30 @@ func (s *MemberService) List(bookID int64) ([]MemberDTO, error) {
 
 // ChangeRole 修改成员角色：owner/admin 可操作，但 admin 不能改 owner，也不能把他人提为 owner
 func (s *MemberService) ChangeRole(actor, bookID, targetUid int64, newRole int8) error {
-	actorRole, err := RoleOf(s.engine, bookID, actor)
+	if newRole != model.RoleAdmin && newRole != model.RoleMember {
+		// 归入 ErrInvalidArgument：由 mapSvcErr 映射为 400，而不是 500
+		return fmt.Errorf("%w：只能将成员设为管理员或普通成员", ErrInvalidArgument)
+	}
+	// 权限复核 / 数据变更 / 审计必须在【同一事务】内完成（WBS 4.3 / 4.6）。
+	//
+	// GPT-R28：actor 的角色必须在事务内重读。事务外读角色会留下 TOCTOU 窗口——
+	// 请求通过检查后被并发降权或移除，却仍能用过期权限继续改别人的角色。
+	// GPT-R29：before_json 用的旧角色同样在事务内读，保证"变更前状态"与实际变更对应。
+	sess := s.engine.NewSession()
+	defer sess.Close()
+	if err := sess.Begin(); err != nil {
+		return err
+	}
+	defer func() { _ = sess.Rollback() }()
+
+	actorRole, err := roleOfTx(sess, bookID, actor)
 	if err != nil {
 		return err
 	}
 	if !CanManageMembers(actorRole) {
 		return ErrForbidden
 	}
-	if newRole != model.RoleAdmin && newRole != model.RoleMember {
-		// 归入 ErrInvalidArgument：由 mapSvcErr 映射为 400，而不是 500
-		return fmt.Errorf("%w：只能将成员设为管理员或普通成员", ErrInvalidArgument)
-	}
-	targetRole, err := RoleOf(s.engine, bookID, targetUid)
+	targetRole, err := roleOfTx(sess, bookID, targetUid)
 	if err != nil {
 		return err
 	}
@@ -143,13 +155,6 @@ func (s *MemberService) ChangeRole(actor, bookID, targetUid int64, newRole int8)
 	if actorRole == model.RoleAdmin && targetRole == model.RoleOwner {
 		return ErrCannotOperateOwner
 	}
-	// 角色变更与审计必须在【同一事务】：不允许出现"角色已改但审计缺失"（WBS 4.3 / 4.6）
-	sess := s.engine.NewSession()
-	defer sess.Close()
-	if err := sess.Begin(); err != nil {
-		return err
-	}
-	defer func() { _ = sess.Rollback() }()
 
 	n, err := sess.Where("book_id = ? AND uid = ? AND deleted = 0", bookID, targetUid).
 		Cols("role", "updated_at").
@@ -176,27 +181,28 @@ func (s *MemberService) ChangeRole(actor, bookID, targetUid int64, newRole int8)
 
 // Remove 移除成员（软删，保留历史记录）
 func (s *MemberService) Remove(actor, bookID, targetUid int64) error {
-	actorRole, err := RoleOf(s.engine, bookID, actor)
-	if err != nil {
-		return err
-	}
-	if !CanManageMembers(actorRole) {
-		return ErrForbidden
-	}
-	targetRole, err := RoleOf(s.engine, bookID, targetUid)
-	if err != nil {
-		return err
-	}
-	if targetRole == model.RoleOwner {
-		return ErrCannotOperateOwner
-	}
-	// 与 ChangeRole 同理：移除与审计在同一事务（WBS 4.3 / 4.6）
+	// 与 ChangeRole 同理：权限复核 / 移除 / 审计在同一事务（WBS 4.3 / 4.6；GPT-R28 / R29）
 	sess := s.engine.NewSession()
 	defer sess.Close()
 	if err := sess.Begin(); err != nil {
 		return err
 	}
 	defer func() { _ = sess.Rollback() }()
+
+	actorRole, err := roleOfTx(sess, bookID, actor)
+	if err != nil {
+		return err
+	}
+	if !CanManageMembers(actorRole) {
+		return ErrForbidden
+	}
+	targetRole, err := roleOfTx(sess, bookID, targetUid)
+	if err != nil {
+		return err
+	}
+	if targetRole == model.RoleOwner {
+		return ErrCannotOperateOwner
+	}
 
 	now := time.Now().Unix()
 	n, err := sess.Where("book_id = ? AND uid = ? AND deleted = 0", bookID, targetUid).
@@ -222,19 +228,30 @@ func (s *MemberService) Remove(actor, bookID, targetUid int64) error {
 }
 
 // CreateInvite 生成邀请码（限流：每账本每分钟 ≤5）
+//
+// GPT-R28：actor 的权限必须在【写事务内】重读。邀请码是入户凭证，若拿一个事务外
+// 读到的过期角色签发，已被降权/移除的管理员仍能继续拉人进账本。
 func (s *MemberService) CreateInvite(actor, bookID int64, role int8, boundUsername string) (*model.Invite, error) {
-	actorRole, err := RoleOf(s.engine, bookID, actor)
-	if err != nil {
-		return nil, err
-	}
-	if !CanManageMembers(actorRole) {
-		return nil, ErrForbidden
-	}
 	if role != model.RoleAdmin && role != model.RoleMember {
 		role = model.RoleMember
 	}
 	if !s.limiter.Allow(fmt.Sprintf("invite:create:book:%d", bookID), 5, time.Minute) {
 		return nil, ErrRateLimited
+	}
+
+	sess := s.engine.NewSession()
+	defer sess.Close()
+	if err := sess.Begin(); err != nil {
+		return nil, err
+	}
+	defer func() { _ = sess.Rollback() }()
+
+	actorRole, err := roleOfTx(sess, bookID, actor)
+	if err != nil {
+		return nil, err
+	}
+	if !CanManageMembers(actorRole) {
+		return nil, ErrForbidden
 	}
 
 	code, err := randomCode(32)
@@ -250,7 +267,10 @@ func (s *MemberService) CreateInvite(actor, bookID int64, role int8, boundUserna
 		BoundUsername: strings.TrimSpace(boundUsername),
 		CreatedAt:     time.Now().Unix(),
 	}
-	if _, err := s.engine.Insert(inv); err != nil {
+	if _, err := sess.Insert(inv); err != nil {
+		return nil, err
+	}
+	if err := sess.Commit(); err != nil {
 		return nil, err
 	}
 	return inv, nil

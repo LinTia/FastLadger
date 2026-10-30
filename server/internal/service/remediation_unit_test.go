@@ -243,6 +243,92 @@ func TestR32RestoreUsesTombstoneAt(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// GPT-R28：权限必须在写事务内重读（源码顺序断言）
+// ---------------------------------------------------------------------------
+
+// TestR28PermissionRevalidatedInsideWriteTransaction 七个敏感入口的权限判定必须发生在
+// 【写事务开始之后】，且不得再使用事务外的 RoleOf（engine 版本）。
+//
+// 为什么用源码顺序断言而不是"跑一次看结果"：事务外读角色留下的 TOCTOU 窗口，
+// 在 SQLite 单写者 + MaxOpenConns=1 下几乎不可能靠 goroutine 调度稳定复现
+// （撤销方的写会被 A 的写事务挡住）。而"读角色是否在 Begin 之后"是**确定性**的：
+// 只要它成立，撤销一旦先提交，本次判定必然读到新角色。
+// 真实 SQLite 的行为验证见 remediation_integration_test.go 的 TestR28* 系列。
+func TestR28PermissionRevalidatedInsideWriteTransaction(t *testing.T) {
+	cases := []struct {
+		file string
+		fn   string
+	}{
+		{"tx.go", "mutateVisibility"}, // 交易删除 / 恢复
+		{"member.go", "ChangeRole"},   // 改角色
+		{"member.go", "Remove"},       // 移除成员
+		{"member.go", "CreateInvite"}, // 签发邀请码
+		{"book.go", "Update"},         // 改账本名称 + 可见性
+		{"book.go", "SetVisibility"},  // 可见性开关（唯一写实现）
+		{"book.go", "Delete"},         // 删除账本
+	}
+	for _, c := range cases {
+		f, fset := remediationParse(t, c.file)
+		fn := qas3Func(f, c.fn)
+		if fn == nil {
+			t.Errorf("%s 中找不到 %s", c.file, c.fn)
+			continue
+		}
+		callees := qas3Callees(fn)
+		// ① 不得再出现事务外的 RoleOf（engine 版本）
+		if callees["RoleOf"] {
+			t.Errorf("%s.%s 仍调用 RoleOf：那是事务外的权限快照（GPT-R28）", c.file, c.fn)
+		}
+		// ② 必须使用事务内的权限读取原语
+		inTx := callees["roleOfTx"] || callees["requireManagerTx"]
+		if !inTx {
+			t.Errorf("%s.%s 未调用 roleOfTx/requireManagerTx：权限不是在事务内重读的", c.file, c.fn)
+		}
+		// ③ Begin 必须出现在权限读取之前
+		beginLine := remediationFirstCallLine(fn, fset, "Begin")
+		if beginLine == 0 {
+			t.Errorf("%s.%s 没有开启写事务（Begin）", c.file, c.fn)
+			continue
+		}
+		permLine := remediationFirstCallLine(fn, fset, "roleOfTx")
+		if permLine == 0 {
+			permLine = remediationFirstCallLine(fn, fset, "requireManagerTx")
+		}
+		if permLine == 0 {
+			t.Errorf("%s.%s 未找到事务内权限读取调用", c.file, c.fn)
+			continue
+		}
+		if beginLine >= permLine {
+			t.Errorf("%s.%s：Begin（L%d）必须早于事务内权限读取（L%d），否则仍是事务外快照",
+				c.file, c.fn, beginLine, permLine)
+		}
+	}
+}
+
+// TestR28NoEngineRoleReadInWritePaths 全包扫描：写路径函数不得再出现 `RoleOf(s.engine, ...)`。
+//
+// RoleOf 只允许留在**只读**判定里（handler 的成员资格展示等），写操作一律走 roleOfTx。
+func TestR28NoEngineRoleReadInWritePaths(t *testing.T) {
+	for _, name := range []string{"tx.go", "member.go", "book.go"} {
+		f, _ := remediationParse(t, name)
+		for _, d := range f.Decls {
+			fn, ok := d.(*ast.FuncDecl)
+			if !ok || fn.Body == nil {
+				continue
+			}
+			if !qas3Callees(fn)["RoleOf"] {
+				continue
+			}
+			// 允许 RoleOf 的包装实现本身（MemberService.RoleOf）继续存在：它服务只读路径
+			if fn.Name.Name == "RoleOf" {
+				continue
+			}
+			t.Errorf("%s.%s 调用了 RoleOf（engine 版本）：写路径必须改用 roleOfTx", name, fn.Name.Name)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
 // 共用：源码解析helper
 // ---------------------------------------------------------------------------
 

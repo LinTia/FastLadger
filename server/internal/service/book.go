@@ -128,6 +128,22 @@ type BookUpdateResult struct {
 	VisibilityChanged bool
 }
 
+// loadBookTx 在【调用方事务内】读取未删除的账本；不存在返回 ErrBookNotFound。
+//
+// GPT-R28 / R29：事务外读账本会让"权限判定"与"旧值快照"建立在已被并发改掉的
+// 数据上——before_json 可能记错旧值，权限也可能用的是撤销前的成员资格。
+func loadBookTx(sess *xorm.Session, bookID int64) (*model.Book, error) {
+	var b model.Book
+	has, err := sess.ID(bookID).Where("deleted = 0").Get(&b)
+	if err != nil {
+		return nil, err
+	}
+	if !has {
+		return nil, ErrBookNotFound
+	}
+	return &b, nil
+}
+
 // Update 修改账本设置（名称 / 可见性开关）：owner 或 admin。
 //
 // **不变量（《落地方案》§5.2）**：可见性开关只有**一套写实现**（SetVisibility），
@@ -138,25 +154,41 @@ type BookUpdateResult struct {
 // 因此本方法只负责：① 名称变了就写 name（并校验 RowsAffected==1）；② 传了开关就委托
 // SetVisibility，把它的 changed 结果原样带给 handler。绝不在这里拼第二个
 // members_can_view_others 的 UPDATE —— 那才是"两条写路径"的真实风险来源。
+//
+// GPT-R33：名称与可见性必须落在【同一个事务】里，审计与变更同事务，任一环节失败
+// 整体回滚（旧实现先写 name 提交、再单独开事务写开关，中途失败会留下"名字改了、
+// 开关没改"的半截状态）。WS 广播由 handler 在 Update 返回成功后执行——
+// 只有事务提交成功才会走到那里。
 func (s *BookService) Update(actor, bookID int64, name string, canViewOthers *bool) (*BookUpdateResult, error) {
-	b, err := s.Get(bookID)
-	if err != nil {
+	sess := s.engine.NewSession()
+	defer sess.Close()
+	if err := sess.Begin(); err != nil {
 		return nil, err
 	}
-	role, err := RoleOf(s.engine, bookID, actor)
+	defer func() { _ = sess.Rollback() }()
+
+	// 权限与账本快照都在事务内读取（GPT-R28 / R29）
+	role, err := roleOfTx(sess, bookID, actor)
 	if err != nil {
 		return nil, err
 	}
 	if role != model.RoleOwner && role != model.RoleAdmin {
 		return nil, ErrForbidden
 	}
+	b, err := loadBookTx(sess, bookID)
+	if err != nil {
+		return nil, err
+	}
 
 	out := &BookUpdateResult{}
 	// 名称：空串 = 不改名；与当前值相同 = 不写库（避免无谓 UPDATE 与 updated_at 抖动）
-	if trimmed := strings.TrimSpace(name); trimmed != "" && trimmed != b.Name {
+	// before_json 用事务内读到的旧名（GPT-R29）
+	oldName := b.Name
+	if trimmed := strings.TrimSpace(name); trimmed != "" && trimmed != oldName {
 		b.Name = trimmed
 		b.UpdatedAt = time.Now().Unix()
-		n, uerr := s.engine.ID(bookID).Where("deleted = 0").
+		// 仍走 xorm 的列白名单更新（只写 name / updated_at），但在**本事务**的会话上执行
+		n, uerr := sess.ID(bookID).Where("deleted = 0").
 			Cols("name", "updated_at").Update(b)
 		if uerr != nil {
 			return nil, uerr
@@ -168,13 +200,16 @@ func (s *BookService) Update(actor, bookID int64, name string, canViewOthers *bo
 		out.NameChanged = true
 	}
 
-	// 可见性：一律委托唯一实现，让"是否真的变了"只有一处判定
+	// 可见性：一律委托唯一实现，并**传入本事务**（GPT-R33 原子性）
 	if canViewOthers != nil {
-		changed, cerr := s.SetVisibility(actor, bookID, *canViewOthers)
+		changed, cerr := s.SetVisibility(actor, bookID, *canViewOthers, sess)
 		if cerr != nil {
 			return nil, cerr
 		}
 		out.VisibilityChanged = changed
+	}
+	if err := sess.Commit(); err != nil {
+		return nil, err
 	}
 	return out, nil
 }
@@ -208,16 +243,38 @@ func (s *BookService) CurrentVersion(bookID int64) (int64, error) {
 //     该话术由前端常驻显示；服务端只负责让后续 pull 立刻按新规则过滤。
 //  4. 对外只有 `PUT /books/:id/visibility` 一个入口（`PUT /books/:id` 收到该字段会被
 //     handler 显式 400），避免"两条写路径只修一条"的历史坑。
-func (s *BookService) SetVisibility(actor, bookID int64, canView bool) (bool, error) {
+//
+// 可选参数 tx（GPT-R33）：非空时表示"在调用方已有的写事务内执行"，此时本函数
+// 【不自行提交、不自行回滚】，事务边界由调用方掌握——`PUT /books/:id` 同时改名称与
+// 开关时，两者必须同生共死。为空时自建事务并在末尾提交。
+//
+// GPT-R28：actor 的角色与账本快照都在事务内重读，不依赖任何事务外的旧权限结果。
+func (s *BookService) SetVisibility(actor, bookID int64, canView bool, tx ...*xorm.Session) (bool, error) {
 	if actor <= 0 || bookID <= 0 {
 		return false, fmt.Errorf("%w：用户或账本缺失", ErrInvalidArgument)
 	}
-	// 账本存在性（软删后不可改设置）
-	b, err := s.Get(bookID)
+
+	// 事务边界：复用调用方事务（GPT-R33 原子性），否则自建
+	sess := (*xorm.Session)(nil)
+	ownTx := false
+	if len(tx) > 0 && tx[0] != nil {
+		sess = tx[0]
+	} else {
+		sess = s.engine.NewSession()
+		defer sess.Close()
+		if err := sess.Begin(); err != nil {
+			return false, err
+		}
+		ownTx = true
+		defer func() { _ = sess.Rollback() }()
+	}
+
+	// 账本存在性（软删后不可改设置）与权限：一律在事务内读（GPT-R28）
+	b, err := loadBookTx(sess, bookID)
 	if err != nil {
 		return false, err
 	}
-	role, err := RoleOf(s.engine, bookID, actor)
+	role, err := roleOfTx(sess, bookID, actor)
 	if err != nil {
 		return false, err
 	}
@@ -228,19 +285,11 @@ func (s *BookService) SetVisibility(actor, bookID int64, canView bool) (bool, er
 		// 幂等：没有实际变化就不写库、不广播
 		return false, nil
 	}
-	// 变更前的旧值必须在 b 被改写【之前】取，否则 before_json 记不到原状态
+	// 变更前的旧值必须在 b 被改写【之前】取，否则 before_json 记不到原状态（GPT-R29）
 	oldCanView := b.MembersCanViewOthers
 	now := time.Now().Unix()
 	b.MembersCanViewOthers = canView
 	b.UpdatedAt = now
-
-	// 配置变更与审计在同一事务：不允许"开关已改但审计缺失"（WBS 4.3 / 4.6）
-	sess := s.engine.NewSession()
-	defer sess.Close()
-	if err := sess.Begin(); err != nil {
-		return false, err
-	}
-	defer func() { _ = sess.Rollback() }()
 
 	n, err := sess.ID(bookID).Where("deleted = 0").
 		Cols("members_can_view_others", "updated_at").Update(b)
@@ -256,15 +305,27 @@ func (s *BookService) SetVisibility(actor, bookID int64, canView bool) (bool, er
 		map[string]interface{}{"membersCanViewOthers": oldCanView}, "server"); err != nil {
 		return false, err
 	}
-	if err := sess.Commit(); err != nil {
-		return false, err
+	if ownTx {
+		if err := sess.Commit(); err != nil {
+			return false, err
+		}
 	}
 	return true, nil
 }
 
 // Delete 删除账本：仅 owner（落地方案 §5.5：admin 不可删除账本）
+//
+// GPT-R28：owner 判定同样在写事务内重读——账本删除是不可逆操作，
+// 不能建立在事务外读到的旧成员资格上。
 func (s *BookService) Delete(actor, bookID int64) error {
-	role, err := RoleOf(s.engine, bookID, actor)
+	sess := s.engine.NewSession()
+	defer sess.Close()
+	if err := sess.Begin(); err != nil {
+		return err
+	}
+	defer func() { _ = sess.Rollback() }()
+
+	role, err := roleOfTx(sess, bookID, actor)
 	if err != nil {
 		return err
 	}
@@ -272,6 +333,20 @@ func (s *BookService) Delete(actor, bookID int64) error {
 		return ErrForbidden
 	}
 	now := time.Now().Unix()
-	_, err = s.engine.ID(bookID).Update(&model.Book{Deleted: true, DeletedAt: now, UpdatedAt: now})
-	return err
+	res, err := sess.Exec(`UPDATE books SET deleted = 1, deleted_at = ?, updated_at = ? WHERE id = ? AND deleted = 0`,
+		now, now, bookID)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n != 1 {
+		return fmt.Errorf("%w：账本已不存在或已被删除", ErrConcurrentConflict)
+	}
+	if err := sess.Commit(); err != nil {
+		return err
+	}
+	return nil
 }
