@@ -337,18 +337,20 @@ func (s *MemberService) CreateInvite(actor, bookID int64, role int8, boundUserna
 	}
 	defer func() { _ = sess.Rollback() }()
 
+	// GPT-R43：账本有效性判定必须【早于】权限判定。
+	//
+	// 与本项目既有口径一致——BookService.Update 已确立「先 404 后 403」（4bbdb17）。
+	// 否则账本一旦被删、而成员残留行还在，请求会先撞上"没有权限"返回 403，
+	// 运维看到的是权限问题而不是"这个账本已经没了"，排查方向完全跑偏。
+	if err := requireActiveBookTx(sess, bookID); err != nil {
+		return nil, err
+	}
 	actorRole, err := roleOfTx(sess, bookID, actor)
 	if err != nil {
 		return nil, err
 	}
 	if !CanManageMembers(actorRole) {
 		return nil, ErrForbidden
-	}
-	// GPT-R43：账本必须仍然有效。roleOfTx 的 JOIN 其实已经保证了这一点，
-	// 这里再显式判一次不是为了重复兜底，而是为了让「账本已删」
-	// 与"没有权限"成为两种可分辨的结果——排查时这两件事的含义完全不同。
-	if err := requireActiveBookTx(sess, bookID); err != nil {
-		return nil, err
 	}
 
 	code, err := randomCode(32)
@@ -414,9 +416,17 @@ func (s *MemberService) RevokeInvite(actor, bookID, inviteID int64) error {
 
 	actorRole, err := roleOfTx(sess, bookID, actor)
 	if err != nil {
+		// GPT-R40：调用者对本账本而言是"外人"时，对外统一表现为【邀请不存在】。
+		// 若如实返回"不是该账本成员"，就等于告诉对方"这个账本存在、而你不在里面"，
+		// 可被拿去枚举其他账本的邀请主键。
+		if errors.Is(err, ErrNotMember) {
+			return ErrInviteNotFound
+		}
 		return err
 	}
 	if !CanManageMembers(actorRole) {
+		// 是本账本成员但权限不足（普通成员）：不存在跨账本枚举风险，
+		// 故保留 403，便于本账本内排查权限配置。
 		return ErrForbidden
 	}
 
