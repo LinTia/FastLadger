@@ -1,0 +1,109 @@
+{
+  "review": "GPT v1.8 retrospective code review for stages 0-3",
+  "repository": "LinTia/FastLadger",
+  "head": "be5439d6b2787bc4657b4a96bdc8503ef6896c4c",
+  "latest_code_commit": "1a7d07ad4106026e9900eda01fa237669aac2ea1",
+  "base": "phase 0-3 current implementation; no new source diff executed",
+  "status": "static_review_only",
+  "existing_ci_evidence": {
+    "run": "41034510229",
+    "result": "170 PASS / 0 FAIL; six steps success; no race",
+    "note": "Historical CI evidence from reviewer guide; not rerun in this review and does not cover the new proposed regressions."
+  },
+  "local_execution": {
+    "go_build": "not_run",
+    "go_vet": "not_run",
+    "go_test": "not_run",
+    "sqlite": "not_run",
+    "race": "not_run",
+    "websocket": "not_run",
+    "filesystem_crash_test": "not_run"
+  },
+  "proposed_regressions": [
+    {
+      "id": "GPT-R35",
+      "status": "not_run"
+    },
+    {
+      "id": "GPT-R36",
+      "status": "not_run"
+    },
+    {
+      "id": "GPT-R37",
+      "status": "not_run"
+    },
+    {
+      "id": "GPT-R38",
+      "status": "not_run"
+    },
+    {
+      "id": "GPT-R39",
+      "status": "not_run"
+    },
+    {
+      "id": "GPT-R40",
+      "status": "not_run"
+    },
+    {
+      "id": "GPT-R41",
+      "status": "not_run"
+    },
+    {
+      "id": "GPT-R42",
+      "status": "not_run"
+    },
+    {
+      "id": "GPT-R43",
+      "status": "not_run"
+    },
+    {
+      "id": "GPT-R44",
+      "status": "not_run"
+    },
+    {
+      "id": "GPT-R45",
+      "status": "not_run"
+    },
+    {
+      "id": "GPT-R46",
+      "status": "not_run"
+    },
+    {
+      "id": "GPT-R47",
+      "status": "not_run"
+    },
+    {
+      "id": "GPT-R48",
+      "status": "not_run"
+    },
+    {
+      "id": "GPT-R49",
+      "status": "not_run"
+    },
+    {
+      "id": "GPT-R50",
+      "status": "not_run"
+    },
+    {
+      "id": "GPT-R51",
+      "status": "not_run"
+    },
+    {
+      "id": "GPT-R52",
+      "status": "not_run"
+    }
+  ],
+  "existing_finding_scope_extensions": [
+    {
+      "id": "GPT-R27",
+      "status": "static_scope_extension",
+      "note": "NewMemberService inviteTTLDays * daySeconds also lacks overflow guard."
+    },
+    {
+      "id": "GPT-R34",
+      "status": "static_scope_extension",
+      "note": "config.envInt silently falls back to defaults for malformed environment values; malformed recycle TTL can unexpectedly revert to 30 days."
+    }
+  ],
+  "note": "No test pass is claimed for this review. This is a static code and contract review. Workbuddy should add deterministic SQLite, permission, filesystem durability, auth, invitation, pagination, and WebSocket concurrency regressions before changing any finding status."
+}
