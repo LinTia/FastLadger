@@ -453,6 +453,16 @@ func TestR48OnlyAccountChangesAreBatched(t *testing.T) {
 
 // TestR48MixedChangesBoundedByLimit 混合变更（交易 + 账户 + 分类）：
 // 每批总行数（跨实体合计）受 limit 约束。
+//
+// ⚠️ 期望值推导里有一个反直觉的点（CI 上栽过一次），写在最前面：
+// 记一笔交易会把【所用账户】的 sync_version 一并抬到本笔交易的版本
+// （TxService.Create → createChangeBalance：`UPDATE accounts SET balance=..., sync_version=?`，
+//
+//	一次 s.versions.Next 的版本被交易行与账户行共用）。
+//
+// 因此本用例里"每轮新建的 18 行"之外还会多 1 行：环境里那个既有账户（e.assetID「现金」）
+// 被 6 笔支出连续抬版本后，最终停在**最后一笔交易的版本**上——库里它仍只有一行，
+// 只是从"start 之前"被搬进了本轮范围，所以是 **+1 而不是 +6**，也不是重复下发。
 func TestR48MixedChangesBoundedByLimit(t *testing.T) {
 	requireSQLite(t)
 	e := newTestEnv(t)
@@ -462,6 +472,7 @@ func TestR48MixedChangesBoundedByLimit(t *testing.T) {
 	ctx := context.Background()
 
 	// 交错产生交易 / 账户 / 分类变更，每类各 6 次（共 18 行，每行一个独立版本）
+	// （外加上面说明的"被抬版本的既有账户"1 行 ⇒ 合计 19，见下方断言）
 	const rounds = 6
 	for i := 0; i < rounds; i++ {
 		_, err := e.txs.Create(ctx, e.uid, e.bookID, e.expense(CreateRequest{
@@ -499,7 +510,12 @@ func TestR48MixedChangesBoundedByLimit(t *testing.T) {
 	//     sync_version 抬到本笔交易的版本——余额变了，客户端必须重新收到这一行。
 	//     它本来在 start 之前（不在本轮范围），因为余额被改写才被"搬"进范围，属正确语义，
 	//     不是重复下发（库里它仍只有一行）。
-	//   合计 19 行 ⇒ 按 limit=7 分 3 批：7 + 7 + 5（最后一批不足 limit 属正常）。
+	//   合计 19 行 ⇒ 按 limit=7 分 3 批：7 + 7 + 5。
+	//   为什么第 3 批是 5（不是 7）：把版本摊开就清楚了——相对版本下
+	//     交易 {1,4,7,10,13,16}、新建账户 {2,5,8,11,14,17}、被抬版本的现金 {16}、
+	//     分类 {3,6,9,12,15,18}，合并流第 7 个 = 7、第 14 个 = 14，
+	//     于是前两批各 7 行，余下 {15,16,16,17,18} 共 5 行 —— 最后一批不足 limit 属正常收尾，
+	//     不是水位失控（若是失控，前两批就会超过 7）。
 	got := sumBatches(batches)
 	want := batchStat{transactions: rounds, accounts: rounds + 1, categories: rounds, holdings: 0}
 	if got != want {
