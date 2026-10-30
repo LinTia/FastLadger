@@ -342,6 +342,16 @@ func (h *Hub) SetConnectionLimits(perUser, total int) {
 	h.maxConnPerUser, h.maxConnTotal = perUser, total
 }
 
+// ConnectionLimits 读取当前连接数上限（per-uid, 全局；观测/测试用）。
+//
+// 主要供接线守卫用例使用：断言生产接线（api.NewRouter → config）真的把上限
+// 注入了 Hub —— 若有人重构路由时删掉这段接线，守卫用例直接红。
+func (h *Hub) ConnectionLimits() (perUser, total int) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.maxConnPerUser, h.maxConnTotal
+}
+
 // SetChecker 注入可见性校验器（main 启动时调用一次；测试可注入假实现）。
 func (h *Hub) SetChecker(checker VisibilityChecker) {
 	h.mu.Lock()

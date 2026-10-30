@@ -987,6 +987,7 @@ CREATE INDEX idx_audit_entity ON audit_logs(entity_type, entity_id);
 - **`forceFullResync=true` 的客户端语义**（PRD §12.1 决策 3）：丢弃该账本本地缓存中当前用户无权访问的记录，以 `afterVersion=0` **全量重拉该账本**（不清空整个本地库）；不需要重拉其他账本。
 - **`version` 必须存在**：客户端以它为"是否有新数据"的唯一判据；缺失时按"有更新"处理并触发一次 pull（fail-safe）。
 - 客户端只处理"当前已订阅账本"的事件；WS 事件只用于通知有新版本，**不直接推进已同步游标**；断线自动重连，重连后走 `sync/pull?afterVersion=上次完整应用的版本` 补漏。
+- **服务端主动关闭码**（阶段 5 客户端必须按此实现）：令牌过期以 **`4001`** 关闭，客户端须**重新登录后再重连**；连接数超上限（单用户 `EBK_WS_MAX_CONN_PER_USER` / 全局 `EBK_WS_MAX_CONN_TOTAL`）以 **`4002`** 关闭并附带一条 `{"event":"error","code":"connection_rejected",...}` 错误帧，客户端应**指数退避重连，禁止立即冲击重连**。
 - 发送缓冲溢出：服务端丢弃该条通知并计数（不影响已提交事务），客户端须以**周期性 pull（建议 60s）+ 重连必 pull** 兜底，不得依赖 WS 的"至少一次"投递。
 
 #### `member_removed` 的投递保证（服务端契约，[1.30]）
