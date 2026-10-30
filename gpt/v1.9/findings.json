@@ -1,0 +1,28 @@
+{
+  "version": "v1.9",
+  "scope": "阶段0-3第二轮补充复核",
+  "baseline": "be5439d6b2787bc4657b4a96bdc8503ef6896c4c",
+  "findings": [
+    {
+      "id": "GPT-R53",
+      "title": "删除仍有活跃子账户的父账户会留下悬空 parent_id",
+      "severity": "P2",
+      "location": "server/internal/service/account.go:202-251; server/internal/service/category.go:251-259",
+      "quote": "AccountService.Delete 只统计未删除交易引用，没有查询 accounts.parent_id 子账户；CategoryService.Delete 会检查活跃子分类。",
+      "problem": "账户支持 parent_id 层级，但删除父账户时不检查活跃子账户。父账户无交易引用时，即使有活跃子账户也能软删除，子账户继续引用已删除父账户。",
+      "reproduce": "创建父账户 A 和子账户 B(parent_id=A.id)，确保 A 没有活跃交易，然后调用 AccountService.Delete(A)，查询得到 A.deleted=1、B.deleted=0、B.parent_id=A.id。",
+      "actual": "父账户软删除成功，活跃子账户保留悬空 parent_id。",
+      "expected": "有活跃子账户时拒绝删除父账户，或在同一事务中明确迁移/提升子账户并递增其 sync_version。",
+      "impact": "账户树出现孤儿节点，不同客户端可能展示不同分组结构。",
+      "suggestion": "在 AccountService.Delete 事务中查询活跃子账户并拒绝删除；增加真实 SQLite 测试，验证拒绝时数据与版本不变，并验证软删子账户不阻止删除。",
+      "status": "待确认",
+      "evidence": "account.go Delete 完整检查链没有子账户查询；category.go Delete 有 children 查询与 ErrCategoryHasChildren 对称保护。静态审查，未执行测试。"
+    }
+  ],
+  "review_notes": [
+    "复核 GPT-R35–GPT-R52；未发现足够证据新增其他 finding，不代表风险已排除。",
+    "GPT-R47（账户 parent_id 环路）与 GPT-R53（删除父账户留下悬空引用）是不同问题。",
+    "GPT-R31（交易恢复依赖账户）与 GPT-R53（账户树层级完整性）是不同问题。",
+    "保留 GPT-R27 invite TTL 溢出与 GPT-R34 envInt 静默回退范围补充。"
+  ]
+}
