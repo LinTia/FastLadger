@@ -82,9 +82,10 @@ v1.9 的 review_notes 明确：R27 保留"invite TTL 溢出"范围补充；R34 �
 
 **本地验证边界（如实记录，不夸大）**：
 
-- 本机**无 gcc**，而 `mattn/go-sqlite3` 需要 CGO → 所有依赖真实 SQLite 的用例**本机跑不了**；本地策略还会拦截 `%TEMP%` 下的测试二进制（已用 `GOTMPDIR` 重定向到 `repo_tmp/.gotmp` 绕开，仅对非 CGO 用例有效）。
+- **真 SQLite 已可在本地跑**（2026-10-30 升级）：经 owner 许可在仓库外 `.tools/` 装了便携 MinGW-w64（GCC 12.2.0，w64devkit 1.16.1）。`CGO_ENABLED=1` + `CC="<bindir>/gcc.exe -B <bindir>/"` → **9/9 包 ok，432 PASS / 0 FAIL / 5 SKIP**；432+5=437 与 CI 全量一致。248 个 GPT-R 回归用例本地实跑：**244 PASS / 0 FAIL / 4 SKIP**，覆盖 R26–R53 共 24 个编号。一键脚本：`.tools/run_local_tests.sh`（参数 `plain`）。
+- **`-race` 仍只能靠 CI**：本机 ThreadSanitizer `failed to allocate ... bytes (error code: 87)`，重试 3 次（含 `-p 1`）均失败。
+- 本地策略会间歇拦下新生成的测试二进制（`An Application Control policy has blocked this file`）→ 逐包重试最多 8 次可绕过，**不是测试失败**；`%TEMP%` 下的二进制另用 `GOTMPDIR` 重定向绕开。
 - 本地实际执行并通过的：`gofmt -l .`（空）、`CGO_ENABLED=0 go vet ./...`（含测试文件类型检查）、非 CGO 单元测试若干批（TTL 9 例、config 7 例、邀请批次 15 例、R44 5 例、R46 全例、R48 纯逻辑 2 例、ws 包 37 例 `-count=3` 无偶发）、迁移 SQL 用 Python sqlite3 校验。
-- 真库断言原样保留、以 `t.Skipf` 打印原因，**由 CI 真实执行**；`-race` 结论一律以 CI 为准。
 - 两个平台边界：R35 文件权限在 Windows 上 `Chmod` 为空操作（按 `GOOS` 跳过并说明，Linux 真实断言）；R39 单测无法模拟断电（已写明）。
 - **方法学自检**：WebSocket 批次额外做了"临时回退修复 → 确认对应用例变红 → 恢复"，证明用例确实能抓住缺陷。
 

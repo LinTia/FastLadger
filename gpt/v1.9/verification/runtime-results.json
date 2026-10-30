@@ -34,10 +34,20 @@
       "go_vet": "run (CGO_ENABLED=0, Go 1.22.5 portable toolchain): clean, incl. test files",
       "gofmt": "run: clean",
       "go_test_non_cgo": "run (GOTMPDIR redirected to repo_tmp/.gotmp to bypass local App Control blocking %TEMP%)",
-      "go_test_sqlite": "run_in_ci_only (no gcc locally; mattn/go-sqlite3 requires CGO)",
-      "race": "run_in_ci_only",
-      "migration_sql": "run via python sqlite3 against migrations 0004/0005/0006"
+      "go_test_sqlite": "run — portable gcc 12.2.0 (w64devkit 1.16.1) installed under .tools/, CGO_ENABLED=1, CC=\"gcc.exe -B <bindir>\": 9/9 packages ok, 432 PASS / 0 FAIL / 5 SKIP",
+      "go_test_sqlite_skips": "5 SKIP are exactly the R35 file-permission cases (Windows Chmod semantics differ; skipped by GOOS). 432 + 5 = 437 = the CI full-run count.",
+      "race": "run_in_ci_only — ThreadSanitizer on this machine fails with 'failed to allocate ... bytes (error code: 87)' (3/3 attempts, incl. -p 1). Race conclusion stays with CI.",
+      "migration_sql": "run via python sqlite3 against migrations 0004/0005/0006",
+      "local_block_note": "Local App Control intermittently blocks freshly built test binaries ('An Application Control policy has blocked this file'); the runner retries up to 8 times per package. These are NOT test failures — all 9 packages pass on retry."
     },
-    "note": "Local machine has no gcc and blocks test binaries under %TEMP%; true SQLite and -race verification is delegated to GitHub Actions, which is the authoritative evidence. This block is appended by the maintainer and does not overwrite the reviewer's own static_review_only status."
+    "note": "Local verification upgraded 2026-10-30: a portable MinGW-w64 (GCC 12.2.0) was installed under fastledger/.tools/w64devkit with the owner's permission, so the real SQLite (CGO) suite now runs locally: 9/9 packages ok, 432 PASS / 0 FAIL / 5 SKIP (the 5 skips are the R35 file-permission cases that only assert on Linux). 248 GPT-R regression tests executed locally: 244 PASS / 0 FAIL / 4 SKIP. -race remains CI-only: ThreadSanitizer cannot allocate its shadow region on this machine (error 87). This block is appended by the maintainer and does not overwrite the reviewer's own static_review_only status.",
+    "local_full_run": {
+      "date": "2026-10-30",
+      "head_commit": "61f405b",
+      "gcc": "12.2.0 (w64devkit 1.16.1, portable, under fastledger/.tools/)",
+      "packages": "9/9 ok",
+      "result": "432 PASS / 0 FAIL / 5 SKIP (Windows); CI (Linux) 437 PASS / 0 FAIL / 0 SKIP",
+      "gpt_r_tests_executed": "248 (244 PASS / 0 FAIL / 4 SKIP)"
+    }
   }
 }

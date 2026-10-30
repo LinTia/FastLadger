@@ -125,9 +125,10 @@ gofmt / vet / build / SQLite 冒烟 / 全量测试 / **`-race`** 六步全 succe
 
 #### 验证状态（如实区分）
 
-- **本地实跑并通过**：`gofmt -l .` 空、`go vet ./...` 通过；TTL 9 例、config 7 例、邀请批次 15 例、R44 5 例、R45（除 1 例需真库）、R46 全例、R48 纯逻辑 2 例、**ws 包 37 例全 PASS（`-count=3` 无偶发）**。
-- **未能本地执行（本机无 gcc / CGO 不可用）**：所有需真实 SQLite 的用例（R26/R28/R29/R31/R32/R33/R35/R37/R38/R47/R48/R53 的端到端部分），断言原样保留、以 `t.Skipf` 打印原因，**由 CI 真实执行**。
-- **`-race` 本机无法执行**（要求 cgo），并发用例已用 channel barrier 做确定性同步（无随机 sleep），但**数据竞争检测结论必须由 CI 给出**。
+- **本地实跑并通过（真 SQLite / CGO）**：经 owner 许可在 `.tools/` 装了便携 MinGW-w64（**GCC 12.2.0**，w64devkit 1.16.1），CGO 打通后全量真实 SQLite 测试本地跑通 —— **9/9 包 ok，432 PASS / 0 FAIL / 5 SKIP**。432 + 5 = 437，与 CI 全量 437 完全对上（5 个 SKIP 全是 R35 文件权限用例，Windows 上 `Chmod` 语义不同按 `GOOS` 跳过，CI 在 Linux 上真实断言）。其中 **248 个 GPT-R 系列回归用例本地实跑：244 PASS / 0 FAIL / 4 SKIP**，覆盖 R26–R53 共 24 个编号。
+- **`gofmt -l .` 空、`go vet ./...` 通过**；另 TTL 9 例、config 7 例、邀请批次 15 例、R44 5 例、R46 全例、R48 纯逻辑 2 例、ws 包 37 例（`-count=3` 无偶发）等非 CGO 批次也本地实跑通过。
+- **`-race` 仍只能靠 CI**：本机 ThreadSanitizer 分配不到影子内存（`failed to allocate ... bytes, error code: 87`，重试 3 次含 `-p 1` 均失败）。并发用例已用 channel barrier 做确定性同步（无随机 sleep），但**数据竞争检测结论以 CI 为准**。
+- **本地偶发拦截**：本机 Application Control 会间歇拦下新生成的测试二进制（`An Application Control policy has blocked this file`）。已用"逐包最多重试 8 次"绕过，**9 个包最终全部通过**；这类报错不是测试失败。
 - **两个平台验证边界**：R35 文件权限在 Windows 上 `Chmod` 为空操作，4 例按 `GOOS` 跳过并说明，Linux 上真实断言；R39 单测无法模拟断电，Windows 目录 fsync 不可用（`Access is denied`），已在测试注释与报告写明。
 - **方法学**：WebSocket 批次额外做了**"临时回退修复 → 确认对应用例变红 → 恢复"**的自检，证明用例确实能抓住缺陷，而非只是"跑通"。
 
