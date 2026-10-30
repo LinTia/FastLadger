@@ -13,8 +13,10 @@ package service
 // 用 mock 或源码正则都证明不了。相应地，本文件不删减也不放宽任何断言。
 
 import (
+	"encoding/json"
 	"errors"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -505,5 +507,295 @@ func TestR40RevokeAndRedeemRaceExactlyOneWins(t *testing.T) {
 		}
 	default:
 		t.Fatalf("两者都失败属于非预期状态：revoke=%v join=%v", revokeErr, joinErr)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// GPT-R42：邀请生命周期审计（需真实 SQLite）
+// ---------------------------------------------------------------------------
+
+// inviteAuditRows 读取某账本下所有 book_member 实体的审计行（按 id 升序）
+func inviteAuditRows(t *testing.T, e *inviteEnv) []model.AuditLog {
+	t.Helper()
+	var rows []model.AuditLog
+	if err := e.engine.Where("book_id = ? AND entity_type = ?", e.bookID, model.AuditEntityMember).
+		OrderBy("id ASC").Find(&rows); err != nil {
+		t.Fatalf("读审计日志失败：%v", err)
+	}
+	return rows
+}
+
+// inviteAuditRowsFor 读取某条邀请的审计行
+func inviteAuditRowsFor(t *testing.T, e *inviteEnv, inviteID int64) []model.AuditLog {
+	t.Helper()
+	var rows []model.AuditLog
+	if err := e.engine.Where("book_id = ? AND entity_type = ? AND entity_id = ?",
+		e.bookID, model.AuditEntityMember, inviteID).OrderBy("id ASC").Find(&rows); err != nil {
+		t.Fatalf("读邀请 %d 的审计日志失败：%v", inviteID, err)
+	}
+	return rows
+}
+
+// parseInviteAudit 解析 before_json（邀请事件的 payload）
+func parseInviteAudit(t *testing.T, row model.AuditLog) map[string]interface{} {
+	t.Helper()
+	var p map[string]interface{}
+	if err := json.Unmarshal([]byte(row.BeforeJson), &p); err != nil {
+		t.Fatalf("before_json 不是合法 JSON：%q err=%v", row.BeforeJson, err)
+	}
+	return p
+}
+
+// TestR42FullLifecycleLeavesAuditTrail 创建 → 兑换 / 撤销，每一步都必须有对应审计，
+// 且动作只能落在枚举字典里已有的 create / delete 上。
+func TestR42FullLifecycleLeavesAuditTrail(t *testing.T) {
+	e := newInviteEnv(t)
+
+	// ① 签发（绑定邮箱）
+	inv, err := e.members.CreateInvite(e.uid, e.bookID, model.RoleAdmin, "", "Alice@Example.com")
+	if err != nil {
+		t.Fatalf("签发邀请失败：%v", err)
+	}
+	rows := inviteAuditRowsFor(t, e, inv.Id)
+	if len(rows) != 1 {
+		t.Fatalf("签发应写 1 条审计，实际 %d", len(rows))
+	}
+	if rows[0].Action != model.AuditActionCreate {
+		t.Fatalf("签发的审计动作应为 create，实际 %q", rows[0].Action)
+	}
+	if rows[0].ActorUid != e.uid {
+		t.Fatalf("签发审计的 actor 应为 owner(uid=%d)，实际 %d", e.uid, rows[0].ActorUid)
+	}
+	p := parseInviteAudit(t, rows[0])
+	if p["inviteEvent"] != inviteEventCreate || p["result"] != inviteResultAccepted {
+		t.Fatalf("签发审计的 payload 不符：%v", p)
+	}
+	if p["boundTarget"] != inviteBoundEmail {
+		t.Fatalf("应记录绑定维度为 email（不记邮箱本体），实际 %v", p["boundTarget"])
+	}
+	// 绑定邮箱本体不能出现在审计的任何角落
+	if strings.Contains(rows[0].BeforeJson, "example.com") {
+		t.Fatalf("审计不得记录邮箱本体：%s", rows[0].BeforeJson)
+	}
+
+	// ② 兑换
+	u, err := e.members.JoinViaInvite(e.bookID, inv.Code, "alice", "alice@example.com", "password123", "10.0.0.1")
+	if err != nil {
+		t.Fatalf("兑换失败：%v", err)
+	}
+	rows = inviteAuditRowsFor(t, e, inv.Id)
+	if len(rows) != 2 {
+		t.Fatalf("兑换后该邀请应有 2 条审计（签发 + 兑换），实际 %d", len(rows))
+	}
+	redeem := rows[1]
+	if redeem.Action != model.AuditActionCreate {
+		t.Fatalf("兑换的审计动作应为 create（成员被建立），实际 %q", redeem.Action)
+	}
+	if redeem.ActorUid != u.Id {
+		t.Fatalf("兑换审计的 actor 应为新建用户(uid=%d)，实际 %d", u.Id, redeem.ActorUid)
+	}
+	p = parseInviteAudit(t, redeem)
+	if p["inviteEvent"] != inviteEventRedeem || p["result"] != inviteResultAccepted {
+		t.Fatalf("兑换审计的 payload 不符：%v", p)
+	}
+	if p["joinerUsername"] != "alice" {
+		t.Fatalf("成功兑换应记录入户者用户名以便追溯，实际 %v", p)
+	}
+
+	// ③ 另一条邀请走撤销
+	inv2, err := e.members.CreateInvite(e.uid, e.bookID, model.RoleMember, "", "")
+	if err != nil {
+		t.Fatalf("签发第 2 条邀请失败：%v", err)
+	}
+	if err := e.members.RevokeInvite(e.uid, e.bookID, inv2.Id); err != nil {
+		t.Fatalf("撤销失败：%v", err)
+	}
+	rows2 := inviteAuditRowsFor(t, e, inv2.Id)
+	if len(rows2) != 2 {
+		t.Fatalf("撤销后该邀请应有 2 条审计（签发 + 撤销），实际 %d", len(rows2))
+	}
+	if rows2[1].Action != model.AuditActionDelete {
+		t.Fatalf("撤销的审计动作应为 delete（凭证被废止），实际 %q", rows2[1].Action)
+	}
+	if rows2[1].ActorUid != e.uid {
+		t.Fatalf("撤销审计的 actor 应为操作者 %d，实际 %d", e.uid, rows2[1].ActorUid)
+	}
+	if p := parseInviteAudit(t, rows2[1]); p["inviteEvent"] != inviteEventRevoke {
+		t.Fatalf("撤销审计的 payload 不符：%v", p)
+	}
+}
+
+// TestR42FailedRedemptionWritesRejectedAudit 无效邀请 / 已用 / 已撤销 / 过期 /
+// 绑定不匹配，都要留一条 result=rejected 的审计，且不写可用于暴力破解的细节。
+func TestR42FailedRedemptionWritesRejectedAudit(t *testing.T) {
+	e := newInviteEnv(t)
+
+	// ① 不存在的邀请码
+	if _, err := e.members.JoinViaInvite(e.bookID, "no-such-code", "bob", "", "password123", "10.0.0.2"); !errors.Is(err, ErrInviteNotFound) {
+		t.Fatalf("未知邀请码应返回 ErrInviteNotFound，实际 %v", err)
+	}
+	// ② 绑定不匹配的邮箱
+	inv, err := e.members.CreateInvite(e.uid, e.bookID, model.RoleMember, "", "alice@example.com")
+	if err != nil {
+		t.Fatalf("签发邀请失败：%v", err)
+	}
+	if _, err := e.members.JoinViaInvite(e.bookID, inv.Code, "bob", "bob@example.com", "password123", "10.0.0.2"); !errors.Is(err, ErrInviteBoundMismatch) {
+		t.Fatalf("邮箱不匹配应返回 ErrInviteBoundMismatch，实际 %v", err)
+	}
+	// ③ 过期（把 expires_at 改到过去）
+	inv2, err := e.members.CreateInvite(e.uid, e.bookID, model.RoleMember, "", "")
+	if err != nil {
+		t.Fatalf("签发第 2 条邀请失败：%v", err)
+	}
+	if _, err := e.engine.Exec("UPDATE invites SET expires_at = ? WHERE id = ?", time.Now().Unix()-1, inv2.Id); err != nil {
+		t.Fatalf("构造过期邀请失败：%v", err)
+	}
+	if _, err := e.members.JoinViaInvite(e.bookID, inv2.Code, "carol", "", "password123", "10.0.0.2"); !errors.Is(err, ErrInviteExpired) {
+		t.Fatalf("过期邀请应返回 ErrInviteExpired，实际 %v", err)
+	}
+	// ④ 已使用
+	inv3, err := e.members.CreateInvite(e.uid, e.bookID, model.RoleMember, "", "")
+	if err != nil {
+		t.Fatalf("签发第 3 条邀请失败：%v", err)
+	}
+	if _, err := e.members.JoinViaInvite(e.bookID, inv3.Code, "dave", "", "password123", "10.0.0.2"); err != nil {
+		t.Fatalf("首次兑换应成功：%v", err)
+	}
+	if _, err := e.members.JoinViaInvite(e.bookID, inv3.Code, "erin", "", "password123", "10.0.0.2"); !errors.Is(err, ErrInviteAlreadyUsed) {
+		t.Fatalf("重复兑换应返回 ErrInviteAlreadyUsed，实际 %v", err)
+	}
+	// ⑤ 已撤销
+	inv4, err := e.members.CreateInvite(e.uid, e.bookID, model.RoleMember, "", "")
+	if err != nil {
+		t.Fatalf("签发第 4 条邀请失败：%v", err)
+	}
+	if err := e.members.RevokeInvite(e.uid, e.bookID, inv4.Id); err != nil {
+		t.Fatalf("撤销失败：%v", err)
+	}
+	if _, err := e.members.JoinViaInvite(e.bookID, inv4.Code, "frank", "", "password123", "10.0.0.2"); !errors.Is(err, ErrInviteAlreadyRevoked) {
+		t.Fatalf("已撤销邀请应返回 ErrInviteAlreadyRevoked，实际 %v", err)
+	}
+
+	// 逐条核对：每次失败都必须有一条 result=rejected 且 reason 正确的审计
+	expect := map[int64]string{
+		inv.Id:  inviteReasonBoundMismatch,
+		inv2.Id: inviteReasonExpired,
+		inv3.Id: inviteReasonAlreadyUsed,
+		inv4.Id: inviteReasonRevoked,
+	}
+	for id, wantReason := range expect {
+		rows := inviteAuditRowsFor(t, e, id)
+		found := false
+		for _, r := range rows {
+			p := parseInviteAudit(t, r)
+			if p["result"] == inviteResultRejected && p["reason"] == wantReason {
+				found = true
+				// 失败审计不得携带本次尝试用到的身份，只留 IP 作为取证线索
+				for _, banned := range []string{"joinerUid", "joinerUsername"} {
+					if _, has := p[banned]; has {
+						t.Errorf("邀请 %d 的失败审计不应含 %s：%v", id, banned, p)
+					}
+				}
+			}
+		}
+		if !found {
+			t.Errorf("邀请 %d 缺少 reason=%s 的失败审计（实际 %d 条）", id, wantReason, len(rows))
+		}
+	}
+
+	// 未知邀请码：无法归因到任何邀请主键，entity_id 记 0，但仍要有一行
+	var zeroRows []model.AuditLog
+	if err := e.engine.Where("book_id = ? AND entity_type = ? AND entity_id = 0 AND before_json LIKE ?",
+		e.bookID, model.AuditEntityMember, "%"+inviteReasonNotFound+"%").Find(&zeroRows); err != nil {
+		t.Fatalf("查询未知邀请码审计失败：%v", err)
+	}
+	if len(zeroRows) == 0 {
+		t.Fatal("未知邀请码的尝试必须留下一条 entity_id=0 的失败审计")
+	}
+}
+
+// TestR42NoInviteCodeInAnyAuditRow 全表扫描：任何一条审计里都不能出现邀请码本体或其前缀。
+//
+// 这是「审计最小化」最硬的断言——它不依赖我们对 payload 结构的记忆，
+// 而是直接在库上清点有没有凭证被写进去。
+func TestR42NoInviteCodeInAnyAuditRow(t *testing.T) {
+	e := newInviteEnv(t)
+	inv, err := e.members.CreateInvite(e.uid, e.bookID, model.RoleMember, "", "alice@example.com")
+	if err != nil {
+		t.Fatalf("签发邀请失败：%v", err)
+	}
+	if _, err := e.members.JoinViaInvite(e.bookID, inv.Code, "bob", "bob@example.com", "password123", "10.0.0.3"); !errors.Is(err, ErrInviteBoundMismatch) {
+		t.Fatalf("预期绑定不匹配，实际 %v", err)
+	}
+	if err := e.members.RevokeInvite(e.uid, e.bookID, inv.Id); err != nil {
+		t.Fatalf("撤销失败：%v", err)
+	}
+
+	rows := inviteAuditRows(t, e)
+	if len(rows) == 0 {
+		t.Fatal("本用例至少应产生若干审计行，实际 0 行（断言失去意义）")
+	}
+	for _, r := range rows {
+		if strings.Contains(r.BeforeJson, inv.Code) {
+			t.Fatalf("审计行 %d 记录了完整邀请码：%s", r.Id, r.BeforeJson)
+		}
+		if strings.Contains(r.BeforeJson, inv.Code[:6]) {
+			t.Fatalf("审计行 %d 记录了邀请码前缀：%s", r.Id, r.BeforeJson)
+		}
+	}
+}
+
+// TestR42NoAcceptedAuditWhenJoinFails 兑换在审计之后失败时，accepted 行必须随事务回滚：
+// 不能出现"人没进来、却记了一条入户成功"。
+//
+// 用成员上限（PRD §12 决策 6）制造一个确定性的失败：计数检查在 insertAudit 之前，
+// 因此失败时不应存在任何 accepted 行。
+func TestR42NoAcceptedAuditWhenJoinFails(t *testing.T) {
+	e := newInviteEnv(t)
+	// 先把账本填满到上限 20（owner 已在内）
+	for i := 1; i < maxBookMembers; i++ {
+		addInviteMember(t, e, insertInviteUser(t, e, "member-"+strconv.Itoa(i)), model.RoleMember)
+	}
+	inv, err := e.members.CreateInvite(e.uid, e.bookID, model.RoleMember, "", "")
+	if err != nil {
+		t.Fatalf("签发邀请失败：%v", err)
+	}
+	if _, err := e.members.JoinViaInvite(e.bookID, inv.Code, "overflow", "", "password123", "10.0.0.4"); !errors.Is(err, ErrBookFull) {
+		t.Fatalf("成员满员应返回 ErrBookFull，实际 %v", err)
+	}
+	rows := inviteAuditRowsFor(t, e, inv.Id)
+	for _, r := range rows {
+		p := parseInviteAudit(t, r)
+		if p["result"] == inviteResultAccepted && p["inviteEvent"] == inviteEventRedeem {
+			t.Fatalf("兑换失败却留下了 accepted 审计：%v", p)
+		}
+	}
+	if got := inviteAuditRowsFor(t, e, inv.Id); len(got) != 1 {
+		t.Fatalf("签发成功的审计应保留、兑换失败不得新增 accepted 行，实际 %d 条", len(got))
+	}
+}
+
+// TestR42RevokeFailureWritesRejectedAudit 撤销一个不可撤销的邀请时也要留痕
+// （"谁试图废止一张已被用掉的凭证"是安全观察要点）。
+func TestR42RevokeFailureWritesRejectedAudit(t *testing.T) {
+	e := newInviteEnv(t)
+	inv := newRevocableInvite(t, e)
+	if _, err := e.members.JoinViaInvite(e.bookID, inv.Code, "soon", "", "password123", "10.0.0.5"); err != nil {
+		t.Fatalf("兑换失败：%v", err)
+	}
+	if err := e.members.RevokeInvite(e.uid, e.bookID, inv.Id); !errors.Is(err, ErrInviteAlreadyUsed) {
+		t.Fatalf("已使用的邀请不得再撤销，实际 %v", err)
+	}
+	rows := inviteAuditRowsFor(t, e, inv.Id)
+	found := false
+	for _, r := range rows {
+		p := parseInviteAudit(t, r)
+		if p["inviteEvent"] == inviteEventRevoke && p["result"] == inviteResultRejected &&
+			p["reason"] == inviteReasonAlreadyUsed {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("撤销失败必须留下 rejected 审计，实际 %v", rows)
 	}
 }

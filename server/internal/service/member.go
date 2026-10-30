@@ -70,6 +70,10 @@ const (
 	inviteReasonRevoked = "invite_revoked"
 	// inviteReasonExpired 邀请已过期（判定时刻 expires_at <= now）
 	inviteReasonExpired = "invite_expired"
+	// inviteReasonBoundMismatch 与绑定的用户名/邮箱不匹配（GPT-R41 闭环的失败态）
+	inviteReasonBoundMismatch = "bound_mismatch"
+	// inviteReasonEmailTaken 邮箱已被其他账号占用（对外并入 bound_mismatch 文案）
+	inviteReasonEmailTaken = "email_taken"
 )
 
 // GPT-R40：邀请撤销的失败语义，全部**继承**既有错误树（用 %w 包装），
@@ -324,6 +328,16 @@ func (s *MemberService) CreateInvite(actor, bookID int64, role int8, boundUserna
 	if _, err := sess.Insert(inv); err != nil {
 		return nil, err
 	}
+	if err := insertAudit(sess, bookID, actor, inviteAuditAction(inviteEventCreate),
+		model.AuditEntityMember, inv.Id,
+		inviteAuditPayload(inviteEventCreate, inviteResultAccepted, inviteReasonNone, inviteAuditFields{
+			InviteID:    inv.Id,
+			Role:        inv.Role,
+			BoundTarget: inviteBoundTargetOf(boundUser, boundMail),
+			ExpiresAt:   inv.ExpiresAt,
+		}), "server"); err != nil {
+		return nil, err
+	}
 	if err := sess.Commit(); err != nil {
 		return nil, err
 	}
@@ -363,6 +377,16 @@ func (s *MemberService) RevokeInvite(actor, bookID, inviteID int64) error {
 		return ErrForbidden
 	}
 
+	// 先把邀请读进来，只为【成功时描述它被作废前长什么样】（role / 绑定维度 / 有效期）。
+	//
+	// 强调：这次读【不参与任何判定】。判定全部写在下面 UPDATE 的 WHERE 里，
+	// 读到的值只用于事后记账——否则就退回成 GPT-R40 要消灭的"先读后写"。
+	var inv model.Invite
+	hasInvite, err := sess.Where("id = ? AND book_id = ?", inviteID, bookID).Get(&inv)
+	if err != nil {
+		return err
+	}
+
 	now := time.Now().Unix()
 	n, err := sess.Where(
 		"id = ? AND book_id = ? AND used_at = 0 AND revoked = 0 AND expires_at > ?",
@@ -372,22 +396,57 @@ func (s *MemberService) RevokeInvite(actor, bookID, inviteID int64) error {
 		return err
 	}
 	if n != 1 {
-		// 未命中：把原因查清楚再返回给调用方（"无效"太含糊，排查时无从下手）。
-		// 这次读在本事务内，与上面的 UPDATE 共享同一快照，不存在交错。
-		var inv model.Invite
-		has, rErr := sess.Where("id = ? AND book_id = ?", inviteID, bookID).Get(&inv)
-		if rErr != nil {
-			return rErr
-		}
-		reason := inviteRejectReason(has, &inv, now)
+		// 未命中：用事务内那份只读快照裁定原因（"无效"太含糊，排查时无从下手）。
 		_ = sess.Rollback()
-		return inviteRejectError(reason)
+		// GPT-R42：撤销失败同样留痕——"谁在什么时候试图废止一个不可废止的邀请"
+		// 对排查误操作与安全观察都有价值。actor 是已认证用户，故不再是哨兵 0。
+		return s.inviteFailed(inviteEventRevoke, bookID, actor, inviteID,
+			inviteRejectReason(hasInvite, &inv, now), "")
+	}
+
+	// GPT-R42：成功撤销与审计【同事务】——成功也是一个需要解释的状态变更。
+	if err := insertAudit(sess, bookID, actor, inviteAuditAction(inviteEventRevoke),
+		model.AuditEntityMember, inviteID,
+		inviteAuditPayload(inviteEventRevoke, inviteResultAccepted, inviteReasonNone, inviteAuditFields{
+			InviteID:    inviteID,
+			Role:        inv.Role,
+			BoundTarget: inviteBoundTargetOf(inv.BoundUsername, inv.BoundEmail),
+			ExpiresAt:   inv.ExpiresAt,
+		}), "server"); err != nil {
+		return err
 	}
 
 	if err := sess.Commit(); err != nil {
 		return err
 	}
 	return nil
+}
+
+// inviteFailed 失败路径的统一出口：把"业务错误"与"审计结果"一起带回。
+//
+// 为什么用 errors.Join 而不是二选一：
+//   - 只返回审计错误 → 对外把"邀请无效"变成 500，反而泄露了内部情况；
+//   - 只返回业务错误 → 审计写失败被彻底吞掉，事后查不到这段窗口发生过什么；
+//   - errors.Join 让 errors.Is(err, ErrInviteInvalid) 继续成立（HTTP 映射不变），
+//     同时把审计异常留在错误链里，服务日志能看到。这是一次失败被完整地记录，
+//     而不是挑一半报上去。
+func (s *MemberService) inviteFailed(event string, bookID, actorUID, inviteID int64, reason, clientIP string) error {
+	biz := inviteRejectError(reason)
+	auditErr := s.appendInviteRejectedAudit(bookID, actorUID, inviteID, event, reason,
+		inviteAuditFields{ClientIP: clientIP})
+	if auditErr != nil {
+		return errors.Join(biz, fmt.Errorf("邀请审计写入失败：%w", auditErr))
+	}
+	return biz
+}
+
+// inviteIDOrZero 邀请不可归因（不存在 / 不属于本账本）时，entity_id 记 0，
+// 避免把一次无主的尝试扣到某个不相关的主键上。
+func inviteIDOrZero(found bool, id int64) int64 {
+	if !found {
+		return 0
+	}
+	return id
 }
 
 // inviteRejectReason 按"只读快照"裁定一条邀请此刻不能被操作的原因。
@@ -420,9 +479,165 @@ func inviteRejectError(reason string) error {
 		return ErrInviteAlreadyRevoked
 	case inviteReasonExpired:
 		return ErrInviteExpired
+	case inviteReasonBoundMismatch:
+		return ErrInviteBoundMismatch
+	case inviteReasonEmailTaken:
+		// 继承 ErrInviteBoundMismatch：对外文案统一，防止邮箱枚举（见 ErrInviteEmailUnavailable）
+		return ErrInviteEmailUnavailable
 	default:
 		return ErrInviteInvalid
 	}
+}
+
+// ---- GPT-R42：邀请生命周期审计 ---------------------------------------------
+//
+// 【策略一：过期不做后台标记，一律"查询时判定"（惰性）】
+//
+// 本仓没有、也不为此引入守护线程：没有定时器去把过期邀请逐个 UPDATE 成"已过期"，
+// 也不写"过期时刻"这种无主体的审计行。理由：
+//  1. 审计回答的是"发生了什么"，不是"时间到了"——无人触碰时并没有事件发生，
+//     凭空生成一行等于制造噪声，还会让人误以为有人来过；
+//  2. 后台扫描要为每条过期邀请补一行与用户行为无关的日志，审计表随时间线性膨胀，
+//     却没有对应的可追溯价值；
+//  3. 判定只有 inviteRejectReason 一处实现，兑换（JoinViaInvite）与撤销
+//     （RevokeInvite）共用同一个函数、同一个 expires_at <= now 口径，
+//     不存在"这里按查询时、那里按标记位"的两套实现互相打架。
+//
+// 因此：过期这件事只在【有人拿它做动作】时才留下痕迹（reason = invite_expired）。
+//
+// 【策略二：审计内容最小化】
+//
+// 记：邀请主键、目标角色、由此产生的用户/成员主键、绑定到了哪一维（username/email/none）、
+//    事件类型与结果。
+// 不记：邀请码（哪怕掩码前缀）、口令、绑定邮箱本体、绑定用户名本体。
+//   - 邀请码等价于入户凭证，审计里留全文，任何能读库的人都能直接入户；
+//     记"前 4 位"同样不可接受：它把暴力搜索空间缩小若干数量级，还免费给出命中确认信号。
+//   - 邮箱/用户名属于 PII，且本场景只需要回答"是否绑定过、绑的是哪一维"。
+//
+// 【策略三：失败事件的取舍】
+//
+// 失败写一条 result=rejected + 粗粒度 reason 的行，方便事后看"有没有人在撞门户"；
+//   - 不记尝试用的邀请码/用户名/邮箱：否则审计表自己变成一份枚举字典；
+//   - 成功事件已有 actor_uid 可追溯，就不再落 IP；失败事件没有主语，
+//     IP 是唯一可用的取证线索，因此只在这种情况下记 ipBucket(clientIP)；
+//   - **限流拒绝不写审计**：那条请求根本没碰到邀请状态，若每写一行就等于给攻击者
+//     一个"按请求放大审计表"的开关（超过配额后每个请求一行），由限流器本身兜住。
+//
+// 【策略四：动作/实体落在既有枚举上，不扩展枚举字典】
+//
+// 《枚举字典》是枚举的唯一权威，本次不新增常量；邀请事件复用：
+//
+//	entity_type = AuditEntityMember("book_member")，entity_id = invites.id
+//	create      → 邀请创建 / 兑换入户（一条成员关系被建立）
+//	delete      → 邀请撤销（入户凭证被废止）
+//
+// 与既有的 permission_change（同为 book_member，但 entity_id = 成员 uid）
+// 靠 action 区分，查询时带上 action 即无歧义。
+
+// 邀请事件类型（审计 payload 的 inviteEvent 字段）
+const (
+	inviteEventCreate = "invite_create"
+	inviteEventRedeem = "invite_redeem"
+	inviteEventRevoke = "invite_revoke"
+)
+
+// 事件结果
+const (
+	inviteResultAccepted = "accepted"
+	inviteResultRejected = "rejected"
+)
+
+// 绑定维度（只记维度，不记本体）
+const (
+	inviteBoundNone     = "none"
+	inviteBoundUsername = "username"
+	inviteBoundEmail    = "email"
+)
+
+// inviteAuditFields 构造邀请审计 payload 的入参；零值字段不落库。
+type inviteAuditFields struct {
+	InviteID       int64
+	Role           int8
+	BoundTarget    string
+	ExpiresAt      int64
+	JoinerUid      int64
+	JoinerUsername string
+	ClientIP       string
+}
+
+// inviteAuditPayload 生成审计 payload（会被 JSON 序列化进 before_json）。
+//
+// result 与 reason 是固定两件套：成功事件 reason 为空串、失败事件 result=rejected。
+// 这样"这条是不是失败"永远可以一眼判定，不需要靠"有没有某个字段"去猜。
+func inviteAuditPayload(event, result, reason string, f inviteAuditFields) map[string]interface{} {
+	p := map[string]interface{}{
+		"inviteEvent": event,
+		"result":      result,
+	}
+	if reason != inviteReasonNone {
+		p["reason"] = reason
+	}
+	if f.InviteID != 0 {
+		p["inviteId"] = f.InviteID
+	}
+	if f.Role != 0 {
+		p["role"] = f.Role
+	}
+	if f.BoundTarget != "" {
+		p["boundTarget"] = f.BoundTarget
+	}
+	if f.ExpiresAt != 0 {
+		p["expiresAt"] = f.ExpiresAt
+	}
+	// 身份信息只出现在【成功】事件里（失败事件记身份 = 把审计做成枚举字典）
+	if result == inviteResultAccepted {
+		if f.JoinerUid != 0 {
+			p["joinerUid"] = f.JoinerUid
+		}
+		if f.JoinerUsername != "" {
+			p["joinerUsername"] = f.JoinerUsername
+		}
+	}
+	if result == inviteResultRejected && f.ClientIP != "" {
+		p["clientIP"] = f.ClientIP
+	}
+	return p
+}
+
+// inviteBoundTargetOf 由两个绑定字段推出"绑到了哪一维"（不输出具体的邮箱/用户名）
+func inviteBoundTargetOf(boundUsername, boundEmail string) string {
+	switch {
+	case boundUsername != "":
+		return inviteBoundUsername
+	case boundEmail != "":
+		return inviteBoundEmail
+	default:
+		return inviteBoundNone
+	}
+}
+
+// appendInviteRejectedAudit 在【事务回滚之后】补一条被拒事件的审计。
+//
+// 为什么不用 insertAudit（事务内）：失败路径必须回滚——不回滚就等于"拒绝了一半"，
+// 而回滚会把同事务里写的审计一起抹掉，结果是"拒绝了且什么都没留下"。
+// 因此这里走导出的 AppendAudit，在独立连接上落一行。
+func (s *MemberService) appendInviteRejectedAudit(
+	bookID, actorUID, inviteID int64, event, reason string, f inviteAuditFields) error {
+	f.InviteID = inviteID
+	return AppendAudit(s.engine, bookID, actorUID, inviteAuditAction(event),
+		model.AuditEntityMember, inviteID,
+		inviteAuditPayload(event, inviteResultRejected, reason, f), "server")
+}
+
+// inviteAuditAction 事件类型 → 审计动作（成功链路用；失败链路同样复用）
+func inviteAuditAction(event string) string {
+	if event == inviteEventRevoke {
+		// 撤销 = 废止入户凭证，取"删除"语义（与"恢复一笔交易"restore 无冲突，
+		// 因为实体类型是 book_member，不代表交易被恢复）
+		return model.AuditActionDelete
+	}
+	// 创建邀请 / 兑换入户：一条成员关系被建立
+	return model.AuditActionCreate
 }
 
 // JoinViaInvite 凭邀请码注册并加入。
@@ -470,20 +685,26 @@ func (s *MemberService) JoinViaInvite(bookID int64, code, username, email, passw
 		_ = sess.Rollback()
 		return nil, err
 	}
-	if !has || inv.BookId != bookID || inv.Revoked || inv.UsedAt > 0 || inv.ExpiresAt <= time.Now().Unix() {
+	// "存在但不属于本账本"与"不存在"对外不可区分、也必须不可区分：
+	// 否则攻击者可以拿已知邀请去枚举别的账本里有哪些主键存在。
+	found := has && inv.BookId == bookID
+	if reason := inviteRejectReason(found, &inv, time.Now().Unix()); reason != inviteReasonNone {
 		_ = sess.Rollback()
-		return nil, ErrInviteInvalid
+		return nil, s.inviteFailed(inviteEventRedeem, bookID, model.AuditActorSystem,
+			inviteIDOrZero(found, inv.Id), reason, ipBucket(clientIP))
 	}
 	if inv.BoundUsername != "" && !strings.EqualFold(inv.BoundUsername, uname) {
 		_ = sess.Rollback()
-		return nil, ErrInviteBoundMismatch
+		return nil, s.inviteFailed(inviteEventRedeem, bookID, model.AuditActorSystem, inv.Id,
+			inviteReasonBoundMismatch, ipBucket(clientIP))
 	}
 	// GPT-R41：邮箱绑定校验。两侧都已过同一个规范化函数，因此这里是精确的
 	// "同一个人"判定；邀请绑了邮箱而兑换方留空时，空串必然不等于绑定值 → 拒绝，
 	// 不会出现"不填邮箱反而能绕过绑定"的洞。
 	if inv.BoundEmail != "" && inv.BoundEmail != email {
 		_ = sess.Rollback()
-		return nil, ErrInviteBoundMismatch
+		return nil, s.inviteFailed(inviteEventRedeem, bookID, model.AuditActorSystem, inv.Id,
+			inviteReasonBoundMismatch, ipBucket(clientIP))
 	}
 
 	// GPT-R41：邮箱占用检查必须在事务内、建号之前。
@@ -502,7 +723,8 @@ func (s *MemberService) JoinViaInvite(bookID int64, code, username, email, passw
 		}
 		if emailTaken > 0 {
 			_ = sess.Rollback()
-			return nil, ErrInviteEmailUnavailable
+			return nil, s.inviteFailed(inviteEventRedeem, bookID, model.AuditActorSystem, inv.Id,
+				inviteReasonEmailTaken, ipBucket(clientIP))
 		}
 	}
 
@@ -562,8 +784,27 @@ func (s *MemberService) JoinViaInvite(bookID int64, code, username, email, passw
 		return nil, err
 	}
 	if n != 1 {
+		// GPT-R40：命中 0 行说明"撤销或另一个兑换"抢先提交了（redeemed 条件含 revoked = 0）。
+		// 整笔回滚，不留下半截入户；并按 Erlang 失败语义返回 ErrInviteInvalid 以免泄露状态。
 		_ = sess.Rollback()
-		return nil, ErrInviteInvalid
+		return nil, s.inviteFailed(inviteEventRedeem, bookID, model.AuditActorSystem, inv.Id,
+			inviteReasonAlreadyUsed, ipBucket(clientIP))
+	}
+
+	// GPT-R42：成功兑换必须【与状态变更同事务】留痕。
+	// actor 取新建用户：兑换是未认证入口，此刻他是唯一可归因的主体。
+	// payload 里不放邀请码与邮箱——放谁都能入户/拿到身份，见本文件顶部的审计策略说明。
+	if err := insertAudit(sess, inv.BookId, u.Id, inviteAuditAction(inviteEventRedeem),
+		model.AuditEntityMember, inv.Id,
+		inviteAuditPayload(inviteEventRedeem, inviteResultAccepted, inviteReasonNone, inviteAuditFields{
+			InviteID:       inv.Id,
+			Role:           inv.Role,
+			BoundTarget:    inviteBoundTargetOf(inv.BoundUsername, inv.BoundEmail),
+			JoinerUid:      u.Id,
+			JoinerUsername: u.Username,
+		}), "server"); err != nil {
+		_ = sess.Rollback()
+		return nil, err
 	}
 
 	if err := sess.Commit(); err != nil {
