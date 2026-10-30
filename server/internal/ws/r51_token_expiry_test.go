@@ -108,6 +108,9 @@ func TestR51ShortTTLTokenClosesConnection(t *testing.T) {
 	} else if !websocket.IsCloseError(err, closeTokenExpired) {
 		t.Fatalf("应收到关闭码 %d（token expired），实际错误 %v", closeTokenExpired, err)
 	}
+
+	// 排干：token 到期路径上连接已被服务端关闭，这里确认再无 goroutine 残留
+	rCloseWSAndDrain(t, conn, DefaultHub)
 }
 
 // TestR51SubscriptionsClearedOnTokenExpiry 令牌到期后订阅必须被清理干净。
@@ -151,6 +154,10 @@ func TestR51SubscriptionsClearedOnTokenExpiry(t *testing.T) {
 	if n := len(client.Send); n != 0 {
 		t.Fatalf("连接结束后不应再收到广播，实际缓冲 %d 条", n)
 	}
+
+	// 排干：确保没有 ServeWS goroutine 活到下一个用例（否则会与 t.Cleanup 写回
+	// DefaultHub 形成数据竞争，见 r49_default_hub_race_test.go）
+	rCloseWSAndDrain(t, conn, DefaultHub)
 }
 
 // TestR51RejectsHandshakeWithoutTokenExpiry 上下文缺少 exp：fail-closed 拒绝升级。
@@ -248,8 +255,7 @@ func TestR51LongLivedTokenKeepsConnectionAlive(t *testing.T) {
 	}
 
 	// 主动断开 → 正常注销（与原有生命周期测试一致）
-	_ = conn.Close()
-	waitCount(t, DefaultHub, 0)
+	rCloseWSAndDrain(t, conn, DefaultHub)
 }
 
 // r51Get 发一个普通 GET（非 WS 握手），返回状态码

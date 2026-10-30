@@ -274,7 +274,6 @@ func TestR49ServeWSReturnsExplicitErrorFrameOnOversizedSubscribe(t *testing.T) {
 	if err != nil {
 		t.Fatalf("WebSocket 握手失败：%v", err)
 	}
-	defer func() { _ = conn.Close() }()
 	waitCount(t, DefaultHub, 1)
 
 	// 合法帧：静默成功（不回 error）
@@ -304,4 +303,7 @@ func TestR49ServeWSReturnsExplicitErrorFrameOnOversizedSubscribe(t *testing.T) {
 	if !strings.Contains(got.Msg, "上限") {
 		t.Fatalf("错误帧应说明被拒原因（含上限字样），实际 %q", got.Msg)
 	}
+
+	// 排干连接：必须在 DefaultHub 被 Cleanup 写回之前，确保没有 goroutine 还在跑
+	rCloseWSAndDrain(t, conn, DefaultHub)
 }

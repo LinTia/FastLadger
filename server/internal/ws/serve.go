@@ -144,9 +144,23 @@ func ServeWS(c *gin.Context) {
 		return conn.SetReadDeadline(time.Now().Add(pongWait))
 	})
 
+	// hub 在这里**一次性**取全局 Hub，此后本条连接的注册/注销/订阅都用这一个引用。
+	//
+	// 为什么不能"用到时再读 DefaultHub"：测试会临时替换 DefaultHub 并在 t.Cleanup
+	// 里写回原值；而 WebSocket 是 hijacked 连接，httptest.Server.Close()
+	// **不等待**被劫持的连接（ServeWS 的 goroutine 可能还活着）。
+	// 于是出现了真实的数据竞争（CI 的 -race 抓到）：写是 t.Cleanup 的
+	// `DefaultHub = old`，读是 ServeWS 收尾时的 `DefaultHub.Unregister`——
+	// 同一份代码两次运行分别记在不同用例名下，正是因为"谁在读"随调度漂移。
+	//
+	// 捕获一次之后，握手完成到连接结束之间**不再有任何对全局变量的读**，
+	// 竞争窗口从"整条连接生命周期"收敛为零。进程运行期 DefaultHub 不会被替换，
+	// 因此这里捕获一次与逐次读取行为等价。
+	hub := DefaultHub
+
 	client := NewClient()
 	client.UID = uid // 连接绑定认证用户（R05）：广播按这个 uid 做可见性过滤
-	DefaultHub.Register(client)
+	hub.Register(client)
 
 	// 读/写循环共用一个取消上下文，任一方结束都恰好清理一次（R18）。
 	//
@@ -155,7 +169,7 @@ func ServeWS(c *gin.Context) {
 	ctx, cancel := context.WithDeadline(context.Background(), time.Unix(expUnix, 0))
 	defer func() {
 		cancel()
-		DefaultHub.Unregister(client)
+		hub.Unregister(client)      // 用的是连接建立时捕获的 Hub 引用
 		client.ClearSubscriptions() // 令牌到期/连接结束：订阅不留残余
 		_ = conn.Close()
 	}()
@@ -172,7 +186,7 @@ func ServeWS(c *gin.Context) {
 			}
 			var sub subscribeMsg
 			if json.Unmarshal(msg, &sub) == nil && sub.Action == "subscribe" {
-				if err := DefaultHub.Subscribe(client, sub.Books, uid); err != nil {
+				if err := hub.Subscribe(client, sub.Books, uid); err != nil {
 					sendError(client, "subscribe_rejected", err.Error())
 				}
 			}
