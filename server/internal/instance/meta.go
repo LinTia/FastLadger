@@ -35,8 +35,13 @@ const (
 	fileName = "instance.meta"
 	// filePerm 权限 0600：实例标识不敏感，但按最小权限落盘（《落地方案》§5.5 文件权限受控）
 	filePerm = 0o600
-	// dirPerm 数据目录权限
-	dirPerm = 0o755
+	// dirPerm 数据目录权限。
+	//
+	// 0700 而非 0755（GPT-R35）：这个目录里放的是 instance.meta 与数据库，
+	// `fastledger instance bump` 往往是【第一个】创建它的命令（恢复流程在启动之前跑），
+	// 若这里建成 0755，bump 到服务启动之间会有一段"同机其他用户可进"的窗口。
+	// （服务启动后 database.EnsureDataDir 会再收紧一次，双重覆盖。）
+	dirPerm = 0o700
 	// instanceIDBytes instance_id 的随机字节数（16 字节 → 32 位十六进制）
 	instanceIDBytes = 16
 	// tmpSuffix 原子写入的临时文件后缀
