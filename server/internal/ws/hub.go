@@ -84,6 +84,9 @@ var (
 	ErrTooManyConnections = errors.New("服务端在线连接数已达上限，请稍后重试")
 	// ErrTooManyConnectionsForUser 单用户 WebSocket 连接数已达上限（SYNC-01）
 	ErrTooManyConnectionsForUser = errors.New("该账号的在线连接数已达上限，请先断开其它设备")
+	// ErrSubscribeUIDMismatch 订阅请求的用户与连接绑定的用户不一致（SYNC-05）。
+	// 连接额度按"注册时刻的 uid"记账，注册后不得改绑 —— 否则注销会去减别人的计数。
+	ErrSubscribeUIDMismatch = errors.New("订阅用户与连接绑定的用户不一致")
 	// errStaleGeneration 内部哨兵：本次鉴权结果已过期，需重新鉴权（不外泄给调用方）
 	errStaleGeneration = errors.New("stale book permission generation")
 )
@@ -130,6 +133,11 @@ type Client struct {
 	Dropped int64
 	// UID 连接绑定的认证用户（R05）
 	UID int64
+	// regUID 注册时刻的 uid（SYNC-05）：per-uid 连接额度按它记账并在注销时回收。
+	// 与 UID 分开存，是因为 Subscribe 理论上会写 UID（未绑定时首次绑定）；
+	// 额度记账必须锚定注册时刻的值，否则"UID=0 注册 → 被写成非 0 → 注销"会去
+	// 减别人从未加过的计数，凭空多出额度、绕过连接上限。
+	regUID int64
 	// canView 账本 → 能否看到【他人】明细（订阅时由服务端校验结果缓存，
 	// 广播只读它，避免在 Hub 锁内查库）
 	canView map[int64]bool
@@ -229,6 +237,13 @@ func (h *Hub) consumeSubToken(uid int64) bool {
 	if b == nil {
 		if len(h.subBuckets) >= maxSubBuckets {
 			h.pruneSubBucketsLocked()
+			if len(h.subBuckets) >= maxSubBuckets {
+				// SYNC-08：满表且无可回收对象（所有 uid 都在活跃消费）——
+				// fail-closed 拒绝新 uid 的订阅令牌，而不是让桶表无界增长。
+				// 触发前提是 4096+ 个不同 uid 在同一补充窗口内持续消费，
+				// 家庭场景实际不可达；被拒方可稍后重试（有令牌释放即恢复）。
+				return false
+			}
 		}
 		b = &subBucket{tokens: subscribeBurst, last: now}
 		h.subBuckets[uid] = b
@@ -384,9 +399,11 @@ func (h *Hub) Register(c *Client) error {
 	if h.clients[c] {
 		return nil // 幂等：已在注册表里，不重复计数
 	}
-	// 读 UID 需要短暂取 c.mu（锁顺序 Hub.mu → Client.mu，单向）
+	// 读 UID 需要短暂取 c.mu（锁顺序 Hub.mu → Client.mu，单向）；
+	// 同时把它锚定为额度记账的 uid（SYNC-05）：注销时按这个值回收。
 	c.mu.Lock()
 	uid := c.UID
+	c.regUID = uid
 	c.mu.Unlock()
 	if h.maxConnTotal > 0 && len(h.clients) >= h.maxConnTotal {
 		return fmt.Errorf("%w：当前在线 %d，上限 %d", ErrTooManyConnections, len(h.clients), h.maxConnTotal)
@@ -415,9 +432,10 @@ func (h *Hub) Unregister(c *Client) {
 	}
 	delete(h.clients, c)
 	c.mu.Lock()
-	uid := c.UID
+	uid := c.regUID // SYNC-05：按注册时刻的 uid 回收额度，而不是可能被改写过的 c.UID
 	c.mu.Unlock()
-	// 防御：UID 在注册后理论不变（生产路径成立）；即便被改也不会把计数减成负数
+	// 防御：regUID=0 的连接从未计入 per-user 额度，回收必须跳过（否则会去减
+	// 别人的计数，凭空多出额度、绕过连接上限——验证探针实测过这条泄漏路径）
 	if uid > 0 && h.connPerUser[uid] > 0 {
 		h.connPerUser[uid]--
 	}
@@ -578,6 +596,14 @@ func (h *Hub) Subscribe(c *Client, bookIDs []int64, uid int64) error {
 	if c == nil {
 		return ErrSubscribeClientGone
 	}
+	// SYNC-05：连接绑定过的用户不得改绑（连接额度按注册时刻的 uid 记账）。
+	// 放在最前面：改绑请求一次库都不该查、一个令牌都不该扣。
+	c.mu.Lock()
+	bound := c.UID
+	c.mu.Unlock()
+	if bound != 0 && bound != uid {
+		return fmt.Errorf("%w：连接绑定 uid=%d，订阅请求 uid=%d", ErrSubscribeUIDMismatch, bound, uid)
+	}
 	// 1) 频率限制（按 uid）：令牌不足直接拒绝，零解析、零查库
 	if !h.consumeSubToken(uid) {
 		return ErrSubscribeRateLimited
@@ -732,6 +758,14 @@ func (h *Hub) writeSubscribe(c *Client, ids []int64, allowed map[int64]bool,
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.ensureLocked()
+	// SYNC-05：连接绑定过的用户不得改绑。若允许把 c.UID 改写成另一个用户，
+	// 注销就会去减别人从未加过的计数 —— 凭空多出额度，per-user 连接上限被绕过。
+	// 未绑定（UID=0）的连接允许首次绑定，兼容"注册时还没有 uid、订阅时才确定"
+	// 的既有调用方；绑定后 c.UID 恒定，与 Unregister 按 regUID 回收的口径一致。
+	if c.UID != 0 && c.UID != uid {
+		return true, nil, fmt.Errorf("%w：连接绑定 uid=%d，订阅请求 uid=%d",
+			ErrSubscribeUIDMismatch, c.UID, uid)
+	}
 	fresh := 0
 	for b := range allowed {
 		if !c.BookIds[b] {
