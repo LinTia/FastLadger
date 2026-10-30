@@ -2,6 +2,18 @@
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.33] - 2026-10-30
+
+### 修复 GPT-R25（P2）：database/migrate 补真实 SQLite 集成测试，冒烟步骤不再是空转
+
+- **根因**：[1.31] 的 SQLite 冒烟步骤 `go test ./internal/migrate/... ./internal/database/...` 目标包当时均无 `*_test.go`，CI 输出 `[no test files]`，等于没跑任何测试；但 [1.31] 却把它描述成"真库测试已执行、9 项 SQLite 断言跑通"。这一夸大表述由 GPT-R25 命中，已在 [1.32] 收窄。
+- **修复（本次）**：
+  - `server/internal/database/database_test.go`：调用 `database.Init` 在临时库开真库，断言 `foreign_keys=1`、`journal_mode=wal`、`synchronous=FULL`，并验证可写可读（证明驱动不是 stub）。
+  - `server/internal/migrate/migrate_test.go`：临时库上 `Apply` 迁移，校验版本=应用数、重复执行幂等（`n2==0`）、`schema_migrations` 与 `accounts`/`users` 表真实存在。
+  - `.github/workflows/ci.yml`：SQLite 冒烟步骤加反向门禁——若目标包再无 `*_test.go` 输出 `[no test files]` 则显式失败，防止门禁静默空转（GPT-R25 建议 #4）。
+- **验证**：Actions run [41014327155](https://github.com/LinTia/FastLadger/actions/runs/41014327155) 全绿；冒烟步骤日志显示 `ok fastledger/internal/database`、`ok fastledger/internal/migrate`，两个用例 `--- PASS`，不再出现 `[no test files]`。
+- **诚实边界**：本次只补齐"驱动能开真库 / PRAGMA 生效 / 迁移可执行且幂等"这层验证。**阶段 3/4 的 9 项业务级 SQLite 断言（clientUuid 幂等重试、转账回滚、`related_id` 配对、`RowsAffected` 语义、`busy_timeout` 并发等）仍未有真实 DB 集成测试覆盖**，属独立 backlog，勿误读为本轮已全闭环。
+
 ## [1.32] - 2026-10-30
 
 ### GPT-R25（P2，已采纳）：SQLite 驱动冒烟步骤没有实际执行测试

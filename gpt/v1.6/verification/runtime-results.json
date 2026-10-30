@@ -19,6 +19,9 @@
     "race_ws_service_api": "既有 run 记录为全部 ok；本轮未重新运行"
   },
   "local_rerun": "not_run",
-  "owner_disposition": "accepted",
-  "implementation_status": "not_fixed"
+  "owner_disposition": "fixed",
+  "implementation_status": "fixed",
+  "fixed_commit": "49eade0",
+  "fixed_run": "https://github.com/LinTia/FastLadger/actions/runs/41014327155",
+  "smoke_step_now": "ok fastledger/internal/database (TestInitOpensRealSQLiteAndConfiguresPragmas PASS); ok fastledger/internal/migrate (TestApplyMigrationsOnFreshDB PASS); no longer [no test files]"
 }

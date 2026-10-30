@@ -20,7 +20,10 @@
     "expected": "新增真实临时 SQLite 测试，调用 database.Init、断言 foreign_keys/journal_mode/synchronous，调用 migrate.Apply 并验证版本及重复执行；无测试文件时 CI 应失败。",
     "impact": "CI 专项门禁可能在 SQLite 驱动不可用、PRAGMA 配置错误或迁移失败时仍通过；CHANGELOG [1.31] 对验证覆盖范围的描述因此过度。",
     "suggestion": "新增 server/internal/database/database_test.go 与 server/internal/migrate/migrate_test.go；保留 CI 命令并确认日志出现实际测试结果；可增加测试文件存在性门禁；将全量 Go 测试与 SQLite 专项集成测试的证据分开记录。",
-    "status": "已采纳（owner 2026-10-30 确认；尚未修复 CI/测试代码）",
-    "evidence": "Actions run 41010979053: https://github.com/LinTia/FastLadger/actions/runs/41010979053；日志分别为 '? fastledger/internal/migrate [no test files]' 与 '? fastledger/internal/database [no test files]'；ci.yml:63-66；当前仓库树中两个目录均无 *_test.go。本轮未重新运行 Go 测试。"
+    "status": "已修复（[1.33]）",
+    "evidence": "修复见 CHANGELOG [1.33] 与 commit 49eade0。新增 server/internal/database/database_test.go （调用 database.Init 开真库，断言 foreign_keys=1 / journal_mode=wal / synchronous=FULL，并验证可写可读）与 server/internal/migrate/migrate_test.go（临时库 Apply 迁移，校验版本=应用数、重复执行幂等 n2==0、schema_migrations 与 accounts/users 表真实存在）。.github/workflows/ci.yml 冒烟步骤加反向门禁：若目标包再无 *_test.go 输出 [no test files] 则显式失败。\nActions run 41014327155（commit 49eade0）全绿，日志：ok fastledger/internal/database / ok fastledger/internal/migrate，两个用例 --- PASS，不再出现 [no test files]。\n诚实边界：本轮仅验证『驱动能开真库 / PRAGMA 生效 / 迁移可执行且幂等』；9 项业务级 SQLite 断言（clientUuid 幂等重试、转账回滚、related_id 配对、RowsAffected 语义、busy_timeout 并发等）仍未有真实 DB 集成测试，属独立 backlog。",
+    "fixed_in": "[1.33]",
+    "fixed_commit": "49eade0",
+    "verified_run": "https://github.com/LinTia/FastLadger/actions/runs/41014327155"
   }
 ]
