@@ -199,50 +199,56 @@ func (s *AccountService) Update(uid, bookID, accountID int64, in AccountUpdateIn
 	return &a, nil
 }
 
-// Delete 软删账户（保留历史交易引用）；存在未删除交易时拒绝，避免账目悬空
-func (s *AccountService) Delete(uid, bookID, accountID int64) error {
+// Delete 软删账户（保留历史交易引用）；存在未删除交易时拒绝，避免账目悬空。
+//
+// 返回本次写入产生的 `sync_version`：HTTP 适配层要用它广播 data_changed
+// （账户是账本共享配置，任何在线成员都需要知道"有新版本"）。若返回 error，版本无意义。
+func (s *AccountService) Delete(uid, bookID, accountID int64) (int64, error) {
 	sess := s.engine.NewSession()
 	defer sess.Close()
 	if err := sess.Begin(); err != nil {
-		return err
+		return 0, err
 	}
 	defer func() { _ = sess.Rollback() }()
 
 	if _, err := requireManagerTx(sess, bookID, uid); err != nil {
-		return err
+		return 0, err
 	}
 	if err := ensureAccountInBook(sess, bookID, accountID); err != nil {
-		return err
+		return 0, err
 	}
 	var used int64
 	if _, err := sess.SQL(
 		`SELECT COUNT(1) FROM transactions
 		 WHERE book_id = ? AND deleted = 0 AND (account_id = ? OR to_account_id = ?)`,
 		bookID, accountID, accountID).Get(&used); err != nil {
-		return err
+		return 0, err
 	}
 	if used > 0 {
-		return ErrAccountInUse
+		return 0, ErrAccountInUse
 	}
 	ver, err := s.versions.Next(sess, bookID)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	now := time.Now().Unix()
 	res, err := sess.Exec(
 		`UPDATE accounts SET deleted = 1, deleted_at = ?, sync_version = ?, updated_at = ?
 		 WHERE id = ? AND book_id = ? AND deleted = 0`, now, ver, now, accountID, bookID)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	n, err := res.RowsAffected()
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if n != 1 {
-		return ErrAccountNotFound
+		return 0, ErrAccountNotFound
 	}
-	return sess.Commit()
+	if err := sess.Commit(); err != nil {
+		return 0, err
+	}
+	return ver, nil
 }
 
 // ensureAccountInBook 校验账户归属本账本且未删除（防越权引用他人账本账户）

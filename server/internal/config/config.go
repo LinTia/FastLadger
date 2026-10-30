@@ -17,6 +17,8 @@ const (
 	DefaultHTTPPort = "8080"
 	// DefaultDBPath 默认 SQLite 路径
 	DefaultDBPath = "./data/fastledger.db"
+	// DefaultDataDir 默认数据目录（instance.meta / 附件都落在这里，见指南 §26.1）
+	DefaultDataDir = "./data"
 
 	// minJWTSecretLen JWT 密钥最短长度，短于此视为不安全
 	minJWTSecretLen = 32
@@ -33,6 +35,9 @@ type Config struct {
 	HTTPPort string
 	DBPath   string
 
+	// DataDir 数据目录（instance.meta 等实例级元信息，备份须排除该文件）
+	DataDir string
+
 	JWTSecret      string
 	EnableRegister bool
 
@@ -47,6 +52,7 @@ func Load() (*Config, error) {
 	c := &Config{
 		HTTPPort:       envOr("EBK_HTTP_PORT", DefaultHTTPPort),
 		DBPath:         envOr("EBK_DB_PATH", DefaultDBPath),
+		DataDir:        envOr("EBK_DATA_DIR", DefaultDataDir),
 		JWTSecret:      os.Getenv("EBK_JWT_SECRET"),
 		EnableRegister: envBool("EBK_ENABLE_REGISTER", false),
 		RecycleTTLDays: envInt("EBK_RECYCLE_TTL_DAYS", 30),
@@ -64,6 +70,9 @@ func (c *Config) validate() error {
 	}
 	if strings.TrimSpace(c.DBPath) == "" {
 		return fmt.Errorf("EBK_DB_PATH 不能为空")
+	}
+	if strings.TrimSpace(c.DataDir) == "" {
+		return fmt.Errorf("EBK_DATA_DIR 不能为空")
 	}
 	if err := validateJWTSecret(c.JWTSecret); err != nil {
 		return err

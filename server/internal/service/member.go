@@ -28,6 +28,12 @@ import (
 
 const daySeconds = int64(24 * 60 * 60)
 
+// maxBookMembers 账本成员上限（PRD §12 决策 6：MVP 上限 20 人，家庭/小圈子足够）。
+//
+// 注意：统计口径是 `book_members.deleted = 0`（软删退出的成员不占名额，
+// 但其历史记录保留，满足"不可篡改审计"）。
+const maxBookMembers = 20
+
 var (
 	// ErrInviteInvalid 邀请码无效（不存在/已用/已撤销/过期）
 	ErrInviteInvalid = errors.New("邀请码无效或已过期")
@@ -37,6 +43,8 @@ var (
 	ErrCannotOperateOwner = errors.New("不能对账本所有者执行该操作")
 	// ErrRateLimited 触发限流
 	ErrRateLimited = errors.New("操作过于频繁，请稍后再试")
+	// ErrBookFull 账本成员已达上限（PRD §12 决策 6，HTTP 409）
+	ErrBookFull = errors.New("该账本成员已达上限")
 )
 
 // RoleOf 查询成员角色；非成员返回 ErrNotMember（服务端权威判定）
@@ -248,6 +256,21 @@ func (s *MemberService) JoinViaInvite(bookID int64, code, username, password, cl
 	if inv.BoundUsername != "" && !strings.EqualFold(inv.BoundUsername, uname) {
 		_ = sess.Rollback()
 		return nil, ErrInviteBoundMismatch
+	}
+
+	// 成员上限（PRD §12 决策 6：MVP 账本成员上限 20 人）。
+	// 必须在**同一事务内**统计：两个邀请并发入户时，若在事务外计数会双双重置为
+	// "未满 20"，把人数顶过上限。口径为 deleted=0（已软删退出的不占名额）。
+	var memberCount int64
+	if _, cerr := sess.SQL(
+		`SELECT COUNT(1) FROM book_members WHERE book_id = ? AND deleted = 0`,
+		inv.BookId).Get(&memberCount); cerr != nil {
+		_ = sess.Rollback()
+		return nil, cerr
+	}
+	if memberCount >= maxBookMembers {
+		_ = sess.Rollback()
+		return nil, ErrBookFull
 	}
 
 	u, err := s.auth.insertUserInTx(sess, uname, hash)

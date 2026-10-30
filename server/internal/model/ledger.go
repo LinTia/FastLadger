@@ -5,6 +5,13 @@ package model
 // 字段严格对齐 `migrate/migrations/0001_init.up.sql`（表结构是唯一权威），
 // 枚举取值以《FastLedger-枚举字典》为唯一权威，金额一律整数分。
 //
+// 软删除字段的 JSON 契约（阶段 3 同步墓碑，**不要改回 `json:"-"`**）：
+//
+// 增量同步（sync/pull）故意下发**墓碑行**（不过滤 deleted），客户端必须能识别
+// `deleted=true` 并覆盖本地对应行；若该字段被隐藏，客户端会把墓碑当活行处理
+// （表现为"删掉的数据又回来了"）。REST 读路径本就只查 `deleted=0`，
+// 因此对外暴露该字段没有副作用。`deletedAt` 为墓碑时间（0 值不输出）。
+//
 // 负债余额符号（枚举字典 §2）：负债账户（10~15）的 balance 存储为【正=欠款】，
 // 故刷卡消费使 balance 增加、还款使 balance 减少；净资产 = Σ(1~9) − Σ(10~15)。
 
@@ -109,10 +116,10 @@ type Account struct {
 	Balance     int64  `xorm:"notnull default 0" json:"balance"` // 整数分；负债账户正=欠款
 	ParentId    int64  `xorm:"default 0" json:"parentId"`        // 仅 UI 分组，不参与余额计算
 	SyncVersion int64  `xorm:"notnull default 0" json:"syncVersion"`
-	Deleted     bool   `xorm:"notnull default 0" json:"-"`
+	Deleted     bool   `xorm:"notnull default 0" json:"deleted"` // 同步墓碑标识：客户端须以 deleted=true 覆盖本地行
 	CreatedAt   int64  `xorm:"created" json:"createdAt"`
 	UpdatedAt   int64  `xorm:"updated" json:"updatedAt"`
-	DeletedAt   int64  `json:"-"`
+	DeletedAt   int64  `json:"deletedAt,omitempty"` // 墓碑时间（未删除时为 0，不输出）
 }
 
 func (Account) TableName() string { return "accounts" }
@@ -125,10 +132,10 @@ type Category struct {
 	ParentId    int64  `xorm:"default 0" json:"parentId"`
 	CatType     int8   `xorm:"notnull" json:"catType"` // 1=收入 2=支出
 	SyncVersion int64  `xorm:"notnull default 0" json:"syncVersion"`
-	Deleted     bool   `xorm:"notnull default 0" json:"-"`
+	Deleted     bool   `xorm:"notnull default 0" json:"deleted"` // 同步墓碑标识：客户端须以 deleted=true 覆盖本地行
 	CreatedAt   int64  `xorm:"created" json:"createdAt"`
 	UpdatedAt   int64  `xorm:"updated" json:"updatedAt"`
-	DeletedAt   int64  `json:"-"`
+	DeletedAt   int64  `json:"deletedAt,omitempty"` // 墓碑时间（未删除时为 0，不输出）
 }
 
 func (Category) TableName() string { return "categories" }
@@ -159,10 +166,10 @@ type Transaction struct {
 	RelatedId      int64  `xorm:"default 0" json:"relatedId"`
 	ClientUuid     string `xorm:"varchar(64) default ''" json:"clientUuid"`
 	SyncVersion    int64  `xorm:"notnull default 0" json:"syncVersion"`
-	Deleted        bool   `xorm:"notnull default 0" json:"-"`
+	Deleted        bool   `xorm:"notnull default 0" json:"deleted"` // 同步墓碑标识：客户端须以 deleted=true 覆盖本地行
 	CreatedAt      int64  `xorm:"created" json:"createdAt"`
 	UpdatedAt      int64  `xorm:"updated" json:"updatedAt"`
-	DeletedAt      int64  `json:"-"`
+	DeletedAt      int64  `json:"deletedAt,omitempty"` // 墓碑时间（未删除时为 0，不输出）
 }
 
 func (Transaction) TableName() string { return "transactions" }

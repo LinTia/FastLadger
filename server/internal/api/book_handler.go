@@ -68,6 +68,12 @@ func (h *bookHandler) get(c *gin.Context) {
 	ok(c, b)
 }
 
+// update 修改账本设置（名称 / 可见性开关，`PUT /books/:id`）——文档既有入口。
+//
+// 可见性写入与 `PUT /books/:id/visibility` 共用**同一个** BookService.SetVisibility
+// （单一实现、两个入口，见《落地方案》§5.2 不变量）。本 handler 只负责：
+// 把"是否真的变了"（res.VisibilityChanged）翻译成一次广播——
+// **只在条件分支内广播**，值没变不播（否则所有在线端白做一次 afterVersion=0 全量重拉）。
 func (h *bookHandler) update(c *gin.Context) {
 	id, good := bookID(c)
 	if !good {
@@ -80,9 +86,13 @@ func (h *bookHandler) update(c *gin.Context) {
 	if !bindJSON(c, &req) {
 		return
 	}
-	if err := h.books.Update(currentUID(c), id, req.Name, req.MembersCanViewOthers); err != nil {
+	res, err := h.books.Update(currentUID(c), id, req.Name, req.MembersCanViewOthers)
+	if err != nil {
 		mapSvcErr(c, err)
 		return
+	}
+	if res.VisibilityChanged {
+		notifyVisibilityChanged(id, currentBookVersion(h.books, id))
 	}
 	ok(c, gin.H{"id": id})
 }
@@ -96,6 +106,9 @@ func (h *bookHandler) remove(c *gin.Context) {
 		mapSvcErr(c, err)
 		return
 	}
+	// 已提交 → 通知在线成员清空该账本本地数据并停止订阅（失败只记日志）
+	// 版本从 book_versions 读（账本是软删，版本水位仍在，信封要求带 version）
+	notifyBookDeleted(id, currentBookVersion(h.books, id))
 	ok(c, gin.H{"id": id})
 }
 
@@ -183,6 +196,8 @@ func (h *bookHandler) changeRole(c *gin.Context) {
 		mapSvcErr(c, err)
 		return
 	}
+	// 已提交 → 角色变化可能改变可见范围，要求定向全量重拉（失败只记日志）
+	notifyMemberRoleChanged(id, currentBookVersion(h.books, id), uid, req.Role)
 	ok(c, gin.H{"uid": uid, "role": req.Role})
 }
 
@@ -200,6 +215,8 @@ func (h *bookHandler) removeMember(c *gin.Context) {
 		mapSvcErr(c, err)
 		return
 	}
+	// 已提交 → 被移除成员应主动清除该账本本地数据（失败只记日志）
+	notifyMemberRemoved(id, currentBookVersion(h.books, id), uid)
 	ok(c, gin.H{"uid": uid})
 }
 

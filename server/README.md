@@ -100,6 +100,27 @@ go test ./internal/service/ -v
 # 无需数据库、无需 CGO
 ```
 
+## 部署安全提示（阶段 3：WebSocket）
+
+- **`CheckOrigin` 当前恒为 `true`**（`internal/ws/serve.go` 的 `upgrader`）：自托管场景下
+  Flutter 桌面/移动端与局域网浏览器可能不带 `Origin` 头，先放宽以免误伤。
+  **生产部署必须改为 Origin 白名单校验**（与 Caddy 反代的站点域名一致），否则任意站点都能
+  在用户浏览器里发起 WS 连接（虽然仍需要合法 token）。
+- **WS 鉴权的 token 可能出现在 URL 上**：浏览器 WebSocket API 无法设置 `Authorization` 头，
+  因此 `wsAuth` 支持回退读 `?token=`。代价是 token 会进入 access log / 反代日志 / 浏览器历史。
+  生产部署须二选一：① 由反代对日志脱敏（Caddy `log` 的 query 过滤）；
+  ② 改用 `Sec-WebSocket-Protocol` 子协议承载 token。
+- **`instance.meta` 必须排除在备份包之外**：它是"恢复世代"的唯一凭据，随备份恢复等于把
+  `restore_epoch` 一起回退，客户端将无法察觉服务端数据整体回退（见下文「恢复流程」）。
+
+### 恢复流程（restore_epoch）
+
+```bash
+# 1) 停容器 → 2) 替换 data/fastledger.db（instance.meta 不要一起覆盖）
+fastledger instance bump        # restore_epoch += 1，restored_at=RFC3339，写 data/instance.meta
+# 3) 启动；客户端发现 /healthz 或 sync/pull 的 restoreEpoch 变化后会全量重建
+```
+
 ## 尚未实现（后续阶段）
 
 - 阶段 2：统一 `TxService.Create`、转账双边原子、幂等回执、Gin 400/409 接线

@@ -29,6 +29,13 @@ func (h *ledgerHandler) createTransaction(c *gin.Context) {
 		mapSvcErr(c, err)
 		return
 	}
+	// 已提交 → 通知在线成员"有新版本，去 pull"（不携带明细；失败只记日志，不能反转已提交结果）
+	//
+	// 幂等重放（Replayed=true）**不广播**：那次变更在首次提交时已经通知过，
+	// 重复事件会让所有在线端白拉一次（与 syncHandler.push 的口径一致）。
+	if !res.Replayed {
+		notifyDataChanged(bookID, res.Version)
+	}
 	ok(c, res)
 }
 

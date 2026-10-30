@@ -609,13 +609,15 @@ CREATE INDEX idx_members_book ON book_members(book_id);
   ```json
   { "action": "subscribe", "books": [1, 2] }
   ```
-- 服务器在有新交易/改动时推送（事件名统一用点号；关闭互看时 `data` 为脱敏通知，需再走授权接口拉明细）：
+- 服务器在有新交易/改动时推送。**事件名的唯一权威表在《落地方案》§5.2**——只有 **1 个信号事件** `data_changed`（任何版本递增的写都用它）+ **4 个协调事件**（`visibility_changed` / `member_removed` / `member_role_changed` / `book_deleted`，名称出自 PRD §12.1 决策 2）。统一规则：**事件名下划线、JSON 字段名 camelCase**；信封为 `{event, bookId, version, forceFullResync, data}`，业务字段一律收进 `data`：
   ```json
-  { "event": "transaction.created", "bookId": 1, "version": 88, "data": { "id": 88, "amount": 3650 } }
-  { "event": "transaction.updated", "bookId": 1, "version": 89, "data": { "id": 88 } }
-  { "event": "transaction.deleted", "bookId": 1, "version": 90, "data": { "id": 123 } }
-  { "event": "member.role_changed", "bookId": 1, "version": 91, "data": { "uid": 2, "role": 2 } }
+  { "event": "data_changed",         "bookId": 1, "version": 88, "forceFullResync": false, "data": {} }
+  { "event": "visibility_changed",   "bookId": 1, "version": 91, "forceFullResync": true,  "data": {} }
+  { "event": "member_role_changed",  "bookId": 1, "version": 91, "forceFullResync": true,  "data": { "targetUid": 2, "role": 2 } }
+  { "event": "member_removed",       "bookId": 1, "version": 91, "forceFullResync": true,  "data": { "targetUid": 2 } }
+  { "event": "book_deleted",         "bookId": 1, "version": 91, "forceFullResync": true,  "data": {} }
   ```
+  > `data_changed` 的 `data` **刻意为空**：事件只是"有新版本"的信号，明细必须走授权 `sync/pull` 获取——**不要为了省一次请求往事件里塞明细**，那会绕过可见性判定（关闭互看时无权者也能从事件里读到他人金额）。
 - 断线自动重连：**WS 事件只用于"通知有新版本"，不直接据此推进已同步游标**；重连后用 `sync/pull?afterVersion=上次完整应用的版本` 补漏（见 §22）。
 
 ---
@@ -1556,12 +1558,16 @@ func (h *Hub) BroadcastToBook(bookId int64, msg []byte, sensitiveMsg []byte) {
 // 位于 HTTP/同步适配层：Create 内部不导入 ws，避免 services ↔ ws 循环依赖。
 result, err := txService.Create(c.Request.Context(), uid, bookID, req)
 if err != nil { /* 按 §13.2 映射 HTTP/同步错误，结束本次请求 */ return }
-notice, err := json.Marshal(map[string]any{
-    "event": "transaction.created", "bookId": bookID, "version": result.Version,
-})
-if err == nil {
-    // WS 只通知有更新，不携带交易明细；真正数据走授权 pull。
-    ws.DefaultHub.BroadcastToBook(bookID, notice, notice)
+// 只在真正新建时通知；幂等重放（result.Replayed）没有新版本，不该发信号
+if !result.Replayed {
+    notice, err := json.Marshal(map[string]any{
+        "event": "data_changed", "bookId": bookID, "version": result.Version,
+        "forceFullResync": false, "data": map[string]any{},
+    })
+    if err == nil {
+        // WS 只通知有更新，不携带交易明细；真正数据走授权 pull。
+        ws.DefaultHub.BroadcastToBook(bookID, notice, notice)
+    }
 }
 // 通知失败记录日志/由后续 pull 兜底；不能把已提交命令改为失败或重做。
 ```

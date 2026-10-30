@@ -77,6 +77,9 @@ func mapSvcErr(c *gin.Context, err error) {
 		fail(c, http.StatusBadRequest, "邀请码无效或已过期")
 	case errors.Is(err, service.ErrInviteBoundMismatch):
 		fail(c, http.StatusBadRequest, "邀请码已绑定指定用户，信息不匹配")
+	case errors.Is(err, service.ErrBookFull):
+		// PRD §12 决策 6：成员上限 20，属于"当前状态不允许"而非"请求非法" → 409
+		fail(c, http.StatusConflict, "该账本成员已达上限（20）")
 	case errors.Is(err, service.ErrRateLimited):
 		fail(c, http.StatusTooManyRequests, "操作过于频繁，请稍后再试")
 	case errors.Is(err, service.ErrWeakPassword):

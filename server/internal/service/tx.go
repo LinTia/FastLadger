@@ -452,13 +452,22 @@ func loadCategoryForType(sess *xorm.Session, bookID, categoryID int64, txType in
 	return nil
 }
 
-// List 交易列表（分页 + 过滤）；服务端先复核成员资格
+// List 交易列表（分页 + 过滤）；服务端先复核成员资格与可见性（PRD §7.3）。
+//
+// 读路径必须与 Pull / Get 一致地叠加可见性条件：关闭互看时 member 只能看到本人记录，
+// 否则"列表接口"会成为绕过可见性开关的后门（服务端权威，不能靠前端隐藏）。
 func (s *TxService) List(uid, bookID int64, q TxListQuery) ([]model.Transaction, int64, error) {
-	if err := requireMember(s.engine, bookID, uid); err != nil {
+	canViewAll, err := canViewAllForTx(s.engine, uid, bookID)
+	if err != nil {
 		return nil, 0, err
 	}
 	where := []string{"book_id = ?", "deleted = 0"}
 	args := []interface{}{bookID}
+	// 可见性条件同时进入 COUNT 与列表查询，保证 total 与实际可见条数一致
+	if vcond, vargs := txVisibilityCond(canViewAll, uid); vcond != "" {
+		where = append(where, vcond)
+		args = append(args, vargs...)
+	}
 	if q.MaxTime > 0 {
 		where = append(where, "tx_time <= ?")
 		args = append(args, q.MaxTime)
@@ -502,13 +511,24 @@ func (s *TxService) List(uid, bookID int64, q TxListQuery) ([]model.Transaction,
 	return out, total, nil
 }
 
-// Get 交易详情
+// Get 交易详情（可见性不可见时返回 ErrTransactionNotFound → HTTP 404）。
+//
+// 为什么是 404 而不是 403：403 会泄露"这笔记录确实存在，只是你无权查看"，
+// 相当于把关闭互看下的他人记录存在性暴露给 member。404 与"记录不存在"不可区分，
+// 是可见性过滤场景唯一不泄露信息的选择。
 func (s *TxService) Get(uid, bookID, txID int64) (*model.Transaction, error) {
-	if err := requireMember(s.engine, bookID, uid); err != nil {
+	canViewAll, err := canViewAllForTx(s.engine, uid, bookID)
+	if err != nil {
 		return nil, err
 	}
+	where := "id = ? AND book_id = ? AND deleted = 0"
+	args := []interface{}{txID, bookID}
+	if vcond, vargs := txVisibilityCond(canViewAll, uid); vcond != "" {
+		where += " AND " + vcond
+		args = append(args, vargs...)
+	}
 	var tx model.Transaction
-	has, err := s.engine.Where("id = ? AND book_id = ? AND deleted = 0", txID, bookID).Get(&tx)
+	has, err := s.engine.Where(where, args...).Get(&tx)
 	if err != nil {
 		return nil, err
 	}

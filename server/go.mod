@@ -4,6 +4,7 @@ go 1.22
 
 require (
 	github.com/gin-gonic/gin v1.10.0
+	github.com/gorilla/websocket v1.5.1
 	github.com/mattn/go-sqlite3 v1.14.22
 	golang.org/x/crypto v0.23.0
 	xorm.io/xorm v1.3.9

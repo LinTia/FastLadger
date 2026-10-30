@@ -59,6 +59,8 @@ func (h *ledgerHandler) createCategory(c *gin.Context) {
 		mapSvcErr(c, err)
 		return
 	}
+	// 已提交 → 广播 data_changed（分类是账本共享配置）
+	notifyDataChanged(bookID, cat.SyncVersion)
 	ok(c, cat)
 }
 
@@ -84,6 +86,8 @@ func (h *ledgerHandler) updateCategory(c *gin.Context) {
 		mapSvcErr(c, err)
 		return
 	}
+	// 已提交 → 广播 data_changed（本次写入的 sync_version 即 cat.SyncVersion）
+	notifyDataChanged(bookID, cat.SyncVersion)
 	ok(c, cat)
 }
 
@@ -96,9 +100,12 @@ func (h *ledgerHandler) deleteCategory(c *gin.Context) {
 	if !good {
 		return
 	}
-	if err := h.categories.Delete(currentUID(c), bookID, categoryID); err != nil {
+	ver, err := h.categories.Delete(currentUID(c), bookID, categoryID)
+	if err != nil {
 		mapSvcErr(c, err)
 		return
 	}
+	// 已提交 → 广播 data_changed（删除同样是账本数据变更，版本已递增）
+	notifyDataChanged(bookID, ver)
 	ok(c, gin.H{"id": categoryID})
 }

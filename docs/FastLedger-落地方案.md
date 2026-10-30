@@ -828,7 +828,8 @@ CREATE INDEX idx_audit_entity ON audit_logs(entity_type, entity_id);
 | 用户 | GET `/users/me` | 当前用户资料 |
 | 账本 | GET `/books` | 我加入的账本列表 |
 |  | POST `/books` | 创建账本（创建者自动为 owner） |
-|  | PUT `/books/{id}` | 修改账本（名称/可见性开关） |
+|  | PUT `/books/{id}` | 修改账本（名称 / 可见性开关）。可见性部分**必须委托**给与下一行相同的服务方法（`SetVisibility`），本路径**不得自行拼接**该列的 UPDATE |
+|  | PUT `/books/{id}/visibility` | 可见性开关的语义化**便捷入口**（body `{"membersCanViewOthers": bool}`）；仅 owner/admin；响应含 `changed`（是否实际变化）；与上一行**同一写实现** |
 |  | GET `/books/{id}/members` | 成员列表 |
 |  | POST `/books/{id}/members/invite` | 生成邀请码/链接 |
 |  | POST `/books/{id}/members/join` | 凭邀请码加入 |
@@ -862,6 +863,31 @@ CREATE INDEX idx_audit_entity ON audit_logs(entity_type, entity_id);
 |  | DELETE `/books/{id}/budgets/{bid}` | 删除 |
 | 同步 | GET `/books/{id}/sync/pull` | 拉取增量（参数：afterVersion、limit；服务端校验成员资格） |
 |  | POST `/books/{id}/sync/push` | 每个离线创建项调用同一个 TxService.Create，携带稳定 clientUuid |
+
+**`sync/push` 响应契约**（整体 HTTP 200，逐项给结果，便于客户端按项重试）：
+
+```json
+{ "code": 0, "data": { "results": [
+  { "clientUuid": "u-1", "status": "created",  "id": 101, "transactionIds": [101],      "version": 57 },
+  { "clientUuid": "u-2", "status": "replayed", "id": 88,  "transactionIds": [88],       "version": 51 },
+  { "clientUuid": "u-3", "status": "conflict", "errorCode": "CONFLICT", "message": "…" },
+  { "clientUuid": "u-4", "status": "invalid",  "errorCode": "INVALID_REQUEST", "message": "…" },
+  { "clientUuid": "u-5", "status": "forbidden","errorCode": "FORBIDDEN", "message": "…" },
+  { "clientUuid": "u-6", "status": "error",    "errorCode": "INTERNAL_ERROR", "message": "…" }
+] } }
+```
+
+| `status` | 含义 | 客户端处置 |
+|---|---|---|
+| `created` | 新建成功 | 记下 `id`/`version`，从离线队列移除该项 |
+| `replayed` | 幂等命中，返回**原结果** | 同 `created`（不是新账，不得再入队） |
+| `conflict` | **业务冲突**（同 clientUuid 内容不一致 / 并发修改） | 进入"覆盖 / 放弃 / 另存副本"选择。**允许换新 clientUuid 另存** |
+| `invalid` | 参数非法（如缺 clientUuid、金额越界、转账缺对手账户） | 标记该项为需人工修正，**不自动重试** |
+| `forbidden` | 无权（非成员 / 编辑他人记录） | 提示无权限，丢弃该项 |
+| `error` | **服务端内部错误**（磁盘满、`database is locked` 等） | **原样重试，禁止换 clientUuid** |
+
+> ⚠️ **`conflict` 与 `error` 必须区分**：`conflict` 会触发"另存副本"（通常意味着换新 `clientUuid` 重试）；若把内部错误也标成 `conflict`，客户端换键重试就会**把同一笔钱记两遍**。这是 P1 级会计后果，不是文案问题。
+
 | 删除恢复 | GET `/books/{id}/recycle` | 回收站列表（软删实体，`EBK_RECYCLE_TTL_DAYS` 默认 30 天内可恢复） |
 |  | POST `/books/{id}/recycle/{entityType}/{entityId}/restore` | 恢复（转账**整笔**恢复，两侧余额同时回滚，禁止单边） |
 |  | DELETE `/books/{id}/recycle/{entityType}/{entityId}` | 硬清除（立即，跳过保留期） |
@@ -885,16 +911,50 @@ CREATE INDEX idx_audit_entity ON audit_logs(entity_type, entity_id);
 ## 5.2 WebSocket 协议
 
 - 连接：`wss://域名/api/v1/ws?token=xxx`，连接后发送 `{"action":"subscribe","books":[1,2]}`（账本 ID 由服务端校验成员资格，不信任客户端）。
-- 服务端推送事件（统一带 `version`；关闭互看时 `data` 为脱敏通知）：
+- 鉴权：优先 `Authorization: Bearer <token>`；浏览器原生 WebSocket 无法设自定义头，故**回退支持 `?token=`**。
+  > ⚠️ **运维要求**：query 中的 token 会进入反向代理 access log。生产部署必须在 Caddy/nginx 侧对该参数脱敏（或改用 `Sec-WebSocket-Protocol` 传递），不得原样落盘。
+- **统一信封**（所有事件必须遵守，`data` 一律为对象，禁止把业务字段平铺到顶层）：
 
 ```json
-{ "event": "transaction.created", "bookId": 1, "version": 88, "data": { ...交易对象 } }
-{ "event": "transaction.updated", "bookId": 1, "version": 89, "data": { ... } }
-{ "event": "transaction.deleted", "bookId": 1, "version": 90, "data": { "id": 123 } }
-{ "event": "member.role_changed", "bookId": 1, "version": 91, "data": { ... } }
+{ "event": "<事件名>", "bookId": 1, "version": 88, "forceFullResync": false, "data": { } }
 ```
 
+### 事件名权威表（本节即唯一口径）
+
+> **命名规则（一条可执行规则取代"风格之争"）**：**事件名（枚举值）一律下划线；JSON 字段名一律 camelCase**（`bookId` / `version` / `targetUid` / `forceFullResync`）。
+
+| `event` | 类型 | 触发 | `version` 取值 | `forceFullResync` | `data` |
+|---|---|---|---|---|---|
+| `data_changed` | **信号** | 任何使版本递增的写：交易/转账创建、账户增改删、分类增改删、持仓（未来） | 本次递增后的版本 | `false` | `{}` |
+| `visibility_changed` | 协调 | 账本可见性开关**实际发生变化** | 当前 `book_versions.version`（**不递增**） | `true` | `{}` |
+| `member_removed` | 协调 | 成员被移除/退出 | 当前版本（不递增） | `true` | `{"targetUid": 9}` |
+| `member_role_changed` | 协调 | 成员角色变更 | 当前版本（不递增） | `true` | `{"targetUid": 9, "role": 2}` |
+| `book_deleted` | 协调 | 账本被删除 | 当前版本（不递增） | `true` | `{}` |
+
+- **为什么只有 5 个事件、且只有 1 个是"信号"**：WS 的职责只有两件事——"**有新版本，去 pull**"（`data_changed`）和"**重建本地缓存/停止订阅**"（四个协调事件）。不为每种实体单独定义事件，避免客户端漏接、也避免事件表随实体增加而爆炸。
+- **`data_changed` 的 `data` 刻意为空**：不含金额/账户/备注。明细必须走授权 `sync/pull`（关闭互看时服务端不会把他人明细发给无权者）。**不得**为了"省一次请求"往事件里塞明细——那会绕过可见性判定。
+- **四个协调事件的名称出自 PRD §12.1 决策 2**（owner 已裁决，不改名），且它们**不是数据变更**，故不递增 `sync_version`，用 `forceFullResync` 表达。
+- **`forceFullResync=true` 的客户端语义**（PRD §12.1 决策 3）：丢弃该账本本地缓存中当前用户无权访问的记录，以 `afterVersion=0` **全量重拉该账本**（不清空整个本地库）；不需要重拉其他账本。
+- **`version` 必须存在**：客户端以它为"是否有新数据"的唯一判据；缺失时按"有更新"处理并触发一次 pull（fail-safe）。
 - 客户端只处理"当前已订阅账本"的事件；WS 事件只用于通知有新版本，**不直接推进已同步游标**；断线自动重连，重连后走 `sync/pull?afterVersion=上次完整应用的版本` 补漏。
+- 发送缓冲溢出：服务端丢弃该条通知并计数（不影响已提交事务），客户端须以**周期性 pull（建议 60s）+ 重连必 pull** 兜底，不得依赖 WS 的"至少一次"投递。
+
+### 可见性开关：单一写实现、两个入口（**已定稿，勿再改结构**）
+
+可见性开关有**两个入口**（`PUT /books/{id}` 的 `membersCanViewOthers` 字段、`PUT /books/{id}/visibility`），但**只允许一个写实现**：`BookService.SetVisibility`（含 `RowsAffected==1` 校验）。两个 handler 都必须在该值**实际发生变化**时执行"刷新 Hub 缓存 + 广播 `visibility_changed`"。
+
+三条硬约束（均由测试锁死，不是靠"记得改两处"）：
+
+1. **`Update` 不得自行拼接该列的 UPDATE**。`Update` 只写 `name`/`updated_at`，可见性一律委托 `SetVisibility`。测试断言 `Update` 函数体内不得出现 `members_can_view_others`——这是"两套写实现"的真实来源，也是本条唯一真正的风险点。
+2. **两个入口都必须广播**。测试断言两个 handler 函数体内都出现 `notifyVisibilityChanged`，且 `PUT /books/{id}` 的广播位于 `res.VisibilityChanged` 条件分支内（无条件播会在每次改名时触发全体 `afterVersion=0` 重拉）。
+3. **"值没变"不得广播、不得写库**。重复提交同一值返回 `changed=false`；仅改名同样不广播（改名不递增版本、不影响任何已同步实体）。
+
+> **为什么保留两个入口而不是收敛成一个**：真正的风险是"两套写实现"，而这里只有一个 `SetVisibility`，两个入口重复的仅是一行广播调用——用 AST 断言即可锁死。若收敛为单入口（老路径对 `membersCanViewOthers` 返回 400），"改名 + 关互看"这类常见设置操作就要发两次请求，且客户端收到 400 的失败模式比"少一条广播"更难排查。
+>
+> ⚠️ 无论哪种结构，都**不得"悄悄忽略"该字段**：`ShouldBindJSON` 会忽略未知字段，若某天把字段从请求结构删掉，客户端发 `{"membersCanViewOthers":true}` 会得到 200 但什么都没改——用户以为关了开关而实际没关，这比报错危险得多。
+>
+> 同类历史教训：GPT-ADR01（双创建入口）、D-R01（"决策写了、骨架没跟上"）。
+
 
 ## 5.3 识别接口的请求/响应（关键）
 

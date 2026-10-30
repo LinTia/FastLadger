@@ -1,9 +1,10 @@
-// FastLedger 服务端入口（阶段 0 脚手架 + 阶段 1 认证/账本/成员）。
+// FastLedger 服务端入口（阶段 0 脚手架 + 阶段 1 认证/账本/成员 + 阶段 3 同步/协同）。
 //
 // 用法：
 //
 //	fastledger                                   # 启动 HTTP 服务
 //	fastledger db migrate                        # 手动执行数据库迁移
+//	fastledger instance bump                     # 恢复后递增 restore_epoch（不随备份恢复）
 //	fastledger user create --username u --password p [--owner]
 //	                                             # --owner 仅在【无任何用户】时可用（首个 owner 初始化）
 //
@@ -23,10 +24,12 @@ import (
 	"fastledger/internal/api"
 	"fastledger/internal/config"
 	"fastledger/internal/database"
+	"fastledger/internal/instance"
 	"fastledger/internal/migrate"
 	"fastledger/internal/model"
 	"fastledger/internal/service"
 	"fastledger/internal/version"
+	"fastledger/internal/ws"
 
 	"golang.org/x/crypto/bcrypt"
 	"xorm.io/xorm"
@@ -41,11 +44,21 @@ func main() {
 		log.Fatalf("配置加载失败：%v", err)
 	}
 
-	// SQLite 不会自动创建目录
+	// 数据目录（SQLite 与 instance.meta 都不会自动创建目录）
+	if err := os.MkdirAll(cfg.DataDir, 0o755); err != nil {
+		log.Fatalf("创建数据目录失败：%v", err)
+	}
 	if dir := filepath.Dir(cfg.DBPath); dir != "" && dir != "." {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			log.Fatalf("创建数据目录失败：%v", err)
 		}
+	}
+
+	// instance 子命令不依赖数据库，必须能在"替换 db 文件之后、服务启动之前"执行：
+	// 停容器 → 替换 db → `fastledger instance bump` → 启动（《落地方案》§8.3 恢复流程）。
+	if args := os.Args[1:]; len(args) > 0 && args[0] == "instance" {
+		handleInstance(cfg.DataDir, args[1:])
+		return
 	}
 
 	engine, err := database.Init(cfg.DBPath)
@@ -68,7 +81,7 @@ func main() {
 			handleUser(engine, args[1:])
 			return
 		default:
-			log.Fatalf("未知子命令 %q（可用：db migrate / user create）", args[0])
+			log.Fatalf("未知子命令 %q（可用：db migrate / instance bump / user create）", args[0])
 		}
 	}
 
@@ -82,6 +95,12 @@ func main() {
 			st.Current, st.Expected)
 	}
 
+	// 实例元信息（restore_epoch）：不存在则生成并落盘 0600（指南 §26.1）
+	meta, err := instance.LoadOrCreate(cfg.DataDir)
+	if err != nil {
+		log.Fatalf("实例元信息加载失败：%v", err)
+	}
+
 	versions := version.NewRepo() // 版本唯一实现（VersionRepo.Next）
 	authSvc := service.NewAuthService(engine, cfg.JWTSecret, tokenTTL)
 	books := service.NewBookService(engine, versions)
@@ -89,6 +108,13 @@ func main() {
 	accounts := service.NewAccountService(engine, versions)
 	categories := service.NewCategoryService(engine, versions)
 	txs := service.NewTxService(engine, versions)
+	syncSvc := service.NewSyncService(engine, txs, meta)
+
+	// WS 订阅资格 + 可见性校验：由 service 提供（ws 不得在 Hub 锁内查库，
+	// 只在 Subscribe / RefreshVisibility 的锁外调用本函数并缓存结果）
+	ws.DefaultHub.SetChecker(func(uid, bookID int64) (bool, error) {
+		return service.CanViewDetail(engine, uid, bookID)
+	})
 
 	r := api.NewRouter(api.Deps{
 		Config:        cfg,
@@ -98,13 +124,15 @@ func main() {
 		Accounts:      accounts,
 		Categories:    categories,
 		Txs:           txs,
+		Sync:          syncSvc,
+		Instance:      meta,
 		SchemaVersion: st.Current,
 	})
 
 	srv := &http.Server{Addr: ":" + cfg.HTTPPort, Handler: r}
 	go func() {
-		log.Printf("FastLedger 启动：http://localhost:%s （schema v%d，公开注册=%v）",
-			cfg.HTTPPort, st.Current, cfg.EnableRegister)
+		log.Printf("FastLedger 启动：http://localhost:%s （schema v%d，公开注册=%v，restore_epoch=%d）",
+			cfg.HTTPPort, st.Current, cfg.EnableRegister, meta.RestoreEpoch)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("服务异常：%v", err)
 		}
@@ -122,6 +150,23 @@ func main() {
 		log.Printf("HTTP 关闭出错：%v", err)
 	}
 	log.Println("已退出")
+}
+
+// handleInstance 实例元信息子命令（恢复流程使用）
+func handleInstance(dataDir string, args []string) {
+	if len(args) == 0 || args[0] != "bump" {
+		log.Fatalf("用法：instance bump（恢复备份后递增 restore_epoch）")
+	}
+	before, err := instance.LoadOrCreate(dataDir)
+	if err != nil {
+		log.Fatalf("读取实例元信息失败：%v", err)
+	}
+	after, err := instance.Bump(dataDir)
+	if err != nil {
+		log.Fatalf("递增 restore_epoch 失败：%v", err)
+	}
+	log.Printf("restore_epoch：%d → %d（%s，文件 %s）",
+		before.RestoreEpoch, after.RestoreEpoch, after.RestoredAt, instance.Path(dataDir))
 }
 
 // handleDB 迁移子命令

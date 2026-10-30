@@ -2,20 +2,76 @@
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
-## [1.25] - 2026-10-30
+## [1.27] - 2026-10-30
 
-### D 第二轮工程实现核查：核心 9 焦点无错，成员/邀请服务 3 条新缺口（D-R07–D-R09）
+### 新增：**阶段 3（同步与家庭协同）** 落地 + QA 验收整改
 
-- **新增 `workbuddy/FastLedger-D二次核查报告.md`**：D（同一审阅者，非新 AI）对真实可编译 Go 后端 `server/`（基线 `67da52a`，复跑 build/vet 通过、41 测试全绿）做第二轮核查。
-- **卡片第 6 节 9 个焦点经逐行核对全部正确，无新 finding**：tx.go 事务边界、幂等四项核对、BETWEEN 边界数学、转账禁单边、15 类符号、400/409 错误映射、0003 迁移合法性、无隐藏入口、新建 creator_uid 强制 >0。
-- **新发现 3 条，均为"代码没照设计做"（非设计文档错），无 P0/P1**：
-  - `D-R07`（P2）：`JoinViaInvite` 先调 `auth.Register`（独立事务已提交 user），再另开事务写成员；第二步失败回滚但 user 不回滚，产生无账本孤儿用户，重试用户名冲突。设计要求"原子同事务建 user + book_members"（PRD L573/WBS L227）。
-  - `D-R08`（P2）：标记邀请已用的 `UPDATE ... WHERE used_at=0` 不校验 RowsAffected，0002 邀请表又无"单次使用"库约束；并发竞争下一个未绑定用户名的邀请码可被两个不同用户重复使用。
-  - `D-R09`（P3）：`ChangeRole`/`Remove` 的 UPDATE 丢弃影响行数，目标在并发中已被移除时影响 0 行却返回 nil 被当成功（对比 account.go 已核对 RowsAffected==1）。
-- **落地判断**：不阻塞阶段 3 开工；建议 D-R07+D-R08 合并修复（JoinViaInvite 收敛单一事务 + 两处 RowsAffected 硬校验），D-R09 随阶段 3 成员管理改。
-- **验证边界**：本轮为静态核查；构建机无 gcc，事务真实回滚、UPSERT RowsAffected、并发、0002/0003 真实迁移、PRD §10.1/10.3/10.4 端到端、`go test -race` 仍无运行时证据，需在带 gcc 环境补真实 SQLite 集成测试。
+> 范围：WBS 阶段 3 的 3.1–3.5。经过一轮实现 + QA 独立验收（1×P1 + 4×P2 + 8×P3）+ 两轮返工。**记账核心与前两阶段代码零改动**。
 
-## [1.25] - 2026-10-30
+#### 交付
+
+| 模块 | 落点 |
+|---|---|
+| 可信拉取 | `internal/service/sync.go` `Pull`：单一只读事务定水位 → `safeVersion` **版本边界**分页（同一 `sync_version` 绝不拆批）→ 四类实体（交易/账户/分类/持仓）同一快照读取，四个 `Find` 全部检错 |
+| 离线补传 | `sync.go` `Push(ctx,…)`：**逐项调用同一个 `TxService.Create`**，不新增第二创建入口；单项失败不影响后续 |
+| 可见性 | `internal/service/visibility.go`：`CanViewDetail` + `txVisibilityCond`，接入 `List` / `Get` / `Pull` **三处**；`Get` 他人记录返 **404**（403 会泄露存在性）；`creator_uid=0` 历史行对 member **不可见**（`creator_uid = ? AND creator_uid <> 0` 双保险） |
+| WS | `internal/ws/`：锁序恒 `Hub.mu → Client.mu`；`Send` 永不 close；广播路径**零查库**（订阅时缓存 `canView`）；`Subscribe` 每个 bookID 都查库校验；读限制 64KB / 读截止 60s / Pong 续期 / 写 30s ping |
+| 世代 | `internal/instance/meta.go`：`data/instance.meta`（**不在数据库里**、不随备份恢复）、tmp+rename 原子写、0600、坏文件**不重建**；CLI `instance bump`；`/healthz` 与 `Pull` 均返回 `instanceId`/`restoreEpoch` |
+
+#### QA 验收后整改（均已修）
+
+| 编号 | 问题 | 修复 |
+|---|---|---|
+| **P1** | `PUT /books/:id` 能改 `members_can_view_others` 却**不发事件、不刷 Hub 缓存** → 关互看后客户端永远不重拉，**开关在用户看来失效** | 两个入口统一委托 `SetVisibility`（唯一写实现，含 `RowsAffected==1`）；两 handler 均在 `VisibilityChanged` 时刷新缓存 + 广播。**AST 测试锁死**：`Update` 内不得出现该列、两个 handler 都必须广播、且广播必须在条件分支内 |
+| P2 | `sync/push` 把**服务端内部错误**映射成 `conflict` → 客户端会走"另存副本"换新 `clientUuid` 重试 → **同一笔钱记两遍** | 新增 `status="error"`（`INTERNAL_ERROR`，语义=原样重试、**禁止换键**）；`conflict` 只留给真正的业务冲突 |
+| P2 | Pull 下发墓碑但 `deleted` 被 `json:"-"` 隐藏 → 客户端把已删实体当活行（删账户即可触发；阶段 4 交易删除上线后会变成幽灵账） | 四类模型 `Deleted` → `json:"deleted"`、`DeletedAt` → `json:"deletedAt,omitempty"`，注释标明"墓碑标识" |
+| P2 | 事件契约三份文档互相冲突（点号/下划线、`version` 有无、`data` 平铺、`force_full_resync` vs `forceFullResync`） | **收敛为 5 个事件**（见下）+ 一条可执行命名规则，三份文档对齐 |
+| P2 | 账户/分类 **6 个写 handler 零广播** → A 端新建账户，B 端在线也收不到信号（多端实时性失效） | 6 处写成功后 `notifyDataChanged(bookID, ver)`；`AccountService.Delete`/`CategoryService.Delete` 改为返回本次 `sync_version`。holdings 无写接口，已留 TODO 注释 |
+| P3 | `RefreshVisibility` 旧结果可覆盖更新的 `Subscribe` 结果 | `Client.visSeq`：查库前快照、回写前比对，不一致即放弃 |
+| P3 | 被移除成员仍留在订阅表 → 继续收到该账本事件（泄露"账本仍活跃"） | 非成员时在同一把 `c.mu` 内 `delete(BookIds)`（fail-closed，重连会重订阅） |
+| P3 | `Client` 字面量构造 → nil map panic | `ensureLocked()` 统一懒初始化 |
+| P3 | 幂等重放（`replayed`）也广播"有新版本" | `!res.Replayed` 守卫 |
+| P3 | `Push` 用 `context.Background()` | 改为 `Push(ctx, …)`，handler 传 `c.Request.Context()` |
+| P3 | PRD §12 决策 6「成员上限 20」无校验 | `JoinViaInvite` **事务内**计数（防并发顶破上限），`>=20` → `ErrBookFull` → **409** |
+
+#### WS 事件契约（**定稿，唯一权威见《落地方案》§5.2**）
+
+| `event` | 类型 | `forceFullResync` | `data` |
+|---|---|---|---|
+| `data_changed` | 信号（任何版本递增的写：交易/转账、账户、分类、持仓） | `false` | `{}` |
+| `visibility_changed` / `member_removed` / `member_role_changed` / `book_deleted` | 协调（**不递增版本**） | `true` | `{}` / `{targetUid}` / `{targetUid,role}` / `{}` |
+
+命名规则：**事件名（枚举值）一律下划线；JSON 字段名一律 camelCase**。信封固定 `{event, bookId, version, forceFullResync, data}`，五个事件都必须带 `version`；`data_changed` 的 `data` **刻意为空**（明细走授权 pull，防止绕过可见性）。
+
+#### 函数签名变更（下游需同步）
+
+1. `MemberService.JoinViaInvite(bookID, code, username, password, clientIP)`（[1.26]）
+2. `SyncService.Push(ctx, uid, bookID, items []PushItem)` —— `PushItem` 与 `CreateRequest` 1:1 无损（反射测试锁定）
+3. `BookService.SetVisibility(...) (changed bool, error)` —— 同值提交返回 `false` 且不写库、不广播
+4. `BookService.Update(...) (*BookUpdateResult, error)`
+5. `AccountService.Delete` / `CategoryService.Delete` → `(syncVersion int64, error)`
+
+#### 文档
+
+- `落地方案 §5.1`：补 `sync/push` **响应契约**（六值 `status` 表 + `conflict`/`error` 处置差异）、`PUT /books/{id}` 与 `/visibility` 的关系
+- `落地方案 §5.2`：**事件权威表**重写（5 事件 + 命名规则 + `forceFullResync` 客户端语义）、新增「可见性开关：单一写实现、两个入口（已定稿，勿再改结构）」并写明三条由测试锁死的硬约束
+- `指南 §7.4` 与 `§14.2` 示例：改为 `data_changed` 信封；补 `!Replayed` 守卫
+- `PRD §12.1` / `WBS`：`force_full_resync` → `forceFullResync`（**仅格式**，语义与决策不变，已在 PRD 内注明）；PRD 事件描述 `book_id` → `bookId`
+
+#### 验证
+
+- `gofmt -l .` 空、`go build ./...`、`go vet ./...` 通过
+- 测试（主理人本机实测，顶层用例）：**PASS 122 / FAIL 0 / SKIP 1**（service 58、api 29、ws 21、instance 11、model 3；SKIP = Windows 无 POSIX 权限位）
+- `grep` 验收：`transaction.created` 残留 **0**；`members_can_view_others` 非测试命中仅 `SetVisibility` 一处 UPDATE；`AddTransaction` = 0；`internal/ws` 未被 `internal/service` 导入
+
+#### 验证边界（**未**完成，不得据此宣称验收通过）
+
+1. **`go test -race` 未执行**（`-race requires cgo`，本机无 gcc）——而 WBS 阶段 3.3 明确要求，Hub 并发必须靠它证明
+2. **真实 SQLite 集成未跑**：`Pull` 的 `safeVersion` 版本边界、可见性过滤（`List`/`Get`/`Pull` 三处结果集与 total）、`sync/push` 幂等重放与 409、`SetVisibility` 并发 0 行→409、`JoinViaInvite` 事务回滚与并发上限
+3. **WS 端到端仅验到握手 + 订阅 + 脱敏载荷 + 断连清理**（进程内），未验真实网络下的 ping/pong 续期与半开连接
+4. 观察项：本机 `go test ./internal/api/` 曾出现 **1 次** `--- FAIL`，随后 14 次复跑全绿未复现（疑与本机 Application Control 拦测试可执行文件相关），已记录待 CI 观察
+
+## [1.26] - 2026-10-30
 
 ### 修复：D 第二轮 3 条 + 主理人补 1 条（成员/邀请健壮性）
 
@@ -36,6 +92,19 @@
 **签名变更（下游需同步）**：`MemberService.JoinViaInvite(code, username, password)` → **`JoinViaInvite(bookID, code, username, password, clientIP)`**。
 **验证边界**：真实事务回滚与并发竞争**仍无运行时证据**（构建机无 gcc），`member_test.go` 只覆盖纯逻辑与源码级守卫，不冒充该部分验收；已由给 GPT 的核查卡片承接。
 **文档**：`workbuddy/FastLedger-D二次核查报告.md` 回填 D-R07/R08/R09 的 `status`（→已修复）与 `evidence`（逐条取证 + 两处更正：`MaxOpenConns=1` 不能免除 D-R08 缺陷；`account.go` 的 Update 分支用的是 `Update()` 返回值而非 `RowsAffected()`），并新增"复核与处置"一节记录 WB-R01。
+
+## [1.25] - 2026-10-30
+
+### D 第二轮工程实现核查：核心 9 焦点无错，成员/邀请服务 3 条新缺口（D-R07–D-R09）
+
+- **新增 `workbuddy/FastLedger-D二次核查报告.md`**：D（同一审阅者，非新 AI）对真实可编译 Go 后端 `server/`（基线 `67da52a`，复跑 build/vet 通过、41 测试全绿）做第二轮核查。
+- **卡片第 6 节 9 个焦点经逐行核对全部正确，无新 finding**：tx.go 事务边界、幂等四项核对、BETWEEN 边界数学、转账禁单边、15 类符号、400/409 错误映射、0003 迁移合法性、无隐藏入口、新建 creator_uid 强制 >0。
+- **新发现 3 条，均为"代码没照设计做"（非设计文档错），无 P0/P1**：
+  - `D-R07`（P2）：`JoinViaInvite` 先调 `auth.Register`（独立事务已提交 user），再另开事务写成员；第二步失败回滚但 user 不回滚，产生无账本孤儿用户，重试用户名冲突。设计要求"原子同事务建 user + book_members"（PRD L573/WBS L227）。
+  - `D-R08`（P2）：标记邀请已用的 `UPDATE ... WHERE used_at=0` 不校验 RowsAffected，0002 邀请表又无"单次使用"库约束；并发竞争下一个未绑定用户名的邀请码可被两个不同用户重复使用。
+  - `D-R09`（P3）：`ChangeRole`/`Remove` 的 UPDATE 丢弃影响行数，目标在并发中已被移除时影响 0 行却返回 nil 被当成功（对比 account.go 已核对 RowsAffected==1）。
+- **落地判断**：不阻塞阶段 3 开工；建议 D-R07+D-R08 合并修复（JoinViaInvite 收敛单一事务 + 两处 RowsAffected 硬校验），D-R09 随阶段 3 成员管理改。
+- **验证边界**：本轮为静态核查；构建机无 gcc，事务真实回滚、UPSERT RowsAffected、并发、0002/0003 真实迁移、PRD §10.1/10.3/10.4 端到端、`go test -race` 仍无运行时证据，需在带 gcc 环境补真实 SQLite 集成测试。
 
 ## [1.24] - 2026-10-30
 

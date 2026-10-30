@@ -226,63 +226,68 @@ func (s *CategoryService) Update(uid, bookID, categoryID int64, in CategoryUpdat
 	return &c, nil
 }
 
-// Delete 软删分类；存在子分类或被交易引用时拒绝
-func (s *CategoryService) Delete(uid, bookID, categoryID int64) error {
+// Delete 软删分类；存在子分类或被交易引用时拒绝。
+//
+// 返回本次写入产生的 `sync_version`（HTTP 适配层用它广播 data_changed）。
+func (s *CategoryService) Delete(uid, bookID, categoryID int64) (int64, error) {
 	sess := s.engine.NewSession()
 	defer sess.Close()
 	if err := sess.Begin(); err != nil {
-		return err
+		return 0, err
 	}
 	defer func() { _ = sess.Rollback() }()
 
 	if _, err := requireManagerTx(sess, bookID, uid); err != nil {
-		return err
+		return 0, err
 	}
 	var c model.Category
 	has, err := sess.Where("id = ? AND book_id = ? AND deleted = 0", categoryID, bookID).Get(&c)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if !has {
-		return ErrCategoryNotFound
+		return 0, ErrCategoryNotFound
 	}
 	var children int64
 	if _, err := sess.SQL(
 		`SELECT COUNT(1) FROM categories WHERE book_id = ? AND parent_id = ? AND deleted = 0`,
 		bookID, categoryID).Get(&children); err != nil {
-		return err
+		return 0, err
 	}
 	if children > 0 {
-		return ErrCategoryHasChildren
+		return 0, ErrCategoryHasChildren
 	}
 	var used int64
 	if _, err := sess.SQL(
 		`SELECT COUNT(1) FROM transactions WHERE book_id = ? AND category_id = ? AND deleted = 0`,
 		bookID, categoryID).Get(&used); err != nil {
-		return err
+		return 0, err
 	}
 	if used > 0 {
-		return ErrCategoryInUse
+		return 0, ErrCategoryInUse
 	}
 	ver, err := s.versions.Next(sess, bookID)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	now := time.Now().Unix()
 	res, err := sess.Exec(
 		`UPDATE categories SET deleted = 1, deleted_at = ?, sync_version = ?, updated_at = ?
 		 WHERE id = ? AND book_id = ? AND deleted = 0`, now, ver, now, categoryID, bookID)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	n, err := res.RowsAffected()
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if n != 1 {
-		return ErrCategoryNotFound
+		return 0, ErrCategoryNotFound
 	}
-	return sess.Commit()
+	if err := sess.Commit(); err != nil {
+		return 0, err
+	}
+	return ver, nil
 }
 
 // ensureParentCategory 校验父分类：属于本账本、未删除、是大类、且 cat_type 一致

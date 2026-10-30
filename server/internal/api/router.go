@@ -3,7 +3,9 @@ package api
 // 路由（对齐《落地方案》§5.1 REST API 契约，统一前缀 /api/v1）
 import (
 	"fastledger/internal/config"
+	"fastledger/internal/instance"
 	"fastledger/internal/service"
+	"fastledger/internal/ws"
 
 	"github.com/gin-gonic/gin"
 )
@@ -17,6 +19,8 @@ type Deps struct {
 	Accounts      *service.AccountService
 	Categories    *service.CategoryService
 	Txs           *service.TxService
+	Sync          *service.SyncService
+	Instance      *instance.Meta
 	SchemaVersion int64
 }
 
@@ -28,12 +32,19 @@ func NewRouter(d Deps) *gin.Engine {
 	ah := &authHandler{authSvc: d.AuthService, enableRegister: d.Config.EnableRegister}
 	bh := &bookHandler{books: d.Books, members: d.Members}
 	lh := &ledgerHandler{accounts: d.Accounts, categories: d.Categories, txs: d.Txs}
+	sh := &syncHandler{svc: d.Sync}
 
 	r.GET("/healthz", func(c *gin.Context) {
-		c.JSON(200, gin.H{"code": 0, "msg": "ok", "data": gin.H{
+		data := gin.H{
 			"status":        "up",
 			"schemaVersion": d.SchemaVersion,
-		}})
+		}
+		// 恢复世代（指南 §26.1）：客户端据此判断"服务端是否从备份回退过"
+		if d.Instance != nil {
+			data["instanceId"] = d.Instance.InstanceId
+			data["restoreEpoch"] = d.Instance.RestoreEpoch
+		}
+		c.JSON(200, gin.H{"code": 0, "msg": "ok", "data": data})
 	})
 
 	v1 := r.Group("/api/v1")
@@ -44,6 +55,11 @@ func NewRouter(d Deps) *gin.Engine {
 		// 邀请码入户：不受 EBK_ENABLE_REGISTER 限制（PRD §12.1）
 		v1.POST("/books/:id/members/join", bh.join)
 
+		// WebSocket：**不挂在 JWTAuth 组下**。
+		// 浏览器 WS 无法设置 Authorization 头，wsAuth 需要在本路由内自行
+		// "先读 Header、再回退 ?token="；若被 JWTAuth 先拦，回退分支永远不会生效。
+		v1.GET("/ws", wsAuth(d.AuthService), ws.ServeWS)
+
 		auth := v1.Group("", JWTAuth(d.AuthService))
 		auth.GET("/users/me", ah.me)
 
@@ -52,6 +68,9 @@ func NewRouter(d Deps) *gin.Engine {
 		auth.GET("/books/:id", bh.get)
 		auth.PUT("/books/:id", bh.update)
 		auth.DELETE("/books/:id", bh.remove)
+
+		// 可见性开关（阶段 3.4，PRD §7.3 / §12.1）
+		auth.PUT("/books/:id/visibility", bh.setVisibility)
 
 		auth.GET("/books/:id/members", bh.listMembers)
 		auth.POST("/books/:id/members/invite", bh.createInvite)
@@ -75,6 +94,10 @@ func NewRouter(d Deps) *gin.Engine {
 		auth.GET("/books/:id/transactions", lh.listTransactions)
 		auth.GET("/books/:id/transactions/:txId", lh.getTransaction)
 		auth.POST("/books/:id/transactions", lh.createTransaction)
+
+		// 增量同步（阶段 3.1 / 3.2）
+		auth.GET("/books/:id/sync/pull", sh.pull)
+		auth.POST("/books/:id/sync/push", sh.push)
 	}
 	return r
 }
