@@ -29,6 +29,11 @@ func NewRouter(d Deps) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Recovery())
 
+	// SYNC-01：WS 连接数上限来自配置（config.Load 已保证两个值恒为正整数；
+	// 测试里以零值 Config 构造时为 0 = 不限，与既有用例行为一致）。
+	// Hub 是进程级单例（DefaultHub），这里重复调用只是幂等地重设同一个值。
+	ws.DefaultHub.SetConnectionLimits(d.Config.WSMaxConnPerUser, d.Config.WSMaxConnTotal)
+
 	ah := &authHandler{authSvc: d.AuthService, enableRegister: d.Config.EnableRegister}
 	bh := &bookHandler{books: d.Books, members: d.Members}
 	lh := &ledgerHandler{accounts: d.Accounts, categories: d.Categories, txs: d.Txs}

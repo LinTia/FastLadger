@@ -29,6 +29,15 @@ const (
 	DefaultRecycleTTLDays = 30
 	// DefaultInviteTTLDays 邀请码默认有效期天数（PRD §12.1 决策：7 天）
 	DefaultInviteTTLDays = 7
+	// DefaultWSMaxConnPerUser 单用户 WebSocket 并发连接数上限默认值（SYNC-01）。
+	//
+	// 为什么必须设上限：一条 WS 连接 ≈ 2 个 goroutine + 1 个 FD + 256 槽发送缓冲，
+	// 而订阅限流若只按连接计，多开连接就能把"单帧鉴权查询量封顶"线性放大。
+	// 家庭 NAS 场景单人同时在线的设备数远小于 10。
+	DefaultWSMaxConnPerUser = 10
+	// DefaultWSMaxConnTotal 全局 WebSocket 并发连接数上限默认值（SYNC-01）。
+	// 兜住"注册一堆账号各开 10 条"这类组合放大；家庭场景同时在线设备远小于 1000。
+	DefaultWSMaxConnTotal = 1000
 	// MaxRetentionDays 保留天数上限（100 年）。与 service.maxRetentionDays 同值：
 	// 这里是【配置层】的启动期拦截，那里是【换算层】的运行时拦截，互为纵深防御。
 	MaxRetentionDays = 36500
@@ -57,6 +66,13 @@ type Config struct {
 	InviteTTLDays int
 	// AuditRetentionDays 审计日志保留天数（PRD §12.1 决策：保留 1 年）
 	AuditRetentionDays int
+
+	// WSMaxConnPerUser 单用户 WebSocket 并发连接数上限（SYNC-01；
+	// 环境变量 EBK_WS_MAX_CONN_PER_USER，默认 10）
+	WSMaxConnPerUser int
+	// WSMaxConnTotal 全局 WebSocket 并发连接数上限（SYNC-01；
+	// 环境变量 EBK_WS_MAX_CONN_TOTAL，默认 1000）
+	WSMaxConnTotal int
 }
 
 // Load 从环境变量加载配置并校验。
@@ -76,6 +92,15 @@ func Load() (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+	// WS 连接数上限（SYNC-01）：envInt 已保证正整数，无需额外 validate 分支
+	wsPerUser, err := envInt("EBK_WS_MAX_CONN_PER_USER", DefaultWSMaxConnPerUser)
+	if err != nil {
+		return nil, err
+	}
+	wsTotal, err := envInt("EBK_WS_MAX_CONN_TOTAL", DefaultWSMaxConnTotal)
+	if err != nil {
+		return nil, err
+	}
 	c := &Config{
 		HTTPPort:           envOr("EBK_HTTP_PORT", DefaultHTTPPort),
 		DBPath:             envOr("EBK_DB_PATH", DefaultDBPath),
@@ -85,6 +110,8 @@ func Load() (*Config, error) {
 		RecycleTTLDays:     recycleTTL,
 		InviteTTLDays:      inviteTTL,
 		AuditRetentionDays: auditDays,
+		WSMaxConnPerUser:   wsPerUser,
+		WSMaxConnTotal:     wsTotal,
 	}
 	if err := c.validate(); err != nil {
 		return nil, err

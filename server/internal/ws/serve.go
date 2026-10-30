@@ -41,6 +41,10 @@ const (
 	// 4000-4999 是 WebSocket 规范留给应用层自定义的区间；
 	// 客户端据此"重新登录后再重连"，而不是当成网络抖动无脑重连。
 	closeTokenExpired = 4001
+	// closeTooManyConnections 连接数超上限时服务端主动发送的关闭码（SYNC-01）。
+	// 客户端据此**退避重连**（说明服务端在限连接，重试要拉开间隔），
+	// 而不是立即重连形成冲击。
+	closeTooManyConnections = 4002
 )
 
 // wsErrorMsg 服务端主动下行的错误通知（订阅被拒等）。
@@ -72,6 +76,20 @@ func sendError(c *Client, code, msg string) {
 		c.Dropped++
 		c.mu.Unlock()
 	}
+}
+
+// writeRejectAndClose 在**写循环尚未启动**的阶段（注册被拒）直接写 conn：
+// 此时还没有任何其它 goroutine 会写这条连接（读循环也未启动），
+// 因此不违反 gorilla 的单写者约束。先回一条结构化错误帧，再发关闭帧，
+// 让客户端能区分"被限流拒绝"与"网络抖动"。
+func writeRejectAndClose(conn *websocket.Conn, closeCode int, code, msg string) {
+	if payload, err := json.Marshal(wsErrorMsg{Event: "error", Code: code, Msg: msg}); err == nil {
+		_ = conn.SetWriteDeadline(time.Now().Add(writeWait))
+		_ = conn.WriteMessage(websocket.TextMessage, payload)
+	}
+	_ = conn.WriteControl(websocket.CloseMessage,
+		websocket.FormatCloseMessage(closeCode, code),
+		time.Now().Add(writeWait))
 }
 
 // upgrader 显式定义，避免不同入口下默认行为不一致。
@@ -160,7 +178,15 @@ func ServeWS(c *gin.Context) {
 
 	client := NewClient()
 	client.UID = uid // 连接绑定认证用户（R05）：广播按这个 uid 做可见性过滤
-	hub.Register(client)
+	if err := hub.Register(client); err != nil {
+		// SYNC-01：连接数超上限（单用户 / 全局）。必须在握手后立即明确拒绝并
+		// 关闭——带结构化错误帧 + 关闭码 4002，客户端据此退避重连，而不是把
+		// 这次断开当成网络抖动去冲击重连。
+		log.Printf("ws: 拒绝连接（超上限）uid=%d err=%v", uid, err)
+		writeRejectAndClose(conn, closeTooManyConnections, "connection_rejected", err.Error())
+		_ = conn.Close()
+		return
+	}
 
 	// 读/写循环共用一个取消上下文，任一方结束都恰好清理一次（R18）。
 	//

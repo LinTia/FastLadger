@@ -80,8 +80,21 @@ var (
 	ErrSubscribeGenerationStale = errors.New("订阅期间账本权限持续变更，请稍后重新订阅")
 	// ErrSubscribeClientGone 连接已注销，不再接受订阅写入
 	ErrSubscribeClientGone = errors.New("连接已注销")
+	// ErrTooManyConnections 全局 WebSocket 连接数已达上限（SYNC-01）
+	ErrTooManyConnections = errors.New("服务端在线连接数已达上限，请稍后重试")
+	// ErrTooManyConnectionsForUser 单用户 WebSocket 连接数已达上限（SYNC-01）
+	ErrTooManyConnectionsForUser = errors.New("该账号的在线连接数已达上限，请先断开其它设备")
 	// errStaleGeneration 内部哨兵：本次鉴权结果已过期，需重新鉴权（不外泄给调用方）
 	errStaleGeneration = errors.New("stale book permission generation")
+)
+
+const (
+	// maxSubBuckets 按 uid 计量的订阅令牌桶容量上限（SYNC-01）。
+	//
+	// 桶的键是 uid，条目数因此有界于"曾经订阅过的用户数"，本就不会爆炸；
+	// 上限是兜底：满桶时**无损**回收"当前满桶"的条目（满桶状态可由
+	// tokens=burst 完全重建），不淘汰活跃用户的桶。
+	maxSubBuckets = 4096
 )
 
 // VisibilityChecker 订阅资格 + 可见性校验。
@@ -120,23 +133,15 @@ type Client struct {
 	// 该连接就会按过期权限收发明细。Subscribe 每次写某账本的 canView 时把 visSeq 自增，
 	// RefreshVisibility 回写前比对自己快照到的序号，不一致即放弃本次写入（让更新的结果生效）。
 	visSeq map[int64]uint64
-	// subTokens / subLast 订阅消息令牌桶（GPT-R49 频率限制）。
-	//
-	// 只在 c.mu 下读写；subLast 为零值表示"桶尚未初始化"（字面量构造的连接），
-	// 首次消费时按满桶处理。
-	subTokens float64
-	subLast   time.Time
 }
 
 // NewClient 构造一个连接级客户端（Send/BookIds/canView/visSeq 均已初始化）。
 func NewClient() *Client {
 	return &Client{
-		BookIds:   make(map[int64]bool),
-		Send:      make(chan []byte, sendBufferSize),
-		canView:   make(map[int64]bool),
-		visSeq:    make(map[int64]uint64),
-		subTokens: subscribeBurst,
-		subLast:   time.Now(),
+		BookIds: make(map[int64]bool),
+		Send:    make(chan []byte, sendBufferSize),
+		canView: make(map[int64]bool),
+		visSeq:  make(map[int64]uint64),
 	}
 }
 
@@ -190,38 +195,64 @@ func (c *Client) SubscriptionCount() int {
 	return len(c.BookIds)
 }
 
-// consumeSubscribeToken 扣减一个"订阅消息"令牌；令牌不足即被限流（调用方应直接拒绝，
-// **不要**再去查库）。
-//
-// GPT-R49：一帧订阅就是 N 次 SQLite 查询（MaxOpenConns=1），因此限流器必须位于
-// 鉴权【之前】——被限流的帧一次库都不查，这才是限流的意义。
-func (c *Client) consumeSubscribeToken() bool {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.consumeSubscribeTokenLocked(time.Now())
+// subBucket 按 uid 计量的订阅令牌桶状态（SYNC-01：限流必须按 uid 而不是按连接）。
+type subBucket struct {
+	tokens float64
+	last   time.Time
 }
 
-// consumeSubscribeTokenLocked 令牌桶实现（**必须在持有 c.mu 时调用**）。
+// consumeSubToken 扣减某 uid 的一个"订阅消息"令牌；令牌不足即被限流
+// （调用方应直接拒绝，**不要**再去查库）。
 //
-// 桶容量 subscribeBurst（允许客户端重连后一次性补订阅），按 subscribeRefill/秒补充。
-// 零值时间（字面量构造的连接）按满桶处理，避免把"未初始化"当成"已耗尽"。
-func (c *Client) consumeSubscribeTokenLocked(now time.Time) bool {
-	if c.subLast.IsZero() {
-		c.subTokens = subscribeBurst
-		c.subLast = now
+// 为什么按 uid 而不是按连接（GPT-R49 原实现是 Client 级）：令牌桶按连接计，
+// 同一用户多开 N 条连接就把鉴权查询量放大 N 倍 —— 而连接本身才是要被
+// SYNC-01 挡住的东西，限流器不能再被它绕过。与 service 的邀请限流桶
+// （key 是 IP/接口）key 空间完全隔离：这里的键是 uid，且桶只存在于 Hub 内。
+func (h *Hub) consumeSubToken(uid int64) bool {
+	h.bucketMu.Lock()
+	defer h.bucketMu.Unlock()
+	if h.subBuckets == nil {
+		h.subBuckets = make(map[int64]*subBucket) // 字面量构造的 Hub 兜底
 	}
-	if elapsed := now.Sub(c.subLast).Seconds(); elapsed > 0 {
-		c.subTokens += elapsed * subscribeRefill
-		if c.subTokens > subscribeBurst {
-			c.subTokens = subscribeBurst
+	if uid <= 0 {
+		uid = 0 // 无 uid 的调用方共享一个桶（生产不会出现，防御性收敛）
+	}
+	now := time.Now()
+	b := h.subBuckets[uid]
+	if b == nil {
+		if len(h.subBuckets) >= maxSubBuckets {
+			h.pruneSubBucketsLocked()
 		}
-		c.subLast = now
+		b = &subBucket{tokens: subscribeBurst, last: now}
+		h.subBuckets[uid] = b
 	}
-	if c.subTokens < 1 {
+	if elapsed := now.Sub(b.last).Seconds(); elapsed > 0 {
+		b.tokens += elapsed * subscribeRefill
+		if b.tokens > subscribeBurst {
+			b.tokens = subscribeBurst
+		}
+		b.last = now
+	}
+	if b.tokens < 1 {
 		return false
 	}
-	c.subTokens--
+	b.tokens--
 	return true
+}
+
+// pruneSubBucketsLocked 回收"当前满桶"的条目（**必须在持有 h.bucketMu 时调用**）。
+//
+// 满桶状态可以无损重建：一个 tokens 已回到 subscribeBurst 的桶，删掉之后
+// 下次消费会按满桶重建 —— 语义完全一致，因此这是无损回收而不是淘汰活跃用户。
+func (h *Hub) pruneSubBucketsLocked() {
+	for uid, b := range h.subBuckets {
+		if len(h.subBuckets) < maxSubBuckets/2 {
+			return
+		}
+		if b.tokens >= subscribeBurst {
+			delete(h.subBuckets, uid)
+		}
+	}
 }
 
 // ClearSubscriptions 清空该连接的全部订阅与可见性缓存。
@@ -258,15 +289,50 @@ type Hub struct {
 	// 旧的 allow=true 随后被写回，等于撤权后订阅又被恢复。
 	// generation 让 Subscribe 能在写入【前】发现自己拿到的是过期结论并重新鉴权。
 	gen map[int64]uint64
+
+	// ---- 连接数上限（SYNC-01）----
+	// maxConnPerUser / maxConnTotal 连接数上限；**0 = 不限**。
+	// NewHub 的缺省是不限（保持既有行为、测试不受影响）；生产由 api.NewRouter
+	// 从 config 注入（EBK_WS_MAX_CONN_PER_USER / EBK_WS_MAX_CONN_TOTAL）。
+	maxConnPerUser int
+	maxConnTotal   int
+	// connPerUser 各 uid 当前在线连接数（与 clients 同一把 h.mu 保护）。
+	// 按"注册时刻的 UID"记账：生产路径 ServeWS 在 Register 之前就绑定了认证 uid。
+	connPerUser map[int64]int
+
+	// ---- 订阅消息限流（按 uid 计量，SYNC-01）----
+	// subBuckets 键是 uid。与 clients 不同锁（bucketMu），避免订阅限流的记账
+	// 和广播路径的读锁互相影响。
+	subBuckets map[int64]*subBucket
+	bucketMu   sync.Mutex
 }
 
 // NewHub 构造 Hub（checker 允许为 nil，此时订阅一律被拒绝并记日志）。
+//
+// 连接数上限缺省为"不限"（0），由 api.NewRouter 启动时用 config 注入 ——
+// 这样直接构造 Hub 的既有调用方（含测试）行为不变，生产路径一定有上限。
 func NewHub(checker VisibilityChecker) *Hub {
-	return &Hub{clients: make(map[*Client]bool), checker: checker, gen: make(map[int64]uint64)}
+	return &Hub{
+		clients:     make(map[*Client]bool),
+		checker:     checker,
+		gen:         make(map[int64]uint64),
+		connPerUser: make(map[int64]int),
+		subBuckets:  make(map[int64]*subBucket),
+	}
 }
 
 // DefaultHub 进程级默认 Hub（api 适配层广播、ServeWS 注册都用它）。
 var DefaultHub = NewHub(nil)
+
+// SetConnectionLimits 设置连接数上限（SYNC-01；**≤0 表示该维度不限**）。
+//
+// 生产接线点：api.NewRouter 用 config.WSMaxConnPerUser / WSMaxConnTotal 调用
+// （config.Load 已保证两个值恒为正整数）；测试可注入更小的值。
+func (h *Hub) SetConnectionLimits(perUser, total int) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.maxConnPerUser, h.maxConnTotal = perUser, total
+}
 
 // SetChecker 注入可见性校验器（main 启动时调用一次；测试可注入假实现）。
 func (h *Hub) SetChecker(checker VisibilityChecker) {
@@ -275,24 +341,60 @@ func (h *Hub) SetChecker(checker VisibilityChecker) {
 	h.checker = checker
 }
 
-// Register 注册连接（引用计数语义：重复注册无副作用）。
-func (h *Hub) Register(c *Client) {
+// Register 注册连接（幂等：重复注册无副作用）。
+//
+// SYNC-01：注册即配额审查 —— 超出"单用户连接数"或"全局连接数"上限时**拒绝注册**
+// 并返回明确错误；ServeWS 收到错误会在握手后立即向客户端回错误帧 + 关闭帧
+// （close code 4002），绝不静默断开。
+//
+// 计数口径：per-uid 按"注册时刻的 c.UID"记账（生产路径 ServeWS 在 Register 前
+// 已绑定认证 uid，之后不变）。
+func (h *Hub) Register(c *Client) error {
 	if c == nil {
-		return
+		return ErrSubscribeClientGone
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if h.clients[c] {
+		return nil // 幂等：已在注册表里，不重复计数
+	}
+	// 读 UID 需要短暂取 c.mu（锁顺序 Hub.mu → Client.mu，单向）
+	c.mu.Lock()
+	uid := c.UID
+	c.mu.Unlock()
+	if h.maxConnTotal > 0 && len(h.clients) >= h.maxConnTotal {
+		return fmt.Errorf("%w：当前在线 %d，上限 %d", ErrTooManyConnections, len(h.clients), h.maxConnTotal)
+	}
+	if h.maxConnPerUser > 0 && uid > 0 && h.connPerUser[uid] >= h.maxConnPerUser {
+		return fmt.Errorf("%w：该账号当前在线 %d 条连接，上限 %d",
+			ErrTooManyConnectionsForUser, h.connPerUser[uid], h.maxConnPerUser)
+	}
 	h.clients[c] = true
+	if uid > 0 {
+		h.connPerUser[uid]++
+	}
+	return nil
 }
 
-// Unregister 注销连接：只从 clients 删除，**不关闭 Send**（见 Client.Send 约定）。
+// Unregister 注销连接：从注册表删除并回收 per-uid 连接计数，**不关闭 Send**
+// （见 Client.Send 约定）。对未注册的连接是 no-op。
 func (h *Hub) Unregister(c *Client) {
 	if c == nil {
 		return
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if !h.clients[c] {
+		return
+	}
 	delete(h.clients, c)
+	c.mu.Lock()
+	uid := c.UID
+	c.mu.Unlock()
+	// 防御：UID 在注册后理论不变（生产路径成立）；即便被改也不会把计数减成负数
+	if uid > 0 && h.connPerUser[uid] > 0 {
+		h.connPerUser[uid]--
+	}
 }
 
 // Count 在线连接数（观测/测试用）。
@@ -312,7 +414,20 @@ func (h *Hub) Generation(bookID int64) uint64 {
 	return h.gen[bookID] // nil map 读取安全，返回 0
 }
 
+// UserSubscriptionCount 某用户当前在全部在线连接上的订阅条目总数
+// （连接 × 账本；观测/测试与运维排障用）。
+func (h *Hub) UserSubscriptionCount(uid int64) int {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.userSubscriptionCountLocked(uid)
+}
+
 // bumpGenerationLocked 递增某账本的权限 generation（**必须在持有 h.mu 写锁时调用**）。
+//
+// SYNC-04：gen 表只增不减（账本删除也不会清条目），因此给它设一个上限；
+// 触顶时回收条目。**删除条目与递增等价**——对 pending 的 Subscribe 而言，
+// "快照值 != 当前值"即判过期，条目消失（读到 0）同样构成变化，
+// 只会让 in-flight 的鉴权结论被重新验证，方向安全，不影响 R50 的正确性。
 func (h *Hub) bumpGenerationLocked(bookID int64) {
 	if h.gen == nil {
 		// 字面量构造的 Hub（&Hub{}）：补出来，避免"assignment to entry in nil map"
@@ -381,10 +496,14 @@ func normalizeBookIDs(bookIDs []int64) ([]int64, error) {
 // 拿到结果后再进锁写入 —— 既保证"订阅写的唯一入口在 Hub"，
 // 又不会让一次慢查询卡住所有广播。
 //
-// GPT-R49（订阅放大）：在查库之前先做三件事，全部超限都**返回明确错误**：
-//  1. 规范化输入：剔除非法 ID、**去重**、单帧数量上限（MaxBookIDsPerFrame）；
-//  2. 订阅频率限制（令牌桶，位于鉴权之前 —— 被限流的帧一次库都不查）；
-//  3. 写入前再校验单连接 / 单用户订阅总数上限。
+// 处理顺序（每一环都在"花钱"之前把不该发生的请求挡掉，被拒的帧**零查库**）：
+//  1. **频率限制（按 uid 计量，SYNC-01/02）**：先扣令牌再解析 —— 否则解析开销
+//     最大的超限帧（64KB ≈ 8000 个 ID）反而是唯一不限速的路径；限流按 uid 而非
+//     连接，否则多开连接即可绕过；
+//  2. 规范化输入：剔除非法 ID、**去重**、单帧数量上限（MaxBookIDsPerFrame）；
+//  3. **配额预检（SYNC-01）**：单连接 / 单用户订阅总数若已放不下这一帧，
+//     在任何查库之前直接拒绝（旧实现是"先查库、后配额"——钱花了才查票）；
+//  4. 鉴权 → 写入（见下）。
 //     绝不静默截断：截断会让客户端以为订阅成功，之后永远等不到事件，
 //     现象是"偶尔不实时"这种极难定位的问题。
 //
@@ -400,17 +519,21 @@ func (h *Hub) Subscribe(c *Client, bookIDs []int64, uid int64) error {
 	if c == nil {
 		return ErrSubscribeClientGone
 	}
-	// 1) 规范化输入（去重 + 单帧上限）—— 在任何查库之前完成
+	// 1) 频率限制（按 uid）：令牌不足直接拒绝，零解析、零查库
+	if !h.consumeSubToken(uid) {
+		return ErrSubscribeRateLimited
+	}
+	// 2) 规范化输入（去重 + 单帧上限）—— 在任何查库之前完成
 	ids, err := normalizeBookIDs(bookIDs)
 	if err != nil {
 		return err
 	}
-	// 2) 频率限制：令牌不足直接拒绝，一次库都不查
-	if !c.consumeSubscribeToken() {
-		return ErrSubscribeRateLimited
+	// 3) 配额预检：放不下这一帧就别查库（SYNC-01 的关键顺序修正）
+	if err := h.checkSubscriptionQuota(c, uid, ids); err != nil {
+		return err
 	}
 
-	// 3) 取校验器（只在读锁内读指针，不做任何 IO）
+	// 4) 取校验器（只在读锁内读指针，不做任何 IO）
 	h.mu.RLock()
 	checker := h.checker
 	h.mu.RUnlock()
@@ -420,7 +543,7 @@ func (h *Hub) Subscribe(c *Client, bookIDs []int64, uid int64) error {
 		return ErrNoVisibilityChecker
 	}
 
-	// 4) 鉴权 → 写入（写入前比对 generation，过期就整轮重来）
+	// 5) 鉴权 → 写入（写入前比对 generation，过期就整轮重来）
 	var lastErr error
 	for attempt := 0; attempt < maxSubscribeAttempts; attempt++ {
 		snap := h.generationSnapshot(ids)
@@ -448,13 +571,52 @@ func (h *Hub) Subscribe(c *Client, bookIDs []int64, uid int64) error {
 	return ErrSubscribeGenerationStale
 }
 
+// checkSubscriptionQuota 在任何查库【之前】校验"这一帧放不放得下"（SYNC-01）。
+//
+// 旧实现顺序是"逐账本查库鉴权 → 进锁查配额"：被配额拒绝的帧照样烧掉
+// MaxBookIDsPerFrame 次 SQLite 查询（MaxOpenConns=1，等于白占唯一的连接）。
+// 现在配额前置，被拒帧零查库；写入时（writeSubscribe）保留同样的校验作为
+// 并发兜底 —— 预检到写入之间配额状态可能被其它连接改变。
+//
+// 全程锁顺序 Hub.mu → Client.mu；不做任何 IO。
+func (h *Hub) checkSubscriptionQuota(c *Client, uid int64, ids []int64) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if !h.clients[c] {
+		return ErrSubscribeClientGone
+	}
+	// 用户维度总量（持 Hub.mu，逐个取 Client.mu；必须在锁 c.mu 之前取，
+	// 避免在持有 c.mu 时访问 Hub——反向锁序会与 Subscribe/Broadcast 死锁）
+	userTotal := h.userSubscriptionCountLocked(uid)
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.ensureLocked()
+	fresh := 0
+	for _, b := range ids {
+		if !c.BookIds[b] {
+			fresh++
+		}
+	}
+	if len(c.BookIds)+fresh > MaxSubscriptionsPerClient {
+		return fmt.Errorf("%w：已有 %d + 本帧新增 %d > %d",
+			ErrSubscriptionLimitPerConnection, len(c.BookIds), fresh, MaxSubscriptionsPerClient)
+	}
+	if userTotal+fresh > MaxSubscriptionsPerUser {
+		return fmt.Errorf("%w：该用户已有 %d + 本帧新增 %d > %d",
+			ErrSubscriptionLimitPerUser, userTotal, fresh, MaxSubscriptionsPerUser)
+	}
+	return nil
+}
+
 // writeSubscribe 把一次（锁外）鉴权结论写入订阅表。
 //
-// 返回 (是否落定, 错误)：
-//   - (true, nil)                       写入成功
-//   - (true, ErrSubscribeClientGone)    连接已注销：结论确定，不必重试
-//   - (true, ErrSubscriptionLimit*)     订阅数超限：结论确定，不必重试
-//   - (false, errStaleGeneration)       期间权限变更：本次结论作废，调用方需重新鉴权
+// 返回 (是否落定, generation 变过的账本, 错误)：
+//   - (true, nil, nil)                       写入成功
+//   - (true, nil, ErrSubscribeClientGone)    连接已注销：结论确定，不必重试
+//   - (true, nil, ErrSubscriptionLimit*)     订阅数超限：结论确定，不必重试
+//   - (false, stale, errStaleGeneration)     期间权限变更：本次结论作废，
+//     调用方只需重新鉴权 stale 中的账本（SYNC-03）
 //
 // 全程锁顺序 Hub.mu → Client.mu；在持有 c.mu 期间不触碰 Hub。
 func (h *Hub) writeSubscribe(c *Client, ids []int64, allowed map[int64]bool,
@@ -471,7 +633,8 @@ func (h *Hub) writeSubscribe(c *Client, ids []int64, allowed map[int64]bool,
 			return false, errStaleGeneration
 		}
 	}
-	// 订阅总数上限：先算用户维度（持 Hub.mu，逐个取 Client.mu），再落本连接的写。
+	// 订阅总数上限（并发兜底，预检见 checkSubscriptionQuota）：
+	// 先算用户维度（持 Hub.mu，逐个取 Client.mu），再落本连接的写。
 	// 必须在锁 c.mu **之前**取，避免在持有 c.mu 时访问 Hub（反向锁序）。
 	userTotal := h.userSubscriptionCountLocked(uid)
 
