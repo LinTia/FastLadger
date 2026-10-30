@@ -141,7 +141,7 @@ func (h *bookHandler) createInvite(c *gin.Context) {
 }
 
 func (h *bookHandler) join(c *gin.Context) {
-	_, good := bookID(c)
+	id, good := bookID(c)
 	if !good {
 		return
 	}
@@ -153,7 +153,9 @@ func (h *bookHandler) join(c *gin.Context) {
 	if !bindJSON(c, &req) {
 		return
 	}
-	u, err := h.members.JoinViaInvite(req.Code, req.Username, req.Password)
+	// 传入 path 上的 bookID 与真实客户端 IP：
+	// bookID 用于校验邀请确实属于该账本；IP 用于按 IP 限流（PRD §12.1，WB-R01）。
+	u, err := h.members.JoinViaInvite(id, req.Code, req.Username, req.Password, c.ClientIP())
 	if err != nil {
 		mapSvcErr(c, err)
 		return

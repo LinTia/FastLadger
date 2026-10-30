@@ -129,10 +129,18 @@ func (s *MemberService) ChangeRole(actor, bookID, targetUid int64, newRole int8)
 	if actorRole == model.RoleAdmin && targetRole == model.RoleOwner {
 		return ErrCannotOperateOwner
 	}
-	_, err = s.engine.Where("book_id = ? AND uid = ? AND deleted = 0", bookID, targetUid).
+	n, err := s.engine.Where("book_id = ? AND uid = ? AND deleted = 0", bookID, targetUid).
 		Cols("role", "updated_at").
 		Update(&model.BookMember{Role: newRole, UpdatedAt: time.Now().Unix()})
-	return err
+	if err != nil {
+		return err
+	}
+	if n != 1 {
+		// 目标在「读角色」与「写入」之间被并发移除：写条件 deleted=0 生效导致 0 行。
+		// 不能 return nil 冒充成功（D-R09）——映射为 409，让调用方刷新后重试。
+		return fmt.Errorf("%w：目标成员已不存在或已被移除", ErrConcurrentConflict)
+	}
+	return nil
 }
 
 // Remove 移除成员（软删，保留历史记录）
@@ -152,10 +160,17 @@ func (s *MemberService) Remove(actor, bookID, targetUid int64) error {
 		return ErrCannotOperateOwner
 	}
 	now := time.Now().Unix()
-	_, err = s.engine.Where("book_id = ? AND uid = ? AND deleted = 0", bookID, targetUid).
+	n, err := s.engine.Where("book_id = ? AND uid = ? AND deleted = 0", bookID, targetUid).
 		Cols("deleted", "deleted_at", "updated_at").
 		Update(&model.BookMember{Deleted: true, DeletedAt: now, UpdatedAt: now})
-	return err
+	if err != nil {
+		return err
+	}
+	if n != 1 {
+		// 与 ChangeRole 同理（D-R09）：目标已被并发移除时 0 行，不能当成功返回。
+		return fmt.Errorf("%w：目标成员已不存在或已被移除", ErrConcurrentConflict)
+	}
+	return nil
 }
 
 // CreateInvite 生成邀请码（限流：每账本每分钟 ≤5）
@@ -193,27 +208,22 @@ func (s *MemberService) CreateInvite(actor, bookID int64, role int8, boundUserna
 	return inv, nil
 }
 
-// JoinViaInvite 凭邀请码注册并加入：原子建 user + book_members，并标记邀请已使用
-func (s *MemberService) JoinViaInvite(code, username, password string) (*model.User, error) {
-	if !s.limiter.Allow("invite:join", 10, time.Hour) {
+// JoinViaInvite 凭邀请码注册并加入。
+//
+// 三条硬约束：
+//  1. **原子**（D-R07）：建 user + 写 book_members + 标记邀请已用，全在**同一个事务**内；
+//     不再调用会自行提交的 auth.Register，任一步失败整笔回滚，不产生孤儿用户。
+//  2. **单次使用**（D-R08）：邀请在事务内重读，且标记已用的 UPDATE 必须 `RowsAffected==1`；
+//     为 0 说明已被并发抢用，回滚并返回 ErrInviteInvalid。
+//  3. **按 IP 限流**（WB-R01 / PRD §12.1 L572）：同一 IP 每小时 ≤10 次尝试。
+//     原实现用全局 key "invite:join"，任意一人耗尽计数即可让**全实例**一小时无法入户。
+func (s *MemberService) JoinViaInvite(bookID int64, code, username, password, clientIP string) (*model.User, error) {
+	if !s.limiter.Allow("invite:join:ip:"+ipBucket(clientIP), 10, time.Hour) {
 		return nil, ErrRateLimited
 	}
-	var inv model.Invite
-	has, err := s.engine.Where("code = ?", strings.TrimSpace(code)).Get(&inv)
-	if err != nil {
-		return nil, err
-	}
-	if !has || inv.Revoked || inv.UsedAt > 0 || inv.ExpiresAt <= time.Now().Unix() {
-		return nil, ErrInviteInvalid
-	}
-	if inv.BoundUsername != "" && !strings.EqualFold(inv.BoundUsername, strings.TrimSpace(username)) {
-		return nil, ErrInviteBoundMismatch
-	}
-	if len(password) < minPasswordLen {
-		return nil, ErrWeakPassword
-	}
 
-	u, err := s.auth.Register(username, password)
+	// 校验口令并算哈希；bcrypt 放在事务外，避免长时间占住唯一连接
+	uname, hash, err := normalizeAndHash(username, password)
 	if err != nil {
 		return nil, err
 	}
@@ -223,6 +233,29 @@ func (s *MemberService) JoinViaInvite(code, username, password string) (*model.U
 	if err := sess.Begin(); err != nil {
 		return nil, err
 	}
+
+	// 邀请的读必须在事务内：读与写不能跨事务，否则两个请求都能读到 used_at=0（D-R08 竞争窗口）
+	var inv model.Invite
+	has, err := sess.Where("code = ?", strings.TrimSpace(code)).Get(&inv)
+	if err != nil {
+		_ = sess.Rollback()
+		return nil, err
+	}
+	if !has || inv.BookId != bookID || inv.Revoked || inv.UsedAt > 0 || inv.ExpiresAt <= time.Now().Unix() {
+		_ = sess.Rollback()
+		return nil, ErrInviteInvalid
+	}
+	if inv.BoundUsername != "" && !strings.EqualFold(inv.BoundUsername, uname) {
+		_ = sess.Rollback()
+		return nil, ErrInviteBoundMismatch
+	}
+
+	u, err := s.auth.insertUserInTx(sess, uname, hash)
+	if err != nil {
+		_ = sess.Rollback()
+		return nil, err
+	}
+
 	now := time.Now().Unix()
 	if _, err := sess.Insert(&model.BookMember{
 		BookId: inv.BookId, Uid: u.Id, Role: inv.Role, CanViewOthers: true, CreatedAt: now, UpdatedAt: now,
@@ -230,15 +263,32 @@ func (s *MemberService) JoinViaInvite(code, username, password string) (*model.U
 		_ = sess.Rollback()
 		return nil, err
 	}
-	if _, err := sess.Where("id = ? AND used_at = 0", inv.Id).
-		Cols("used_at", "used_by").Update(&model.Invite{UsedAt: now, UsedBy: u.Id}); err != nil {
+
+	// 单次使用：条件更新必须核对影响行数（D-R08）
+	n, err := sess.Where("id = ? AND used_at = 0", inv.Id).
+		Cols("used_at", "used_by").Update(&model.Invite{UsedAt: now, UsedBy: u.Id})
+	if err != nil {
 		_ = sess.Rollback()
 		return nil, err
 	}
+	if n != 1 {
+		_ = sess.Rollback()
+		return nil, ErrInviteInvalid
+	}
+
 	if err := sess.Commit(); err != nil {
 		return nil, err
 	}
 	return u, nil
+}
+
+// ipBucket 把客户端 IP 归一化为限流桶键；空值归入 unknown，避免"缺 IP 即绕过"。
+func ipBucket(ip string) string {
+	ip = strings.TrimSpace(ip)
+	if ip == "" {
+		return "unknown"
+	}
+	return ip
 }
 
 // 便于单元测试替换口令哈希成本（默认沿用 bcrypt.DefaultCost）

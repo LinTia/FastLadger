@@ -15,6 +15,28 @@
 - **落地判断**：不阻塞阶段 3 开工；建议 D-R07+D-R08 合并修复（JoinViaInvite 收敛单一事务 + 两处 RowsAffected 硬校验），D-R09 随阶段 3 成员管理改。
 - **验证边界**：本轮为静态核查；构建机无 gcc，事务真实回滚、UPSERT RowsAffected、并发、0002/0003 真实迁移、PRD §10.1/10.3/10.4 端到端、`go test -race` 仍无运行时证据，需在带 gcc 环境补真实 SQLite 集成测试。
 
+## [1.25] - 2026-10-30
+
+### 修复：D 第二轮 3 条 + 主理人补 1 条（成员/邀请健壮性）
+
+> 性质：全部为「**代码没照设计做**」，`docs/` 设计口径无需改动。D 报告的 9 个记账核心焦点经其核对**全部正确**。
+
+- **D-R07（P2）· 邀请注册非原子** → `JoinViaInvite` 原先调用会自行提交事务的 `auth.Register`，第二步失败留下**孤儿用户**。
+  - 修复：`auth.go` 抽出 `insertUserInTx(sess, ...)`（**不自行 Begin/Commit**），`Register` 改为"校验+哈希 → Begin → insertUserInTx → Commit"；`JoinViaInvite` 全程**单事务**完成「建 user + 写 book_members + 标记邀请已用」，任一步失败整笔回滚。
+  - 顺带：`normalizeAndHash` 把 bcrypt 移到**事务外**——避免数十毫秒的 CPU 开销占住唯一连接（`MaxOpenConns=1`）。
+- **D-R08（P2）· 邀请"单次使用"可被并发绕过** → 条件更新 `WHERE id=? AND used_at=0` 不校验影响行数。
+  - 修复：邀请改为**事务内重读**（消除跨事务 check-then-act 窗口）；标记已用的 UPDATE 校验 `RowsAffected==1`，为 0 即回滚并返 `ErrInviteInvalid`。
+- **D-R09（P3）· 改角色/移除成员"假成功"** → `ChangeRole`/`Remove` 丢弃影响行数，目标已被并发移除时仍返回 nil。
+  - 修复：改为 `n, err := ...`，`n != 1` 返回 `ErrConcurrentConflict`（→ **409**），与 `account.go` 既有规范对齐。
+- **WB-R01（P2）· 邀请入户限流键为全局唯一（主理人补充，D 漏报）** → 原为 `s.limiter.Allow("invite:join", 10, time.Hour)`，**不含 IP 维度**：任意一人耗尽计数即可让**全实例**一小时无法入户（关闭注册后邀请是唯一入户通道，等同低成本 DoS）；且 `limiter.go` 注释把口径写成"同**实例**"，与 PRD §12.1 L572"同一 **IP** 每小时 ≤10"不符（实现侧口径漂移）。
+  - 修复：键改为 `"invite:join:ip:"+ipBucket(clientIP)`，handler 传 `c.ClientIP()`；空/空白 IP 归入 `unknown` 桶**防绕过**；同时校验邀请确属 URL 上的账本（原先 `join` 忽略 `:id`，邀请可跨账本使用）。
+- **未做（有意保留）**：`RevokeInvite` 撤销入口——PRD 要求"生成/使用/撤销/过期全周期"，但 `落地方案 §5.1` 未定义撤销接口，**不擅自加路由**，随阶段 3 补契约。
+
+**验证**：`gofmt -l .` 空、`go build ./...`、`go vet ./...` 通过、**`go test ./...` 47/47 PASS（FAIL 0 / SKIP 0）**；新增 `server/internal/service/member_test.go` 6 个用例（IP 分桶独立性、空 IP 不绕过、`JoinViaInvite` 签名守卫防退回全局 key、`member.go` 源码级 `RowsAffected` 守卫、`normalizeAndHash` 校验不退化）。
+**签名变更（下游需同步）**：`MemberService.JoinViaInvite(code, username, password)` → **`JoinViaInvite(bookID, code, username, password, clientIP)`**。
+**验证边界**：真实事务回滚与并发竞争**仍无运行时证据**（构建机无 gcc），`member_test.go` 只覆盖纯逻辑与源码级守卫，不冒充该部分验收；已由给 GPT 的核查卡片承接。
+**文档**：`workbuddy/FastLedger-D二次核查报告.md` 回填 D-R07/R08/R09 的 `status`（→已修复）与 `evidence`（逐条取证 + 两处更正：`MaxOpenConns=1` 不能免除 D-R08 缺陷；`account.go` 的 Update 分支用的是 `Update()` 返回值而非 `RowsAffected()`），并新增"复核与处置"一节记录 WB-R01。
+
 ## [1.24] - 2026-10-30
 
 ### 新增：GPT 第三次核查对齐卡片（`GPT-R24` 起）

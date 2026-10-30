@@ -8,6 +8,45 @@
 
 ---
 
+## 复核与处置（WorkBuddy，[1.25]）
+
+> 本节由主理人（WB）在 D 报告之后追加，按《多AI对齐规范》§5 状态机回填 `status` / `evidence`。
+
+### 一、逐条取证结果：**D-R07 / D-R08 / D-R09 全部属实**
+
+| 编号 | 取证命令与事实 | 判定 |
+|---|---|---|
+| D-R07 | `grep -n "s.auth.Register" server/internal/service/member.go` → 原先命中 L216；`auth.go` 内 Register 自带 `sess.Begin()`+`Commit()`（原 L57/L96），而 `member.go` 原 L221 才 `NewSession()` —— 两段事务确实不相关，第二步失败无法回滚已提交的 user | ✅ 属实 |
+| D-R08 | `grep -n "RowsAffected" server/internal/service/member.go` → 修复前 **0 命中**；`0002_invites_and_member_unique.up.sql` 的 `invites` 表 `used_at` 为普通列，**无任何库级单次约束**；条件更新 `WHERE id=? AND used_at=0` 未校验影响行数 | ✅ 属实（并补充：`MaxOpenConns=1` 不能免除该缺陷——读在事务外、写在新事务内，check-then-act 跨事务仍有窗口） |
+| D-R09 | 原 L132 / L155 均为 `_, err = s.engine.Where(...).Update(...)` 后 `return err`，丢弃影响行数；对照 `account.go` 同类写操作确为 `if n != 1`（注：`account.go` 的 `Update` 分支用的是 `Update()` 返回的 `(int64, error)`，`RowsAffected()` 仅用于 `account.go:238` 的 `Delete`；D 的引用方式略有偏差，结论无误） | ✅ 属实 |
+
+### 二、D 漏报 1 条，已补记为 **WB-R01（P2）**
+
+**邀请入户限流键为全局唯一，违背 PRD「同一 IP 每小时 ≤10」**
+
+- 规范侧：`PRD §12.1` L572、`开发WBS` L226、`CHANGELOG` L221 三处均为「**同一 IP** 每小时尝试 ≤10」
+- 实现侧：修复前 `member.go` 为 `s.limiter.Allow("invite:join", 10, time.Hour)` —— **不含 IP 维度**
+- 后果：任意一人连续尝试 10 次即可让**全实例**在一小时内无法凭邀请入户；关闭公开注册后邀请是唯一入户通道，等同低成本 DoS
+- 旁证：`limiter.go` 的注释把口径写成了"同**实例**每小时 ≤10 尝试"——**代码注释已悄悄改变 PRD 口径而 PRD 未改**，属实现侧口径漂移
+- 附带发现：`MemberService` 无 `RevokeInvite`，而 PRD 要求"生成/使用/撤销/过期全周期审计"；因 `落地方案 §5.1` 未定义撤销接口，**留待阶段 3 一并补契约**，本轮不擅自加路由
+
+### 三、处置结果（CHANGELOG [1.25]，均已在真实代码中修复）
+
+| 编号 | 修复内容 | 位置 |
+|---|---|---|
+| D-R07 | 抽出 `insertUserInTx(sess, ...)`（不自行 Begin/Commit），`JoinViaInvite` 全程单事务；bcrypt 移到事务外避免占住唯一连接 | `auth.go` / `member.go:JoinViaInvite` |
+| D-R08 | 邀请**在事务内重读**；标记已用的 `UPDATE` 校验 `RowsAffected==1`，为 0 即回滚并返 `ErrInviteInvalid` | `member.go` |
+| D-R09 | `ChangeRole` / `Remove` 改为 `n, err := ...`，`n != 1` 返回 `ErrConcurrentConflict`（→409） | `member.go:138/169` |
+| WB-R01 | 限流键改 `"invite:join:ip:"+ipBucket(clientIP)`，handler 传 `c.ClientIP()`；空 IP 归入 `unknown` 桶防绕过；并校验邀请确属 URL 上的账本 | `member.go` / `book_handler.go` / `router.go` 不变 |
+
+**回归**：`gofmt -l .` 空、`go build ./...`、`go vet ./...` 通过、**`go test ./...` 47/47 PASS（0 FAIL / 0 SKIP）**，其中新增 6 个用例（`member_test.go`）覆盖 IP 分桶独立性、空 IP 不绕过、签名守卫（防退回全局 key）、`member.go` 源码级 `RowsAffected` 守卫、`normalizeAndHash` 校验不退化。
+
+### 四、仍未闭合的（需 CGO 环境）
+
+上述修复的**真实事务回滚**与**并发竞争**仍无运行时证据（构建机无 gcc）。`member_test.go` 只覆盖纯逻辑与源码级守卫，**不冒充**这部分验收。已同步写入给 GPT 的核查卡片——由其在有 CGO 的环境补测。
+
+---
+
 ## 0. 总体判断
 
 | 维度 | 结论 |
@@ -59,8 +98,8 @@
 - `expected`：把"建 user + 写 book_members + 标记邀请"收敛进**同一个事务**：在 JoinViaInvite 的会话内完成用户名查重、bcrypt 哈希、插入 user（不调用会自行提交的 `auth.Register`，或为 Register 增加可传入外部 `*xorm.Session` 的事务内版本），再插成员、更新邀请，一起 Commit / 一起 Rollback。
 - `impact`：不损坏财务数据，但破坏入户一致性与可用性：产生孤儿账号、重试即冲突，关闭公开注册后邀请是唯一入户通道，该路径报错会直接阻断新成员加入。
 - `suggestion`：新增一个事务内注册助手（如 `registerInTx(sess, username, password)`，复用首用户判定逻辑但不自行 Commit），JoinViaInvite 全程在单一事务内调用；保留对公开注册入口仍走原 `auth.Register`。
-- `status`：待确认
-- `evidence`：（待复核 AI 填）D 自查：L216 与 L221 的事务边界、auth.go L96 的独立提交可由上述 grep 直接复现；历史评审未提过邀请注册孤儿用户（GPT 相关条目针对的是交易孤儿行，非 user 注册），无重复。
+- `status`：**已修复（[1.25]）**
+- `evidence`：**WB 复核：属实。**`grep -n "s.auth.Register" member.go` 修复前命中 L216，`auth.go` 的 Register 自带 Begin/Commit，与 member.go 原 L221 的 `NewSession()` 确属两段独立事务。修复见 `member.go:JoinViaInvite` + `auth.go:insertUserInTx`：抽出**不自行提交**的事务内建用户函数，`JoinViaInvite` 全程单事务，bcrypt 移至事务外；并新增签名/源码守卫 `member_test.go:TestJoinViaInviteSignatureRequiresBookAndIP`。**真实事务回滚仍待 CGO 环境验证**。D 自查原文：L216 与 L221 的事务边界、auth.go L96 的独立提交可由上述 grep 直接复现；历史评审未提过邀请注册孤儿用户（GPT 相关条目针对的是交易孤儿行，非 user 注册），无重复。
 
 ---
 
@@ -81,8 +120,8 @@
 - `expected`：L233 的条件更新后读取 RowsAffected，**影响行数必须为 1**；为 0 说明邀请已被并发使用，应 Rollback 并返回 `ErrInviteInvalid`（或并发冲突）。可进一步在应用层对 `invites.id` 的写竞争加保护。
 - `impact`：触发条件较窄——需邀请码未绑定用户名、被转发/泄露、且两请求在时间窗口内并发；家庭场景概率低。但一旦邀请码泄露，会放大为未授权入户（访问控制），故定 P2 而非 P3；绑定了用户名的邀请因 L209 强制匹配，不受此影响。
 - `suggestion`：与 D-R07 同处修复时一并处理：条件更新后 `n, _ := res.RowsAffected(); if n != 1 { rollback; return ErrInviteInvalid }`，把"单次使用"从软约定改为硬校验。
-- `status`：待确认
-- `evidence`：（待复核 AI 填）D 自查：0002 表无单次约束、L233 未校验影响行数可 grep 复现；与 D-R07 根因相邻但性质不同（本条为并发安全，D-R07 为失败原子性），故独立编号。
+- `status`：**已修复（[1.25]）**
+- `evidence`：**WB 复核：属实，并补强一条。**修复前 `grep -n "RowsAffected" member.go` 为 0 命中；`0002` 的 `invites.used_at` 为普通列、无库级单次约束。**补充**：`MaxOpenConns=1` 并不能免除此缺陷——原实现的邀请读取在事务外、写在新事务内，check-then-act 跨事务，单连接只是让语句串行而非让读-改-写原子。修复见 `member.go:JoinViaInvite`：邀请改为**事务内重读**，标记已用的 UPDATE 校验 `RowsAffected==1`，为 0 即回滚返 `ErrInviteInvalid`。守卫 `member_test.go:TestMemberWritesCheckRowsAffected` 断言 `AND used_at = 0` 条件与行数校验均存在。**并发竞争仍待 CGO 环境验证**。D 自查原文：0002 表无单次约束、L233 未校验影响行数可 grep 复现；与 D-R07 根因相邻但性质不同（本条为并发安全，D-R07 为失败原子性），故独立编号。
 
 ---
 
@@ -103,8 +142,8 @@
 - `expected`：取 Update 返回的计数，`n != 1` 时返回明确错误（目标已不在 → `ErrNotMember`/`ErrConcurrentConflict`），由 mapSvcErr 映射为 404/409，而非静默成功。
 - `impact`：不造成数据损坏或越权（写条件本身带 `deleted=0`，不会误改），仅在并发管理成员时产生"假成功"，影响管理操作的可预期性，故 P3。
 - `suggestion`：两处统一改为接收计数并校验 `n==1`，与 account.go 对齐；可在后续成员管理测试中补一个"目标已删"的用例。
-- `status`：待确认
-- `evidence`：（待复核 AI 填）D 自查：L132/L155 丢弃计数、与 account.go 不一致可 grep 复现；历史评审未提过成员角色变更的 RowsAffected，无重复。
+- `status`：**已修复（[1.25]）**
+- `evidence`：**WB 复核：属实（引用方式小偏，结论无误）。**修复前 L132/L155 均为 `_, err = s.engine.Where(...).Update(...)` 后 `return err`。**更正一处**：`account.go` 的 Update 分支校验的是 `Update()` 返回的 `(int64, error)`（非 `result.RowsAffected()`），`RowsAffected()` 实际只用于 `account.go:238` 的 Delete——不影响"D 所说项目已有核对 1 行的规范"这一结论。修复见 `member.go:138`（ChangeRole）与 `:169`（Remove）：改为 `n, err := ...` 且 `n != 1` 返回 `ErrConcurrentConflict`（经 mapSvcErr → 409），不再静默成功。守卫 `member_test.go:TestMemberWritesCheckRowsAffected` 断言 `member.go` 内不再出现 `_, err = s.engine.Where` 且 `if n != 1 {` 至少 2 处。D 自查原文：L132/L155 丢弃计数、与 account.go 不一致可 grep 复现；历史评审未提过成员角色变更的 RowsAffected，无重复。
 
 ---
 
