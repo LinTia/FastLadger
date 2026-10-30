@@ -52,13 +52,18 @@ func main() {
 		log.Fatalf("配置加载失败：%v", err)
 	}
 
+	// GPT-R35：先把进程 umask 收紧到 0077，之后再建的文件/目录默认就是 0600/0700。
+	// 放在最前面——umask 是进程全局状态，改晚了对之前创建的文件无效。
+	database.ApplyStrictUmask()
+
 	// 数据目录（SQLite 与 instance.meta 都不会自动创建目录）
-	if err := os.MkdirAll(cfg.DataDir, 0o755); err != nil {
-		log.Fatalf("创建数据目录失败：%v", err)
+	// 权限 0700：目录里是财务明细与 instance.meta，同机其他用户不该进得来
+	if err := database.EnsureDataDir(cfg.DataDir); err != nil {
+		log.Fatalf("准备数据目录失败：%v", err)
 	}
 	if dir := filepath.Dir(cfg.DBPath); dir != "" && dir != "." {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			log.Fatalf("创建数据目录失败：%v", err)
+		if err := database.EnsureDataDir(dir); err != nil {
+			log.Fatalf("准备数据库目录失败：%v", err)
 		}
 	}
 
