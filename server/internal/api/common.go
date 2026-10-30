@@ -96,6 +96,13 @@ func mapSvcErr(c *gin.Context, err error) {
 		fail(c, http.StatusTooManyRequests, "操作过于频繁，请稍后再试")
 	case errors.Is(err, service.ErrWeakPassword):
 		fail(c, http.StatusBadRequest, "密码至少 8 位")
+	case errors.Is(err, service.ErrPasswordTooLong):
+		// GPT-R45：bcrypt 最多接受 72 字节。这是客户端输入问题，必须 400 + 可行动文案，
+		// 绝不能落到 default 变成 500（用户只会看到"服务内部错误"，不知道该改短密码）。
+		fail(c, http.StatusBadRequest, "密码过长：最多 72 字节（超出部分 bcrypt 会丢弃）")
+	case errors.Is(err, service.ErrUsernameTooLong):
+		// GPT-R45：用户名按字符计 1~64，且 UTF-8 字节不超过 255
+		fail(c, http.StatusBadRequest, "用户名长度超限：1~64 个字符")
 	default:
 		// 不回显内部错误，避免泄露实现细节
 		fail(c, http.StatusInternalServerError, "服务内部错误")

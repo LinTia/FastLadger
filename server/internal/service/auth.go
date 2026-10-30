@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"fastledger/internal/model"
 
@@ -27,9 +28,37 @@ var (
 	ErrUserExists = errors.New("用户名已存在")
 	// ErrWeakPassword 口令强度不足
 	ErrWeakPassword = errors.New("密码强度不足：至少 8 位")
+	// ErrPasswordTooLong 口令超过 bcrypt 能接受的字节数（GPT-R45）。
+	//
+	// bcrypt 只取输入的前 72 字节，超出的部分会被静默丢弃——那意味着"用户以为设了一个
+	// 很长的密码，实际生效的只有前 72 字节"。golang.org/x/crypto/bcrypt 为此直接返回
+	// ErrPasswordTooLong，旧实现把它当成通用错误一路冒泡，最终在 HTTP 层变成 500。
+	// 现在在哈希【之前】显式校验，返回 400，且不会有任何一次 DB 写入。
+	ErrPasswordTooLong = errors.New("密码过长：最多 72 字节")
+	// ErrUsernameTooLong 用户名超出长度上限（GPT-R45）。
+	//
+	// 0001_init.up.sql 里 username 是 VARCHAR(64)，但 SQLite **不强制** VARCHAR 的长度
+	//（按 TEXT 亲和性存储），所以超长用户名能一路落库，之后再遇到索引、审计、日志、
+	// 迁移对比都会踩到"超出 schema 预期"的坑。上限必须由应用层兜住。
+	ErrUsernameTooLong = errors.New("用户名长度超限：1~64 个字符")
 )
 
-const minPasswordLen = 8
+const (
+	// minPasswordLen 口令最小长度。**按字节计**（既有行为，不改）：
+	// 8 个 ASCII 字符 = 8 字节；中文等宽字符同样按字节参与，故 3 个汉字（9 字节）也满足。
+	// 这里刻意不改成按字符计——收紧会让已注册用户的既有口令"变短"，属于破坏性变更。
+	minPasswordLen = 8
+	// maxPasswordBytes 口令最大长度，**按字节计**：这是 bcrypt 的硬上限（72 字节），
+	// 不是产品决策。字符数口径在这里没有意义——bcrypt 吃的是字节。
+	maxPasswordBytes = 72
+	// maxUsernameRunes 用户名最大**字符**数（Unicode 码点），对齐 schema 的 VARCHAR(64)。
+	maxUsernameRunes = 64
+	// maxUsernameBytes 用户名最大**字节**数（UTF-8 编码后）。
+	//
+	// 为什么字符数之外还要卡字节：64 个 4 字节 emoji 是 256 字节，字符数合法但字节数
+	// 已经超过常见索引/日志的舒适区。取 255 作为兜底，正常中文名（64×3=192 字节）不受影响。
+	maxUsernameBytes = 255
+)
 
 // AuthService 认证服务
 type AuthService struct {
@@ -70,20 +99,50 @@ func (s *AuthService) Register(username, password string) (*model.User, error) {
 //
 // 刻意放在事务之外：bcrypt 是纯 CPU 开销（默认成本约数十毫秒），
 // 若放进事务会长时间占住唯一的数据库连接（MaxOpenConns=1），拖慢所有并发请求。
+//
+// 顺序即契约（GPT-R45）：**所有输入校验都在开事务之前完成**，因此任何一条校验失败都
+// 是"零写入"——不存在"建了用户才发现口令超长"的中间态，也就不可能落库。
 func normalizeAndHash(username, password string) (string, string, error) {
 	username = strings.TrimSpace(username)
 	if username == "" {
 		// 归入 ErrInvalidArgument：由 mapSvcErr 映射为 400，而不是 500
 		return "", "", fmt.Errorf("%w：用户名不能为空", ErrInvalidArgument)
 	}
+	if err := validateUsername(username); err != nil {
+		return "", "", err
+	}
 	if len(password) < minPasswordLen {
 		return "", "", ErrWeakPassword
+	}
+	// bcrypt 的 72 字节上限必须在哈希之前拦住：否则 bcrypt 返回它自己的
+	// ErrPasswordTooLong，被当成"服务内部错误"冒到 HTTP 层变成 500，而客户端
+	// 真正需要的是"请把密码改短一点"的 400。
+	if len(password) > maxPasswordBytes {
+		return "", "", fmt.Errorf("%w：实际 %d 字节", ErrPasswordTooLong, len(password))
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return "", "", fmt.Errorf("口令哈希失败：%w", err)
 	}
 	return username, string(hash), nil
+}
+
+// validateUsername 用户名边界校验（GPT-R45）。
+//
+// 口径（写死在代码里，避免"字符还是字节"含糊）：
+//  1. 主口径【字符】：TrimSpace 之后 1~maxUsernameRunes(64) 个 Unicode 码点，
+//     对齐 schema 的 VARCHAR(64) 与 normalizeName 的既有口径；
+//  2. 兜底口径【字节】：UTF-8 编码后不超过 maxUsernameBytes(255)。
+//
+// 两条都按"客户端输入错误"处理 → HTTP 400，且调用点在事务之前，不会落库。
+func validateUsername(username string) error {
+	if n := utf8.RuneCountInString(username); n > maxUsernameRunes {
+		return fmt.Errorf("%w：实际 %d 个字符", ErrUsernameTooLong, n)
+	}
+	if b := len(username); b > maxUsernameBytes {
+		return fmt.Errorf("%w：UTF-8 编码后 %d 字节", ErrUsernameTooLong, b)
+	}
+	return nil
 }
 
 // insertUserInTx 在**调用方的事务**内建用户，不自行 Begin/Commit。
