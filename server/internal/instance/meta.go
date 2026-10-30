@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -166,7 +167,16 @@ func Bump(dataDir string) (*Meta, error) {
 	return m, nil
 }
 
-// write 原子落盘：先写临时文件再 rename，避免写到一半掉电留下半个 JSON。
+// write 原子落盘 + fsync（GPT-R39）。
+//
+// 分四步，任一步失败都必须返回错误（不做"尽力而为"）：
+//  1. 写临时文件 → Sync → Close（数据本体落盘）；
+//  2. Rename 覆盖目标（原子：要么旧内容要么新内容，不会半截）；
+//  3. 对【父目录】Sync（目录项变更落盘）。
+//
+// 为什么第 3 步不能省：rename 只保证原子性，**不保证断电持久化**。
+// 没有目录 fsync 时，Bump 返回成功之后立刻断电，仍可能读到旧 restore_epoch——
+// 客户端就会以为数据库没恢复过，继续用旧游标 sync/push 把数据覆盖回去。
 //
 // （meta 文件很小，但它是"恢复世代"的唯一凭据，半截文件会让全实例客户端无法判断世代。）
 func write(dataDir string, m *Meta) error {
@@ -182,16 +192,87 @@ func write(dataDir string, m *Meta) error {
 
 	path := Path(dataDir)
 	tmp := path + tmpSuffix
-	if err := os.WriteFile(tmp, b, filePerm); err != nil {
-		return fmt.Errorf("写入 %s 失败：%w", tmp, err)
+	if err := writeFileSync(tmp, b); err != nil {
+		// 写坏了就带走临时文件，避免残留被误认为备份包的一部分
+		cleanupTmp(tmp)
+		return err
 	}
 	if err := os.Rename(tmp, path); err != nil {
-		// rename 失败时清理临时文件，避免残留被误认为备份包的一部分
-		_ = os.Remove(tmp)
+		cleanupTmp(tmp)
 		return fmt.Errorf("落盘 %s 失败：%w", path, err)
+	}
+	// rename 已生效，但目录项本身也要落盘，否则断电后可能退回旧世代
+	if err := syncDirHook(dir); err != nil {
+		return fmt.Errorf("同步目录 %s 失败（rename 已生效，断电后仍可能丢失）：%w", dir, err)
 	}
 	return nil
 }
+
+// cleanupTmp 清理写入失败的临时文件。
+//
+// 只删【普通文件】：万一这个临时名字被别的东西占成了目录，
+// 一次失败的写入不应该顺手删掉一个目录。
+func cleanupTmp(tmp string) {
+	if st, err := os.Stat(tmp); err == nil && st.IsDir() {
+		return
+	}
+	_ = os.Remove(tmp)
+}
+
+// writeFileSync 写临时文件：Write → Sync → Close，三步都必须成功。
+//
+// 顺序不能颠倒：Sync 必须在 Close 之前（要拿着句柄刷），Close 的返回值也要检查
+// —— 部分文件系统会在 Close 时才真正报错。
+func writeFileSync(tmp string, b []byte) error {
+	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, filePerm)
+	if err != nil {
+		return fmt.Errorf("创建 %s 失败：%w", tmp, err)
+	}
+	if _, err := f.Write(b); err != nil {
+		_ = f.Close()
+		return fmt.Errorf("写入 %s 失败：%w", tmp, err)
+	}
+	if err := syncFileHook(f); err != nil {
+		_ = f.Close()
+		return fmt.Errorf("同步 %s 失败（数据可能未落盘）：%w", tmp, err)
+	}
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("关闭 %s 失败：%w", tmp, err)
+	}
+	return nil
+}
+
+// syncDir 对目录执行 fsync，让 rename 产生的目录项变更真正落盘。
+func syncDir(dir string) error {
+	if runtime.GOOS == "windows" {
+		// Windows 不允许对目录句柄调用 FlushFileBuffers（实测 Access is denied），
+		// 目录持久化只能依赖系统缓存策略；此处显式返回 nil 而不是吞掉真实错误。
+		return nil
+	}
+	d, err := os.Open(dir)
+	if err != nil {
+		return fmt.Errorf("打开目录 %s 失败：%w", dir, err)
+	}
+	if err := d.Sync(); err != nil {
+		_ = d.Close()
+		return fmt.Errorf("同步目录 %s 失败：%w", dir, err)
+	}
+	if err := d.Close(); err != nil {
+		return fmt.Errorf("关闭目录 %s 失败：%w", dir, err)
+	}
+	return nil
+}
+
+// 同步钩子：生产路径指向真实 fsync；测试可替换为故障注入实现（GPT-R39）。
+//
+// 之所以要做成可替换的变量，是因为"断电"无法在单元测试里真实发生，
+// 能验证的只有【调用序列与错误处理】——见 meta_r39_test.go 的验证边界说明。
+var (
+	// syncFileHook 刷临时文件的数据本体
+	syncFileHook = func(f *os.File) error { return f.Sync() }
+	// syncDirHook 刷父目录的目录项
+	syncDirHook = func(dir string) error { return syncDir(dir) }
+)
 
 // newInstanceID 生成 32 位十六进制随机实例 ID（crypto/rand，不可预测、无需时间戳）
 func newInstanceID() (string, error) {
