@@ -19,6 +19,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	"fastledger/internal/instance"
 	"fastledger/internal/model"
@@ -197,6 +198,69 @@ func normalizeSyncLimit(limit int) int {
 	return limit
 }
 
+// syncEntityTables 参与"批次边界"判定的四类同步实体（顺序与 SyncBatch 的字段一致）。
+//
+// 写死为常量而非拼接外部输入：下面要用表名拼 SQL，表名必须来自这份白名单。
+var syncEntityTables = [4]string{
+	"transactions", "accounts", "categories", "holdings",
+}
+
+// syncVersionRow 版本流的一行投影：只取 sync_version 一列，
+// 不把整行读进内存（水位计算只需要版本号）。
+type syncVersionRow struct {
+	SyncVersion int64 `xorm:"sync_version"`
+}
+
+// syncVersionStream 读取单个实体在 (afterVersion, +∞) 内、**按版本升序**的前 limit 个版本。
+//
+// 含软删墓碑（不过滤 deleted）：墓碑也要占版本位，否则游标会跳过它们。
+// 单表最多读 limit 行，因此水位计算的扫描量恒为 O(limit)，不会随历史数据膨胀。
+func syncVersionStream(sess *xorm.Session, table string, bookID, afterVersion int64, limit int) ([]int64, error) {
+	rows := make([]syncVersionRow, 0, limit)
+	err := sess.SQL(
+		`SELECT sync_version FROM `+table+` WHERE book_id = ? AND sync_version > ?
+		 ORDER BY sync_version ASC, id ASC LIMIT ?`,
+		bookID, afterVersion, limit).Find(&rows)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]int64, len(rows))
+	for i := range rows {
+		out[i] = rows[i].SyncVersion
+	}
+	return out, nil
+}
+
+// mergeSafeVersion 合并四类实体的版本流，取合并后的第 limit 个版本作为本批上界。
+//
+// 语义（GPT-R48）：批次边界由【所有同步实体共同决定】——不再是"交易说了算"。
+//   - 每条流已按升序排列且长度 ≤ limit；
+//   - 合并后升序，取第 limit 个（1-based）；不足 limit 个则取最大值（最后一批）；
+//   - 没有任何增量时返回 0（调用方据此回空批）。
+//
+// 这是纯函数（不碰数据库），便于直接单测——水位的算术是最容易算错的地方。
+func mergeSafeVersion(streams [][]int64, limit int) int64 {
+	if limit <= 0 {
+		return 0
+	}
+	total := 0
+	for _, s := range streams {
+		total += len(s)
+	}
+	if total == 0 {
+		return 0
+	}
+	merged := make([]int64, 0, total)
+	for _, s := range streams {
+		merged = append(merged, s...)
+	}
+	slices.Sort(merged)
+	if len(merged) < limit {
+		return merged[len(merged)-1] // 增量不足一批：上界取最大版本（本批即最后一批）
+	}
+	return merged[limit-1]
+}
+
 // Pull 拉取增量（一致快照 + 版本边界分页）。
 //
 // 逐行对应指南 §22.2 的骨架，差异只有两处（均为本阶段硬性要求，见文件头）：
@@ -254,40 +318,34 @@ func (s *SyncService) Pull(uid, bookID, afterVersion int64, limit int) (*SyncBat
 		return nil, err
 	}
 
-	// 2) 确定本批版本上界 safeVersion：按【版本边界】分页，绝不把同一 sync_version
-	//    的一组变更拆到两批。先取增量交易前 limit 行所在的最高版本（含软删墓碑，
-	//    不过滤 deleted），再把该版本的全部行（含同版本的账户/分类/持仓）一起纳入。
-	var safeVersion int64
-	_, err = sess.SQL(`SELECT COALESCE(MAX(sync_version), 0) FROM (
-		SELECT sync_version FROM transactions
-		WHERE book_id = ? AND sync_version > ?
-		ORDER BY sync_version ASC LIMIT ?
-	)`, bookID, afterVersion, limit).Get(&safeVersion)
-	if err != nil {
-		return nil, err
-	}
-
-	// 兜底：本批没有交易增量时，可能只有账户/分类/持仓变更，
-	// 从这三张表取增量的最高版本，避免漏掉非交易变更。
-	if safeVersion == 0 {
-		_, err = sess.SQL(`SELECT COALESCE(MAX(v), 0) FROM (
-			SELECT sync_version AS v FROM accounts   WHERE book_id=? AND sync_version>?
-			UNION ALL
-			SELECT sync_version FROM categories WHERE book_id=? AND sync_version>?
-			UNION ALL
-			SELECT sync_version FROM holdings  WHERE book_id=? AND sync_version>?
-		)`, bookID, afterVersion, bookID, afterVersion, bookID, afterVersion).
-			Get(&safeVersion)
-		if err != nil {
-			return nil, err
+	// 2) 确定本批版本上界 safeVersion：批次边界由【所有同步实体共同决定】（GPT-R48）。
+	//
+	// 旧实现只按交易行算水位：交易的高水位会把大量不同版本的账户/分类/持仓行一并
+	// 纳入同一批，"纯非交易变更"的兜底分支更是直接取 MAX——实际返回远超 limit。
+	// 现在合并四类实体的版本流（每行贡献一个版本号），取合并后的第 limit 个版本。
+	//
+	// 每个实体各自只取前 limit 个版本就够了（因而单表扫描量恒 ≤ limit）：
+	// 若合并流的第 limit 个版本是 V，则全库小于 V 的版本行最多 limit-1 个，
+	// 那么任一实体小于 V 的行也最多 limit-1 个 ⇒ V 必在该实体的前 limit 个之内。
+	streams := make([][]int64, 0, len(syncEntityTables))
+	for _, table := range syncEntityTables {
+		s, serr := syncVersionStream(sess, table, bookID, afterVersion, limit)
+		if serr != nil {
+			return nil, serr
 		}
+		streams = append(streams, s)
 	}
+	safeVersion := mergeSafeVersion(streams, limit)
 	if safeVersion == 0 {
 		return emptyBatch(bv.Version), nil // 确实没有任何增量
 	}
 
 	// 3) 所有实体统一在 (afterVersion, safeVersion] 内、同一快照读取，
-	//    保证同一版本的多表/多行一起可见；limit 是目标规模，同版本回扩可能略超。
+	//    保证同一版本的多表/多行一起可见。
+	//
+	//    limit 是【目标规模】，允许的唯一超出是"同一 sync_version 整体回扩"：
+	//    边界版本的所有行必须一起下发（不能拆版本），故同一版本含海量行时本批会
+	//    大于 limit。真正的内存兜底在写路径（maxPushItems 限制单批变更条数）。
 	batch := emptyBatch(safeVersion)
 	cond := "book_id=? AND sync_version>? AND sync_version<=?"
 
