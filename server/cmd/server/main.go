@@ -107,7 +107,11 @@ func main() {
 	versions := version.NewRepo() // 版本唯一实现（VersionRepo.Next）
 	authSvc := service.NewAuthService(engine, cfg.JWTSecret, tokenTTL)
 	books := service.NewBookService(engine, versions)
-	members := service.NewMemberService(engine, authSvc, cfg.InviteTTLDays)
+	// GPT-R27：邀请 TTL 非法（≤0 或超上限）直接启动失败，不带着错误的有效期运行
+	members, err := service.NewMemberService(engine, authSvc, cfg.InviteTTLDays)
+	if err != nil {
+		log.Fatalf("成员服务初始化失败：%v", err)
+	}
 	accounts := service.NewAccountService(engine, versions)
 	categories := service.NewCategoryService(engine, versions)
 	txs := service.NewTxService(engine, versions)

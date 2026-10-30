@@ -26,8 +26,6 @@ import (
 	"xorm.io/xorm"
 )
 
-const daySeconds = int64(24 * 60 * 60)
-
 // maxBookMembers 账本成员上限（PRD §12 决策 6：MVP 上限 20 人，家庭/小圈子足够）。
 //
 // 注意：统计口径是 `book_members.deleted = 0`（软删退出的成员不占名额，
@@ -93,13 +91,21 @@ type MemberService struct {
 }
 
 // NewMemberService 构造成员服务
-func NewMemberService(engine *xorm.Engine, auth *AuthService, inviteTTLDays int) *MemberService {
+//
+// GPT-R27：邀请有效期天数在此【一次性校验】。原先是 `int64(days)*86400` 裸乘，
+// 天数极大时会溢出成负数，表现为"邀请码刚发出就已过期"，且无任何报错。
+// 现在非法配置直接构造失败（服务启动不起来），不会带着错误的 TTL 运行。
+func NewMemberService(engine *xorm.Engine, auth *AuthService, inviteTTLDays int) (*MemberService, error) {
+	ttlSec, err := daysToSeconds(inviteTTLDays)
+	if err != nil {
+		return nil, fmt.Errorf("邀请有效期配置非法：%w", err)
+	}
 	return &MemberService{
 		engine:       engine,
 		auth:         auth,
-		inviteTTLSec: int64(inviteTTLDays) * daySeconds,
+		inviteTTLSec: ttlSec,
 		limiter:      NewLimiter(),
-	}
+	}, nil
 }
 
 // List 账本成员列表（调用方需已校验成员资格）

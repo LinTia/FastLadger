@@ -27,6 +27,11 @@ const (
 	DefaultAuditRetentionDays = 365
 	// DefaultRecycleTTLDays 回收站默认保留天数（PRD §12.1 决策：30 天）
 	DefaultRecycleTTLDays = 30
+	// DefaultInviteTTLDays 邀请码默认有效期天数（PRD §12.1 决策：7 天）
+	DefaultInviteTTLDays = 7
+	// MaxRetentionDays 保留天数上限（100 年）。与 service.maxRetentionDays 同值：
+	// 这里是【配置层】的启动期拦截，那里是【换算层】的运行时拦截，互为纵深防御。
+	MaxRetentionDays = 36500
 )
 
 // jwtPlaceholders 常见的"没改过"的占位值
@@ -54,18 +59,32 @@ type Config struct {
 	AuditRetentionDays int
 }
 
-// Load 从环境变量加载配置并校验
+// Load 从环境变量加载配置并校验。
+//
+// GPT-R34：涉及保留期的整数变量若非法，在此即【启动失败】，不做静默回退。
 func Load() (*Config, error) {
+	recycleTTL, err := envInt("EBK_RECYCLE_TTL_DAYS", DefaultRecycleTTLDays)
+	if err != nil {
+		return nil, err
+	}
+	inviteTTL, err := envInt("EBK_INVITE_TTL_DAYS", DefaultInviteTTLDays)
+	if err != nil {
+		return nil, err
+	}
+	// 审计保留 1 年（PRD §12.1）；到期由 PurgeAuditLogs 硬清除
+	auditDays, err := envInt("EBK_AUDIT_RETENTION_DAYS", DefaultAuditRetentionDays)
+	if err != nil {
+		return nil, err
+	}
 	c := &Config{
-		HTTPPort:       envOr("EBK_HTTP_PORT", DefaultHTTPPort),
-		DBPath:         envOr("EBK_DB_PATH", DefaultDBPath),
-		DataDir:        envOr("EBK_DATA_DIR", DefaultDataDir),
-		JWTSecret:      os.Getenv("EBK_JWT_SECRET"),
-		EnableRegister: envBool("EBK_ENABLE_REGISTER", false),
-		RecycleTTLDays: envInt("EBK_RECYCLE_TTL_DAYS", DefaultRecycleTTLDays),
-		InviteTTLDays:  envInt("EBK_INVITE_TTL_DAYS", 7),
-		// 审计保留 1 年（PRD §12.1）；到期由 PurgeAuditLogs 硬清除
-		AuditRetentionDays: envInt("EBK_AUDIT_RETENTION_DAYS", DefaultAuditRetentionDays),
+		HTTPPort:           envOr("EBK_HTTP_PORT", DefaultHTTPPort),
+		DBPath:             envOr("EBK_DB_PATH", DefaultDBPath),
+		DataDir:            envOr("EBK_DATA_DIR", DefaultDataDir),
+		JWTSecret:          os.Getenv("EBK_JWT_SECRET"),
+		EnableRegister:     envBool("EBK_ENABLE_REGISTER", false),
+		RecycleTTLDays:     recycleTTL,
+		InviteTTLDays:      inviteTTL,
+		AuditRetentionDays: auditDays,
 	}
 	if err := c.validate(); err != nil {
 		return nil, err
@@ -94,6 +113,20 @@ func (c *Config) validate() error {
 	}
 	if c.AuditRetentionDays <= 0 {
 		return fmt.Errorf("EBK_AUDIT_RETENTION_DAYS 必须为正整数，当前=%d", c.AuditRetentionDays)
+	}
+	// GPT-R27 / R34：保留期上限在【启动期】拦截，避免配错成超大值后
+	// 由清理任务在运行期溢出（那会造成不可逆的批量清除）
+	for _, v := range []struct {
+		name string
+		n    int
+	}{
+		{"EBK_RECYCLE_TTL_DAYS", c.RecycleTTLDays},
+		{"EBK_INVITE_TTL_DAYS", c.InviteTTLDays},
+		{"EBK_AUDIT_RETENTION_DAYS", c.AuditRetentionDays},
+	} {
+		if v.n > MaxRetentionDays {
+			return fmt.Errorf("%s 超过上限 %d 天，当前=%d", v.name, MaxRetentionDays, v.n)
+		}
 	}
 	return nil
 }
@@ -133,14 +166,24 @@ func envBool(key string, def bool) bool {
 	}
 }
 
-func envInt(key string, def int) int {
+// envInt 解析正整数环境变量。
+//
+// GPT-R34：非法值【绝不静默回退默认值】。原先 `abc` / `-5` 会静默退回默认值，
+// 而这些变量正是回收站保留天数、审计保留天数——静默回退等于用一个用户从未
+// 同意过的保留期去执行【不可逆的清理】。故非法输入一律返回错误（启动失败）。
+//
+// 仅在【变量未设置】时使用默认值——那是用户确实没有表达偏好，与"配错了"不同。
+func envInt(key string, def int) (int, error) {
 	v := strings.TrimSpace(os.Getenv(key))
 	if v == "" {
-		return def
+		return def, nil
 	}
 	n, err := strconv.Atoi(v)
-	if err != nil || n <= 0 {
-		return def
+	if err != nil {
+		return 0, fmt.Errorf("%s 必须是整数，当前=%q", key, v)
 	}
-	return n
+	if n <= 0 {
+		return 0, fmt.Errorf("%s 必须为正整数，当前=%d", key, n)
+	}
+	return n, nil
 }

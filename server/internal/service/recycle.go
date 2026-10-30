@@ -62,7 +62,11 @@ func (s *TxService) PurgeExpiredTransactions(bookID int64, ttlDays int, now int6
 	if ttlDays <= 0 {
 		return 0, fmt.Errorf("%w：回收站保留天数必须为正整数", ErrInvalidArgument)
 	}
-	cutoff := now - int64(ttlDays)*secondsPerDay
+	// GPT-R27：经统一的防溢出换算；非法天数拿不到截止时间，也就不会删任何数据
+	cutoff, err := retentionCutoff(ttlDays, now)
+	if err != nil {
+		return 0, err
+	}
 	res, err := s.engine.Exec(
 		`DELETE FROM transactions WHERE book_id = ? AND deleted = 1 AND deleted_at > 0 AND deleted_at <= ?`,
 		bookID, cutoff)
@@ -83,13 +87,14 @@ func PurgeAuditLogs(engine *xorm.Engine, retentionDays int, now int64) (int64, e
 	if retentionDays <= 0 {
 		return 0, fmt.Errorf("%w：审计保留天数必须为正整数", ErrInvalidArgument)
 	}
-	cutoff := now - int64(retentionDays)*secondsPerDay
+	// GPT-R27：同上，非法天数不会得到截止时间
+	cutoff, err := retentionCutoff(retentionDays, now)
+	if err != nil {
+		return 0, err
+	}
 	res, err := engine.Exec(`DELETE FROM audit_logs WHERE at <= ?`, cutoff)
 	if err != nil {
 		return 0, fmt.Errorf("审计保留期清理失败：%w", err)
 	}
 	return res.RowsAffected()
 }
-
-// secondsPerDay 一天的秒数（仅用于保留期换算）
-const secondsPerDay = 24 * 60 * 60

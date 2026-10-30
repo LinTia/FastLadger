@@ -87,7 +87,8 @@ func TestLoginFailureWritesNoAudit(t *testing.T) {
 func TestChangeRoleWritesAudit(t *testing.T) {
 	e := newTestEnv(t)
 	as := NewAuthService(e.engine, testJWTSecret, time.Hour)
-	ms := NewMemberService(e.engine, as, 7)
+	ms, err := NewMemberService(e.engine, as, 7)
+	must(t, err)
 
 	target := insertUser(t, e, "role-target")
 	addMember(t, e, target, model.RoleMember)
@@ -107,7 +108,8 @@ func TestChangeRoleWritesAudit(t *testing.T) {
 func TestRemoveMemberWritesAudit(t *testing.T) {
 	e := newTestEnv(t)
 	as := NewAuthService(e.engine, testJWTSecret, time.Hour)
-	ms := NewMemberService(e.engine, as, 7)
+	ms, err := NewMemberService(e.engine, as, 7)
+	must(t, err)
 
 	target := insertUser(t, e, "remove-target")
 	addMember(t, e, target, model.RoleMember)
