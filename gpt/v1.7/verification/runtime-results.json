@@ -1,0 +1,45 @@
+{
+  "review": "GPT v1.7 Stage 4 strict code review",
+  "repository": "LinTia/FastLadger",
+  "head": "be5439d6b2787bc4657b4a96bdc8503ef6896c4c",
+  "latest_code_commit": "1a7d07ad4106026e9900eda01fa237669aac2ea1",
+  "base": "9d45a449eb83139276df8cd11df15ee5f130cf36",
+  "commits_compared": 5,
+  "changed_files": 14,
+  "status": "static_review_only",
+  "existing_ci_evidence": {
+    "run": "41034510229",
+    "result": "170 PASS / 0 FAIL; six steps success; no race",
+    "note": "Read from current reviewer guide; not rerun in this review."
+  },
+  "local_execution": {
+    "go_build": "not_run",
+    "go_vet": "not_run",
+    "go_test": "not_run",
+    "sqlite": "not_run",
+    "race": "not_run"
+  },
+  "proposed_regressions": [
+    {
+      "id": "GPT-R26",
+      "status": "not_run"
+    },
+    {
+      "id": "GPT-R27",
+      "status": "not_run"
+    },
+    {
+      "id": "GPT-R28",
+      "status": "not_run"
+    },
+    {
+      "id": "GPT-R29",
+      "status": "not_run"
+    },
+    {
+      "id": "GPT-R30",
+      "status": "static_scope_check"
+    }
+  ],
+  "note": "No test pass is claimed for this review. Existing CI evidence does not cover the newly identified edge cases unless explicit tests are added."
+}
