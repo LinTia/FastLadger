@@ -221,9 +221,29 @@ func containsStr(xs []string, want string) bool {
 //
 // 规则：
 //   - 表里每个文件的内容必须与指纹一致（改一个字符都会红）；
-//   - **发布新迁移时必须在此登记它的指纹**——这是一次有意识的确认动作，
-//     发布后就锁死。未来文件（如 0007）在登记前不受保护，属已知边界。
+//   - **发布新迁移时必须在此登记它的指纹**——这是强制而非可选：
+//     migrations/ 下存在但指纹表里没有的文件同样会让本测试红（反向守卫）。
 func TestPublishedMigrationsMatchGoldenHash(t *testing.T) {
+	// 反向守卫：migrations/ 下存在、但指纹表里没有的文件 = 发布时忘了登记，
+	// 该文件不受任何保护。登记是强制的，不是可选动作（crosscheck-infra 复核建议采纳）。
+	entries, err := migrationFS.ReadDir(migrationsDir)
+	if err != nil {
+		t.Fatalf("读取内嵌迁移目录失败：%v", err)
+	}
+	registered := make(map[string]bool, len(goldenScripts))
+	for _, f := range goldenScripts {
+		registered[f.name] = true
+	}
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".up.sql") {
+			continue
+		}
+		if !registered[e.Name()] {
+			t.Fatalf("迁移脚本 %s 未登记 golden 指纹（发布新迁移必须在 goldenScripts 里登记，"+
+				"否则它不受\"内容不可变\"守卫保护）", e.Name())
+		}
+	}
+
 	for _, f := range goldenScripts {
 		b, err := migrationFS.ReadFile(migrationsDir + "/" + f.name)
 		if err != nil {
