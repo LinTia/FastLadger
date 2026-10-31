@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/netip"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -122,18 +123,33 @@ func (s *AuthService) ConfigureLoginThrottle(maxAttempts int, window time.Durati
 	s.loginWindow = window
 }
 
-// loginKey 登录限流的桶键：按来源 IP 分桶。
+// loginKey 登录限流的桶键：按【来源网段】聚合分桶——IPv4 按 /24、IPv6 按 /64（R-1）。
+//
+// 为什么按前缀聚合而不是完整地址（对抗验证 ZZ-2 实测复现）：IPv6 隐私扩展（RFC 4941）
+// 与代理池让一台机器在自己 /64 内可拥有海量地址；按完整 ClientIP 分桶等于"每换一个
+// 地址就是全新配额"，15 分钟 10 次的配额被 /64 内的地址数摊薄，登录限流在 IPv6 环境
+// 下形同虚设。聚合口径与 member.go 的 ipBucket 一致（/24、/64），但实现各自独立、
+// 互不引用（文件所有权隔离）。
+//
+// 代价（明示）：同一 /24（IPv4）或 /64（IPv6）内的多台设备共享一个失败配额。
+// 家庭自托管场景下同一出口路由器后面的设备本来就该算同一个来源，可接受；
+// 口径已写进《落地方案》§8.4.2。
 //
 // clientIP 来自 gin 的 ClientIP()——router.go 已 SetTrustedProxies(nil)，
 // 它恒等于 TCP 对端（RemoteAddr），不可被 X-Forwarded-For 单方面操纵。
-// 空值（非 HTTP 直调，如单测/CLI）统一归 unknown 桶：fail-closed，
-// 所有无来源的调用共享一个桶，绝不会因为缺 IP 而绕过限流。
+// 不可解析的值（正常不应出现）统一归 invalid 共享桶：fail-closed，
+// 绝不会因为解析失败而绕过限流。
 func loginKey(clientIP string) string {
-	ip := strings.TrimSpace(clientIP)
-	if ip == "" {
-		return "login:unknown"
+	ip, err := netip.ParseAddr(strings.TrimSpace(clientIP))
+	if err != nil {
+		return "login:invalid"
 	}
-	return "login:" + ip
+	ip = ip.Unmap() // IPv4-mapped IPv6（::ffff:203.0.113.9）按 IPv4 口径聚合
+	bits := 64
+	if ip.Is4() {
+		bits = 24
+	}
+	return "login:" + netip.PrefixFrom(ip, bits).Masked().String()
 }
 
 // Register 注册；若是系统首个用户，自动授予实例管理员
@@ -248,13 +264,16 @@ func (s *AuthService) Login(username, password string) (string, error) {
 	return s.LoginFromIP(username, password, "")
 }
 
-// LoginFromIP 校验口令并签发 token（含 jti），按来源 IP 做失败限流（A6）。
+// LoginFromIP 校验口令并签发 token（含 jti），按来源网段做失败限流（A6 / R-1）。
 //
 // 执行顺序即契约：
 //  1. **限流判定在最前**：超限直接 ErrRateLimited（HTTP 429）——不查库、不写审计，
 //     审计表的写入速率被天然封顶（审计写在限流之后，绝不能倒过来）；
-//  2. **只有失败才占配额**：入口先 Allow 占位，成功路径在签发令牌前 Release 归还，
-//     内部故障（DB / 审计 / 签发）也归还——它们不是"尝试爆破"的信号；
+//  2. **只有失败才占配额，且归还的必须是自己的占位**（R-2）：入口 AllowWithToken 占位，
+//     成功路径在签发令牌前 ReleaseToken 归还【自己那次】，内部故障（DB / 审计 / 签发）
+//     也归还——它们不是"尝试爆破"的信号；失败路径保留占位（计数生效）。
+//     旧版 Release(key) 删最近一条，同 IP 并发下会误删他人的失败计数并留下幽灵占位，
+//     已废弃；
 //  3. 失败路径（限流通过后）写 AuditActionLoginFailed（A7 加固）：账号不存在记
 //     entity_id=0，口令错/禁用记命中用户 id；before_json 记 attempted 用户名与 reason，
 //     **绝不记口令**；响应仍保持统一 401 文案（R46：不做用户枚举）；
@@ -267,7 +286,8 @@ func (s *AuthService) Login(username, password string) (string, error) {
 func (s *AuthService) LoginFromIP(username, password, clientIP string) (string, error) {
 	key := loginKey(clientIP)
 	// ① 失败限流：先占位（失败才计数——见方法注释第 2 条）
-	if !s.loginLimiter.Allow(key, s.loginMaxAttempts, s.loginWindow) {
+	slot, allowed := s.loginLimiter.AllowWithToken(key, s.loginMaxAttempts, s.loginWindow)
+	if !allowed {
 		return "", ErrRateLimited
 	}
 
@@ -276,7 +296,7 @@ func (s *AuthService) LoginFromIP(username, password, clientIP string) (string, 
 	if err != nil {
 		// 数据库故障 ≠ 口令错误：归还占位（内部故障不计入失败配额，否则一次
 		// 审计表/库故障就能把全网用户的失败配额吃光），并标成依赖不可用
-		s.loginLimiter.Release(key)
+		s.loginLimiter.ReleaseToken(slot)
 		return "", fmt.Errorf("%w：查询用户失败：%w", ErrAuthUnavailable, err)
 	}
 	if !has {
@@ -296,12 +316,13 @@ func (s *AuthService) LoginFromIP(username, password, clientIP string) (string, 
 			s.writeLoginFailedAudit(username, u.Id, "bad_password")
 			return "", ErrBadCredentials
 		}
-		s.loginLimiter.Release(key)
+		s.loginLimiter.ReleaseToken(slot)
 		return "", fmt.Errorf("%w：校验口令失败：%w", ErrAuthUnavailable, err)
 	}
 
-	// ② 认证成功：归还占位（成功不占失败配额——多设备正常登录不得被误伤）
-	s.loginLimiter.Release(key)
+	// ② 认证成功：归还【自己】的占位（成功不占失败配额——多设备正常登录不得被误伤；
+	// 同网段并发的失败计数不受影响，R-2）
+	s.loginLimiter.ReleaseToken(slot)
 
 	// 审计（WBS 4.3）：登录是实例级事件，不隶属任何账本，book_id 取哨兵 0。
 	// 刻意放在签发令牌【之前】：审计写失败就不签发，避免出现"已通过认证却无留痕"。
