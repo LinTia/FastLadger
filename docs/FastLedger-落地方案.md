@@ -1334,6 +1334,7 @@ ledger.your-domain.com {
 - 客户端发现 `restore_epoch` 变化后停止旧游标增量同步，全量重建本地库，并逐条核对离线队列（R10），避免恢复后被旧缓存覆盖或重复。
 - **恢复演练（必做）**：备份未经验证等于没有备份。建议每月一次：新实例恢复最近备份 → 校验记录数与关键汇总（净资产、本月收支）→ 递增 `restore_epoch` → 客户端全量重建后抽查读写。演练结果记入运维记录（对应 PRD §10.9）。
 - **WAL 注意事项**：若用文件复制而非 `.backup`/`VACUUM INTO`，须先 `PRAGMA wal_checkpoint(TRUNCATE)` 或停容器，否则 `-wal` 中尚未 checkpoint 的事务会丢失。
+- `instance bump` 成功日志打印 instance.meta 的**绝对路径**；若该文件原本不存在（本次是新建而非读取已有），会打印显著警告——请立即核对 `EBK_DATA_DIR` 是否指错目录。
 
 ## 8.4 监控与安全
 
@@ -1345,6 +1346,7 @@ ledger.your-domain.com {
 
 - GitHub Actions：提交 → Go test / Flutter analyze+test → 构建镜像 → 推送 GHCR。
 - NAS 上 watchtower 或手动拉取更新；更新前自动备份数据库。
+- **回滚镜像必须同时回滚数据库备份**：schema 版本只进不退，旧程序遇到"库里有它不认识的版本"会拒绝启动（降级运行保护），`db migrate` 无法修复该状态。
 
 ## 8.6 版本 Roadmap（迭代规划）
 
