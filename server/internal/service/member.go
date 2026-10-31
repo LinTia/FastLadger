@@ -932,8 +932,15 @@ func (s *MemberService) JoinViaInvite(bookID int64, code, username, email, passw
 	// 撤销条件、inviteRejectReason 的过期判定共用【同一个常量】。
 	// 旧版把四个条件手写了一遍并漏掉 expires_at，于是"兑换说它过期了、撤销也说它过期了，
 	// 但标记已用那一步却认为它还活着"——正是 R42 要消灭的"多套实现打架"。
-	// 用同一个 now（本函数开头判定用的时间轴）而不是再取一次 time.Now()，
-	// 保证"判定过期"与"写入条件"看到的是同一时刻。
+	//
+	// 关于取时（务必按事实理解，勿"顺手合并"）：本函数取**两次**当前时刻——
+	// 入口 `inviteRejectReason(..., s.clock())` 一次、这里的 `now := s.clock()` 一次，
+	// 二者是两个独立取值，不是一个值用两处。真实时钟下二者相差毫秒级、语义等价，
+	// 因此不会引入"判定说没过期、写库说已过期"的抖动风险。
+	// **保留两次读取是刻意的**：它让"入口判不过期 → 写库时已过期"这个窗口可被注入时钟
+	// 精确复现，TestWA9MarkUsedRejectsExpiredOnLateClock 正是靠这个窗口证明生产 UPDATE
+	// 的过期条件真的生效。若把它们合并成一次取值，该用例会立刻失败（且失败文案已注明
+	// 这种可能），因为两次取时相同就再也构造不出"写库时已过期"的状态。
 	n, err := sess.Where("id = ? AND "+inviteUsableCond, inv.Id, now).
 		Cols("used_at", "used_by").Update(&model.Invite{UsedAt: now, UsedBy: u.Id})
 	if err != nil {
