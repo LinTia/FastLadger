@@ -935,12 +935,20 @@ func (s *MemberService) JoinViaInvite(bookID int64, code, username, email, passw
 	//
 	// 关于取时（务必按事实理解，勿"顺手合并"）：本函数取**两次**当前时刻——
 	// 入口 `inviteRejectReason(..., s.clock())` 一次、这里的 `now := s.clock()` 一次，
-	// 二者是两个独立取值，不是一个值用两处。真实时钟下二者相差毫秒级、语义等价，
-	// 因此不会引入"判定说没过期、写库说已过期"的抖动风险。
+	// 二者是两个独立取值，不是一个值用两处。
+	//
+	// 真实时钟下两次读取至多相差 1 秒，安全语义不受影响，但**边界上存在一档错报**：
+	// 若 `expires_at == T+1`、入口在 T 秒通过、mark-used 在 T+1 秒执行，则
+	// `expires_at > now` 转假 → 命中 0 行 → 调用方拿到 ErrInviteAlreadyUsed
+	// 而不是 ErrInviteExpired。这属于"刚过期"被报成"已被使用"，可接受：
+	// ① 邀请确实已过期、单次使用与撤销互斥都没有被破坏，只是错误码与真实原因差一档；
+	// ② 每个邀请的生命周期里最多命中一次（窗口仅一个整秒边界的瞬间）；
+	// ③ 对外两者都落 400/409 家族的"邀请不可用"，不泄露额外状态。
+	//
 	// **保留两次读取是刻意的**：它让"入口判不过期 → 写库时已过期"这个窗口可被注入时钟
 	// 精确复现，TestWA9MarkUsedRejectsExpiredOnLateClock 正是靠这个窗口证明生产 UPDATE
 	// 的过期条件真的生效。若把它们合并成一次取值，该用例会立刻失败（且失败文案已注明
-	// 这种可能），因为两次取时相同就再也构造不出"写库时已过期"的状态。
+	// 这种可能，并会打印实际取时次数），因为两次取时相同就再也构造不出"写库时已过期"。
 	n, err := sess.Where("id = ? AND "+inviteUsableCond, inv.Id, now).
 		Cols("used_at", "used_by").Update(&model.Invite{UsedAt: now, UsedBy: u.Id})
 	if err != nil {

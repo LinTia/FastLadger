@@ -600,13 +600,14 @@ func TestWA9MarkUsedRejectsExpiredOnLateClock(t *testing.T) {
 
 	_, jerr := ms.JoinViaInvite(e.bookID, inv.Code, "a9-late-clock", "", "password123", "10.3.0.2")
 	if !errors.Is(jerr, ErrInviteAlreadyUsed) {
-		t.Fatalf("写库时已过期的邀请必须被 mark-used 的过期条件拦下（对外 ErrInviteAlreadyUsed），实际 %v；"+
-			"两种可能，按此顺序排查："+
-			"① 若实际为 nil（入户成功）→ 生产 UPDATE 丢掉了 expires_at > ? 条件；"+
-			"② 若实际为 ErrInviteExpired → 说明 JoinViaInvite 里第一次取时已不在入口判定，"+
+		t.Fatalf("写库时已过期的邀请必须被 mark-used 的过期条件拦下（对外 ErrInviteAlreadyUsed），实际 %v"+
+			"（本次注入时钟被取用 %d 次）；三种可能，按此顺序排查："+
+			"① 实际为 nil（入户成功）→ 生产 UPDATE 丢掉了 expires_at > ? 条件；"+
+			"② 实际为 ErrInviteExpired → 说明 JoinViaInvite 里第一次取时已不在入口判定，"+
 			"调整本用例的步进时钟脚本；"+
-			"③ 若你把入口判定与 mark-used 的两次取时**合并成了一次**（见 member.go 该处注释），"+
-			"同样会以本消息失败——步进时钟需要两次独立取值才能构造出\"写库时已过期\"", jerr)
+			"③ 实际为 nil 且上面显示取用 1 次 → 你把入口判定与 mark-used 的两次取时**合并成了一次**"+
+			"（见 member.go 该处注释：保留两次读取是刻意的），步进时钟因此失效",
+			jerr, calls)
 	}
 	// 整笔回滚：不留孤儿用户
 	var userCount int64
