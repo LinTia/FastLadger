@@ -132,7 +132,16 @@ func TestMemberWritesCheckRowsAffected(t *testing.T) {
 	// 断言用**标识符全等**（AST 级）而不是 strings.Contains：
 	// 子串匹配会让 `inviteUsableCondWeak` 这类同名前缀常量双关命中
 	// （reviewer-authz G-3），也能被注释里的同名文本满足。AST 里没有注释，
-	// Ident.Name 又必须全等，因此只有真引用才能通过。
+	// Ident.Name 又必须全等，这两个口子同时关闭。
+	//
+	// 【已知限界（reviewer-authz 第三轮，刻意不修）】本断言只回答"该函数体内是否**精确
+	// 引用**过这个常量"，因此一行死引用 `_ = inviteUsableCond` 就能满足它，而真正的
+	// UPDATE 仍可能手写弱条件。要堵死得断言"该标识符出现在 Where/Exec 的实参里"，
+	// 但那会对合法的"先赋局部变量再用"（`cond := inviteUsableCond; Where(..., cond)`）
+	// 产生**误拒**——测试守卫的误拒代价同样高（后来者会把它放宽）。
+	// 真正的语义兜底在行为侧：TestWA9MarkUsedRejectsExpired 用同一个常量版本跑
+	// 条件更新（过期命中 0 行、有效命中 1 行），加上下面"常量值必须含三条件"的检查，
+	// 弱条件写法在语义上仍会被行为用例打红。这里接受"源码守卫是腰带、不是安全带"。
 	const condIdent = "inviteUsableCond"
 	if !serviceFuncReferencesIdent(t, src, "JoinViaInvite", condIdent) {
 		t.Fatalf("JoinViaInvite 标记已用的 UPDATE 必须复用 %s（D-R08 / A9：单一条件口径）", condIdent)
@@ -163,6 +172,11 @@ func serviceParseSource(t *testing.T, src string) *ast.File {
 }
 
 // serviceFuncReferencesIdent 报告函数 fnName 的函数体内是否**精确**引用了标识符 ident。
+//
+// 能挡住：同名前缀常量（`inviteUsableCondWeak`）、注释与字符串字面量里的同名文本。
+// **挡不住**：函数体里任何一处精确引用都算命中，包括死引用 `_ = ident`（见
+// TestMemberWritesCheckRowsAffected 里的"已知限界"说明）。这是刻意的取舍——
+// 收紧到"必须出现在某个特定调用的实参里"会误拒合法重构，收益不抵成本。
 func serviceFuncReferencesIdent(t *testing.T, src, fnName, ident string) bool {
 	t.Helper()
 	f := serviceParseSource(t, src)

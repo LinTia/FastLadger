@@ -565,6 +565,13 @@ func stage3ParseSnippet(t *testing.T, body string) *ast.FuncDecl {
 // ① 基准写法必须通过；② 极性混杂；③ 双重否定按奇偶归正向；④ 真取反；
 // ⑤ 分支外的调用；⑥ 常量恒等式（条件恒真/恒假）；⑦ 子串/名字相近的标识符；
 // ⑧ 化简：`!(true && flag)` 仍应判为取反（防"为挡恒等式而误伤合法写法"）。
+//
+// 【维护约定（reviewer-authz 第三轮建议，务必遵守）】**拒/认两侧必须成对维护**：
+// 这个守卫有两类断言方向——"必须拒绝 X"（②③⑤⑥⑦）与"必须接受 Y"（①⑧，以及
+// zz_polarity_probe_test.go 的 ZZP-7 接受侧）。只写拒绝侧是有毒的：把守卫收得过头
+// （例如"条件里出现布尔字面量就拒"）会让拒绝侧全部**假绿**——拒绝一切当然也拒绝它们，
+// 而被误伤的正常写法没人发现，直到下一个人受不了把守卫放宽。
+// 任何一次"顺手收紧守卫"的改动，都必须同时补一条接受侧的对照组。
 func TestStage3GuardRejectsMixedPolarity(t *testing.T) {
 	// ① 基准：正常写法必须通过
 	ok := stage3ParseSnippet(t, "\tif flag {\n\t\tnotify()\n\t}")
