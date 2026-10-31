@@ -11,6 +11,8 @@ package main
 
 import (
 	"errors"
+	"log"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -197,6 +199,36 @@ func TestR2CLIUsernameValidation(t *testing.T) {
 				t.Fatalf("%q 应被拒绝", c.input)
 			}
 		})
+	}
+}
+
+// TestR2UnbackfilledTransferWarning INFRA-11：存在未回填方向的历史转账时必须告警
+func TestR2UnbackfilledTransferWarning(t *testing.T) {
+	engine := openDBWithSchema(t)
+	now := time.Now().Unix()
+	db := engine.DB().DB
+	// 一条 related_id=0 的历史转账（0006 不会回填它）+ 一条普通支出（不应触发）
+	if _, err := db.Exec(
+		`INSERT INTO transactions(book_id, type, account_id, amount, tx_time, related_id, direction, created_at, updated_at)
+		 VALUES (1, 3, 1, 500, ?, 0, 0, ?, ?)`, now, now, now); err != nil {
+		t.Fatalf("插入历史转账失败：%v", err)
+	}
+	if _, err := db.Exec(
+		`INSERT INTO transactions(book_id, type, account_id, amount, tx_time, direction, created_at, updated_at)
+		 VALUES (1, 2, 1, 100, ?, 0, ?, ?)`, now, now, now); err != nil {
+		t.Fatalf("插入普通支出失败：%v", err)
+	}
+
+	var buf strings.Builder
+	log.SetOutput(&buf)
+	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+	warnUnbackfilledTransfers(engine)
+
+	if !strings.Contains(buf.String(), "未回填方向") {
+		t.Fatalf("应打印未回填告警，实际日志：%s", buf.String())
+	}
+	if !strings.Contains(buf.String(), "1 条") {
+		t.Fatalf("告警应统计到 1 条，实际日志：%s", buf.String())
 	}
 }
 
