@@ -209,8 +209,9 @@ const (
 	AuditActionDelete  = "delete"
 	AuditActionRestore = "restore"
 
-	// 以下四类不隶属任何账本，落库时 book_id 取 AuditBookInstance（0）
-	AuditActionLogin            = "login"             // 登录
+	// 以下五类不隶属任何账本，落库时 book_id 取 AuditBookInstance（0）
+	AuditActionLogin            = "login"             // 登录（成功事件——枚举字典 §14.1 明确口径）
+	AuditActionLoginFailed      = "login_failed"      // 登录失败（加固项，与登录失败限流捆绑；见枚举字典 §14.1）
 	AuditActionPermissionChange = "permission_change" // 权限变更（改角色 / 移除成员）
 	AuditActionConfigChange     = "config_change"     // 配置变更（可见性开关等）
 	AuditActionBackupRestore    = "backup_restore"    // 备份恢复（restore_epoch 递增）
@@ -223,6 +224,8 @@ const (
 	AuditEntityMember      = "book_member"
 	AuditEntityBook        = "book"
 	AuditEntityInstance    = "instance"
+	AuditEntityAccount     = "account"  // 账户（共享配置，PRD §10.9"任一写操作"口径）
+	AuditEntityCategory    = "category" // 分类（同上）
 )
 
 // AuditActorSystem 审计 actor_uid 的哨兵值：系统 / 运维操作（无登录用户）。
