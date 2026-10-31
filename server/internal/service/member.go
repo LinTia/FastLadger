@@ -151,6 +151,23 @@ type MemberService struct {
 	inviteTTLSec int64
 	auth         *AuthService
 	limiter      *Limiter
+	// now 取当前 Unix 秒；默认 time.Now().Unix()，测试可替换。
+	//
+	// 为什么要留这个接缝（A9 的教训）：mark-used 的 `expires_at > ?` 条件在生产路径上
+	// **永远见不到过期邀请**——入口的 inviteRejectReason 先一步把它拒了。因此"写库时
+	// 已过期"这个窗口只能靠可控时钟制造，否则"过期条件是否真的生效"就只能靠源码断言，
+	// 而源码断言可以被一行 `_ = inviteUsableCond` 满足（reviewer-authz 复核发现）。
+	// 与 limiter.go 的注入式时钟同一惯用法：字段注入、零值兜底，不用包级变量
+	// （包级变量会被并行/顺序执行的其它用例污染）。
+	now func() int64
+}
+
+// clock 返回可用的取时函数（零值 MemberService 兜底，避免 nil 调用 panic）
+func (s *MemberService) clock() int64 {
+	if s.now == nil {
+		return time.Now().Unix()
+	}
+	return s.now()
 }
 
 // NewMemberService 构造成员服务
@@ -168,6 +185,7 @@ func NewMemberService(engine *xorm.Engine, auth *AuthService, inviteTTLDays int)
 		auth:         auth,
 		inviteTTLSec: ttlSec,
 		limiter:      NewLimiter(),
+		now:          func() int64 { return time.Now().Unix() },
 	}, nil
 }
 
@@ -256,7 +274,7 @@ func (s *MemberService) ChangeRole(actor, bookID, targetUid int64, newRole int8)
 
 	n, err := sess.Where("book_id = ? AND uid = ? AND deleted = 0", bookID, targetUid).
 		Cols("role", "updated_at").
-		Update(&model.BookMember{Role: newRole, UpdatedAt: time.Now().Unix()})
+		Update(&model.BookMember{Role: newRole, UpdatedAt: s.clock()})
 	if err != nil {
 		return err
 	}
@@ -302,7 +320,7 @@ func (s *MemberService) Remove(actor, bookID, targetUid int64) error {
 		return ErrCannotOperateOwner
 	}
 
-	now := time.Now().Unix()
+	now := s.clock()
 	n, err := sess.Where("book_id = ? AND uid = ? AND deleted = 0", bookID, targetUid).
 		Cols("deleted", "deleted_at", "updated_at").
 		Update(&model.BookMember{Deleted: true, DeletedAt: now, UpdatedAt: now})
@@ -376,13 +394,13 @@ func (s *MemberService) CreateInvite(actor, bookID int64, role int8, boundUserna
 		Code:      code,
 		Role:      role,
 		CreatedBy: actor,
-		ExpiresAt: time.Now().Unix() + s.inviteTTLSec,
+		ExpiresAt: s.clock() + s.inviteTTLSec,
 		// GPT-R41：两处绑定字段都存【规范化后的值】，
 		// 兑换端只需再做一次同样的规范化即可精确比较，不会再出现
 		// "Alice@x.com 签发的邀请 alice@x.com 兑不掉"。
 		BoundUsername: boundUser,
 		BoundEmail:    boundMail,
-		CreatedAt:     time.Now().Unix(),
+		CreatedAt:     s.clock(),
 	}
 	if _, err := sess.Insert(inv); err != nil {
 		return nil, err
@@ -461,7 +479,7 @@ func (s *MemberService) RevokeInvite(actor, bookID, inviteID int64) error {
 		return err
 	}
 
-	now := time.Now().Unix()
+	now := s.clock()
 	n, err := sess.Where("id = ? AND book_id = ? AND "+inviteUsableCond, inviteID, bookID, now).
 		Cols("revoked").Update(&model.Invite{Revoked: true})
 	if err != nil {
@@ -787,7 +805,7 @@ func (s *MemberService) JoinViaInvite(bookID int64, code, username, email, passw
 	// "存在但不属于本账本"与"不存在"对外不可区分、也必须不可区分：
 	// 否则攻击者可以拿已知邀请去枚举别的账本里有哪些主键存在。
 	found := has && inv.BookId == bookID
-	if reason := inviteRejectReason(found, &inv, time.Now().Unix()); reason != inviteReasonNone {
+	if reason := inviteRejectReason(found, &inv, s.clock()); reason != inviteReasonNone {
 		_ = sess.Rollback()
 		// A4：**无法归因**的尝试不得写进 URL 路径参数指定的那个账本。
 		//
@@ -897,7 +915,7 @@ func (s *MemberService) JoinViaInvite(bookID int64, code, username, email, passw
 		u.Email = email
 	}
 
-	now := time.Now().Unix()
+	now := s.clock()
 	if _, err := sess.Insert(&model.BookMember{
 		BookId: inv.BookId, Uid: u.Id, Role: inv.Role, CanViewOthers: true, CreatedAt: now, UpdatedAt: now,
 	}); err != nil {

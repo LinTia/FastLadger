@@ -146,10 +146,15 @@ func TestMemberWritesCheckRowsAffected(t *testing.T) {
 	//   **不是**生产代码真的引用了它；
 	// - 同一用例的端到端部分只断言 ErrInviteExpired，而该错误在入口
 	//   inviteRejectReason 就返回了，**根本走不到** join 里的 mark-used 语句。
-	// 因此"生产 UPDATE 用了这个常量"目前**只由上面这条 AST 断言把关**，它挡得住
+	// 因此"生产 UPDATE 用了这个常量"这条不变量**不能只靠上面这条 AST 断言**：它挡得住
 	// "换成同名前缀的弱常量"，挡不住"手写弱条件 + 一行死引用"。
-	// 这一点是刻意接受的：真正能同时表达"复用单一口径"且不误拒的检查是
-	// "把条件抽成函数并由生产代码调用"，属重构级改动，不在本轮范围。
+	//
+	// 【现状：行为侧兜底已补齐（1bd1439 之后）】上一条的结论是"只能靠 AST 断言"，现已不成立：
+	// TestWA9MarkUsedRejectsExpiredOnLateClock 用注入式步进时钟（MemberService.now，
+	// 与 limiter.go 同一惯用法）制造"入口判不过期 → 写库时已过期"的窗口，让**生产代码**的
+	// mark-used 真的见到过期邀请。已做变异验证：把生产 UPDATE 退回
+	// `used_at = 0 AND revoked = 0`（漏 expires_at）时该用例立刻红（入户成功）。
+	// 所以本 AST 断言现在的定位是"快速定位 + 常量语义检查"，语义兜底在行为用例那边。
 	// 结论：源码守卫是腰带，不是安全带——别把它当唯一依据。
 	const condIdent = "inviteUsableCond"
 	if !serviceFuncReferencesIdent(t, src, "JoinViaInvite", condIdent) {

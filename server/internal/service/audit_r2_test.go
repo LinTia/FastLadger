@@ -492,12 +492,20 @@ func TestWA4AnonymousRejectNotOnForeignBook(t *testing.T) {
 // A9：mark-used 必须带过期条件
 // ---------------------------------------------------------------------------
 
-// TestWA9MarkUsedRejectsExpired 「标记已用」的条件更新必须与撤销、过期判定共用同一口径。
+// TestWA9MarkUsedRejectsExpired 「标记已用」的条件更新必须与撤销、过期判定共用同一个口径。
 //
-// 两部分证据：
-//  1. 源码断言：JoinViaInvite 的标记已用 UPDATE 复用 inviteUsableCond（单一实现）；
-//  2. 行为断言：拿同一条条件去更新一个已过期的邀请，必须命中 0 行（拒绝），
-//     而未过期的邀请命中 1 行——这正是旧实现漏掉 `expires_at > ?` 时无法区分的情形。
+// 三类证据，各自能证明的东西**不同**（reviewer-authz 复核纠过一次措辞，这里写清边界）：
+//  1. 源码断言：JoinViaInvite 的标记已用 UPDATE 复用了 inviteUsableCond。
+//     它只能回答"函数体里精确引用过这个标识符"——一行 `_ = inviteUsableCond` 就能满足它。
+//  2. 常量语义断言（下面 markUsed 闭包）：证明**常量本身**带过期语义（过期命中 0 行、
+//     有效命中 1 行）。注意这是测试自己拼的同一条条件，**不能**证明生产代码用了它。
+//  3. 生产路径断言（TestWA9MarkUsedRejectsExpiredOnLateClock）：注入步进时钟制造
+//     "入口判不过期 → 写库时已过期"的窗口，让生产 MarkUsed 那一步真的见到过期邀请。
+//     这是唯一能把"过期条件真的生效"钉在行为上的证据。
+//
+// 为什么需要第 3 类：入口的 inviteRejectReason 会先一步拒掉过期邀请，所以正常数据下
+// mark-used 的 `expires_at > ?` 永远见不到过期行——只靠前两类，"漏掉过期条件"的生产
+// 回归在行为侧是**没有红灯**的。
 func TestWA9MarkUsedRejectsExpired(t *testing.T) {
 	e := newTestEnv(t)
 	ms := newMemberSvc(t, e)
@@ -545,6 +553,76 @@ func TestWA9MarkUsedRejectsExpired(t *testing.T) {
 	// 端到端：过期邀请的兑换仍是 ErrInviteExpired（对外语义不得被条件改写影响）
 	if _, err := ms.JoinViaInvite(e.bookID, expired.Code, "a9-late", "", "password123", "10.3.0.1"); !errors.Is(err, ErrInviteExpired) {
 		t.Fatalf("过期邀请兑换应报 ErrInviteExpired，实际 %v", err)
+	}
+}
+
+// TestWA9MarkUsedRejectsExpiredOnLateClock 让**生产代码**的 mark-used 真的遇到已过期邀请。
+//
+// 背景（reviewer-authz 复核打回）：入口的 inviteRejectReason 会先拒掉过期邀请，因此
+// 正常数据下 mark-used 的 `expires_at > ?` 永远见不到过期行——"生产 UPDATE 漏掉过期
+// 条件"这类回归在行为侧没有任何红灯，唯一的拦截点是一条能被 `_ = inviteUsableCond`
+// 满足的源码断言。本用例把那条独木换成真桥。
+//
+// 手法：注入步进时钟（与 limiter.go 的注入式时钟同一惯用法，不是 sleep）——
+// JoinViaInvite 内第一次取时（入口过期判定）返回 t0，之后的取时（mark-used 的 now）
+// 返回 t0+100；邀请的有效期设为 t0+10。于是：
+//
+//	入口判定：t0+10 > t0    → 未过期，继续
+//	写库条件：t0+10 > t0+100 → 假 → 命中 0 行 → 拒绝
+//
+// 期望 ErrInviteAlreadyUsed（mark-used 失配的对外语义），且整笔回滚（不留孤儿用户、
+// 邀请未被消耗）。若生产 UPDATE 丢掉 `expires_at > ?`，这里会命中 1 行、入户成功，
+// 用例立刻变红——这正是我们要的行为侧兜底。
+//
+// 脆弱性说明（刻意保留为"响亮失败"）：本用例假设 JoinViaInvite 里**第一次**取时是
+// 入口的过期判定。若将来在它之前插入新的取时调用，入口会看到 t0+100 而报
+// ErrInviteExpired，用例会**明确失败**（而不是静默通过），按提示调整时钟脚本即可。
+func TestWA9MarkUsedRejectsExpiredOnLateClock(t *testing.T) {
+	e := newTestEnv(t)
+	ms := newMemberSvc(t, e)
+
+	// 先用真实时钟签一张邀请（CreateInvite 也走 s.clock()，故注入必须放在其后）
+	inv, err := ms.CreateInvite(e.uid, e.bookID, model.RoleMember, "", "")
+	must(t, err)
+
+	t0 := time.Now().Unix()
+	if _, err := e.engine.Exec("UPDATE invites SET expires_at = ? WHERE id = ?", t0+10, inv.Id); err != nil {
+		t.Fatalf("设置有效期失败：%v", err)
+	}
+	calls := 0
+	ms.now = func() int64 {
+		calls++
+		if calls == 1 {
+			return t0 // 入口过期判定：未过期
+		}
+		return t0 + 100 // mark-used 的 now：已过期
+	}
+
+	_, jerr := ms.JoinViaInvite(e.bookID, inv.Code, "a9-late-clock", "", "password123", "10.3.0.2")
+	if !errors.Is(jerr, ErrInviteAlreadyUsed) {
+		t.Fatalf("写库时已过期的邀请必须被 mark-used 的过期条件拦下（对外 ErrInviteAlreadyUsed），实际 %v；"+
+			"若这里是 nil（入户成功），说明生产 UPDATE 丢掉了 expires_at > ? 条件", jerr)
+	}
+	// 整笔回滚：不留孤儿用户
+	var userCount int64
+	if _, err := e.engine.SQL("SELECT COUNT(1) FROM users WHERE username = ?", "a9-late-clock").
+		Get(&userCount); err != nil {
+		t.Fatalf("统计用户失败：%v", err)
+	}
+	if userCount != 0 {
+		t.Fatal("mark-used 被拒后整笔未回滚：留下了孤儿用户")
+	}
+	// 邀请未被消耗（过期条件命中 0 行，不该写 used_at/used_by）
+	var fresh model.Invite
+	if _, err := e.engine.ID(inv.Id).Get(&fresh); err != nil {
+		t.Fatalf("读邀请失败：%v", err)
+	}
+	if fresh.UsedAt != 0 || fresh.UsedBy != 0 {
+		t.Fatalf("被拒的兑换消耗了邀请：used_at=%d used_by=%d", fresh.UsedAt, fresh.UsedBy)
+	}
+	// 时钟确实被消费了两次以上：否则上面的"入口放行"可能只是猜的（防御性断言）
+	if calls < 2 {
+		t.Fatalf("注入时钟只被调用 %d 次，未覆盖入口判定与 mark-used 两处取时（用例前提失效）", calls)
 	}
 }
 
