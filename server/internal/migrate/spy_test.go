@@ -122,13 +122,26 @@ func newLatestSchemaStub(applied []int64) *schemaStub {
 		indexSQL: map[string]string{
 			// 0002：部分唯一索引（定义里必须带 WHERE）
 			"idx_member_unique": "CREATE UNIQUE INDEX idx_member_unique ON book_members(book_id, uid) WHERE deleted = 0",
+			"idx_invite_book":   "CREATE INDEX idx_invite_book ON invites(book_id, revoked)",
 			// 0003
 			"idx_tx_creator": "CREATE INDEX idx_tx_creator ON transactions(book_id, creator_uid, deleted, tx_time)",
 			// 0005：扩为含 op 列
 			"idx_idem_unique": "CREATE UNIQUE INDEX idx_idem_unique ON idempotency_records(book_id, uid, op, client_uuid)",
 			// 0001
-			"idx_tx_book_time":  "CREATE INDEX idx_tx_book_time ON transactions(book_id, tx_time)",
-			"idx_audit_book_at": "CREATE INDEX idx_audit_book_at ON audit_logs(book_id, at)",
+			"idx_users_email":      "CREATE UNIQUE INDEX idx_users_email ON users(email) WHERE email <> ''",
+			"idx_books_owner":      "CREATE INDEX idx_books_owner ON books(owner_uid, deleted)",
+			"idx_member_uid":       "CREATE INDEX idx_member_uid ON book_members(uid, deleted)",
+			"idx_accounts_book":    "CREATE INDEX idx_accounts_book ON accounts(book_id, deleted)",
+			"idx_categories_book":  "CREATE INDEX idx_categories_book ON categories(book_id, deleted)",
+			"idx_tx_book_time":     "CREATE INDEX idx_tx_book_time ON transactions(book_id, tx_time)",
+			"idx_tx_sync":          "CREATE INDEX idx_tx_sync ON transactions(book_id, sync_version)",
+			"idx_tx_related":       "CREATE INDEX idx_tx_related ON transactions(book_id, related_id)",
+			"idx_audit_book_at":    "CREATE INDEX idx_audit_book_at ON audit_logs(book_id, at)",
+			"idx_audit_entity":     "CREATE INDEX idx_audit_entity ON audit_logs(entity_type, entity_id)",
+			"idx_instr_book":       "CREATE INDEX idx_instr_book ON instruments(book_id, deleted)",
+			"idx_instr_price":      "CREATE INDEX idx_instr_price ON instrument_prices(instrument_id, price_time)",
+			"idx_holdings_account": "CREATE INDEX idx_holdings_account ON holdings(book_id, account_id, deleted)",
+			"idx_budget_book":      "CREATE INDEX idx_budget_book ON budgets(book_id, deleted)",
 		},
 	}
 	return s

@@ -40,22 +40,46 @@ type versionAssert struct {
 
 // versionAssertions 版本 → 结构断言。
 //
-// 维护约定：**新增含非幂等 DDL 的迁移时必须在这里登记**，
-// 守卫测试 TestR2NonIdempotentDDLHaveAssertions 会遍历内嵌脚本强制校验这一点。
+// 覆盖口径（V-1 整改后）：**机械全量**——每个版本创建的表、定义（或最后重定义）
+// 的索引、ALTER 增加的列，全部登记，不是抽样。守卫测试
+// TestAssertionCoversAllArtifacts 会从内嵌 .sql 重新解析出这份清单并逐项比对：
+// 断言表漏登记、或新脚本加了产物忘登记，都会红。
+//
+// 维护约定：**新增迁移必须同步登记断言**。
 var versionAssertions = map[int64]versionAssert{
 	1: {
 		tables: []string{
-			"users", "books", "book_members", "accounts", "categories",
+			"users", "books", "book_members", "book_versions", "accounts", "categories",
 			"transactions", "idempotency_records", "audit_logs",
+			"instruments", "instrument_prices", "holdings", "budgets",
+			"schema_migrations",
 		},
 		indexes: map[string]string{
-			"idx_tx_book_time":  "",
-			"idx_audit_book_at": "",
+			"idx_users_email":      "",
+			"idx_books_owner":      "",
+			"idx_member_uid":       "",
+			"idx_accounts_book":    "",
+			"idx_categories_book":  "",
+			"idx_tx_book_time":     "",
+			"idx_tx_sync":          "",
+			"idx_tx_related":       "",
+			"idx_audit_book_at":    "",
+			"idx_audit_entity":     "",
+			"idx_instr_book":       "",
+			"idx_instr_price":      "",
+			"idx_holdings_account": "",
+			"idx_budget_book":      "",
+			// idx_member_unique（v2 重定义为部分索引）与 idx_idem_unique（v5 重定义含 op）
+			// 归属【最后定义它们的版本】，见下方 2 / 5。
 		},
 	},
 	2: {
-		tables:  []string{"invites"},
-		indexes: map[string]string{"idx_member_unique": "where"}, // 0002 改成部分唯一索引
+		tables: []string{"invites"},
+		indexes: map[string]string{
+			// 0002 把 idx_member_unique 改成部分唯一索引——定义里必须带 WHERE
+			"idx_member_unique": "where",
+			"idx_invite_book":   "",
+		},
 	},
 	3: {
 		columns: map[string][]string{
