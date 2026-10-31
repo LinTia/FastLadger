@@ -107,11 +107,11 @@ func TestProbeCore3UpdatedAtOnDeleteRestore(t *testing.T) {
 	}
 }
 
-// ---------- 探针 26：父账户删除时，已软删的子账户会留下悬空 parent_id ----------
+// ---------- 探针 26：父账户删除后不得留下悬空 parent_id ----------
 //
-// 【GPT-C06 已修复】子账户引用检查现在覆盖**任何状态**（含已软删）：
-// 存在软删子账户时删除父账户必须返回 ErrAccountHasChildren——软删子账户日后恢复
-// 会带着悬空 parent_id，比活跃子账户更危险（恢复动作让悬空引用"复活"）。
+// 【GPT-C06 已修复（裁决方案一：解挂）】子账户引用检查只挡**活跃**子账户（R53 原口径）；
+// 删除父账户时同一事务内把墓碑子账户的 parent_id 置 0——既消除悬空引用，
+// 又保住删除出口（账户墓碑没有硬清入口，"任何状态都阻止"会让父账户永久不可删）。
 
 func TestProbeCore3ParentDeleteLeavesDanglingChild(t *testing.T) {
 	e := newTestEnv(t)
@@ -120,21 +120,21 @@ func TestProbeCore3ParentDeleteLeavesDanglingChild(t *testing.T) {
 	must(t, err)
 	child, err := as.Create(e.uid, e.bookID, AccountCreateInput{Name: "子账户", Category: model.CategoryCash, Currency: "CNY", ParentId: parent.Id})
 	must(t, err)
-	// 先把子账户软删（旧实现只数 deleted=0 的子账户，父账户会被放行）
-	if _, err := e.engine.Exec("UPDATE accounts SET deleted = 1, deleted_at = ? WHERE id = ?",
-		time.Now().Unix(), child.Id); err != nil {
-		t.Fatal(err)
+	// 先把子账户软删（正式入口，留下墓碑）
+	if _, err := as.Delete(e.uid, e.bookID, child.Id); err != nil {
+		t.Fatalf("软删子账户失败：%v", err)
 	}
-	if _, err := as.Delete(e.uid, e.bookID, parent.Id); !errors.Is(err, ErrAccountHasChildren) {
-		t.Fatalf("GPT-C06：存在已软删子账户时删除父账户应 ErrAccountHasChildren，实际 %v", err)
+	// 父账户可删（墓被子账户被解挂，不再构成悬空）
+	if _, err := as.Delete(e.uid, e.bookID, parent.Id); err != nil {
+		t.Fatalf("GPT-C06（方案一）：软删子账户后父账户应可删除，实际 %v", err)
 	}
-	var cnt int64
+	var pid int64
 	if _, err := e.engine.SQL(
-		"SELECT COUNT(1) FROM accounts WHERE parent_id = ? AND id = ?", parent.Id, child.Id).Get(&cnt); err != nil {
+		"SELECT parent_id FROM accounts WHERE parent_id = ? AND id = ?", parent.Id, child.Id).Get(&pid); err != nil {
 		t.Fatal(err)
 	}
-	if cnt != 1 {
-		t.Fatalf("GPT-C06：删除被拒后子账户的 parent_id 引用必须保持完整（child 仍存在），实际 count=%d", cnt)
+	if pid != 0 {
+		t.Errorf("GPT-C06（方案一）：父账户删除后墓碑子账户仍带 parent_id=%d —— 悬空引用未消除", pid)
 	}
 }
 

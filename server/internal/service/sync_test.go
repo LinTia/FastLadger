@@ -104,6 +104,7 @@ func TestPushStatusOfMapping(t *testing.T) {
 		{"并发冲突", ErrConcurrentConflict, PushStatusConflict, ErrCodeConcurrentConflict},
 		{"账户不存在", ErrAccountNotFound, PushStatusInvalid, ErrCodeAccountNotFound},
 		{"分类不存在", ErrCategoryNotFound, PushStatusInvalid, ErrCodeCategoryNotFound},
+		{"交易不存在", ErrTransactionNotFound, PushStatusInvalid, ErrCodeInvalidRequest},
 		{"请求非法", ErrInvalidCreate, PushStatusInvalid, ErrCodeInvalidRequest},
 		{"参数非法", ErrInvalidArgument, PushStatusInvalid, ErrCodeInvalidRequest},
 		{"未预期错误", errors.New("boom"), PushStatusError, ErrCodeInternal},

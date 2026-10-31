@@ -473,6 +473,12 @@ func pushStatusOf(err error) (status, code, message string) {
 		return PushStatusInvalid, ErrCodeAccountNotFound, "账户不存在"
 	case errors.Is(err, ErrCategoryNotFound):
 		return PushStatusInvalid, ErrCodeCategoryNotFound, "分类不存在"
+	// GPT-C01 配套防患：交易不存在（如幂等重放的终态校验 404、目标已被硬清）属于
+	// "目标不存在"，重试永远无意义，必须归 invalid 让离线队列作废该条，而不是落
+	// default 的"可重试"话术诱导无限重试。当前 Push 只走 Create（不会产生该错误），
+	// 但 Delete/Restore 若未来接入离线补传，这里就是防线。
+	case errors.Is(err, ErrTransactionNotFound):
+		return PushStatusInvalid, ErrCodeInvalidRequest, "目标交易不存在（可能已被硬清），该条应作废而不是重试"
 	case errors.Is(err, ErrInvalidCreate), errors.Is(err, ErrInvalidArgument):
 		return PushStatusInvalid, ErrCodeInvalidRequest, "该条命令非法（请检查 clientUuid/金额/账户/分类）"
 	default:

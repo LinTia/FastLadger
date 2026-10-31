@@ -245,21 +245,37 @@ func (s *AccountService) Delete(uid, bookID, accountID int64) (int64, error) {
 	if err := ensureAccountInBook(sess, bookID, accountID); err != nil {
 		return 0, err
 	}
-	// GPT-R53：仍有子账户引用本账户的 parent_id 时显式拒绝。
+	// GPT-R53：仍有【活跃】子账户引用本账户的 parent_id 时显式拒绝。
 	// 与 R47（parent_id 环路）不同：这里不是"能不能指向"，而是"被指向的一方能不能消失"。
 	// 与 R31（交易引用账户）也不同：这里是账户树内部的父子引用。
 	//
-	// GPT-C06：检查必须覆盖**任何状态**的子账户（含已软删）。旧实现带 `deleted = 0`，
-	// 于是"先删子账户、再删父账户"可以成功——软删的子账户日后被恢复时会带着悬空的
-	// parent_id，层级组装直接产出孤儿；比活跃子账户更危险（恢复动作让悬空引用"复活"）。
+	// GPT-C06（裁决修订，方案一）：检查只挡**活跃**子账户。墓碑子账户不再阻止删除，
+	// 因为下一行的解挂会消除它们悬空的 parent_id——旧版"任何状态都阻止"的口径
+	// 在生产上不可用：账户墓碑没有硬清入口（PurgeExpired* 只动 transactions /
+	// audit_logs），软删一个子账户会让其父账户**永久**不可删，删除出口被堵死。
 	var children int64
 	if _, err := sess.SQL(
-		`SELECT COUNT(1) FROM accounts WHERE book_id = ? AND parent_id = ?`,
+		`SELECT COUNT(1) FROM accounts WHERE book_id = ? AND parent_id = ? AND deleted = 0`,
 		bookID, accountID).Get(&children); err != nil {
 		return 0, err
 	}
 	if children > 0 {
 		return 0, ErrAccountHasChildren
+	}
+	// GPT-C06（方案一）：删除父账户的同一事务内，把引用它的墓碑子账户 parent_id 置 0。
+	// 此刻能引用它的只剩墓碑（活跃子账户已被上一条检查挡住），置 0 后：
+	//   - 墓碑子账户日后不存在"恢复"入口（无恢复接口），即使出现悬空引用也不再产生；
+	//   - 删除出口恢复畅通。
+	//
+	// 刻意【不】递增这些墓碑行的 sync_version：它们对客户端已是"已删除"态
+	// （墓碑的职责只是让客户端学到删除，parent_id 属于内部整理细节，不影响该职责），
+	// 推进版本会触发所有在线端一次无意义的 pull；且这些行不参与回收站 TTL 硬清
+	// （PurgeExpired* 只动 transactions / audit_logs），改版本号也不会带来清理收益。
+	// 若未来引入"账户恢复"能力，必须同步给墓碑解挂补版本推进——见 zz_c_verify 探针。
+	if _, err := sess.Exec(
+		`UPDATE accounts SET parent_id = 0 WHERE book_id = ? AND parent_id = ? AND deleted = 1`,
+		bookID, accountID); err != nil {
+		return 0, fmt.Errorf("解挂墓碑子账户的 parent_id 失败：%w", err)
 	}
 	// GPT-R31：引用检查必须覆盖【软删除】的交易。
 	//

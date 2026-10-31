@@ -52,8 +52,10 @@ func mapSvcErr(c *gin.Context, err error) {
 		// WBS 4.5：目标已删 → 409 ENTITY_DELETED，绝不静默复活
 		fail(c, http.StatusConflict, "目标已被删除，无法对该数据进行操作")
 	case errors.Is(err, service.ErrTxDirectionMissing):
-		// 失败关闭：宁可报错也不静默算错余额
-		fail(c, http.StatusConflict, "该转账记录缺少方向标记，无法删除或恢复，请联系实例管理员修复数据")
+		// 失败关闭：宁可报错也不静默算错余额。
+		// GPT-C02 后该错误既覆盖"转账缺方向"也覆盖"单笔被污染方向"，
+		// 文案必须中性，不得暗示一定是转账。
+		fail(c, http.StatusConflict, "该交易记录的方向标记异常，无法删除或恢复，请联系实例管理员修复数据")
 	case errors.Is(err, service.ErrTransferGroupIncomplete):
 		// GPT-R26：转账配对损坏 → 整笔拒绝，绝不退化成单边操作
 		fail(c, http.StatusConflict, "该转账记录配对不完整，无法整笔删除或恢复，请联系实例管理员修复数据")

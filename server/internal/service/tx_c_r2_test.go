@@ -303,11 +303,13 @@ func TestC05PagingOffsetBoundary(t *testing.T) {
 	}
 }
 
-// ---------- C06 软删子账户阻止父账户删除 ----------
+// ---------- C06 墓碑子账户解挂（裁决方案一） ----------
 
-// TestC06ParentDeleteBlockedByAnyStateChild 全生命周期：
-// 活跃子账户阻止删除（R53）→ 软删子账户同样阻止（C06）→ 子账户硬清后父账户放行。
-func TestC06ParentDeleteBlockedByAnyStateChild(t *testing.T) {
+// TestC06ParentDeleteUnlinksTombstoneChildren 全生命周期（裁决修订语义）：
+// 活跃子账户阻止删除（R53 不变量）→ 软删子账户后父账户可删（墓碑无硬清入口，
+// 不能永久堵死删除出口），且同一事务内墓碑子账户的 parent_id 被置 0（无悬空引用）、
+// sync_version 不推进（墓碑对客户端已是已删态，无需通知）。
+func TestC06ParentDeleteUnlinksTombstoneChildren(t *testing.T) {
 	e := newTestEnv(t)
 	as := NewAccountService(e.engine, version.NewRepo())
 	parent, err := as.Create(e.uid, e.bookID, AccountCreateInput{Name: "C06父", Category: model.CategoryCash, Currency: "CNY"})
@@ -315,21 +317,40 @@ func TestC06ParentDeleteBlockedByAnyStateChild(t *testing.T) {
 	child, err := as.Create(e.uid, e.bookID, AccountCreateInput{Name: "C06子", Category: model.CategoryCash, Currency: "CNY", ParentId: parent.Id})
 	must(t, err)
 
+	// R53 不变量：活跃子账户阻止删除
 	if _, err := as.Delete(e.uid, e.bookID, parent.Id); !errors.Is(err, ErrAccountHasChildren) {
-		t.Errorf("[R53 前置] 活跃子账户应阻止删除，实际 %v", err)
+		t.Fatalf("[R53] 活跃子账户应阻止删除，实际 %v", err)
 	}
-	if _, err := e.engine.Exec("UPDATE accounts SET deleted = 1, deleted_at = ? WHERE id = ?",
-		time.Now().Unix(), child.Id); err != nil {
+	// 软删子账户（正式入口），记录其墓碑版本
+	if _, err := as.Delete(e.uid, e.bookID, child.Id); err != nil {
+		t.Fatalf("软删子账户失败：%v", err)
+	}
+	var childVer int64
+	if _, err := e.engine.SQL("SELECT sync_version FROM accounts WHERE id = ?", child.Id).Get(&childVer); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := as.Delete(e.uid, e.bookID, parent.Id); !errors.Is(err, ErrAccountHasChildren) {
-		t.Fatalf("GPT-C06：已软删子账户也应阻止删除（恢复时会带悬空 parent_id），实际 %v", err)
-	}
-	// 子账户被硬清（回收站过期清除的等价态）后，父账户才可删
-	if _, err := e.engine.Exec("DELETE FROM accounts WHERE id = ?", child.Id); err != nil {
-		t.Fatal(err)
-	}
+	// 父账户可删（C06 方案一：解挂而非阻止）
 	if _, err := as.Delete(e.uid, e.bookID, parent.Id); err != nil {
-		t.Errorf("子账户硬清后父账户应可删除，实际 %v", err)
+		t.Fatalf("GPT-C06（方案一）：软删子账户后父账户应可删除，实际 %v", err)
+	}
+	// 墓碑子账户 parent_id 已置 0：无悬空引用
+	var pid int64
+	if _, err := e.engine.SQL("SELECT parent_id FROM accounts WHERE id = ?", child.Id).Get(&pid); err != nil {
+		t.Fatal(err)
+	}
+	if pid != 0 {
+		t.Errorf("GPT-C06（方案一）：父账户删除后墓碑子账户 parent_id 应为 0，实际 %d", pid)
+	}
+	// 解挂不推进墓碑行的 sync_version（对客户端已是已删态，无需通知）
+	var verAfter int64
+	if _, err := e.engine.SQL("SELECT sync_version FROM accounts WHERE id = ?", child.Id).Get(&verAfter); err != nil {
+		t.Fatal(err)
+	}
+	if verAfter != childVer {
+		t.Errorf("GPT-C06（方案一）：解挂墓碑子账户不得推进 sync_version：%d → %d", childVer, verAfter)
+	}
+	// 无法再向已删父账户挂新子账户（不产生新悬空引用）
+	if _, err := as.Create(e.uid, e.bookID, AccountCreateInput{Name: "C06子3", Category: model.CategoryCash, Currency: "CNY", ParentId: parent.Id}); !errors.Is(err, ErrAccountNotFound) {
+		t.Errorf("向已删除的父账户挂新子账户应被拒，实际 %v", err)
 	}
 }
