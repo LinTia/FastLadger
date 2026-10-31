@@ -316,75 +316,186 @@ const (
 	stage3PolarityNegated
 )
 
-// stage3FlagRefs 统计条件表达式里对目标标志的引用次数，按"一元取反的奇偶深度"分类。
+// stage3BoolLiteral 识别布尔字面量（`true` / `false` 在 AST 里是 universe 作用域的 Ident）。
+func stage3BoolLiteral(e ast.Expr) (val bool, ok bool) {
+	id, isIdent := e.(*ast.Ident)
+	if !isIdent {
+		return false, false
+	}
+	switch id.Name {
+	case "true":
+		return true, true
+	case "false":
+		return false, true
+	}
+	return false, false
+}
+
+// stage3CondInfo 一条 if 条件相对目标标志的分析结果。
 //
-// 为什么要按奇偶而不是"出现过 ! 就算取反"：
-//   - `!!replayed` 与 `replayed` 语义等价，若按"出现 ! 即取反"判定，作者可以用双重否定
-//     把裸引用伪装成取反（旧守卫只能靠行为级测试兜住）；
-//   - 把 `!replayed` 手写成 `replayed || !replayed` 之后，条件恒为真，等于"无条件广播"，
-//     而旧守卫只检查"条件里出现过这个标识符"，照样通过。
+// 命名与初版 stage3FlagRefs 的区别：初版只回答"出现过几次、极性如何"，
+// 因此漏掉了两类**与极性无关**的绕过（reviewer-authz 的 ZZP-5 / ZZP-6）：
 //
-// 选择器（res.VisibilityChanged）与裸标识符（changed）都要计入，且**不**重复计数：
-// 前者只匹配 Sel，后者由 Ident 分支处理。
-func stage3FlagRefs(expr ast.Expr, condIdent string) (positive, negated int) {
-	count := func(depth int) {
+//	if flag || true   { notify() }  // 恒真：多一处正向引用，极性仍"一致" → 旧版放行
+//	if unchanged      { notify() }  // 名字里含 changed：子串匹配命中 → 旧版放行
+//
+// 现在除了正/负引用计数，还要回答两个支配性问题：
+//   - viaOr：标志是否出现在 `||` 的一侧。`flag || X` 在 flag 为假时仍可成立，
+//     分支因此**不受 flag 支配**（调用可能在标志不成立时发生）；
+//   - deadFalse：条件里是否有"与常量 false 相与"的分支（flag && false）。
+//     那条件恒假、分支永不执行，把它当成"受条件保护"等于承认一段死代码满足了不变量。
+type stage3CondInfo struct {
+	positive  int
+	negated   int
+	viaOr     bool
+	deadFalse bool
+}
+
+// refs 条件里对目标标志的引用总数。
+func (i stage3CondInfo) refs() int { return i.positive + i.negated }
+
+// governs 报告条件是否真的由标志支配（want 指定期望极性）。
+func (i stage3CondInfo) governs(want stage3FlagPolarity) bool {
+	if i.viaOr || i.deadFalse {
+		return false
+	}
+	// 极性混杂（既裸引用又取反）= 条件被写成恒真，拒绝
+	if i.positive > 0 && i.negated > 0 {
+		return false
+	}
+	switch want {
+	case stage3PolarityPositive:
+		return i.positive > 0 && i.negated == 0
+	case stage3PolarityNegated:
+		return i.negated > 0 && i.positive == 0
+	default:
+		return i.refs() > 0
+	}
+}
+
+// stage3AnalyzeCond 分析 if 条件是否真的由目标标志支配，取反按**一元 `!` 的奇偶深度**判定。
+//
+// 为什么必须按奇偶：`!!x` 与 `x` 语义等价，若按"出现过 ! 就算取反"，作者可以用双重否定
+// 把裸引用伪装成取反；而 `!x` 手写成 `x || !x` 之后条件恒真、等于无条件执行，
+// 旧守卫（只问"条件里出现过这个标识符吗"）照样通过。
+//
+// 标识符匹配一律**全等**（Ident.Name == condIdent / Selector.Sel.Name == condIdent），
+// 绝不用子串：否则 `unchanged` 会被当成对 `changed` 的引用、`inviteUsableCondWeak`
+// 会被当成 `inviteUsableCond`——名字里恰好含目标名字的无关变量就能骗过守卫。
+//
+// 布尔字面量的处理（恒等式必须化简掉，否则"恒真/恒假"会漏过去）：
+//   - `A && false`：条件恒假 → deadFalse；
+//   - `A || B`：两侧都可能单独成立 → viaOr（标志落在这里即不受支配）；
+//   - `x == true` / `x != false`：等价 x，深度不变；
+//     `x == false` / `x != true`：等价 !x，深度 +1（仍按支配关系处理）。
+func stage3AnalyzeCond(expr ast.Expr, condIdent string) stage3CondInfo {
+	var info stage3CondInfo
+	count := func(depth int, viaOr bool) {
+		if viaOr {
+			info.viaOr = true
+		}
 		if depth%2 == 1 {
-			negated++
+			info.negated++
 		} else {
-			positive++
+			info.positive++
 		}
 	}
-	var walk func(e ast.Expr, depth int)
-	walk = func(e ast.Expr, depth int) {
+	var walk func(e ast.Expr, depth int, viaOr bool)
+	walk = func(e ast.Expr, depth int, viaOr bool) {
 		switch n := e.(type) {
 		case nil:
 			return
 		case *ast.ParenExpr:
-			walk(n.X, depth)
+			walk(n.X, depth, viaOr)
 		case *ast.UnaryExpr:
+			d := depth
 			if n.Op == token.NOT {
-				walk(n.X, depth+1) // 取反深度 +1：!!x 回到偶数（等价裸引用）
-				return
+				d++ // 取反深度 +1：!!x 回到偶数（等价裸引用）
 			}
-			walk(n.X, depth)
+			walk(n.X, d, viaOr)
 		case *ast.StarExpr:
-			walk(n.X, depth)
+			walk(n.X, depth, viaOr)
 		case *ast.BinaryExpr:
-			walk(n.X, depth)
-			walk(n.Y, depth)
-		case *ast.SelectorExpr:
-			if strings.Contains(n.Sel.Name, condIdent) {
-				count(depth)
+			switch n.Op {
+			case token.LAND:
+				// 与常量 false 相与 = 恒假：分支永不执行，不能算"受条件保护"
+				if v, ok := stage3BoolLiteral(n.X); ok && !v {
+					info.deadFalse = true
+				}
+				if v, ok := stage3BoolLiteral(n.Y); ok && !v {
+					info.deadFalse = true
+				}
+				walk(n.X, depth, viaOr)
+				walk(n.Y, depth, viaOr)
+			case token.LOR:
+				// 任一侧成立即进入分支：标志落在这里就不再"支配"分支
+				walk(n.X, depth, true)
+				walk(n.Y, depth, true)
+			case token.EQL, token.NEQ:
+				// 与布尔字面量比较：x == false / x != true 等价 !x，其余等价 x
+				if lit, other, ok := stage3BoolCompare(n); ok {
+					d := depth
+					if lit != (n.Op == token.EQL) {
+						d++
+					}
+					walk(other, d, viaOr)
+					return
+				}
+				// 其他比较（数值/结构比较）：标志被当作操作数而非布尔判定，不构成支配
+				walk(n.X, depth, true)
+				walk(n.Y, depth, true)
+			default:
+				walk(n.X, depth, true)
+				walk(n.Y, depth, true)
 			}
-			walk(n.X, depth)
+		case *ast.SelectorExpr:
+			if n.Sel.Name == condIdent {
+				count(depth, viaOr)
+			}
+			walk(n.X, depth, viaOr)
 		case *ast.CallExpr:
-			walk(n.Fun, depth)
+			// 调用结果不等于标志本身：里面的引用不构成布尔支配
+			walk(n.Fun, depth, true)
 			for _, a := range n.Args {
-				walk(a, depth)
+				walk(a, depth, true)
 			}
 		case *ast.IndexExpr:
-			walk(n.X, depth)
-			walk(n.Index, depth)
+			walk(n.X, depth, true)
+			walk(n.Index, depth, true)
 		case *ast.Ident:
-			if strings.Contains(n.Name, condIdent) {
-				count(depth)
+			if n.Name == condIdent {
+				count(depth, viaOr)
 			}
 		}
 	}
-	walk(expr, 0)
-	return positive, negated
+	walk(expr, 0, false)
+	return info
 }
 
-// stage3CallInsideIfReferencing 断言 callee 的调用位于"条件里引用了 condIdent 的 if 分支"内。
+// stage3BoolCompare 拆出 `x == <bool字面量>` 形态；返回字面量值、另一侧表达式。
+func stage3BoolCompare(be *ast.BinaryExpr) (lit bool, other ast.Expr, ok bool) {
+	if v, isLit := stage3BoolLiteral(be.Y); isLit {
+		return v, be.X, true
+	}
+	if v, isLit := stage3BoolLiteral(be.X); isLit {
+		return v, be.Y, true
+	}
+	return false, nil, false
+}
+
+// stage3CallInsideIfReferencing 断言 callee 的调用位于"**由 condIdent 支配**的 if 分支"内。
 //
-// 加固（审计域微项）：旧实现只做 `strings.Contains(id.Name, condIdent)` 的"出现过吗"检查，
-// 有两个可编译的绕过口子：
+// 硬化的历史（两轮）：
 //
-//	if replayed || !replayed { notify(...) }  // 极性被抹平 → 条件恒真 = 无条件广播
-//	if !!replayed { notify(...) }             // 双重否定 → 语义是裸引用，却伪装成"取反"
+//	第一轮：旧实现只做 `strings.Contains(id.Name, condIdent)` 的"出现过吗"检查，
+//	       `if replayed || !replayed`（极性被抹平、条件恒真）与 `if !!replayed`
+//	       （双重否定语义等于裸引用）都能通过。
+//	第二轮（reviewer-authz ZZP-5/6）：极性奇偶只能识别 `!x` 形态，仍漏两类：
+//	       `if flag || true` / `if flag && false`（常量恒等式）与
+//	       `if unchanged`（子串匹配把无关变量算成目标标志）。
 //
-// 现在要求：条件里对该标志的引用**极性一致**（不能既裸又取反），取反按一元 `!` 的
-// **奇偶深度**判定。极性混杂直接判失败——它只可能来自手写笔误或刻意绕过。
+// 现在的口径：引用必须**由标志支配**——出现在 `||` 一侧的不算（标志为假时分支仍可成立），
+// 与常量 false 相与的不算（恒假 = 死代码），标识符一律全等匹配，极性按奇偶一致。
 //
 // 需要更强口径（必须正向 / 必须取反）的调用方用 stage3CallInsideIfPolarity。
 func stage3CallInsideIfReferencing(fn *ast.FuncDecl, condIdent, callee string) bool {
@@ -402,24 +513,8 @@ func stage3CallInsideIfPolarity(fn *ast.FuncDecl, condIdent, callee string, want
 		if !ok || ifs.Body == nil {
 			return true
 		}
-		positive, negated := stage3FlagRefs(ifs.Cond, condIdent)
-		if positive+negated == 0 {
-			return true // 本 if 与目标标志无关
-		}
-		switch want {
-		case stage3PolarityConsistent:
-			// 极性混杂（既裸又取反）= 条件被写成恒真/恒假：拒绝
-			if positive > 0 && negated > 0 {
-				return true
-			}
-		case stage3PolarityPositive:
-			if positive == 0 || negated > 0 {
-				return true
-			}
-		case stage3PolarityNegated:
-			if negated == 0 || positive > 0 {
-				return true
-			}
+		if !stage3AnalyzeCond(ifs.Cond, condIdent).governs(want) {
+			return true // 本 if 不构成"由目标标志支配"的分支
 		}
 		ast.Inspect(ifs.Body, func(b ast.Node) bool {
 			call, isCall := b.(*ast.CallExpr)
@@ -464,7 +559,12 @@ func stage3ParseSnippet(t *testing.T, body string) *ast.FuncDecl {
 	return nil
 }
 
-// TestStage3GuardRejectsMixedPolarity 守卫自身的突变测试：三种绕过写法必须被拒绝。
+// TestStage3GuardRejectsMixedPolarity 守卫自身的突变测试：已知的绕过写法必须被拒绝。
+//
+// 分七组（第二轮加固后补齐 reviewer-authz 报的两类新绕过）：
+// ① 基准写法必须通过；② 极性混杂；③ 双重否定按奇偶归正向；④ 真取反；
+// ⑤ 分支外的调用；⑥ 常量恒等式（条件恒真/恒假）；⑦ 子串/名字相近的标识符；
+// ⑧ 化简：`!(true && flag)` 仍应判为取反（防"为挡恒等式而误伤合法写法"）。
 func TestStage3GuardRejectsMixedPolarity(t *testing.T) {
 	// ① 基准：正常写法必须通过
 	ok := stage3ParseSnippet(t, "\tif flag {\n\t\tnotify()\n\t}")
@@ -500,6 +600,37 @@ func TestStage3GuardRejectsMixedPolarity(t *testing.T) {
 	outside := stage3ParseSnippet(t, "\tif flag {\n\t\tother()\n\t}\n\tnotify()")
 	if stage3CallInsideIfReferencing(outside, "flag", "notify") {
 		t.Fatal("守卫把「条件分支之外」的调用误判为分支内调用")
+	}
+
+	// ⑥ 常量恒等式（reviewer-authz ZZP-5）：极性一致但条件恒真/恒假，等于不受支配
+	for _, body := range []string{
+		"\tif flag || true {\n\t\tnotify()\n\t}",  // 恒真 = 无条件执行
+		"\tif true || flag {\n\t\tnotify()\n\t}",  // 同上（字面量在左）
+		"\tif true || !flag {\n\t\tnotify()\n\t}", // 同上（取反形态）
+		"\tif flag && false {\n\t\tnotify()\n\t}", // 恒假 = 分支根本不执行（死代码不算保护）
+	} {
+		if stage3CallInsideIfReferencing(stage3ParseSnippet(t, body), "flag", "notify") {
+			t.Fatalf("守卫被常量恒等式骗过：%q —— 条件恒真/恒假时调用并不受 flag 支配", body)
+		}
+	}
+
+	// ⑦ 子串匹配（reviewer-authz ZZP-6）：名字里含目标标志的无关变量不得命中
+	if stage3CallInsideIfReferencing(
+		stage3ParseSnippet(t, "\tif unchanged {\n\t\tnotify()\n\t}"), "changed", "notify") {
+		t.Fatal("守卫把 `if unchanged` 当成对 `changed` 的引用：标识符必须全等匹配")
+	}
+	// 选择器同理：`res.NotChanged` 不是 `res.Changed`
+	if stage3CallInsideIfReferencing(
+		stage3ParseSnippet(t, "\tif res.NotChanged {\n\t\tnotify()\n\t}"), "Changed", "notify") {
+		t.Fatal("守卫把 `res.NotChanged` 当成 `Changed` 的引用：Selector 的 Sel 必须全等匹配")
+	}
+
+	// ⑧ 化简而非一刀切禁字面量：`!(true && flag)` 等价 `!flag`，必须仍判为取反
+	//    （如果为了挡恒等式而无条件拒绝"条件里出现字面量"，这条就会误报）
+	if !stage3CallInsideIfPolarity(
+		stage3ParseSnippet(t, "\tif !(true && flag) {\n\t\tnotify()\n\t}"),
+		"flag", "notify", stage3PolarityNegated) {
+		t.Fatal("`if !(true && flag)` 等价 !flag，应判为取反引用")
 	}
 }
 
