@@ -135,22 +135,13 @@ func TestR38ParseVersionRejectsBadFilename(t *testing.T) {
 	}
 }
 
-// appliedVersionsHandler 预设：表存在 + 已应用版本集合
+// appliedVersionsHandler 预设：表存在 + 已应用版本集合 + 最新结构。
+//
+// INFRA-03 之后 Check 还会对已应用版本跑只读结构断言，因此替身必须能回答
+// PRAGMA / sqlite_master 的结构查询——交给 schemaStub（人工抄录自真实迁移脚本，
+// 与断言表互相独立，避免循环论证）。
 func appliedVersionsHandler(applied []int64) func(string, []driver.Value) (*queryResult, error) {
-	return func(query string, _ []driver.Value) (*queryResult, error) {
-		q := strings.ToUpper(query)
-		switch {
-		case strings.Contains(q, "SQLITE_MASTER"):
-			return &queryResult{cols: []string{"n"}, rows: []row{{int64(1)}}}, nil
-		case strings.Contains(q, "SELECT VERSION FROM SCHEMA_MIGRATIONS"):
-			rows := make([]row, 0, len(applied))
-			for _, v := range applied {
-				rows = append(rows, row{v})
-			}
-			return &queryResult{cols: []string{"version"}, rows: rows}, nil
-		}
-		return nil, nil
-	}
+	return newLatestSchemaStub(applied).handler()
 }
 
 // TestR38CheckRejectsGapEvenWhenMaxMatches 【关键】MAX 与期望值相同、中间缺版本时仍须报错。

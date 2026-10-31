@@ -32,9 +32,9 @@ const versionTableName = "schema_migrations"
 
 // ErrDuplicateVersion 迁移脚本版本号重复（GPT-R38）。
 //
-// 两个脚本抢同一个版本号时，Apply 会先写入其中一个，另一个随即被 isApplied
-// 判定为"已应用"而【静默跳过】——它的 SQL 永远不执行，而 schema_migrations
-// 看起来一切正常。这类故障只会在业务上真正用到那张表时才爆发，必须在启动期拒。
+// 两个脚本抢同一个版本号时，后一个会被"已应用集合"判定为已处理而静默跳过——
+// 它的 SQL 永远不执行，而 schema_migrations 看起来一切正常。这类故障只在
+// 业务上真正用到那张表时才爆发，必须在启动期拒。
 var ErrDuplicateVersion = errors.New("迁移脚本版本号重复")
 
 // ErrVersionMismatch 已应用版本集合与本地预期集合不一致（GPT-R38）。
@@ -43,6 +43,29 @@ var ErrDuplicateVersion = errors.New("迁移脚本版本号重复")
 //   - 缺失中间版本（缺口）时 MAX 可能仍然等于期望值，看起来"已迁移"；
 //   - 库里存在本地脚本没有的版本（降级运行、脚本被误删）时 MAX 也看不出来。
 var ErrVersionMismatch = errors.New("已应用版本集合与本地迁移脚本不一致")
+
+// VersionMismatchError 版本集合不一致的【结构化】错误（INFRA-02）。
+//
+// 带上缺失/未知明细，是为了让调用方（CLI/启动）能给出**可行动**的处置指引，
+// 而不是让运维对着一串版本号猜。errors.Is(err, ErrVersionMismatch) 仍然成立。
+type VersionMismatchError struct {
+	// Missing 本地脚本有、库里没有（版本缺口）
+	Missing []int64
+	// Unknown 库里有、本地脚本没有（降级运行 / 脚本被删）
+	Unknown []int64
+	// Local / Applied 两边的完整版本集合（诊断用）
+	Local   []int64
+	Applied []int64
+}
+
+// Error 实现 error
+func (e *VersionMismatchError) Error() string {
+	return fmt.Sprintf("%s：缺失版本=%v，未知版本=%v（本地脚本=%v，已应用=%v）",
+		ErrVersionMismatch, e.Missing, e.Unknown, e.Local, e.Applied)
+}
+
+// Is 使 errors.Is(err, ErrVersionMismatch) 对本类型成立
+func (e *VersionMismatchError) Is(target error) bool { return target == ErrVersionMismatch }
 
 // ErrNotMigrated 数据库尚未迁移：schema_migrations 表不存在。
 //
@@ -99,8 +122,16 @@ func checkDB(db *sql.DB) (*Status, error) {
 	// GPT-R38：对照【整个版本集合】，而不是只看 MAX(version)
 	missing, unknown := diffVersions(versionsOf(ms), applied)
 	if len(missing) > 0 || len(unknown) > 0 {
-		return nil, fmt.Errorf("%w：缺失版本=%v，未知版本=%v（本地脚本=%v，已应用=%v）",
-			ErrVersionMismatch, missing, unknown, versionsOf(ms), applied)
+		return nil, &VersionMismatchError{
+			Missing: missing, Unknown: unknown,
+			Local: versionsOf(ms), Applied: applied,
+		}
+	}
+	// INFRA-03：版本号对上了还不够——"登记了版本但结构缺失"（只登记未执行、
+	// 结构被手工改动等）的库同样会假 OK 启动。对登记了断言的版本逐一只读核验。
+	if err := verifyAssertions(db, applied); err != nil {
+		return nil, fmt.Errorf("%w：%v（请恢复数据库备份或重建，勿手工增删 %s 的版本记录）",
+			ErrVersionMismatch, err, versionTableName)
 	}
 	current := int64(0)
 	for _, v := range applied {
@@ -126,8 +157,19 @@ func versionTableExists(db *sql.DB) (bool, error) {
 	return n > 0, nil
 }
 
-// Apply 应用所有未执行的迁移，返回本次应用的个数。CLI 调用。
+// insertVersionSQL 登记版本（正常路径与"版本记录缺口自愈"共用同一句 SQL）
+const insertVersionSQL = `INSERT INTO ` + versionTableName +
+	`(version, name, applied_at) VALUES (?, ?, strftime('%s','now'))`
+
+// Apply 应用所有未执行的迁移，返回本次推进的版本个数。CLI 调用。
+//
+// INFRA-02：对"版本记录缺口"自愈——某版本执行失败、但其全部结构产物经只读断言
+// 确认已在（即迁移实际执行过、只是版本记录丢了），则补登记后继续推进；
+// 断言不通过则原样报错（绝不把真实的迁移失败美化成自愈）。
 func Apply(engine *xorm.Engine) (int, error) {
+	if engine == nil {
+		return 0, fmt.Errorf("migrate.Apply：engine 缺失")
+	}
 	db := engine.DB().DB
 	if err := ensureVersionTable(db); err != nil {
 		return 0, err
@@ -136,25 +178,57 @@ func Apply(engine *xorm.Engine) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	applied := 0
+	applied, err := appliedVersions(db)
+	if err != nil {
+		return 0, err
+	}
+	// INFRA-02：库里有本地没有的版本 = 降级运行。此时缺的版本补不进去
+	// （Check 永远不会 OK），静默返回 n=0 只会让运维误以为迁移"成功"了。
+	if _, unknown := diffVersions(versionsOf(ms), applied); len(unknown) > 0 {
+		return 0, fmt.Errorf("%w：库中存在本地没有的版本 %v——数据库可能比程序新（降级运行）。"+
+			"`db migrate` 无法修复此状态：请升级程序版本，或恢复与程序匹配的数据库备份",
+			ErrVersionMismatch, unknown)
+	}
+	done := make(map[int64]bool, len(applied))
+	for _, v := range applied {
+		done[v] = true
+	}
+	count := 0
 	for _, m := range ms {
-		done, err := isApplied(db, m.version)
-		if err != nil {
-			return applied, err
-		}
-		if done {
+		if done[m.version] {
 			continue
 		}
 		content, err := migrationFS.ReadFile(path.Join(migrationsDir, m.filename))
 		if err != nil {
-			return applied, err
+			return count, err
 		}
 		if err := execInTx(db, m.version, m.filename, string(content)); err != nil {
-			return applied, err
+			// INFRA-02：区分"版本记录缺口"与"真实的迁移失败"。
+			// 只有断言确认产物齐全才允许自愈；否则缺口与坏脚本就会变得无法区分。
+			if _, has := versionAssertions[m.version]; has {
+				if verr := verifyVersion(db, m.version); verr == nil {
+					if rerr := recordVersion(db, m.version, m.filename); rerr != nil {
+						return count, fmt.Errorf("迁移 %s 疑似版本记录缺口（结构已存在），但补登记失败：%w",
+							m.filename, rerr)
+					}
+					// 结构早已在库、这里只是把账补上，计入"本次推进的版本数"
+					count++
+					continue
+				}
+			}
+			return count, err
 		}
-		applied++
+		count++
 	}
-	return applied, nil
+	return count, nil
+}
+
+// recordVersion 把版本写入 schema_migrations（不含迁移脚本本身——那只用于缺口自愈）
+func recordVersion(db *sql.DB, version int64, name string) error {
+	if _, err := db.Exec(insertVersionSQL, version, name); err != nil {
+		return fmt.Errorf("登记版本 %d（%s）失败：%w", version, name, err)
+	}
+	return nil
 }
 
 // execInTx 单个迁移在事务内执行，任一语句失败即整体回滚
@@ -167,9 +241,7 @@ func execInTx(db *sql.DB, version int64, name, script string) error {
 		_ = tx.Rollback()
 		return fmt.Errorf("迁移 %s 执行失败（已回滚）：%w", name, err)
 	}
-	if _, err := tx.Exec(
-		`INSERT INTO `+versionTableName+`(version, name, applied_at) VALUES (?, ?, strftime('%s','now'))`,
-		version, name); err != nil {
+	if _, err := tx.Exec(insertVersionSQL, version, name); err != nil {
 		_ = tx.Rollback()
 		return fmt.Errorf("迁移 %s 记录版本失败（已回滚）：%w", name, err)
 	}
@@ -303,18 +375,6 @@ func latestOf(ms []migration) int64 {
 	return ms[len(ms)-1].version
 }
 
-// latestVersion 本地迁移脚本所期望的最新版本
-//
-// 保留它是因为"程序期望版本"这个概念会被调用方（启动检查、日志）单独使用；
-// 内部主流程走 latestOf(ms) 以避免重复读一次内嵌目录。
-func latestVersion() (int64, error) {
-	ms, err := listMigrations()
-	if err != nil {
-		return 0, err
-	}
-	return latestOf(ms), nil
-}
-
 // ensureVersionTable 建版本表。
 //
 // GPT-R37：**只允许出现在 Apply 路径**（`fastledger db migrate`）。
@@ -326,13 +386,4 @@ func ensureVersionTable(db *sql.DB) error {
 		applied_at INTEGER NOT NULL
 	)`)
 	return err
-}
-
-// isApplied 判断单个版本是否已应用（Apply 路径按版本逐条推进时用）
-func isApplied(db *sql.DB, version int64) (bool, error) {
-	var n int
-	if err := db.QueryRow(`SELECT COUNT(1) FROM schema_migrations WHERE version = ?`, version).Scan(&n); err != nil {
-		return false, err
-	}
-	return n > 0, nil
 }

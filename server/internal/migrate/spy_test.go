@@ -76,6 +76,131 @@ func (d *spyDriver) countStatements(fragment string) int {
 	return n
 }
 
+// schemaStub 手写的"最新结构"模型：替身库按它回答 PRAGMA / sqlite_master 查询。
+//
+// 注意：这份模型是**从 migrations/*.up.sql 人工抄录**的，与生产断言表
+// （versionAssertions，见 verify.go）互相独立——替身不该"按断言的期望答题"，
+// 否则断言测试就成了循环论证。真实结构的权威仍然是真库集成测试。
+type schemaStub struct {
+	// appliedVersions 已应用版本集合
+	appliedVersions []int64
+	// tables 存在的表名集合
+	tables map[string]bool
+	// columns 表名 → 列名集合
+	columns map[string]map[string]bool
+	// indexSQL 索引名 → 完整定义（不存在则查无此行）
+	indexSQL map[string]string
+}
+
+// newLatestSchemaStub 构造一个"已迁移到 v6 最新结构"的库模型（依据 migrations/*.sql）
+func newLatestSchemaStub(applied []int64) *schemaStub {
+	txs := []string{
+		"id", "book_id", "type", "account_id", "to_account_id", "amount", "category_id",
+		"payment_channel", "merchant", "note", "tx_time", "related_id", "client_uuid",
+		"sync_version", "deleted", "created_at", "updated_at", "deleted_at",
+		// 0003 / 0004 增列
+		"creator_uid", "source", "timezone_offset", "direction",
+	}
+	idem := []string{"id", "book_id", "uid", "client_uuid", "request_hash",
+		"result_ids", "result_type", "result_version", "created_at",
+		// 0005 增列
+		"op",
+	}
+	s := &schemaStub{
+		appliedVersions: applied,
+		tables: map[string]bool{
+			"users": true, "books": true, "book_members": true, "book_versions": true,
+			"accounts": true, "categories": true, "transactions": true,
+			"idempotency_records": true, "audit_logs": true, "invites": true,
+			"instruments": true, "instrument_prices": true, "holdings": true,
+			"budgets": true, "schema_migrations": true,
+		},
+		columns: map[string]map[string]bool{
+			"transactions":        setOf(txs),
+			"idempotency_records": setOf(idem),
+		},
+		indexSQL: map[string]string{
+			// 0002：部分唯一索引（定义里必须带 WHERE）
+			"idx_member_unique": "CREATE UNIQUE INDEX idx_member_unique ON book_members(book_id, uid) WHERE deleted = 0",
+			// 0003
+			"idx_tx_creator": "CREATE INDEX idx_tx_creator ON transactions(book_id, creator_uid, deleted, tx_time)",
+			// 0005：扩为含 op 列
+			"idx_idem_unique": "CREATE UNIQUE INDEX idx_idem_unique ON idempotency_records(book_id, uid, op, client_uuid)",
+			// 0001
+			"idx_tx_book_time":  "CREATE INDEX idx_tx_book_time ON transactions(book_id, tx_time)",
+			"idx_audit_book_at": "CREATE INDEX idx_audit_book_at ON audit_logs(book_id, at)",
+		},
+	}
+	return s
+}
+
+func setOf(xs []string) map[string]bool {
+	m := make(map[string]bool, len(xs))
+	for _, x := range xs {
+		m[x] = true
+	}
+	return m
+}
+
+// handler 返回替身查询处理器
+func (s *schemaStub) handler() func(query string, args []driver.Value) (*queryResult, error) {
+	return func(query string, args []driver.Value) (*queryResult, error) {
+		q := strings.ToUpper(strings.TrimSpace(query))
+		switch {
+		case strings.Contains(q, "SQLITE_MASTER") && strings.Contains(q, "COUNT(1)"):
+			// versionTableExists / tableExists
+			name := ""
+			if len(args) > 0 {
+				name, _ = args[0].(string)
+			}
+			var n int64
+			if s.tables[name] {
+				n = 1
+			}
+			return &queryResult{cols: []string{"n"}, rows: []row{{n}}}, nil
+
+		case strings.Contains(q, "SQLITE_MASTER") && strings.Contains(q, "SELECT SQL"):
+			// indexDefinition：查无此行 = 索引不存在
+			name := ""
+			if len(args) > 0 {
+				name, _ = args[0].(string)
+			}
+			def, ok := s.indexSQL[name]
+			if !ok {
+				return &queryResult{cols: []string{"sql"}}, nil // 空结果集 → sql.ErrNoRows
+			}
+			return &queryResult{cols: []string{"sql"}, rows: []row{{def}}}, nil
+
+		case strings.HasPrefix(q, "PRAGMA TABLE_INFO("):
+			// 表名要从【原始】查询里截取：替身的列名模型是小写，
+			// 用大写化的 q 截出来会查不到（q 只用于前缀匹配）
+			table := strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(query), "PRAGMA table_info("), ")")
+			cols := s.columns[table]
+			if cols == nil {
+				return &queryResult{cols: pragmaTableInfoCols}, nil
+			}
+			rows := make([]row, 0, len(cols))
+			i := 0
+			for name := range cols {
+				rows = append(rows, row{i, name, "TEXT", 0, nil, 0})
+				i++
+			}
+			return &queryResult{cols: pragmaTableInfoCols, rows: rows}, nil
+
+		case strings.Contains(q, "SELECT VERSION FROM SCHEMA_MIGRATIONS"):
+			rows := make([]row, 0, len(s.appliedVersions))
+			for _, v := range s.appliedVersions {
+				rows = append(rows, row{v})
+			}
+			return &queryResult{cols: []string{"version"}, rows: rows}, nil
+		}
+		return nil, nil
+	}
+}
+
+// pragmaTableInfoCols PRAGMA table_info 的 6 列
+var pragmaTableInfoCols = []string{"cid", "name", "type", "notnull", "dflt_value", "pk"}
+
 func (d *spyDriver) Open(string) (driver.Conn, error) { return &spyConn{drv: d}, nil }
 
 type spyConn struct{ drv *spyDriver }
