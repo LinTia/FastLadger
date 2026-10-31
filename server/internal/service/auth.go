@@ -9,6 +9,7 @@ package service
 import (
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -50,6 +51,20 @@ var (
 )
 
 const (
+	// DefaultLoginMaxAttempts 登录失败限流默认配额：15 分钟窗口内 10 次失败（A6）。
+	//
+	// 窗口长度的口径：**窗口 = 被打满后的瘫痪时长**（fail-closed 容量语义下，攻击者灌满
+	// 的 key 要等窗口过期才回收）。邀请兑换的 1 小时窗口是"每 IP 每小时 10 次"的产品口径，
+	// 直接照抄会把"爆破者被拦"放大成"该 IP 上所有用户 1 小时进不来"，故取 15 分钟。
+	DefaultLoginMaxAttempts = 10
+	// DefaultLoginWindowMinutes 登录失败限流默认窗口（分钟），见 DefaultLoginMaxAttempts。
+	DefaultLoginWindowMinutes = 15
+	// maxAttemptedUserLen 登录失败审计里 attempted 字段的最大字符数。
+	// 用户名是客户端可控输入，进审计前必须截断，防止超长串把 before_json 撑爆。
+	maxAttemptedUserLen = 64
+)
+
+const (
 	// minPasswordLen 口令最小长度。**按字节计**（既有行为，不改）：
 	// 8 个 ASCII 字符 = 8 字节；中文等宽字符同样按字节参与，故 3 个汉字（9 字节）也满足。
 	// 这里刻意不改成按字符计——收紧会让已注册用户的既有口令"变短"，属于破坏性变更。
@@ -71,11 +86,54 @@ type AuthService struct {
 	engine *xorm.Engine
 	secret string
 	ttl    time.Duration
+
+	// 登录失败限流（A6）：**独立实例**，绝不复用 MemberService.limiter——
+	// 那个实例被邀请签发/兑换共用一个 key 空间，塞进登录会让"登录被爆破"与
+	// "邀请被灌爆"互相挤占容量，形成跨功能 DoS 耦合。
+	loginLimiter *Limiter
+	// loginMaxAttempts / loginWindow 失败配额与窗口；默认 10 次 / 15 分钟，
+	// 可经 ConfigureLoginThrottle 按 EBK_LOGIN_MAX_ATTEMPTS / EBK_LOGIN_WINDOW_MINUTES 覆盖。
+	loginMaxAttempts int
+	loginWindow      time.Duration
 }
 
 // NewAuthService 构造认证服务（secret 由配置注入，已在 config 层 fail-fast 校验）
 func NewAuthService(engine *xorm.Engine, secret string, ttl time.Duration) *AuthService {
-	return &AuthService{engine: engine, secret: secret, ttl: ttl}
+	return &AuthService{
+		engine:           engine,
+		secret:           secret,
+		ttl:              ttl,
+		loginLimiter:     NewLimiter(),
+		loginMaxAttempts: DefaultLoginMaxAttempts,
+		loginWindow:      DefaultLoginWindowMinutes * time.Minute,
+	}
+}
+
+// ConfigureLoginThrottle 覆盖登录失败限流参数（装配层接线用，启动期调用一次）。
+//
+// 参数来自 config（EBK_LOGIN_MAX_ATTEMPTS / EBK_LOGIN_WINDOW_MINUTES，已 fail-fast 校验
+// 为正数）；这里再防御一次：非法值直接 panic——带着"0 次配额"或"0 时长窗口"运行
+// 等于把限流整个关掉，宁可不启动。
+func (s *AuthService) ConfigureLoginThrottle(maxAttempts int, window time.Duration) {
+	if maxAttempts <= 0 || window <= 0 {
+		panic(fmt.Sprintf("登录限流参数非法：maxAttempts=%d window=%v", maxAttempts, window))
+	}
+	s.loginMaxAttempts = maxAttempts
+	s.loginWindow = window
+}
+
+// loginKey 登录限流的桶键：按来源 IP 分桶。
+//
+// clientIP 来自 gin 的 ClientIP()——router.go 已 SetTrustedProxies(nil)，
+// 它恒等于 TCP 对端（RemoteAddr），不可被 X-Forwarded-For 单方面操纵。
+// 空值（非 HTTP 直调，如单测/CLI）统一归 unknown 桶：fail-closed，
+// 所有无来源的调用共享一个桶，绝不会因为缺 IP 而绕过限流。
+func loginKey(clientIP string) string {
+	ip := strings.TrimSpace(clientIP)
+	if ip == "" {
+		return "login:unknown"
+	}
+	return "login:" + ip
 }
 
 // Register 注册；若是系统首个用户，自动授予实例管理员
@@ -184,32 +242,67 @@ func (s *AuthService) insertUserInTx(sess *xorm.Session, username, passwordHash 
 
 // Login 校验口令并签发 token（含 jti）。
 //
-// 错误分为两类，HTTP 层据此分岔（GPT-R46）：
-//   - 凭证类（ErrBadCredentials / ErrAccountDisabled）→ 统一 401，不区分"账号不存在"与
-//     "口令错误"，避免账号枚举；
-//   - 依赖类（ErrAuthUnavailable）→ 503：数据库故障 / 登录审计写入失败 / 令牌签发失败。
-//     这类故障必须显式标注，否则会被 401 吞掉（旧实现把所有错误一律 401）。
+// 兼容入口：不携带来源 IP 的调用方（单测 / CLI 直调）统一归入 unknown 桶。
+// 生产 HTTP 入口必须走 LoginFromIP（按真实 ClientIP 分桶）。
 func (s *AuthService) Login(username, password string) (string, error) {
+	return s.LoginFromIP(username, password, "")
+}
+
+// LoginFromIP 校验口令并签发 token（含 jti），按来源 IP 做失败限流（A6）。
+//
+// 执行顺序即契约：
+//  1. **限流判定在最前**：超限直接 ErrRateLimited（HTTP 429）——不查库、不写审计，
+//     审计表的写入速率被天然封顶（审计写在限流之后，绝不能倒过来）；
+//  2. **只有失败才占配额**：入口先 Allow 占位，成功路径在签发令牌前 Release 归还，
+//     内部故障（DB / 审计 / 签发）也归还——它们不是"尝试爆破"的信号；
+//  3. 失败路径（限流通过后）写 AuditActionLoginFailed（A7 加固）：账号不存在记
+//     entity_id=0，口令错/禁用记命中用户 id；before_json 记 attempted 用户名与 reason，
+//     **绝不记口令**；响应仍保持统一 401 文案（R46：不做用户枚举）；
+//  4. 成功路径的 login 审计保持在【签发令牌之前】（WBS 4.3 / R46 口径，不得倒退）。
+//
+// 错误分类（与 GPT-R46 一致，HTTP 层据此分岔）：
+//   - 凭证类（ErrBadCredentials / ErrAccountDisabled）→ 统一 401；
+//   - 限流（ErrRateLimited）→ 429——它不是凭证错误，也不是内部错误，客户端应退避重试；
+//   - 依赖类（ErrAuthUnavailable）→ 503：数据库故障 / 成功审计写入失败 / 令牌签发失败。
+func (s *AuthService) LoginFromIP(username, password, clientIP string) (string, error) {
+	key := loginKey(clientIP)
+	// ① 失败限流：先占位（失败才计数——见方法注释第 2 条）
+	if !s.loginLimiter.Allow(key, s.loginMaxAttempts, s.loginWindow) {
+		return "", ErrRateLimited
+	}
+
 	var u model.User
 	has, err := s.engine.Where("username = ? AND deleted = 0", strings.TrimSpace(username)).Get(&u)
 	if err != nil {
-		// 数据库故障 ≠ 口令错误：标成依赖不可用，由 HTTP 层返回 503 + 安全日志
+		// 数据库故障 ≠ 口令错误：归还占位（内部故障不计入失败配额，否则一次
+		// 审计表/库故障就能把全网用户的失败配额吃光），并标成依赖不可用
+		s.loginLimiter.Release(key)
 		return "", fmt.Errorf("%w：查询用户失败：%w", ErrAuthUnavailable, err)
 	}
 	if !has {
+		// 不区分"账号不存在"与"口令错误"（响应层统一 401），但审计要记真实原因，
+		// 否则"有人在枚举账号"就不可见。账号不存在时没有 actor/entity 可指 → 0。
+		s.writeLoginFailedAudit(username, 0, "no_such_user")
 		return "", ErrBadCredentials
 	}
 	if u.Disabled {
+		s.writeLoginFailedAudit(username, u.Id, "disabled")
 		return "", ErrAccountDisabled
 	}
 	if err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password)); err != nil {
 		// 只有"口令不匹配"才算凭证错误；哈希本身损坏（长度不对/格式非法）是数据故障，
 		// 归到 503 才不会让运维误以为是用户输错密码。
 		if errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
+			s.writeLoginFailedAudit(username, u.Id, "bad_password")
 			return "", ErrBadCredentials
 		}
+		s.loginLimiter.Release(key)
 		return "", fmt.Errorf("%w：校验口令失败：%w", ErrAuthUnavailable, err)
 	}
+
+	// ② 认证成功：归还占位（成功不占失败配额——多设备正常登录不得被误伤）
+	s.loginLimiter.Release(key)
+
 	// 审计（WBS 4.3）：登录是实例级事件，不隶属任何账本，book_id 取哨兵 0。
 	// 刻意放在签发令牌【之前】：审计写失败就不签发，避免出现"已通过认证却无留痕"。
 	//
@@ -225,6 +318,38 @@ func (s *AuthService) Login(username, password string) (string, error) {
 		return "", fmt.Errorf("%w：签发令牌失败：%w", ErrAuthUnavailable, err)
 	}
 	return token, nil
+}
+
+// writeLoginFailedAudit 写登录失败审计（A7 加固，best-effort）。
+//
+//   - book_id=AuditBookInstance(0)：失败尝试发生在"账本之外"，与成功登录同口径；
+//   - actor_uid / entity_id = 命中的用户 id（账号不存在为 0）——回答"谁在被人尝试"；
+//   - before_json 记 {"attempted":<用户名>,"reason":no_such_user|bad_password|disabled}，
+//     **绝不记口令**（口令进审计等于把凭据落进备份与日志采集）；
+//   - best-effort：失败尝试的【拒绝决定】在审计写入之前已经做出，写不进去不应把一次
+//     401 变成 503（那会让审计表故障期间所有失败登录都变成 5xx，还会掩盖真实失败率）；
+//     改记服务端日志供运维发现"审计管道断了"。
+//     对照：成功路径的 login 审计是【安全关键】（已认证却无留痕不可接受），故保持
+//     "写失败即 503、不签发令牌"的强口径，两条路径刻意不对称。
+func (s *AuthService) writeLoginFailedAudit(attempted string, uid int64, reason string) {
+	before := map[string]string{
+		"attempted": truncateRunes(strings.TrimSpace(attempted), maxAttemptedUserLen),
+		"reason":    reason,
+	}
+	if err := AppendAudit(s.engine, model.AuditBookInstance, uid,
+		model.AuditActionLoginFailed, model.AuditEntityUser, uid, before, "server"); err != nil {
+		log.Printf("[auth] 登录失败审计写入失败 attempted=%q uid=%d reason=%s err=%v",
+			truncateRunes(strings.TrimSpace(attempted), maxAttemptedUserLen), uid, reason, err)
+	}
+}
+
+// truncateRunes 按字符数截断（审计字段卫生：客户端可控输入先截断再落库）
+func truncateRunes(s string, max int) string {
+	r := []rune(s)
+	if len(r) <= max {
+		return s
+	}
+	return string(r[:max])
 }
 
 // GetByID 按 ID 取有效用户（已删除返回 ErrBadCredentials）

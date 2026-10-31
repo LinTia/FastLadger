@@ -318,22 +318,15 @@ func TestAuthzJoinRejectAuditMustNotTargetForeignBook(t *testing.T) {
 
 // ---------- 发现 A5：兑换限流可被伪造的 X-Forwarded-For 绕过 ----------
 
-// TestAuthzJoinRateLimitMustSurviveForgedXFF 兑换限流不能靠客户端可控的请求头分桶。
+// TestAuthzJoinRateLimitMustSurviveForgedXFF 兑换限流不能靠客户端可控的请求头分桶（A5，已修复→回归守卫）。
 //
-// 期望：同一来源连续 12 次兑换尝试时，超出 10 次/小时配额后返回 429；
+// 断言口径（修复后）：
+//   - 固定来源连续 12 次兑换（10 次/小时配额）→ 超出后出现 429；
+//   - **每次换一个伪造 X-Forwarded-For 也必须出现 429**：router.go 已 SetTrustedProxies(nil)，
+//     ClientIP 恒取 TCP 对端（与固定来源同一个桶），请求头拼不出新配额。
 //
-//	且"换个 X-Forwarded-For"不应该重置配额。
-//
-// 实际：gin 的 Engine 默认 trustedProxies = 0.0.0.0/0（信任全部代理），
-//
-//	本仓未调用 SetTrustedProxies / TrustedPlatform，于是 c.ClientIP() 直接取
-//	X-Forwarded-For 的第一个值；每次换一个头就换一个限流桶，配额永不尽。
-//
-// 影响：兑换入口是未认证的，10 次/小时/IP 是它唯一的尝试闸门。
-//
-//	邀请码本身是 128bit 随机（爆破不可行），所以【当前】不构成入户风险，
-//	但该闸门同时承担"挡住撞库与灌水"的职责，等于形同虚设；
-//	一旦将来引入"短码/自填邀请码"就会立刻升级为真实爆破面。
+// （原缺陷：gin 默认信任 0.0.0.0/0，ClientIP 直接取 XFF 最左段，每换一个头就换一个桶，
+// "同 IP 每小时 ≤10 次"形同虚设。）
 func TestAuthzJoinRateLimitMustSurviveForgedXFF(t *testing.T) {
 	e := engine(t)
 	gin.SetMode(gin.TestMode)
@@ -388,7 +381,9 @@ func TestAuthzJoinRateLimitMustSurviveForgedXFF(t *testing.T) {
 		t.Fatalf("对照失败：固定来源连续 12 次兑换没有一次 429，限流器未生效（请核对本用例前提）")
 	}
 
-	// 被测：每次换一个伪造的 X-Forwarded-For
+	// 被测：每次换一个伪造的 X-Forwarded-For —— 修复后必须【仍然】被限流
+	//（XFF 不再参与 ClientIP 计算，所有请求与固定来源共用同一个桶，
+	// 而该桶的 10 次/小时配额已被上面的对照请求耗尽大半）
 	forged := 0
 	for i := 0; i < 12; i++ {
 		if c := post("forged_"+strconv.Itoa(i), "198.51.100."+strconv.Itoa(i+1)); c == http.StatusTooManyRequests {
@@ -397,48 +392,63 @@ func TestAuthzJoinRateLimitMustSurviveForgedXFF(t *testing.T) {
 	}
 	if forged == 0 {
 		t.Fatalf("12 次兑换每次带不同的 X-Forwarded-For，没有一次被限流（429=%d）："+
-			"限流桶键取自客户端可控请求头（gin 默认信任全部代理），可被单方面绕过", forged)
+			"限流桶键仍取自客户端可控请求头——请核对 router.go 的 SetTrustedProxies(nil) 是否还在", forged)
 	}
 }
 
-// TestAuthzForgedIPExhaustsLimiterAndBlocksEveryone 伪造 IP 不只是"绕过限流"，还能反向瘫痪唯一入户通道。
+// TestAuthzForgedIPExhaustsLimiterAndBlocksEveryone 伪造 IP 与限流器容量的攻防（A5/INFRA-04，已修复→回归守卫）。
 //
-// 链路：`ipBucket`（member.go:962）只做 TrimSpace，**原样透传**客户端可控的 IP 字符串，
+// 原缺陷链路：`ipBucket`（member.go）原样透传客户端可控的 IP 字符串 + gin 默认信任全部代理
+// ⇒ "一个伪造头 = 一个限流 key"，1 万个一次性 IP 即可打满 maxLimiterKeys=10000，
+// 而 fail-closed 语义下正常用户的新 key 全部被拒（邀请入户是唯一入户通道）。
 //
-//	于是"一个伪造 IP = 一个限流 key"；`Limiter` 容量 maxLimiterKeys=10000
-//	（limiter.go:38），打满后**拒绝新 key**（limiter.go:104，fail-closed 取舍）。
-//	而回收只能靠 `sweepLocked`（limiter.go:160）——条目要等满自己的窗口（邀请入户
-//	是 1 小时，member.go:734）才会被回收。
-//
-// 期望：容量被一次性 key 打满后，正常用户的 key 仍应可用（或至少能在秒级自愈）。
-// 实际：打满后正常新 key 被拒（429），且立即 Sweep 回收 0 条 —— 必须等满 1 小时窗口。
-// 影响：关闭公开注册后，邀请入户是**唯一**入户通道（PRD §12.1）。攻击者用 1 万个
-//
-//	一次性伪造 IP 就能让全实例所有人一小时内无法入户；配合上面的 A5（限流可被
-//	伪造 XFF 绕过），等于"攻击者绕过闸门的同时还能把门焊死"。
-//
-// 本用例只走限流器本身（不经 HTTP），因此是确定性的、秒级完成；
-// 端到端版本见 reviewer-infra 的 TestInfraProbeLimiterCapacityExhaustionWindow。
+// 修复后的语义（分四点断言）：
+//  1. **容量有界**（R44 不变量保持）：打满后 Size 恒为上限，内存不会随攻击线性增长；
+//  2. **fail-closed**：满容量期间新 key 被拒——这是明确取舍而非缺陷（淘汰最旧会让
+//     攻击者冲掉正常用户的计数，见 limiter.go 容量语义注释）；
+//  3. **容量可自愈**：Allow 在容量满时会先强制清扫过期条目，攻击 key 一过窗容量即刻
+//     回收，无需人工干预或重启（恢复时长上界 = 攻击 key 的窗口长度）；
+//  4. **根因已断**：router.go 已 SetTrustedProxies(nil)，伪造 XFF 制造不了新 IP——
+//     打满容量从此需要 1 万个真实来源，"改个请求头就能焊死大门"的链路不复存在。
 func TestAuthzForgedIPExhaustsLimiterAndBlocksEveryone(t *testing.T) {
+	// ① 容量有界
 	l := service.NewLimiter()
 	// 1 万个一次性伪造 IP，窗口与真实邀请入户一致（1 小时）
 	for i := 0; i < 10001; i++ {
 		l.Allow("invite:join:ip:198.51."+strconv.Itoa(i/256)+"."+strconv.Itoa(i%256), 10, time.Hour)
 	}
-	if l.Size() < 10000 {
-		t.Fatalf("构造前提失败：容量未打满，Size=%d", l.Size())
+	if l.Size() != 10000 {
+		t.Fatalf("容量应有界于 10000（R44 不变量），实际 %d", l.Size())
 	}
-	// 正常用户（此前从未出现过）应当还能入户
+	// ② fail-closed：打满期间正常用户的新 key 被拒（明确取舍）
 	if l.Allow("invite:join:ip:203.0.113.1", 10, time.Hour) {
-		t.Fatalf("容量被伪造 IP 打满后，正常新 IP 仍被放行 —— 与预期相反，请核对 limiter.go:104")
+		t.Fatal("容量被伪造 IP 打满后，正常新 IP 仍被放行——fail-closed 语义被破坏，请核对 limiter.go")
 	}
-	// 立刻强制回收：一条都回收不了（所有条目的窗口都还是 1 小时）
+	// 立刻强制回收：一条都回收不了（所有攻击条目的窗口都还是 1 小时）——
+	// 这就是"恢复时长上界 = 攻击 key 的窗口长度"的直接体现。
 	if n := l.Sweep(); n != 0 {
-		t.Fatalf("Sweep 回收了 %d 条，与‘必须等满窗口’的预期不符，请核对 limiter.go:160", n)
+		t.Fatalf("窗口未过时 Sweep 回收了 %d 条：清理不得回收仍在窗口内的计数（R44 不变量）", n)
 	}
-	t.Fatalf("伪造 IP 打满 limiter 容量（Size=%d）：正常用户的新 key 被拒（429），"+
-		"且立即 Sweep 回收 0 条 —— 恢复必须等满 1 小时窗口；"+
-		"而邀请入户是关闭公开注册后的唯一入户通道", l.Size())
+
+	// ③ 容量自愈（INFRA-04 反向的新语义）：用小容量 + 短窗口做确定性验证。
+	//    固定 120ms 等待对应 50ms 窗口：时钟单调，120ms 必然 > 50ms，不存在慢机器偶发；
+	//    这不是"用 sleep 代替确定性并发测试"，而是时间型行为本身需要时间流逝。
+	recov := service.NewBoundedLimiter(100)
+	for i := 0; i < 100; i++ {
+		if !recov.Allow("invite:join:ip:198.51.100."+strconv.Itoa(i), 10, 50*time.Millisecond) {
+			t.Fatalf("恢复场景前提失败：容量打满前第 %d 个 key 不应被拒", i)
+		}
+	}
+	if recov.Allow("invite:join:ip:203.0.113.2", 10, time.Hour) {
+		t.Fatal("恢复场景前提失败：容量打满后新 key 应被拒")
+	}
+	time.Sleep(120 * time.Millisecond) // 等待 50ms 攻击窗口确定性地过期
+	if !recov.Allow("invite:join:ip:203.0.113.2", 10, time.Hour) {
+		t.Fatalf("攻击 key 过窗后容量应自愈（Allow 容量满时先强制清扫过期条目），实际仍被拒；Size=%d", recov.Size())
+	}
+	if recov.Size() != 1 {
+		t.Fatalf("自愈后应只剩新 key 1 条，实际 %d", recov.Size())
+	}
 }
 
 // ---------- 发现 A7：账户 / 分类的写操作不留审计 ----------

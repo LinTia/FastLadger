@@ -29,7 +29,9 @@ import (
 // 断言强度没有降低——被测的是本文件的错误映射本身。
 type authAPI interface {
 	Register(username, password string) (*model.User, error)
-	Login(username, password string) (string, error)
+	// LoginFromIP 登录：clientIP 取 gin 的 ClientIP()（router.go 已 SetTrustedProxies(nil)，
+	// 恒等于 TCP 对端）。登录失败限流按它分桶，绝不能用请求头拼出来的值。
+	LoginFromIP(username, password, clientIP string) (string, error)
 	GetByID(uid int64) (*model.User, error)
 }
 
@@ -69,7 +71,9 @@ func (h *authHandler) login(c *gin.Context) {
 	if !bindJSON(c, &req) {
 		return
 	}
-	token, err := h.authSvc.Login(req.Username, req.Password)
+	// ClientIP 必须传真实对端地址：登录失败限流按它分桶（A6）。
+	// router.go 已 SetTrustedProxies(nil)，因此它不受 X-Forwarded-For 操纵。
+	token, err := h.authSvc.LoginFromIP(req.Username, req.Password, c.ClientIP())
 	if err != nil {
 		mapLoginErr(c, err)
 		return
@@ -79,19 +83,24 @@ func (h *authHandler) login(c *gin.Context) {
 
 // mapLoginErr 登录错误的唯一映射入口。
 //
-// 三类分支：
+// 四类分支：
 //  1. 凭证类（口令不匹配 / 账号禁用 / 账号不存在）→ 统一 401 + 同一句文案。
 //     账号禁用也用同一句，避免据此枚举"哪些账号被封了"。
-//  2. 依赖不可用（DB 故障 / 审计写入失败 / 令牌签发失败）→ 503 + 安全日志。
-//  3. 其余未预期错误 → 500 + 安全日志。
+//  2. 失败限流（A6）→ 429：它【不是】凭证错误（不能混进 401 的统一文案——那会让
+//     客户端以为是密码错而反复重试），也【不是】内部错误（不该触发告警）；客户端应退避。
+//  3. 依赖不可用（DB 故障 / 成功审计写入失败 / 令牌签发失败）→ 503 + 安全日志。
+//  4. 其余未预期错误 → 500 + 安全日志。
 //
-// 2 与 3 都必须先记日志：日志留在服务端供排查，响应体只给一句通用文案，
+// 3 与 4 都必须先记日志：日志留在服务端供排查，响应体只给一句通用文案，
 // 绝不回显 err（会把表名、驱动报错、内部路径泄露给客户端）。
 func mapLoginErr(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, service.ErrBadCredentials), errors.Is(err, service.ErrAccountDisabled):
 		// 不区分"用户不存在"与"口令错误"，避免账号枚举
 		fail(c, http.StatusUnauthorized, "用户名或密码错误")
+	case errors.Is(err, service.ErrRateLimited):
+		// A6：与 R46 口径并存——429 不是凭证错误，也不是内部错误
+		fail(c, http.StatusTooManyRequests, "登录尝试过于频繁，请稍后再试")
 	case errors.Is(err, service.ErrAuthUnavailable):
 		logLoginInternalError(c, err)
 		fail(c, http.StatusServiceUnavailable, "服务暂时不可用，请稍后重试")

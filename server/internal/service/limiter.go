@@ -22,6 +22,17 @@ package service
 //   - 拒绝新 key = 最坏结果是"容量打满期间新来的 key 被临时限流"（429），属于 fail-closed
 //     ——宁可多拦，也绝不放行。且容量会被第 2 条的主动清理持续回收，不是永久拒绝。
 //
+// 容量耗尽后的恢复策略（INFRA-04 反向，复审要求明确）：
+//   1. 恢复的唯一途径是【过期】：Allow 在容量满时会**先强制全量清扫**，窗口已过期的
+//      条目立即回收（见 Allow 步骤②）——因此攻击者的 key 一旦过窗，容量即刻自愈，
+//      不需要任何人工干预或重启；
+//   2. 恢复时长的上界 = 打满容量的那些 key 的窗口长度（登录 15 分钟 / 邀请 1 小时）；
+//   3. 曾考虑"对只命中一次的 key 用更短的最小保留期"，**否决**：提前删掉一个仍在
+//      窗口内的计数 = 该 IP 可以立刻再来一次，等于把限流改成 fail-open，直接违反
+//      R44 的不变量"清理不得影响限流正确性"；
+//   4. 真正的根因修复在别处：router.go 已 SetTrustedProxies(nil)，ClientIP 恒取 TCP
+//      对端——"1 万个一次性伪造 IP"从此需要 1 万个真实来源，不再是改个请求头的事。
+//
 // 清理不影响限流正确性：被删掉的条目一定是"最新一次命中也已超出窗口"的条目，
 // 重新记录一次不会让窗口内的命中数超过 max；仍在窗口内的条目一个都不会被删。
 import (
@@ -65,6 +76,13 @@ type Limiter struct {
 
 // NewLimiter 构造限流器（容量取 maxLimiterKeys）
 func NewLimiter() *Limiter { return newLimiter(maxLimiterKeys, time.Now) }
+
+// NewBoundedLimiter 按指定容量构造限流器。
+//
+// 导出原因：容量是有意的部署参数（GIN-复审 INFRA-04 反向）——单机自托管默认
+// maxLimiterKeys 足够；若某入口的 key 空间天然更小/更大，可在装配层显式给定，
+// 不必改全局常量。窗口/容量语义与 NewLimiter 完全一致。
+func NewBoundedLimiter(maxKeys int) *Limiter { return newLimiter(maxKeys, time.Now) }
 
 // newLimiter 按指定容量与时钟构造（生产走 NewLimiter；测试可注入小容量与固定时钟）
 func newLimiter(maxKeys int, now func() time.Time) *Limiter {
@@ -136,6 +154,27 @@ func (l *Limiter) Size() int {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return len(l.hits)
+}
+
+// Release 撤销最近一次 Allow 为 key 记下的命中。
+//
+// 用途：两段式"失败才计数"——入口先 Allow 占位，业务判定为【成功】后归还占位，
+// 使成功不占用失败配额（登录场景：多设备正常登录不会被误伤，A6）。
+//
+// 并发语义：同一 key 有并发请求时可能误删其他请求刚记下的占位（失败计数偏差 ±1）。
+// 对限流而言这是可接受的小偏差；换来的是"成功绝不占配额"的确定语义。
+// 若 key 无记录（已被惰性清理）则为幂等空操作。
+func (l *Limiter) Release(key string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	e, ok := l.hits[key]
+	if !ok || len(e.hits) == 0 {
+		return
+	}
+	e.hits = e.hits[:len(e.hits)-1]
+	if len(e.hits) == 0 {
+		delete(l.hits, key) // 不留空壳 key（R44：内存有界）
+	}
 }
 
 // Sweep 立即清理所有过期 key，返回被清理的条数。

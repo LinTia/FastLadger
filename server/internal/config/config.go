@@ -38,6 +38,15 @@ const (
 	// DefaultWSMaxConnTotal 全局 WebSocket 并发连接数上限默认值（SYNC-01）。
 	// 兜住"注册一堆账号各开 10 条"这类组合放大；家庭场景同时在线设备远小于 1000。
 	DefaultWSMaxConnTotal = 1000
+	// DefaultLoginMaxAttempts 登录失败限流默认配额（A6，§8.4）。
+	DefaultLoginMaxAttempts = 10
+	// DefaultLoginWindowMinutes 登录失败限流默认窗口/分钟（A6）。
+	// 窗口 = 被打满后的瘫痪时长，故不照抄邀请的 1 小时。
+	DefaultLoginWindowMinutes = 15
+	// DefaultSyncPushPerMinute 单用户 sync/push 限流默认值/分钟（INFRA 复审：写路径优先）。
+	DefaultSyncPushPerMinute = 60
+	// DefaultSyncPullPerMinute 单用户 sync/pull 限流默认值/分钟（读路径放宽）。
+	DefaultSyncPullPerMinute = 300
 	// MaxRetentionDays 保留天数上限（100 年）。与 service.maxRetentionDays 同值：
 	// 这里是【配置层】的启动期拦截，那里是【换算层】的运行时拦截，互为纵深防御。
 	MaxRetentionDays = 36500
@@ -73,6 +82,20 @@ type Config struct {
 	// WSMaxConnTotal 全局 WebSocket 并发连接数上限（SYNC-01；
 	// 环境变量 EBK_WS_MAX_CONN_TOTAL，默认 1000）
 	WSMaxConnTotal int
+
+	// LoginMaxAttempts 登录失败限流配额（A6；环境变量 EBK_LOGIN_MAX_ATTEMPTS，默认 10）。
+	// 只对【失败】计数：成功登录不占配额（多设备正常登录不得误伤）。
+	LoginMaxAttempts int
+	// LoginWindowMinutes 登录失败限流窗口/分钟（A6；环境变量 EBK_LOGIN_WINDOW_MINUTES，
+	// 默认 15）。窗口 = 被打满后的瘫痪时长，勿照抄邀请的 1 小时。
+	LoginWindowMinutes int
+
+	// SyncPushPerMinute 单用户 sync/push 限流/分钟（INFRA 复审；EBK_SYNC_PUSH_PER_MINUTE，
+	// 默认 60）。push 是写路径，优先收紧。
+	SyncPushPerMinute int
+	// SyncPullPerMinute 单用户 sync/pull 限流/分钟（EBK_SYNC_PULL_PER_MINUTE，默认 300，
+	// 读路径放宽）。与 push 各自独立 key 空间，也与登录/邀请限流完全隔离。
+	SyncPullPerMinute int
 }
 
 // newConfig 从环境变量读取全部配置项（只读取、不校验）。
@@ -106,6 +129,24 @@ func newConfig() (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+	// 登录失败限流（A6）：envInt 同款 fail-fast——配错成 0 / 负数等于把闸门拆掉，启动即拦
+	loginMax, err := envInt("EBK_LOGIN_MAX_ATTEMPTS", DefaultLoginMaxAttempts)
+	if err != nil {
+		return nil, err
+	}
+	loginWindow, err := envInt("EBK_LOGIN_WINDOW_MINUTES", DefaultLoginWindowMinutes)
+	if err != nil {
+		return nil, err
+	}
+	// 同步限流（INFRA 复审）：push 写路径收紧、pull 读路径放宽
+	syncPush, err := envInt("EBK_SYNC_PUSH_PER_MINUTE", DefaultSyncPushPerMinute)
+	if err != nil {
+		return nil, err
+	}
+	syncPull, err := envInt("EBK_SYNC_PULL_PER_MINUTE", DefaultSyncPullPerMinute)
+	if err != nil {
+		return nil, err
+	}
 	return &Config{
 		HTTPPort:           envOr("EBK_HTTP_PORT", DefaultHTTPPort),
 		DBPath:             envOr("EBK_DB_PATH", DefaultDBPath),
@@ -117,6 +158,10 @@ func newConfig() (*Config, error) {
 		AuditRetentionDays: auditDays,
 		WSMaxConnPerUser:   wsPerUser,
 		WSMaxConnTotal:     wsTotal,
+		LoginMaxAttempts:   loginMax,
+		LoginWindowMinutes: loginWindow,
+		SyncPushPerMinute:  syncPush,
+		SyncPullPerMinute:  syncPull,
 	}, nil
 }
 

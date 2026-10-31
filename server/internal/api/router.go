@@ -2,6 +2,8 @@ package api
 
 // 路由（对齐《落地方案》§5.1 REST API 契约，统一前缀 /api/v1）
 import (
+	"time"
+
 	"fastledger/internal/config"
 	"fastledger/internal/instance"
 	"fastledger/internal/service"
@@ -27,6 +29,21 @@ type Deps struct {
 // NewRouter 构建 gin 引擎
 func NewRouter(d Deps) *gin.Engine {
 	r := gin.New()
+	// 信任代理口径（复审 A5 / INFRA-04 反向，**根因修复**）：
+	// gin 的出厂默认是 trustedProxies = 0.0.0.0/0（信任一切代理），c.ClientIP() 会取
+	// X-Forwarded-For 最左段——那是请求方完全可控的字符串。而登录/邀请限流的桶键都是
+	// "…:" + ClientIP，等于把限流闸门的钥匙交给攻击者：每换一个 X-Forwarded-For 头
+	// 就换一个全新配额桶，还能用一次性伪造 IP 灌满限流器容量（见 limiter.go 容量语义）。
+	//
+	// 自托管 MVP 默认【不信任任何代理】：ClientIP 恒取 TCP 对端（RemoteAddr），
+	// 伪造头从此无效。**反代部署必须显式改为受信网段**，例如
+	//	r.SetTrustedProxies([]string{"10.0.0.0/8"})
+	// 并确保只有反代能直达本进程（否则客户端可直连绕过反代伪造源地址）。
+	// nil 入参在 gin 里不会返回错误；一旦未来 gin 语义变化导致失败，
+	// 宁可启动失败也不能带病监听（限流键的完整性依赖这一行）。
+	if err := r.SetTrustedProxies(nil); err != nil {
+		panic("设置受信代理失败（ClientIP 将不可信）：" + err.Error())
+	}
 	r.Use(gin.Recovery())
 
 	// SYNC-01：WS 连接数上限来自配置（config.Load 已保证两个值恒为正整数；
@@ -34,6 +51,12 @@ func NewRouter(d Deps) *gin.Engine {
 	// Hub 是进程级单例（DefaultHub），这里重复调用只是幂等地重设同一个值。
 	ws.DefaultHub.SetConnectionLimits(d.Config.WSMaxConnPerUser, d.Config.WSMaxConnTotal)
 
+	// 登录失败限流参数（A6）：零值 Config（直构的单测）为 0 = 沿用 AuthService 默认
+	// （10 次 / 15 分钟）；生产走 config.Load，两个值恒为正。
+	if d.AuthService != nil && d.Config.LoginMaxAttempts > 0 && d.Config.LoginWindowMinutes > 0 {
+		d.AuthService.ConfigureLoginThrottle(d.Config.LoginMaxAttempts,
+			time.Duration(d.Config.LoginWindowMinutes)*time.Minute)
+	}
 	ah := &authHandler{authSvc: d.AuthService, enableRegister: d.Config.EnableRegister}
 	bh := &bookHandler{books: d.Books, members: d.Members}
 	lh := &ledgerHandler{accounts: d.Accounts, categories: d.Categories, txs: d.Txs}
