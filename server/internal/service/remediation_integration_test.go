@@ -798,7 +798,11 @@ func TestR33BookUpdateNameAndVisibilityAtomic(t *testing.T) {
 // GPT-R53：父账户不得在仍有活跃子账户时被删除
 // ---------------------------------------------------------------------------
 
-// TestR53DeleteParentWithActiveChildrenRejected 有活跃子账户时拒绝删父；子账户先删后可删。
+// TestR53DeleteParentWithActiveChildrenRejected 有活跃子账户时拒绝删父。
+//
+// GPT-C06 修订：子账户【软删】同样阻止父账户删除——软删子账户日后恢复会带着悬空的
+// parent_id，比活跃子账户更危险；只有子账户被硬清（回收站 TTL 到期清除的等价态）后，
+// 父账户才可正常删除。
 func TestR53DeleteParentWithActiveChildrenRejected(t *testing.T) {
 	e := newTestEnv(t)
 	as := NewAccountService(e.engine, version.NewRepo())
@@ -820,12 +824,19 @@ func TestR53DeleteParentWithActiveChildrenRejected(t *testing.T) {
 		t.Fatal("被拒后父账户必须仍存活")
 	}
 
-	// 子账户先删 → 父账户可正常删除（此时不存在指向它的活跃子账户）
+	// 子账户软删 → 父账户仍不可删（GPT-C06：软删子账户恢复会带悬空 parent_id）
 	if _, err := as.Delete(e.uid, e.bookID, child.Id); err != nil {
 		t.Fatalf("删除子账户失败：%v", err)
 	}
+	if _, err := as.Delete(e.uid, e.bookID, parent.Id); !errors.Is(err, ErrAccountHasChildren) {
+		t.Fatalf("GPT-C06：子账户仅软删时父账户应被拒绝删除，实际 err=%v", err)
+	}
+	// 子账户被硬清（回收站到期清除的等价态）→ 父账户可正常删除
+	if _, err := e.engine.Exec("DELETE FROM accounts WHERE id = ?", child.Id); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := as.Delete(e.uid, e.bookID, parent.Id); err != nil {
-		t.Fatalf("子账户已删后父账户应可删除，实际 err=%v", err)
+		t.Fatalf("子账户硬清后父账户应可删除，实际 err=%v", err)
 	}
 	// 不变量：不存在"活跃子账户指向已删父账户"的悬空引用
 	var dangling int64
