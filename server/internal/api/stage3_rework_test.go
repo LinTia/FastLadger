@@ -225,11 +225,13 @@ func stage3FuncBody(t *testing.T, path, fnName string) string {
 //
 // 真实重放需要数据库（本机 CGO 不可用），但"是否在重放时广播"是一个结构性决策，
 // 用源码断言可以对未来任何改动静默回归生效。
+//
+// GPT-C04 第二轮加固：改用 AST 极性校验（assertBroadcastGatedByNotReplayed）——
+// 旧版 strings.Contains("!res.Replayed") 不校验极性，放过了
+// `if res.Replayed || !res.Replayed` 这类可编译的极性翻转样本。
 func TestReplayedIsNotBroadcast(t *testing.T) {
+	assertBroadcastGatedByNotReplayed(t, "tx_handler.go", "createTransaction")
 	body := stage3FuncBody(t, "tx_handler.go", "createTransaction")
-	if !strings.Contains(body, "!res.Replayed") {
-		t.Fatalf("createTransaction 缺少 !res.Replayed 守卫（重放会重复广播）：%s", body)
-	}
 	if !strings.Contains(body, "notifyDataChanged") {
 		t.Fatalf("createTransaction 未调用 notifyDataChanged：%s", body)
 	}
