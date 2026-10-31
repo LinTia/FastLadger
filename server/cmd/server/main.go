@@ -47,7 +47,11 @@ import (
 const tokenTTL = 24 * time.Hour
 
 func main() {
-	cfg, err := config.Load()
+	// INFRA-01：入口只做通用校验（端口/路径/保留期），**不含 JWT**——
+	// `instance bump` 发生在"数据库刚被替换、服务还没起来"的恢复时刻，
+	// `db migrate` / `db purge` / `user create` 也都不签发令牌，
+	// 它们不该被一个与本命令无关的 JWT 校验挡在门外。
+	cfg, err := config.LoadBase()
 	if err != nil {
 		log.Fatalf("配置加载失败：%v", err)
 	}
@@ -96,6 +100,12 @@ func main() {
 		default:
 			log.Fatalf("未知子命令 %q（可用：db migrate / instance bump / user create）", args[0])
 		}
+	}
+
+	// INFRA-01：走到这里说明不是子命令，而是真正要启动 HTTP 服务——
+	// 此时才要求 JWT 合法（该挡的仍然挡住，只是不再挡子命令）。
+	if err := cfg.ValidateRuntime(); err != nil {
+		log.Fatalf("配置校验失败：%v", err)
 	}
 
 	// 正常启动：只检查版本（GPT-R37：Check 纯只读，绝不建表）

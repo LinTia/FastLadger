@@ -75,10 +75,10 @@ type Config struct {
 	WSMaxConnTotal int
 }
 
-// Load 从环境变量加载配置并校验。
+// newConfig 从环境变量读取全部配置项（只读取、不校验）。
 //
-// GPT-R34：涉及保留期的整数变量若非法，在此即【启动失败】，不做静默回退。
-func Load() (*Config, error) {
+// 读取顺序即优先级：任何一个 envInt 非法都会在这里先失败，与重构前 Load 的行为一致。
+func newConfig() (*Config, error) {
 	recycleTTL, err := envInt("EBK_RECYCLE_TTL_DAYS", DefaultRecycleTTLDays)
 	if err != nil {
 		return nil, err
@@ -101,17 +101,36 @@ func Load() (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	c := &Config{
+	// EBK_ENABLE_REGISTER（INFRA-05）：非法值在此即失败，不静默回落
+	enableRegister, err := envBool("EBK_ENABLE_REGISTER", false)
+	if err != nil {
+		return nil, err
+	}
+	return &Config{
 		HTTPPort:           envOr("EBK_HTTP_PORT", DefaultHTTPPort),
 		DBPath:             envOr("EBK_DB_PATH", DefaultDBPath),
 		DataDir:            envOr("EBK_DATA_DIR", DefaultDataDir),
 		JWTSecret:          os.Getenv("EBK_JWT_SECRET"),
-		EnableRegister:     envBool("EBK_ENABLE_REGISTER", false),
+		EnableRegister:     enableRegister,
 		RecycleTTLDays:     recycleTTL,
 		InviteTTLDays:      inviteTTL,
 		AuditRetentionDays: auditDays,
 		WSMaxConnPerUser:   wsPerUser,
 		WSMaxConnTotal:     wsTotal,
+	}, nil
+}
+
+// Load 从环境变量加载配置并做【全量】校验（含 JWT）。服务进程启动入口使用。
+//
+// GPT-R34：涉及保留期的整数变量若非法，在此即【启动失败】，不做静默回退。
+//
+// INFRA-01：`instance bump` / `db migrate` / `db purge` / `user create` 这些子命令
+// 不签发令牌、也不该被 JWT 校验挡在门外（恢复流程发生在"数据库刚被替换、
+// 服务还没起来"的时刻）。因此入口改用 LoadBase，只有真正启动 HTTP 服务才走本函数。
+func Load() (*Config, error) {
+	c, err := newConfig()
+	if err != nil {
+		return nil, err
 	}
 	if err := c.validate(); err != nil {
 		return nil, err
@@ -119,9 +138,50 @@ func Load() (*Config, error) {
 	return c, nil
 }
 
+// LoadBase 只做【通用】校验（端口 / 路径 / 保留期），不含 JWT。CLI 子命令使用。
+//
+// 为什么子命令也要校验保留期：`db purge` 真的会按 EBK_RECYCLE_TTL_DAYS 硬删除，
+// 这些值对子命令同样是"会触发不可逆操作"的配置，必须在动手前拦住。
+func LoadBase() (*Config, error) {
+	c, err := newConfig()
+	if err != nil {
+		return nil, err
+	}
+	if err := c.validateCommon(); err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
+// validate 全量校验：通用校验 + JWT。
+//
+// INFRA-01：**顺序即契约**——保持与重构前逐字一致（端口/路径 → JWT → 保留期），
+// 不得因为拆分而改变"两个配置同时非法时报哪一条"。
 func (c *Config) validate() error {
+	if err := c.validatePaths(); err != nil {
+		return err
+	}
+	if err := c.ValidateRuntime(); err != nil {
+		return err
+	}
+	return c.validateRetention()
+}
+
+// validateCommon 通用校验：路径 + 保留期（不含 JWT，子命令可用）
+func (c *Config) validateCommon() error {
+	if err := c.validatePaths(); err != nil {
+		return err
+	}
+	return c.validateRetention()
+}
+
+// validatePaths 端口与路径必填项（INFRA-06 的端口数值校验也在这里）
+func (c *Config) validatePaths() error {
 	if strings.TrimSpace(c.HTTPPort) == "" {
 		return fmt.Errorf("EBK_HTTP_PORT 不能为空")
+	}
+	if err := validatePort(c.HTTPPort); err != nil {
+		return err
 	}
 	if strings.TrimSpace(c.DBPath) == "" {
 		return fmt.Errorf("EBK_DB_PATH 不能为空")
@@ -129,9 +189,11 @@ func (c *Config) validate() error {
 	if strings.TrimSpace(c.DataDir) == "" {
 		return fmt.Errorf("EBK_DATA_DIR 不能为空")
 	}
-	if err := validateJWTSecret(c.JWTSecret); err != nil {
-		return err
-	}
+	return nil
+}
+
+// validateRetention 保留期取值（正整数 + 上限），见 GPT-R27 / GPT-R34
+func (c *Config) validateRetention() error {
 	if c.RecycleTTLDays <= 0 {
 		return fmt.Errorf("EBK_RECYCLE_TTL_DAYS 必须为正整数，当前=%d", c.RecycleTTLDays)
 	}
@@ -154,6 +216,29 @@ func (c *Config) validate() error {
 		if v.n > MaxRetentionDays {
 			return fmt.Errorf("%s 超过上限 %d 天，当前=%d", v.name, MaxRetentionDays, v.n)
 		}
+	}
+	return nil
+}
+
+// ValidateRuntime 校验【仅服务运行期】需要的配置（JWT）。
+//
+// 导出而非私有：main.go 在 LoadBase 通过后、真正启动 HTTP 服务之前调用它，
+// 保证"该挡的仍然挡住"，只是不再挡子命令。
+func (c *Config) ValidateRuntime() error {
+	return validateJWTSecret(c.JWTSecret)
+}
+
+// validatePort 端口必须是 1-65535 的整数（INFRA-06）。
+//
+// 原实现只查"非空"：EBK_HTTP_PORT=abc 会在 ListenAndServe 时才炸，
+// 而且报错是 net 包的原始信息，运维看不出是哪个环境变量配错了。
+func validatePort(raw string) error {
+	n, err := strconv.Atoi(strings.TrimSpace(raw))
+	if err != nil {
+		return fmt.Errorf("EBK_HTTP_PORT 必须是 1-65535 之间的整数，当前=%q", raw)
+	}
+	if n < 1 || n > 65535 {
+		return fmt.Errorf("EBK_HTTP_PORT 必须是 1-65535 之间的整数，当前=%d", n)
 	}
 	return nil
 }
@@ -182,14 +267,24 @@ func envOr(key, def string) string {
 	return def
 }
 
-func envBool(key string, def bool) bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv(key))) {
+// envBool 解析布尔型环境变量（INFRA-05：与 envInt 同口径——非法值报错，不静默回落）。
+//
+// 原实现对 "enable" / "2" / "Y" 等一律返回默认值：运维写 EBK_ENABLE_REGISTER=enable
+// 会看到服务正常启动、日志里"公开注册=false"与预期相反，却没有任何提示指向配置拼写。
+// 这与 envInt 在 GPT-R34 之前的缺陷同构，一并消灭。
+func envBool(key string, def bool) (bool, error) {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return def, nil // 未设置/空白 = 用户没表达偏好，用默认值
+	}
+	switch strings.ToLower(raw) {
 	case "1", "true", "yes", "on":
-		return true
+		return true, nil
 	case "0", "false", "no", "off":
-		return false
+		return false, nil
 	default:
-		return def
+		return false, fmt.Errorf(
+			"%s 必须是 1/true/yes/on 或 0/false/no/off（不区分大小写），当前=%q", key, os.Getenv(key))
 	}
 }
 
