@@ -148,6 +148,16 @@ func (s *CategoryService) Create(uid, bookID int64, in CategoryCreateInput) (*mo
 	if _, err := sess.Insert(c); err != nil {
 		return nil, err
 	}
+	// A8：分类同为账本共享配置，创建必须留痕（口径同 AccountService.Create）。
+	// create 无"变更前"状态，记被创建实体的关键字段：叫什么、收入还是支出、挂在哪一级。
+	if err := insertAudit(sess, bookID, uid, model.AuditActionCreate,
+		model.AuditEntityCategory, c.Id, map[string]interface{}{
+			"name":     c.Name,
+			"parentId": c.ParentId,
+			"catType":  c.CatType,
+		}, "server"); err != nil {
+		return nil, err
+	}
 	if err := sess.Commit(); err != nil {
 		return nil, err
 	}
@@ -174,6 +184,9 @@ func (s *CategoryService) Update(uid, bookID, categoryID int64, in CategoryUpdat
 	if !has {
 		return nil, ErrCategoryNotFound
 	}
+	// A8：变更前关键字段必须在 c 被改写【之前】取（GPT-R29 的"先读后写"）。
+	// 只用于审计 payload，不参与任何判定。
+	beforeName, beforeParent := c.Name, c.ParentId
 	if in.CatType != nil && *in.CatType != c.CatType {
 		return nil, ErrCategoryInvalid
 	}
@@ -219,6 +232,16 @@ func (s *CategoryService) Update(uid, bookID, categoryID int64, in CategoryUpdat
 	}
 	if n != 1 {
 		return nil, ErrConcurrentConflict
+	}
+	// A8：更新必须留痕，before_json 记变更前的关键字段（名称 / 上级 / 收支类型）。
+	// cat_type 不允许修改，记它是为了让"改名 / 挪级"能对着收支方向解释。
+	if err := insertAudit(sess, bookID, uid, model.AuditActionUpdate,
+		model.AuditEntityCategory, categoryID, map[string]interface{}{
+			"name":     beforeName,
+			"parentId": beforeParent,
+			"catType":  c.CatType,
+		}, "server"); err != nil {
+		return nil, err
 	}
 	if err := sess.Commit(); err != nil {
 		return nil, err
@@ -286,6 +309,13 @@ func (s *CategoryService) Delete(uid, bookID, categoryID int64) (int64, error) {
 	}
 	if n != 1 {
 		return 0, ErrCategoryNotFound
+	}
+	// A8：软删必须带【变更前整行】的 before_json。
+	// c 是本函数开头（UPDATE 之前、同一事务内）读到的快照，未被改写，
+	// 正好是"变更前的整行"——改名/挪级/收支方向都在里面。
+	if err := insertAudit(sess, bookID, uid, model.AuditActionDelete,
+		model.AuditEntityCategory, categoryID, c, "server"); err != nil {
+		return 0, err
 	}
 	if err := sess.Commit(); err != nil {
 		return 0, err

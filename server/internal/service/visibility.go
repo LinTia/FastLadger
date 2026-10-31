@@ -26,7 +26,13 @@ import (
 // 返回值语义：
 //   - 非成员 → (false, ErrNotMember)：**不区分"账本不存在"与"不是成员"**，
 //     避免通过错误码差异探测账本是否存在。
-//   - 账本已软删 → (false, nil)：账本级不可见，但不报错（由调用方的成员校验负责 403）。
+//   - 账本已软删 → (false, ErrNotMember)：**失败关闭**（A2）。
+//     旧实现在这里返回 (false, nil)，对调用方而言等同于"仍是成员，只是关闭了互看"。
+//     HTTP 读路径都在前面另加了一次 requireMember（因此被挡住），但 WS 订阅路径
+//     直接把本函数当 checker 用（cmd/server/main.go），而 hub.go 只在 checker 返回
+//     error 时才跳过订阅——于是已删账本会被订阅成功，并一直保留到令牌到期。
+//     现在与 requireMemberTx / roleOfTx 的口径统一：它们的 SQL 都 JOIN 了
+//     `books b ON b.id = m.book_id AND b.deleted = 0`，"已删即非成员"。
 //   - owner / admin → (true, nil)：权限矩阵《落地方案》§5.5 固定的高权限。
 //   - member → 读账本级开关 books.members_can_view_others（MVP 唯一粒度）。
 //
@@ -62,7 +68,10 @@ func canViewDetailTx(sess *xorm.Session, uid, bookID int64) (bool, error) {
 		return false, ErrNotMember
 	}
 	if row.BookDeleted {
-		return false, nil
+		// A2：已删账本必须**报错**（而不是 (false, nil)）——err 才是调用方的拒绝信号。
+		// 用 ErrNotMember 而非新错误：对外仍不区分"账本不存在"与"不是成员"，
+		// 不给出账本是否存在的探测面（与上面 `!has` 分支同口径）。
+		return false, ErrNotMember
 	}
 	if row.Role == model.RoleOwner || row.Role == model.RoleAdmin {
 		return true, nil

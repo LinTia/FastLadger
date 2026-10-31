@@ -87,6 +87,16 @@ func (s *BookService) Create(uid int64, name string, bookType int8) (*model.Book
 		_ = sess.Rollback()
 		return nil, err
 	}
+	// A1：账本创建必须留痕（PRD §10.9「给定任一写操作 … 可查到操作者、时间、实体」）。
+	//
+	// 与交易 create 同口径：没有"变更前"状态，before_json 留空。
+	// book_id 用本账本 id（**不是** AuditBookInstance 哨兵——创建账本是一次
+	// 归属明确的账本域写操作，不是实例级事件；哨兵只服务登录 / 备份恢复）。
+	if err := insertAudit(sess, b.Id, uid, model.AuditActionCreate,
+		model.AuditEntityBook, b.Id, nil, "server"); err != nil {
+		_ = sess.Rollback()
+		return nil, err
+	}
 	if err := sess.Commit(); err != nil {
 		return nil, err
 	}
@@ -199,6 +209,19 @@ func (s *BookService) Update(actor, bookID int64, name string, canViewOthers *bo
 			return nil, fmt.Errorf("%w：账本已不存在或已被删除", ErrConcurrentConflict)
 		}
 		out.NameChanged = true
+		// A1（顺带）：改名本身也是写操作，必须留痕。
+		//
+		// 口径选择 update（而不是 config_change）：可见性开关走 SetVisibility 的
+		// config_change 已是不变量（那里 before_json 是 {"membersCanViewOthers":旧值}），
+		// 改名改的是账本主数据，语义上是"更新实体字段"——用 update 既填上了枚举字典
+		// §14.1 里那个"预留"的 update 槽位，也避免与开关的 config_change 计数混在一起
+		// （运维查"这个账本什么时候被谁改名"不必再去 config_change 里挑）。
+		// 与业务写入同事务：任一环节失败整体回滚，不会出现"名字改了却没留痕"。
+		if err := insertAudit(sess, bookID, actor, model.AuditActionUpdate,
+			model.AuditEntityBook, bookID,
+			map[string]interface{}{"name": oldName}, "server"); err != nil {
+			return nil, err
+		}
 	}
 
 	// 可见性：一律委托唯一实现，并**传入本事务**（GPT-R33 原子性）
@@ -318,6 +341,15 @@ func (s *BookService) SetVisibility(actor, bookID int64, canView bool, tx ...*xo
 //
 // GPT-R28：owner 判定同样在写事务内重读——账本删除是不可逆操作，
 // 不能建立在事务外读到的旧成员资格上。
+//
+// A1：删除必须留痕，且 before_json 是【变更前的整行】。
+//
+// 口径与"先读后写"教训（GPT-R29）一致：整行在 UPDATE **之前**、于**同一事务内**
+// 读出来，随后那次 UPDATE 才落库。软删本身回答不了"删之前这本账叫什么、属于谁、
+// 开关是开是关"，因此必须把整行原文留在 before_json 里。
+// 账本删除是租户级最高影响的操作（整本数据对外消失、所有成员连带失效、所有在途
+// 邀请同时作废），此前却是全仓唯一"零审计"的高危写操作——而同一张表上
+// 影响更小的可见性开关反而有审计，口径自相矛盾。
 func (s *BookService) Delete(actor, bookID int64) error {
 	sess := s.engine.NewSession()
 	defer sess.Close()
@@ -333,6 +365,16 @@ func (s *BookService) Delete(actor, bookID int64) error {
 	if role != model.RoleOwner {
 		return ErrForbidden
 	}
+	// 变更前整行快照：必须在 UPDATE **之前**、在**本事务**内读取。
+	// loadBookTx 只取 deleted = 0 的账本，因此读不到就说明已被并发删除，
+	// 与下面 RowsAffected == 0 的处理保持同一口径（ErrConcurrentConflict）。
+	before, err := loadBookTx(sess, bookID)
+	if err != nil {
+		if errors.Is(err, ErrBookNotFound) {
+			return fmt.Errorf("%w：账本已不存在或已被删除", ErrConcurrentConflict)
+		}
+		return err
+	}
 	now := time.Now().Unix()
 	res, err := sess.Exec(`UPDATE books SET deleted = 1, deleted_at = ?, updated_at = ? WHERE id = ? AND deleted = 0`,
 		now, now, bookID)
@@ -345,6 +387,12 @@ func (s *BookService) Delete(actor, bookID int64) error {
 	}
 	if n != 1 {
 		return fmt.Errorf("%w：账本已不存在或已被删除", ErrConcurrentConflict)
+	}
+	// 审计与删除同事务：提交失败时两者一起回滚（不会出现"删了没记"或"记了没删"）。
+	// book_id / entity_id 都用本账本 id（不是 AuditBookInstance 哨兵）。
+	if err := insertAudit(sess, bookID, actor, model.AuditActionDelete,
+		model.AuditEntityBook, bookID, before, "server"); err != nil {
+		return err
 	}
 	if err := sess.Commit(); err != nil {
 		return err

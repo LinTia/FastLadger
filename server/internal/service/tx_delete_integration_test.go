@@ -32,10 +32,19 @@ func addMember(t *testing.T, e *testEnv, uid int64, role int8) {
 	}
 }
 
+// auditCount 统计本账本的【交易域】审计条数。
+//
+// 为什么带 entity_type = 'transaction'：A8 之后账户 / 分类的写操作也会写审计
+// （entity_type = 'account' / 'category'），而 newTestEnv 的建库准备本身就会建
+// 3 个账户 + 2 个分类 + 1 本账——按 book_id + action 统计会把它们的 create 行
+// 一起算进来，导致"创建应写 1 行"这类断言失去意义。
+// 本文件的全部调用点断言的都是**交易**的 create / delete / restore，故把口径显式收敛到
+// 交易域；这不是放宽断言，而是把它本来想断言的对象写清楚。
 func auditCount(e *testEnv, action string) int64 {
 	var n int64
 	if _, err := e.engine.SQL(
-		"SELECT COUNT(1) FROM audit_logs WHERE book_id = ? AND action = ?", e.bookID, action).Get(&n); err != nil {
+		"SELECT COUNT(1) FROM audit_logs WHERE book_id = ? AND entity_type = 'transaction' AND action = ?",
+		e.bookID, action).Get(&n); err != nil {
 		e.t.Fatalf("统计审计失败：%v", err)
 	}
 	return n
@@ -323,9 +332,12 @@ func TestPurgeAuditLogs(t *testing.T) {
 	}
 
 	now := time.Now().Unix()
-	// 把这条审计改成 400 天前 → 超过 365 天保留期
+	// 把【交易域】审计改成 400 天前 → 超过 365 天保留期。
+	// 加 entity_type 过滤的原因同 auditCount：账本创建 + 账户/分类的 create 审计
+	// 也落在本账本上，它们不属于本用例要清理的那一条。
 	if _, err := e.engine.Exec(
-		"UPDATE audit_logs SET at = ? WHERE book_id = ?", now-400*24*3600, e.bookID); err != nil {
+		"UPDATE audit_logs SET at = ? WHERE book_id = ? AND entity_type = 'transaction'",
+		now-400*24*3600, e.bookID); err != nil {
 		t.Fatal(err)
 	}
 	n, err := PurgeAuditLogs(e.engine, 365, now)

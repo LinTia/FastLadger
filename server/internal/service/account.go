@@ -152,6 +152,20 @@ func (s *AccountService) Create(uid, bookID int64, in AccountCreateInput) (*mode
 	if _, err := sess.Insert(a); err != nil {
 		return nil, err
 	}
+	// A8：账户是账本共享配置，创建必须留痕（PRD §10.9「任一写操作」口径）。
+	//
+	// create 没有"变更前"状态，这里记的是**被创建实体的关键字段**（叫什么、哪一类、
+	// 什么币种、挂在谁下面）——排查"这个账户是谁建的、原本打算当什么用"靠的就是它。
+	// 仅记录，不含余额写入路径（余额只能由 TxService.Create 驱动）。
+	if err := insertAudit(sess, bookID, uid, model.AuditActionCreate,
+		model.AuditEntityAccount, a.Id, map[string]interface{}{
+			"name":     a.Name,
+			"category": a.Category,
+			"currency": a.Currency,
+			"parentId": a.ParentId,
+		}, "server"); err != nil {
+		return nil, err
+	}
 	if err := sess.Commit(); err != nil {
 		return nil, err
 	}
@@ -181,6 +195,9 @@ func (s *AccountService) Update(uid, bookID, accountID int64, in AccountUpdateIn
 	if !has {
 		return nil, ErrAccountNotFound
 	}
+	// A8：变更前关键字段必须在 a 被改写【之前】取（GPT-R29 的"先读后写"）。
+	// 只读这一处、只用在审计 payload 上，不参与任何判定。
+	beforeName, beforeParent := a.Name, a.ParentId
 	if in.Name != nil {
 		name, nerr := normalizeName(*in.Name, "账户名称")
 		if nerr != nil {
@@ -221,6 +238,15 @@ func (s *AccountService) Update(uid, bookID, accountID int64, in AccountUpdateIn
 	if n != 1 {
 		return nil, ErrConcurrentConflict
 	}
+	// A8：更新必须留痕，before_json 记变更前的关键字段（名称 / 上级分组）。
+	// 与业务写入同事务：提交失败则整体回滚，不会出现"改了却没留痕"。
+	if err := insertAudit(sess, bookID, uid, model.AuditActionUpdate,
+		model.AuditEntityAccount, accountID, map[string]interface{}{
+			"name":     beforeName,
+			"parentId": beforeParent,
+		}, "server"); err != nil {
+		return nil, err
+	}
 	if err := sess.Commit(); err != nil {
 		return nil, err
 	}
@@ -242,8 +268,17 @@ func (s *AccountService) Delete(uid, bookID, accountID int64) (int64, error) {
 	if _, err := requireManagerTx(sess, bookID, uid); err != nil {
 		return 0, err
 	}
-	if err := ensureAccountInBook(sess, bookID, accountID); err != nil {
+	// A8：软删前先把**整行**读出来（在 UPDATE 之前、同一事务内）。
+	// 软删本身回答不了"删之前这个账户叫什么、属于哪一类、余额多少、挂在谁下面"，
+	// 而这条行是历史交易引用的对象——删掉它会让历史交易"引用悬空且无从追溯"。
+	// 这一步同时承担原来的归属校验（id + book_id + deleted = 0，与 ensureAccountInBook 同义）。
+	var before model.Account
+	has, err := sess.Where("id = ? AND book_id = ? AND deleted = 0", accountID, bookID).Get(&before)
+	if err != nil {
 		return 0, err
+	}
+	if !has {
+		return 0, ErrAccountNotFound
 	}
 	// GPT-R53：仍有【活跃】子账户引用本账户的 parent_id 时显式拒绝。
 	// 与 R47（parent_id 环路）不同：这里不是"能不能指向"，而是"被指向的一方能不能消失"。
@@ -272,6 +307,14 @@ func (s *AccountService) Delete(uid, bookID, accountID int64) (int64, error) {
 	// 推进版本会触发所有在线端一次无意义的 pull；且这些行不参与回收站 TTL 硬清
 	// （PurgeExpired* 只动 transactions / audit_logs），改版本号也不会带来清理收益。
 	// 若未来引入"账户恢复"能力，必须同步给墓碑解挂补版本推进——见 zz_c_verify 探针。
+	//
+	// 关于"多级链"：这里只处理**直接**子级，但不需要递归——多级链由两件事共同保证：
+	//  ① 软删时级联解挂（本语句：删除父账户时把引用它的墓碑子级 parent_id 置 0）；
+	//  ② 禁止把账户挂到墓碑账户下（assertNoAccountCycle 回溯到"已删除 / 不属于本账本"
+	//     的上级时直接拒绝）。
+	// 因此任何时刻都不存在"活跃账户 → 墓碑账户 → …"这样的活链：父账户被删时它的
+	// 直接墓碑子级已被解挂，而它们自己的墓碑子级本来就只能挂在墓碑下——按 ② 不可能存在。
+	// 逐层递归只会把一次 UPDATE 变成 N 次，收益为零。
 	if _, err := sess.Exec(
 		`UPDATE accounts SET parent_id = 0 WHERE book_id = ? AND parent_id = ? AND deleted = 1`,
 		bookID, accountID); err != nil {
@@ -311,6 +354,13 @@ func (s *AccountService) Delete(uid, bookID, accountID int64) (int64, error) {
 	}
 	if n != 1 {
 		return 0, ErrAccountNotFound
+	}
+	// A8：软删必须带【变更前整行】的 before_json（before 是在 UPDATE 之前读到的快照，
+	// 此刻仍未被改写）。审计与软删同事务：任一步失败整体回滚，
+	// 不会出现"账户没了、却查不到谁删的、删的是什么"。
+	if err := insertAudit(sess, bookID, uid, model.AuditActionDelete,
+		model.AuditEntityAccount, accountID, before, "server"); err != nil {
+		return 0, err
 	}
 	if err := sess.Commit(); err != nil {
 		return 0, err
