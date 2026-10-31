@@ -228,9 +228,11 @@ func TestR40RevokeUsesConditionalUpdateWithRowsAffected(t *testing.T) {
 	// A9 之后这里不再断言字面量 "used_at = 0 AND revoked = 0"：兑换的标记已用
 	// 复用 inviteUsableCond（used_at / revoked / expires_at 三项），比原来的两条件更强。
 	// 断言"必须引用该常量"，就把"漏掉其中任一条件"这类回归一次性挡住。
-	join := src[strings.Index(src, "func (s *MemberService) JoinViaInvite"):]
-	join = join[:minStringEnd(join, 0)]
-	if !strings.Contains(join, "inviteUsableCond") {
+	//
+	// 用 AST 全等匹配而不是 strings.Contains（reviewer-authz G-3）：
+	// 子串匹配会被 `inviteUsableCondWeak` 这类同名前缀常量双关——名字里带上目标
+	// 名字就能骗过守卫，而实际条件可能已经退回两条件；注释里的同名文本同样会命中。
+	if !serviceFuncReferencesIdent(t, src, "JoinViaInvite", "inviteUsableCond") {
 		t.Fatal("JoinViaInvite 标记已用的 UPDATE 必须复用 inviteUsableCond（含 revoked = 0），" +
 			"否则撤销与兑换可以双成功（GPT-R40）")
 	}

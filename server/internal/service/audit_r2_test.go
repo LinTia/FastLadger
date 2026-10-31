@@ -503,15 +503,9 @@ func TestWA9MarkUsedRejectsExpired(t *testing.T) {
 	ms := newMemberSvc(t, e)
 
 	src := readServiceSource(t, "member.go")
-	joinStart := strings.Index(src, "func (s *MemberService) JoinViaInvite")
-	if joinStart < 0 {
-		t.Fatal("member.go 中找不到 JoinViaInvite")
-	}
-	join := src[joinStart:]
-	if end := strings.Index(join[1:], "\nfunc "); end >= 0 {
-		join = join[:end+1]
-	}
-	if !strings.Contains(join, "inviteUsableCond") {
+	// 用 AST 全等匹配（reviewer-authz G-3）：strings.Contains 会被
+	// `inviteUsableCondWeak` 这类同名前缀常量双关，注释里的同名文本也会命中。
+	if !serviceFuncReferencesIdent(t, src, "JoinViaInvite", "inviteUsableCond") {
 		t.Fatal("JoinViaInvite 标记已用的 UPDATE 必须复用 inviteUsableCond" +
 			"（旧实现在这里手写条件并漏掉了 expires_at > ?，与撤销/过期判定两套口径打架）")
 	}

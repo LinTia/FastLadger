@@ -11,9 +11,13 @@ package service
 // 真实事务回滚 / 并发竞争仍需 CGO 环境下的集成测试，本文件不冒充那部分证据。
 
 import (
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
 	"reflect"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -122,13 +126,138 @@ func TestMemberWritesCheckRowsAffected(t *testing.T) {
 	// 邀请"单次使用"的硬校验：条件更新后必须判 1 行。
 	//
 	// A9：标记已用的 UPDATE 不再手写条件串，而是复用 inviteUsableCond
-	// （used_at = 0 AND revoked = 0 AND expires_at > ?）——单一实现，
-	// 与撤销路径、过期判定同源。因此这里断言的是"两条都在"，而不是某个字面量残片。
-	if !strings.Contains(src, "inviteUsableCond") {
-		t.Fatal("member.go 的邀请标记更新必须复用 inviteUsableCond（D-R08 / A9：单一条件口径）")
+	// （used_at = 0 AND revoked = 0 AND expires_at > ?）——单一实现，与撤销路径、
+	// 过期判定同源。
+	//
+	// 断言用**标识符全等**（AST 级）而不是 strings.Contains：
+	// 子串匹配会让 `inviteUsableCondWeak` 这类同名前缀常量双关命中
+	// （reviewer-authz G-3），也能被注释里的同名文本满足。AST 里没有注释，
+	// Ident.Name 又必须全等，因此只有真引用才能通过。
+	const condIdent = "inviteUsableCond"
+	if !serviceFuncReferencesIdent(t, src, "JoinViaInvite", condIdent) {
+		t.Fatalf("JoinViaInvite 标记已用的 UPDATE 必须复用 %s（D-R08 / A9：单一条件口径）", condIdent)
 	}
-	if !strings.Contains(src, `inviteUsableCond = "used_at = 0 AND revoked = 0 AND expires_at > ?"`) {
-		t.Fatal("inviteUsableCond 必须同时含 used_at / revoked / expires_at 三个条件（A9）")
+	cond, ok := serviceConstString(t, src, condIdent)
+	if !ok {
+		t.Fatalf("member.go 里找不到字符串常量 %s", condIdent)
+	}
+	for _, want := range []string{"used_at = 0", "revoked = 0", "expires_at > ?"} {
+		if !strings.Contains(cond, want) {
+			t.Fatalf("%s 缺少 %q：单一条件口径被拆散（值=%q）", condIdent, want, cond)
+		}
+	}
+}
+
+// serviceParseSource 把源码文本解析成 AST（不带注释）。
+//
+// 存在理由：源码级守卫若用 strings.Contains 匹配标识符，会被两类东西骗过——
+// 同名前缀的另一个标识符（`inviteUsableCondWeak`）与注释/字符串里的同名文本。
+// 解析成 AST 之后，注释不在树里、标识符必须**全等**才命中，这两个口子同时关闭。
+func serviceParseSource(t *testing.T, src string) *ast.File {
+	t.Helper()
+	f, err := parser.ParseFile(token.NewFileSet(), "service_source.go", src, 0)
+	if err != nil {
+		t.Fatalf("解析源码失败：%v", err)
+	}
+	return f
+}
+
+// serviceFuncReferencesIdent 报告函数 fnName 的函数体内是否**精确**引用了标识符 ident。
+func serviceFuncReferencesIdent(t *testing.T, src, fnName, ident string) bool {
+	t.Helper()
+	f := serviceParseSource(t, src)
+	for _, d := range f.Decls {
+		fn, ok := d.(*ast.FuncDecl)
+		if !ok || fn.Body == nil || fn.Name.Name != fnName {
+			continue
+		}
+		hit := false
+		ast.Inspect(fn.Body, func(n ast.Node) bool {
+			if id, isIdent := n.(*ast.Ident); isIdent && id.Name == ident {
+				hit = true
+			}
+			return !hit
+		})
+		return hit
+	}
+	t.Fatalf("源码里找不到函数 %s", fnName)
+	return false
+}
+
+// serviceConstString 返回包级字符串常量 name 的值（未找到返回 false）。
+func serviceConstString(t *testing.T, src, name string) (string, bool) {
+	t.Helper()
+	f := serviceParseSource(t, src)
+	val, found := "", false
+	for _, d := range f.Decls {
+		gd, ok := d.(*ast.GenDecl)
+		if !ok || gd.Tok != token.CONST {
+			continue
+		}
+		for _, s := range gd.Specs {
+			vs, ok := s.(*ast.ValueSpec)
+			if !ok {
+				continue
+			}
+			for i, n := range vs.Names {
+				if n.Name != name || i >= len(vs.Values) {
+					continue
+				}
+				lit, ok := vs.Values[i].(*ast.BasicLit)
+				if !ok || lit.Kind != token.STRING {
+					continue
+				}
+				if unq, err := strconv.Unquote(lit.Value); err == nil {
+					val, found = unq, true
+				}
+			}
+		}
+	}
+	return val, found
+}
+
+// TestServiceSourceGuardRejectsPrefixDoubleEntendre 源码守卫自身的突变测试（reviewer-authz G-3）。
+//
+// 断言的是"守卫必须拒绝哪些东西"，而不是生产代码本身：
+//   - 同名前缀的另一个常量（inviteUsableCondWeak）不得算作对 inviteUsableCond 的引用；
+//   - 注释里的同名文本、字符串字面量里的同名文本同样不得算引用；
+//   - 但真正的引用必须仍被识别（守卫过严会让所有调用点误报）。
+//
+// 为什么值得单独写：这类守卫一旦退化成子串匹配，被它保护的不变量会集体失效，
+// 而且**没有任何红灯**——只有给守卫本身喂"绕过写法"才能发现它已经失效。
+func TestServiceSourceGuardRejectsPrefixDoubleEntendre(t *testing.T) {
+	const base = `package service
+
+// 注释里写 inviteUsableCond 不算引用
+
+const inviteUsableCondWeak = "used_at = 0"
+
+func hero() {
+	_ = inviteUsableCondWeak
+	_ = "inviteUsableCond"
+}
+`
+	if serviceFuncReferencesIdent(t, base, "hero", "inviteUsableCond") {
+		t.Fatal("前缀双关/注释/字符串字面量被当成了真引用：源码守卫必须做标识符全等匹配")
+	}
+	// 常量读取同理：只认常量名全等，不认前缀
+	if _, ok := serviceConstString(t, base, "inviteUsableCond"); ok {
+		t.Fatal("serviceConstString 用前缀匹配命中了 inviteUsableCondWeak")
+	}
+	// 对照：真正的引用与真正的常量定义必须被识别（防止守卫过严）
+	real := `package service
+
+const inviteUsableCond = "used_at = 0 AND revoked = 0 AND expires_at > ?"
+
+func hero() {
+	_ = inviteUsableCond
+}
+`
+	if !serviceFuncReferencesIdent(t, real, "hero", "inviteUsableCond") {
+		t.Fatal("真正的引用未被识别：AST 全等匹配把合法代码也拒了（守卫过严）")
+	}
+	if v, ok := serviceConstString(t, real, "inviteUsableCond"); !ok || !strings.Contains(v, "expires_at > ?") {
+		t.Fatalf("未取到常量值：ok=%v val=%q", ok, v)
 	}
 }
 
