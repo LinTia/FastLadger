@@ -119,6 +119,10 @@ func (h *ledgerHandler) getTransaction(c *gin.Context) {
 //
 // clientUuid 经查询参数传入（DELETE 携带 body 在部分代理/客户端下不可靠）；
 // 缺失即 400（服务层强制，避免重试把余额反向两次）。
+//
+// GPT-C04：与 createTransaction 口径一致，幂等重放（replayed=true）**不广播**——
+// 那次变更在首次提交时已经通知过，重复事件会让所有在线端白拉一次。
+// C01 修复后，终态不匹配的重放会走 404（mapSvcErr），天然不广播。
 func (h *ledgerHandler) deleteTransaction(c *gin.Context) {
 	bookID, good := bookID(c)
 	if !good {
@@ -128,17 +132,21 @@ func (h *ledgerHandler) deleteTransaction(c *gin.Context) {
 	if !good {
 		return
 	}
-	ver, err := h.txs.Delete(c.Request.Context(), currentUID(c), bookID, txID, c.Query("clientUuid"))
+	ver, replayed, err := h.txs.DeleteReceipt(c.Request.Context(), currentUID(c), bookID, txID, c.Query("clientUuid"))
 	if err != nil {
 		mapSvcErr(c, err)
 		return
 	}
 	// 已提交 → 通知在线成员拉取（删除也是版本递增事件；失败只记日志，不反转结果）
-	notifyDataChanged(bookID, ver)
+	if !replayed {
+		notifyDataChanged(bookID, ver)
+	}
 	ok(c, gin.H{"version": ver})
 }
 
 // restoreTransaction 阶段 4：恢复一笔已软删的交易（整笔）。与删除对称。
+//
+// GPT-C04：幂等重放（replayed=true）不广播，口径同 deleteTransaction / createTransaction。
 func (h *ledgerHandler) restoreTransaction(c *gin.Context) {
 	bookID, good := bookID(c)
 	if !good {
@@ -148,12 +156,14 @@ func (h *ledgerHandler) restoreTransaction(c *gin.Context) {
 	if !good {
 		return
 	}
-	ver, err := h.txs.Restore(c.Request.Context(), currentUID(c), bookID, txID, c.Query("clientUuid"))
+	ver, replayed, err := h.txs.RestoreReceipt(c.Request.Context(), currentUID(c), bookID, txID, c.Query("clientUuid"))
 	if err != nil {
 		mapSvcErr(c, err)
 		return
 	}
-	notifyDataChanged(bookID, ver)
+	if !replayed {
+		notifyDataChanged(bookID, ver)
+	}
 	ok(c, gin.H{"version": ver})
 }
 

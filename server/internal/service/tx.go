@@ -547,8 +547,13 @@ func (s *TxService) List(uid, bookID int64, q TxListQuery) ([]model.Transaction,
 	}
 
 	page, count := normalizePaging(q.Page, q.Count)
+	// GPT-C05：页码极大时 (page-1)*count 会回绕成负 OFFSET，显式校验（→400）
+	offset, err := pagingOffset(page, count)
+	if err != nil {
+		return nil, 0, err
+	}
 	listSQL := "SELECT * FROM transactions WHERE " + cond + " ORDER BY tx_time DESC, id DESC LIMIT ? OFFSET ?"
-	listArgs := append(append([]interface{}{}, args...), count, (page-1)*count)
+	listArgs := append(append([]interface{}{}, args...), count, offset)
 	out := make([]model.Transaction, 0, count)
 	if err := s.engine.SQL(listSQL, listArgs...).Find(&out); err != nil {
 		return nil, 0, err
@@ -738,13 +743,30 @@ func likePattern(kw string) string {
 // 余额反向依赖 transactions.direction（0004 补入）：转出侧 flow=-amount、转入侧
 // flow=+amount；单笔按 type 判定。createChangeBalance 复用同一原子 UPDATE，
 // 全组共享一个递增版本（WBS 4.6：单一事务边界）。
+//
+// 需要区分"首次提交"与"幂等重放"的调用方（如 HTTP 层决定是否广播）请用 DeleteReceipt。
 func (s *TxService) Delete(ctx context.Context, uid, bookID, txID int64, clientUuid string) (int64, error) {
+	ver, _, err := s.mutateVisibility(ctx, uid, bookID, txID, clientUuid, true, model.AuditActionDelete, model.IdemOpDelete)
+	return ver, err
+}
+
+// DeleteReceipt 与 Delete 相同，但额外返回 replayed 标记：true 表示本次是同键幂等重放
+// （回执命中且终态一致，未产生任何新写入）。HTTP 层据此跳过 data_changed 广播（GPT-C04）。
+func (s *TxService) DeleteReceipt(ctx context.Context, uid, bookID, txID int64, clientUuid string) (int64, bool, error) {
 	return s.mutateVisibility(ctx, uid, bookID, txID, clientUuid, true, model.AuditActionDelete, model.IdemOpDelete)
 }
 
 // Restore 恢复一笔已软删的交易（整笔）。与 Delete 对称：余额回滚到删除前、deleted 复位、
 // 版本递增、写审计，复用同一事务与版本来源（WBS 4.4）。
+//
+// 需要区分"首次提交"与"幂等重放"的调用方请用 RestoreReceipt。
 func (s *TxService) Restore(ctx context.Context, uid, bookID, txID int64, clientUuid string) (int64, error) {
+	ver, _, err := s.mutateVisibility(ctx, uid, bookID, txID, clientUuid, false, model.AuditActionRestore, model.IdemOpRestore)
+	return ver, err
+}
+
+// RestoreReceipt 与 Restore 相同，但额外返回 replayed 标记（语义见 DeleteReceipt，GPT-C04）。
+func (s *TxService) RestoreReceipt(ctx context.Context, uid, bookID, txID int64, clientUuid string) (int64, bool, error) {
 	return s.mutateVisibility(ctx, uid, bookID, txID, clientUuid, false, model.AuditActionRestore, model.IdemOpRestore)
 }
 
@@ -752,13 +774,16 @@ func (s *TxService) Restore(ctx context.Context, uid, bookID, txID int64, client
 //
 // clientUuid 必填（服务层强制，不依赖 handler）：删除/恢复若失去幂等，客户端离线重试
 // 会把余额反向两次。回执与 Create 共用 idempotency_records，靠 op 列区分（迁移 0005）。
-func (s *TxService) mutateVisibility(ctx context.Context, uid, bookID, txID int64, clientUuid string, wantDeleted bool, action, op string) (int64, error) {
+//
+// 返回的 replayed=true 表示同键幂等重放：没有产生任何新写入（版本号是历史回执里的旧值），
+// 调用方不得将其当作新变更广播（GPT-C04）。
+func (s *TxService) mutateVisibility(ctx context.Context, uid, bookID, txID int64, clientUuid string, wantDeleted bool, action, op string) (int64, bool, error) {
 	clientUuid = strings.TrimSpace(clientUuid)
 	if uid <= 0 || bookID <= 0 || txID <= 0 {
-		return 0, fmt.Errorf("%w：用户/账本/交易 ID 缺失", ErrInvalidArgument)
+		return 0, false, fmt.Errorf("%w：用户/账本/交易 ID 缺失", ErrInvalidArgument)
 	}
 	if clientUuid == "" || len(clientUuid) > maxClientUUIDLen {
-		return 0, fmt.Errorf("%w：clientUuid 必填且不超过 %d 字节", ErrInvalidArgument, maxClientUUIDLen)
+		return 0, false, fmt.Errorf("%w：clientUuid 必填且不超过 %d 字节", ErrInvalidArgument, maxClientUUIDLen)
 	}
 	hash := mutateRequestHash(op, bookID, uid, txID)
 
@@ -768,7 +793,7 @@ func (s *TxService) mutateVisibility(ctx context.Context, uid, bookID, txID int6
 		sess.Context(ctx)
 	}
 	if err := sess.Begin(); err != nil {
-		return 0, err
+		return 0, false, err
 	}
 	defer func() { _ = sess.Rollback() }()
 
@@ -780,9 +805,9 @@ func (s *TxService) mutateVisibility(ctx context.Context, uid, bookID, txID int6
 	role, err := roleOfTx(sess, bookID, uid)
 	if err != nil {
 		if errors.Is(err, ErrNotMember) {
-			return 0, ErrForbidden
+			return 0, false, ErrForbidden
 		}
-		return 0, err
+		return 0, false, err
 	}
 	// 非成员已在上一步拒绝；member 仅能操作本人（creator_uid 哨兵：0 视为仅 owner/admin 可改）
 	canEditOthers := CanEditOthersTx(role)
@@ -796,90 +821,100 @@ func (s *TxService) mutateVisibility(ctx context.Context, uid, bookID, txID int6
 		ON CONFLICT(book_id, uid, op, client_uuid) DO NOTHING`,
 		bookID, uid, clientUuid, op, hash, now)
 	if err != nil {
-		return 0, fmt.Errorf("写入幂等回执占位失败：%w", err)
+		return 0, false, fmt.Errorf("写入幂等回执占位失败：%w", err)
 	}
 	inserted, err := res.RowsAffected()
 	if err != nil {
-		return 0, err
+		return 0, false, err
 	}
 	if inserted == 0 {
-		return replayMutateReceipt(sess, bookID, uid, clientUuid, op, hash)
+		ver, err := replayMutateReceipt(sess, bookID, uid, clientUuid, op, hash)
+		// 重放不是新写入：replayed=true，调用方不得广播（GPT-C04）
+		return ver, err == nil, err
 	}
 	if inserted != 1 {
-		return 0, ErrIncompleteReceipt
+		return 0, false, ErrIncompleteReceipt
 	}
 
 	// 3) 目标当前必须处于与操作相反的删除态（删前须存活、恢复前须已删），否则 404
 	row, err := loadTxRowByState(sess, bookID, txID, wantDeleted)
 	if err != nil {
-		return 0, err
+		return 0, false, err
 	}
 	group, err := collectTransferGroup(sess, bookID, row, wantDeleted)
 	if err != nil {
-		return 0, err
+		return 0, false, err
 	}
 	for _, r := range group {
 		if !canEditOthers && r.CreatorUid != uid {
-			return 0, ErrForbidden
+			return 0, false, ErrForbidden
 		}
 	}
 
 	ver, err := s.versions.Next(sess, bookID)
 	if err != nil {
-		return 0, err
+		return 0, false, err
 	}
 
 	for _, r := range group {
 		// 失败关闭：转账若缺方向标记，无法判定该侧是转出还是转入，
 		// 余额反向会静默算成 0（钱不回滚却不报错）。迁移 0006 负责回填。
+		// （txRowFlow 内部对"转账缺方向 / 单笔带非法方向"还会再做一道终检，GPT-C02。）
 		if r.TxType == model.TxTypeTransfer && r.Direction == model.TxDirectionSingle {
-			return 0, fmt.Errorf("%w：转账记录 %d 缺少方向标记，无法精确反向余额", ErrTxDirectionMissing, r.Id)
+			return 0, false, fmt.Errorf("%w：转账记录 %d 缺少方向标记，无法精确反向余额", ErrTxDirectionMissing, r.Id)
 		}
 		acct, err := loadTxAccount(sess, bookID, r.AccountId)
 		if err != nil {
-			return 0, err
+			return 0, false, err
 		}
 		// 恢复时校验引用仍然有效（GPT-R31）：账户/分类若在回收站保留期内被删掉，
 		// 恢复这笔交易就会产出一条指向已删实体的悬空记录（余额能回滚、但数据不可信）。
 		// 删除方向不做此校验——已删的分类不该拦住用户清理这笔账。
 		if !wantDeleted && r.TxType != model.TxTypeTransfer {
 			if err := loadCategoryForType(sess, bookID, r.CategoryId, r.TxType); err != nil {
-				return 0, err
+				return 0, false, err
 			}
 		}
 		// Create 对该账户施加的 delta；删除反向（取负），恢复再施加（取正）
-		apply := signedBalanceDelta(acct.Category, txRowFlow(r))
+		flow, err := txRowFlow(r)
+		if err != nil {
+			return 0, false, err
+		}
+		apply := signedBalanceDelta(acct.Category, flow)
 		if wantDeleted {
 			apply = -apply
 		}
 		if err := createChangeBalance(sess, bookID, r.AccountId, apply, ver); err != nil {
-			return 0, err
+			return 0, false, err
 		}
 		newDeleted := 0
 		if wantDeleted {
 			newDeleted = 1
 		}
 		res, err := sess.Exec(
-			`UPDATE transactions SET deleted = ?, deleted_at = ?, sync_version = ?
+			`UPDATE transactions SET deleted = ?, deleted_at = ?, sync_version = ?, updated_at = ?
 			 WHERE id = ? AND book_id = ? AND deleted = ?`,
 			// GPT-R32：deleted_at 是**墓碑时间**，只在 deleted=1 期间有效
 			// （回收站保留期的起算点）。删除写当前时刻，恢复必须清零——
 			// 否则恢复后的行会"活着却带着墓碑时间"，REST 与 Pull 输出的
 			// deletedAt 会让人以为它被删过。
-			newDeleted, tombstoneAt(now, wantDeleted), ver, r.Id, bookID, boolToInt(!wantDeleted))
+			// GPT-C03：裸 SQL 绕过了 xorm `xorm:"updated"` 自动列，必须显式刷
+			// updated_at（与 tombstoneAt 同一时间源 now），否则删除/恢复这种实质
+			// 变更在元数据上不可见，客户端按 updated_at 做的增量比较会漏掉它。
+			newDeleted, tombstoneAt(now, wantDeleted), ver, now, r.Id, bookID, boolToInt(!wantDeleted))
 		if err != nil {
-			return 0, fmt.Errorf("更新交易删除状态失败：%w", err)
+			return 0, false, fmt.Errorf("更新交易删除状态失败：%w", err)
 		}
 		n, err := res.RowsAffected()
 		if err != nil {
-			return 0, err
+			return 0, false, err
 		}
 		if n != 1 {
-			return 0, ErrIncompleteReceipt
+			return 0, false, ErrIncompleteReceipt
 		}
 		// 审计：before_json 记录变更前状态（此刻 r 仍是变更前快照）
 		if err := insertAudit(sess, bookID, uid, action, "transaction", r.Id, r, "server"); err != nil {
-			return 0, err
+			return 0, false, err
 		}
 	}
 
@@ -899,23 +934,32 @@ func (s *TxService) mutateVisibility(ctx context.Context, uid, bookID, txID int6
 		WHERE book_id = ? AND uid = ? AND op = ? AND client_uuid = ? AND request_hash = ?`,
 		encodeResultIDs(ids), kind, ver, bookID, uid, op, clientUuid, hash)
 	if err != nil {
-		return 0, fmt.Errorf("回写幂等回执失败：%w", err)
+		return 0, false, fmt.Errorf("回写幂等回执失败：%w", err)
 	}
 	updated, err := res.RowsAffected()
 	if err != nil {
-		return 0, err
+		return 0, false, err
 	}
 	if updated != 1 {
-		return 0, ErrIncompleteReceipt
+		return 0, false, ErrIncompleteReceipt
 	}
 
 	if err := sess.Commit(); err != nil {
-		return 0, err
+		return 0, false, err
 	}
-	return ver, nil
+	return ver, false, nil
 }
 
 // replayMutateReceipt 删除/恢复的同键重放：核对请求摘要后返回原版本，不重复反转余额。
+//
+// GPT-C01：除摘要与回执完整性外，还必须核对**终态一致性**——回执 result_ids 指向的
+// 交易行当前 deleted 状态必须仍与该 op 的预期终态一致（delete→全为已删；restore→全为存活）。
+// 否则"删除→恢复→再删除（同一 clientUuid）"这类序列会被当成首次删除的重放静默吞掉，
+// 且返回一个比当前水位更小的版本号（客户端游标倒退）。终态不匹配与"回执未命中"同口径
+// 返回 ErrTransactionNotFound（HTTP 404）。
+//
+// 注意顺序：终态检查必须在幂等回执核对**之后**。先查状态会破坏主路径——
+// "删除成功后离线重试"时行已是墓碑，若先按"目标必须存活"判定会误报 404。
 func replayMutateReceipt(sess *xorm.Session, bookID, uid int64, clientUuid, op, hash string) (int64, error) {
 	rec := &model.IdempotencyRecord{}
 	has, err := sess.SQL(
@@ -931,16 +975,55 @@ func replayMutateReceipt(sess *xorm.Session, bookID, uid int64, clientUuid, op, 
 	if rec.RequestHash != hash {
 		return 0, ErrCreateConflict
 	}
-	if _, err := decodeResultIDs(rec.ResultIds, rec.ResultType); err != nil || rec.ResultVersion <= 0 {
+	ids, err := decodeResultIDs(rec.ResultIds, rec.ResultType)
+	if err != nil || rec.ResultVersion <= 0 {
 		log.Printf("幂等回执不完整：book_id=%d uid=%d op=%q client_uuid=%q result_type=%d result_ids=%q result_version=%d",
 			bookID, uid, op, clientUuid, rec.ResultType, rec.ResultIds, rec.ResultVersion)
 		return 0, fmt.Errorf("%w：该 clientUuid 已有不完整回执，请更换 clientUuid 或联系实例管理员处理",
 			ErrIncompleteReceipt)
 	}
+	// GPT-C01：回执完整 ≠ 世界仍处于回执描述的终态。回查目标行当前状态。
+	if err := verifyMutateTerminalState(sess, bookID, op, ids); err != nil {
+		return 0, err
+	}
 	if err := sess.Commit(); err != nil {
 		return 0, err
 	}
 	return rec.ResultVersion, nil
+}
+
+// verifyMutateTerminalState 校验回执所涉交易行当前是否仍处于该 op 的预期终态（GPT-C01）。
+//
+//   - op=delete：所有 result_ids 行当前必须仍 deleted=1；
+//   - op=restore：所有 result_ids 行当前必须仍 deleted=0。
+//
+// 任一行不存在、不属于本账本或删除态不符，说明"重放这次操作"已无意义
+// （状态被后续操作改变），返回 ErrTransactionNotFound——与幂等未命中路径同口径 404，
+// 客户端会据此重新走一遍正常判定而不是吞掉本次操作。
+func verifyMutateTerminalState(sess *xorm.Session, bookID int64, op string, ids []int64) error {
+	var wantDeleted int
+	switch op {
+	case model.IdemOpDelete:
+		wantDeleted = 1
+	case model.IdemOpRestore:
+		wantDeleted = 0
+	default:
+		return fmt.Errorf("%w：未知的幂等操作 %q，无法核对终态", ErrIncompleteReceipt, op)
+	}
+	for _, id := range ids {
+		// SQLite 驱动把 deleted 返回为 bool（xorm 映射），扫描目标必须用 bool
+		var deleted bool
+		has, err := sess.SQL(
+			`SELECT deleted FROM transactions WHERE book_id = ? AND id = ?`, bookID, id).Get(&deleted)
+		if err != nil {
+			return err
+		}
+		if !has || deleted != (wantDeleted == 1) {
+			return fmt.Errorf("%w：交易 %d 的当前状态已不匹配 %q 回执的预期终态（期望 deleted=%d）",
+				ErrTransactionNotFound, id, op, wantDeleted)
+		}
+	}
+	return nil
 }
 
 // mutateRequestHash 删除/恢复的请求摘要。clientUuid 不参与（它只是定位回执的键）。
@@ -1088,22 +1171,55 @@ func tombstoneAt(now int64, wantDeleted bool) int64 {
 }
 
 // txRowFlow 该记录在 Create 时对其所在账户的现金流符号（收入为正、支出为负）。
-// 转账靠 direction 区分转出（本侧 -amount）/ 转入（本侧 +amount）；单笔按 type 判定。
-func txRowFlow(r *model.Transaction) int64 {
-	switch r.Direction {
-	case model.TxDirectionOut:
-		return -r.Amount
-	case model.TxDirectionIn:
-		return r.Amount
-	default: // 单笔
-		if r.TxType == model.TxTypeIncome {
-			return r.Amount
+//
+// GPT-C02：必须**先按 TxType 分派**，再解读 Direction。旧实现先按 Direction 分派、
+// type 兜底：单笔行若被历史脏数据写入 direction=1/2，现金流符号会被静默算反且不报错
+// （删除一笔支出反而给账户加钱）。现在的口径：
+//   - 转账行：只认 Direction（非转出/转入即 fail-closed 报 ErrTxDirectionMissing）；
+//   - 非转账行：必须 Direction == TxDirectionSingle（0），被污染即显式报错（HTTP 409），
+//     绝不默默按 type 计算。
+func txRowFlow(r *model.Transaction) (int64, error) {
+	if r.TxType == model.TxTypeTransfer {
+		switch r.Direction {
+		case model.TxDirectionOut:
+			return -r.Amount, nil
+		case model.TxDirectionIn:
+			return r.Amount, nil
+		default:
+			return 0, fmt.Errorf("%w：转账记录 %d 缺少方向标记（direction=%d），无法精确反向余额",
+				ErrTxDirectionMissing, r.Id, r.Direction)
 		}
-		if r.TxType == model.TxTypeExpense {
-			return -r.Amount
-		}
-		return 0
 	}
+	if r.Direction != model.TxDirectionSingle {
+		// 复用 ErrTxDirectionMissing 的 409 映射：同为"方向标记异常、fail-closed"，
+		// 客户端无法自行修复，需要实例管理员处理脏数据。
+		return 0, fmt.Errorf("%w：单笔记录 %d（type=%d）带有非法 direction=%d（应为 0），现金流符号无法判定",
+			ErrTxDirectionMissing, r.Id, r.TxType, r.Direction)
+	}
+	switch r.TxType {
+	case model.TxTypeIncome:
+		return r.Amount, nil
+	case model.TxTypeExpense:
+		return -r.Amount, nil
+	default:
+		return 0, fmt.Errorf("%w：交易记录 %d 类型非法（type=%d），现金流符号无法判定",
+			ErrTxDirectionMissing, r.Id, r.TxType)
+	}
+}
+
+// pagingOffset 计算分页 OFFSET（GPT-C05）。
+//
+// (page-1)*count 在 page 极大时会 int64 回绕成负数，SQLite 把负 OFFSET 按 0 处理——
+// 请求第 MaxInt64 页却返回首页数据，响应还回显 page=MaxInt64，分页口径自相矛盾。
+// 在此显式校验：乘法会溢出即 ErrInvalidArgument（HTTP 400）。
+func pagingOffset(page, count int) (int64, error) {
+	if page <= 0 || count <= 0 {
+		return 0, fmt.Errorf("%w：分页参数非法（page=%d count=%d）", ErrInvalidArgument, page, count)
+	}
+	if int64(page-1) > math.MaxInt64/int64(count) {
+		return 0, fmt.Errorf("%w：分页页码超出范围（page=%d × count=%d 溢出）", ErrInvalidArgument, page, count)
+	}
+	return int64(page-1) * int64(count), nil
 }
 
 func boolToInt(b bool) int {

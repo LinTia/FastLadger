@@ -38,8 +38,13 @@ func (s *TxService) ListDeleted(uid, bookID int64, page, count int) ([]model.Tra
 		return nil, 0, err
 	}
 	p, c := normalizePaging(page, count)
+	// GPT-C05：页码极大时 (p-1)*c 会回绕成负 OFFSET，显式校验（→400）
+	offset, err := pagingOffset(p, c)
+	if err != nil {
+		return nil, 0, err
+	}
 	listSQL := "SELECT * FROM transactions WHERE " + cond + " ORDER BY deleted_at DESC, id DESC LIMIT ? OFFSET ?"
-	listArgs := append(append([]interface{}{}, args...), c, (p-1)*c)
+	listArgs := append(append([]interface{}{}, args...), c, offset)
 	out := make([]model.Transaction, 0, c)
 	if err := s.engine.SQL(listSQL, listArgs...).Find(&out); err != nil {
 		return nil, 0, err

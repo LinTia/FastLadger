@@ -245,12 +245,16 @@ func (s *AccountService) Delete(uid, bookID, accountID int64) (int64, error) {
 	if err := ensureAccountInBook(sess, bookID, accountID); err != nil {
 		return 0, err
 	}
-	// GPT-R53：仍有活跃子账户引用本账户的 parent_id 时显式拒绝。
+	// GPT-R53：仍有子账户引用本账户的 parent_id 时显式拒绝。
 	// 与 R47（parent_id 环路）不同：这里不是"能不能指向"，而是"被指向的一方能不能消失"。
 	// 与 R31（交易引用账户）也不同：这里是账户树内部的父子引用。
+	//
+	// GPT-C06：检查必须覆盖**任何状态**的子账户（含已软删）。旧实现带 `deleted = 0`，
+	// 于是"先删子账户、再删父账户"可以成功——软删的子账户日后被恢复时会带着悬空的
+	// parent_id，层级组装直接产出孤儿；比活跃子账户更危险（恢复动作让悬空引用"复活"）。
 	var children int64
 	if _, err := sess.SQL(
-		`SELECT COUNT(1) FROM accounts WHERE book_id = ? AND parent_id = ? AND deleted = 0`,
+		`SELECT COUNT(1) FROM accounts WHERE book_id = ? AND parent_id = ?`,
 		bookID, accountID).Get(&children); err != nil {
 		return 0, err
 	}
