@@ -57,6 +57,12 @@ func NewRouter(d Deps) *gin.Engine {
 		d.AuthService.ConfigureLoginThrottle(d.Config.LoginMaxAttempts,
 			time.Duration(d.Config.LoginWindowMinutes)*time.Minute)
 	}
+	// 同步限流（INFRA 复审）：同理，零值 Config = 不启用（直调服务层的单测不受影响）；
+	// 生产经 config.Load 得到默认 60（push）/ 300（pull）次/分钟。
+	if d.Sync != nil && d.Config.SyncPushPerMinute > 0 && d.Config.SyncPullPerMinute > 0 {
+		d.Sync.EnableThrottle(d.Config.SyncPushPerMinute, d.Config.SyncPullPerMinute)
+	}
+
 	ah := &authHandler{authSvc: d.AuthService, enableRegister: d.Config.EnableRegister}
 	bh := &bookHandler{books: d.Books, members: d.Members}
 	lh := &ledgerHandler{accounts: d.Accounts, categories: d.Categories, txs: d.Txs}

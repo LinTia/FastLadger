@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"time"
 
 	"fastledger/internal/instance"
 	"fastledger/internal/model"
@@ -169,14 +170,47 @@ type SyncService struct {
 	// meta 启动时加载的实例元信息（恢复世代）。恢复流程要求先停进程再 bump 后启动，
 	// 故运行期只需启动时加载的值，不必每次 pull 读盘（见 internal/instance 注释）。
 	meta *instance.Meta
+
+	// 同步限流（INFRA 复审）：本库只有一条 SQLite 写连接（MaxOpenConns=1），
+	// 高频 pull/push 会把队列打满拖慢所有人。per-user 限流，key 空间
+	// "sync:push:uid:<id>" / "sync:pull:uid:<id>"，**独立实例**——绝不与登录（A6）
+	// 或邀请（A5）的桶混用，否则一个功能的流量能挤占另一个功能的配额。
+	//
+	// 默认关闭，由 HTTP 装配层（api.NewRouter）按配置开启（EnableThrottle）：
+	// 直调服务层的单测 / CLI 不应被限流挡住，HTTP 面才是要保护的面。
+	limiter       *Limiter
+	pushPerMinute int
+	pullPerMinute int
 }
 
 // NewSyncService 构造同步服务。
 //
 // meta 允许为 nil（单元测试/降级场景）：此时批次里的世代信息回填零值，
-// 客户端应按"未知世代"处理，不影响增量语义。
+// 客户端应按"未知世代"处理，不影响增量语义。限流默认关闭（见 EnableThrottle）。
 func NewSyncService(engine *xorm.Engine, txs *TxService, meta *instance.Meta) *SyncService {
-	return &SyncService{engine: engine, txs: txs, meta: meta}
+	return &SyncService{engine: engine, txs: txs, meta: meta, limiter: NewLimiter()}
+}
+
+// EnableThrottle 开启 per-user 同步限流（装配层按配置调用；启动期一次）。
+//
+// 参数来自 config（EBK_SYNC_PUSH_PER_MINUTE / EBK_SYNC_PULL_PER_MINUTE，默认 60 / 300，
+// 已 fail-fast 校验为正数）；这里再防御一次：非法值直接 panic——带着 0 配额运行
+// 等于没有限流，宁可不启动。
+func (s *SyncService) EnableThrottle(pushPerMinute, pullPerMinute int) {
+	if pushPerMinute <= 0 || pullPerMinute <= 0 {
+		panic(fmt.Sprintf("同步限流参数非法：push=%d pull=%d", pushPerMinute, pullPerMinute))
+	}
+	s.pushPerMinute = pushPerMinute
+	s.pullPerMinute = pullPerMinute
+}
+
+// allowThrottle 判定并记录一次同步调用（key 空间按操作与用户隔离）。
+// 返回 false = 超出该用户的配额（HTTP 429）。
+func (s *SyncService) allowThrottle(op string, uid int64, perMinute int) bool {
+	if perMinute <= 0 || s.limiter == nil {
+		return true // 未启用限流（单测 / CLI 直调路径）
+	}
+	return s.limiter.Allow(fmt.Sprintf("sync:%s:uid:%d", op, uid), perMinute, time.Minute)
 }
 
 // generation 返回 (restoreEpoch, instanceId)；meta 缺失时返回零值。
@@ -269,6 +303,11 @@ func mergeSafeVersion(streams [][]int64, limit int) int64 {
 func (s *SyncService) Pull(uid, bookID, afterVersion int64, limit int) (*SyncBatch, error) {
 	if uid <= 0 || bookID <= 0 {
 		return nil, fmt.Errorf("%w：用户或账本缺失", ErrInvalidArgument)
+	}
+	// 同步限流（INFRA 复审）：读路径放宽（默认 300 次/分钟/用户），但要先于
+	// 成员资格查询——超配额的请求连 DB 都不该碰（唯一连接是全局瓶颈）。
+	if !s.allowThrottle("pull", uid, s.pullPerMinute) {
+		return nil, ErrRateLimited
 	}
 	if afterVersion < 0 {
 		// 非法游标按全量处理：宁可从头发一次，也不要因负游标读出空集让客户端误以为"已同步"
@@ -391,6 +430,12 @@ func (s *SyncService) Pull(uid, bookID, afterVersion int64, limit int) (*SyncBat
 func (s *SyncService) Push(ctx context.Context, uid, bookID int64, items []PushItem) ([]PushResult, error) {
 	if uid <= 0 || bookID <= 0 {
 		return nil, fmt.Errorf("%w：用户或账本缺失", ErrInvalidArgument)
+	}
+	// 同步限流（INFRA 复审）：push 是写路径（每项一次事务 + 一次版本递增），
+	// 优先收紧（默认 60 次/分钟/用户）。注意按【调用】而不是按 items 条数计——
+	// 条数上限另有 maxPushItems=200 兜底，二者合起来才是写路径的真实吞吐上界。
+	if !s.allowThrottle("push", uid, s.pushPerMinute) {
+		return nil, ErrRateLimited
 	}
 	if len(items) == 0 {
 		return nil, fmt.Errorf("%w：items 不能为空", ErrInvalidArgument)
