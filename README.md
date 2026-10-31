@@ -4,6 +4,20 @@
 
 > 数据在自己手里 · 识别优先在端侧完成 · 多端协同 · 家庭共享 · 资产全景
 
+## 当前状态（2026-10-31）
+
+| 项 | 状态 |
+|---|---|
+| 后端实现 | **阶段 0–4 已交付**：认证/账本多成员、记账核心、离线同步 + WebSocket、删除/恢复 + 回收站 + 审计 |
+| 阶段 5 | **进行中**：Flutter 客户端与 OCR 尚未开始；多端会话撤销（WBS 5.10）开发中 |
+| 数据库 schema | **v6**（6 个迁移脚本，受 CI 指纹守卫保护：已发布迁移禁止修改） |
+| 测试基线 | 9 个包全绿、645 PASS / 0 FAIL / 5 SKIP（Windows 权限位用例）、`DATA RACE=0`（CI 侧 `-race`） |
+| API 路由 | 交易路由白/黑名单、单一创建入口、可见性条件已由架构守卫用例固化 |
+
+> **部署交接入口（给运维/云厂商专家）**：
+> [`docs/FastLedger-部署交接-腾讯云轻量应用服务器.md`](docs/FastLedger-部署交接-腾讯云轻量应用服务器.md)
+> —— 环境与依赖、编译启动、端口与防火墙、环境变量全量表、持久化与备份、规格建议、验收清单、P0/P1/P2 待确认事项与已知风险。
+
 ## 产品特性
 
 - **截图秒记**：手机/电脑截图后，端侧 OCR + 规则解析，预填确认即可入账；识别结果必须人工确认。
@@ -17,6 +31,8 @@
 
 | 路径 | 内容 | 用途 |
 |---|---|---|
+| [`server/`](server/) | **Go 后端（已实现，阶段 0–4）** | 可编译运行的 API 服务：[server/README.md](server/README.md) 含构建/迁移/启动说明 |
+| [`docs/FastLedger-部署交接-腾讯云轻量应用服务器.md`](docs/FastLedger-部署交接-腾讯云轻量应用服务器.md) | **部署交接说明（给云厂商/运维专家）** | 环境依赖、端口、环境变量、持久化、规格、验收、风险 |
 | [`prototype/`](prototype/) | 完整可交互原型（13 个核心页面，**零外部请求、可离线**） | 看产品长什么样、怎么交互，**可直接在浏览器运行**；**公网在线版：[点此直接体验](https://a38ce1ad4e917321e.app.workbuddy.host/?sharecode=BPE6OFTPKE)**（由 WorkBuddy 托管，无需本地构建） |
 | [`docs/FastLedger-产品需求文档-PRD.md`](docs/FastLedger-产品需求文档-PRD.md) | 产品需求文档（PRD） | 做什么、为什么、范围与验收 |
 | [`docs/FastLedger-落地方案.md`](docs/FastLedger-落地方案.md) | 软件开发 8 环节落地方案 | 整体技术方案、数据模型、API、版本规划 |
@@ -57,12 +73,17 @@ python3 -m http.server 8765
 
 > 直接用 file:// 打开可能因浏览器安全策略导致模块加载受限，建议用上面的本地服务器方式。
 
-## 技术栈（规划）
+## 技术栈（现状）
 
-- **后端**：Go + Gin + xorm，SQLite 起步（预留 PostgreSQL/MySQL），目标常驻内存 < 150 MB。
-- **客户端**：Flutter（Windows / Android / iOS）。
-- **Web**：前端页面由后端 go:embed 托管。
-- **部署**：Docker / docker-compose，Caddy 反代 + DDNS + 自动 HTTPS。
+- **后端（已实现）**：Go 1.22 + Gin + xorm + SQLite（`mattn/go-sqlite3`，**需 CGO**）。
+  - 数据库策略：WAL + `synchronous=FULL` + `foreign_keys=on` + `MaxOpenConns=1`（单写者）。
+  - 鉴权：JWT（HS256，24h，bcrypt 存口令）；登录失败限流 + 失败审计。
+  - 实时：WebSocket（REST 与 WS 共用端口）。
+- **客户端（阶段 5，未开始）**：Flutter（Windows / Android / iOS）。
+- **Web 端（阶段 5，未开始）**：计划由后端 `go:embed` 托管；**当前后端未嵌入任何前端资源**。
+- **部署（当前实际形态）**：**裸机/云主机 + systemd + Caddy 反代**（应用自身只监听 HTTP `:8080`，无内置 TLS）。
+  > 设计文档中的 Docker / docker-compose 方案**尚未落地**（仓库无 Dockerfile），部署请以部署交接文档为准。
+
 
 ## 版本路线（摘要）
 
@@ -75,4 +96,5 @@ python3 -m http.server 8765
 
 ---
 
-*本仓库为 FastLedger 的设计与原型资料汇总；正式代码工程将基于《新手开发完整指南》逐步实现。*
+*本仓库同时承载**设计文档**（`docs/`、`workbuddy/`、`gpt/`）、**可交互原型**（`prototype/`）与**已实现的 Go 后端**（`server/`，阶段 0–4）。后端当前状态与验收口径见上方「当前状态」，部署相关一律以 `docs/FastLedger-部署交接-腾讯云轻量应用服务器.md` 为准。*
+
