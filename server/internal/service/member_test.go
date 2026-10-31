@@ -134,14 +134,23 @@ func TestMemberWritesCheckRowsAffected(t *testing.T) {
 	// （reviewer-authz G-3），也能被注释里的同名文本满足。AST 里没有注释，
 	// Ident.Name 又必须全等，这两个口子同时关闭。
 	//
-	// 【已知限界（reviewer-authz 第三轮，刻意不修）】本断言只回答"该函数体内是否**精确
-	// 引用**过这个常量"，因此一行死引用 `_ = inviteUsableCond` 就能满足它，而真正的
+	// 【已知限界（reviewer-authz 第三轮核实，刻意不修）】本断言只回答"该函数体内是否
+	// **精确引用**过这个常量"，因此一行死引用 `_ = inviteUsableCond` 就能满足它，而真正的
 	// UPDATE 仍可能手写弱条件。要堵死得断言"该标识符出现在 Where/Exec 的实参里"，
 	// 但那会对合法的"先赋局部变量再用"（`cond := inviteUsableCond; Where(..., cond)`）
 	// 产生**误拒**——测试守卫的误拒代价同样高（后来者会把它放宽）。
-	// 真正的语义兜底在行为侧：TestWA9MarkUsedRejectsExpired 用同一个常量版本跑
-	// 条件更新（过期命中 0 行、有效命中 1 行），加上下面"常量值必须含三条件"的检查，
-	// 弱条件写法在语义上仍会被行为用例打红。这里接受"源码守卫是腰带、不是安全带"。
+	//
+	// **不要高估本文件的把关强度**（此处曾误写"行为侧有兜底"，经复核员指出不成立）：
+	// - 行为用例 TestWA9MarkUsedRejectsExpired 里那段"过期命中 0 行 / 有效命中 1 行"
+	//   用的是**测试自己拼的** UPDATE（复用同一常量），证明的是**常量的语义**正确，
+	//   **不是**生产代码真的引用了它；
+	// - 同一用例的端到端部分只断言 ErrInviteExpired，而该错误在入口
+	//   inviteRejectReason 就返回了，**根本走不到** join 里的 mark-used 语句。
+	// 因此"生产 UPDATE 用了这个常量"目前**只由上面这条 AST 断言把关**，它挡得住
+	// "换成同名前缀的弱常量"，挡不住"手写弱条件 + 一行死引用"。
+	// 这一点是刻意接受的：真正能同时表达"复用单一口径"且不误拒的检查是
+	// "把条件抽成函数并由生产代码调用"，属重构级改动，不在本轮范围。
+	// 结论：源码守卫是腰带，不是安全带——别把它当唯一依据。
 	const condIdent = "inviteUsableCond"
 	if !serviceFuncReferencesIdent(t, src, "JoinViaInvite", condIdent) {
 		t.Fatalf("JoinViaInvite 标记已用的 UPDATE 必须复用 %s（D-R08 / A9：单一条件口径）", condIdent)
