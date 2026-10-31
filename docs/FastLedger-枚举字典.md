@@ -152,17 +152,22 @@
 
 | 值 | 含义 | 归属 | 说明 |
 |---|---|---|---|
-| `create` | 创建 | 账本 | 交易创建（转账两侧各一条） |
-| `update` | 更新 | 账本 | 预留；交易更新尚未实现 |
-| `delete` | 删除 | 账本 | 交易软删（整笔，含转账对侧） |
+| `create` | 创建 | 账本 | 交易创建（转账两侧各一条）、账本创建、账户/分类创建、邀请签发与兑换入户 |
+| `update` | 更新 | 账本 | 账本改名、账户/分类改名或调整上级；交易更新仍未实现（延期） |
+| `delete` | 删除 | 账本 | 交易软删（整笔，含转账对侧）、账本软删、账户/分类软删、邀请撤销 |
 | `restore` | 恢复 | 账本 | **恢复一笔交易** |
-| `login` | 登录 | 实例 | 登录成功时写，置于签发令牌之前 |
+| `login` | 登录 | 实例 | 登录**成功**时写，置于签发令牌之前 |
+| `login_failed` | 登录失败 | 实例 | 加固项：登录失败时写，与**失败限流**捆绑（审计写在限流判定**之后**，因此超限请求不写行、写入速率被配额天然封顶，不会给攻击者一个"按请求放大审计表"的开关）。成功事件仍是 `login`，两者不可互相替代 |
 | `permission_change` | 权限变更 | 账本 | 改成员角色 / 移除成员 |
-| `config_change` | 配置变更 | 账本 | 可见性开关等账本配置 |
+| `config_change` | 配置变更 | 账本 | 可见性开关等账本配置（改名走 `update`，不占本值） |
 | `backup_restore` | 备份恢复 | 实例 | `restore_epoch` 递增（整实例从备份恢复） |
 
 **`backup_restore` 不得写成 `restore`**：`restore` 已被"恢复一笔交易"占用，混用会让
 "这笔交易被恢复过"与"整个实例从备份恢复过"无法区分。
+
+**`login_failed` 与 `login` 不得混用**：前者回答"有人在撞门户"（取证价值在于
+"哪个来源在连续失败"），后者回答"谁成功登录了"（`actor_uid` 明确）。把失败也记成
+`login` 会让"登录成功次数"这一最基础的运营口径失真。
 
 ### 14.2 entity_type
 
@@ -170,9 +175,15 @@
 |---|---|
 | `transaction` | 交易 |
 | `user` | 用户（登录等） |
-| `book_member` | 账本成员（`entity_id` = 目标 uid） |
+| `book_member` | 账本成员（`entity_id` = 目标 uid；邀请事件里为 `invites.id`） |
 | `book` | 账本（`entity_id` = book_id） |
+| `account` | 账户（账本级共享配置，`entity_id` = accounts.id） |
+| `category` | 分类（账本级共享配置，`entity_id` = categories.id） |
 | `instance` | 实例（`entity_id` = 新 `restore_epoch`） |
+
+账户与分类是账本共享配置，PRD §10.9「给定**任一写操作** … 可查到操作者、时间、实体与
+变更前后状态」对它们同样成立：删掉一个账户会让历史交易的引用悬空、改掉一个分类会改变
+统计口径，这些变更必须可追溯。写操作一律 `book_id` = 该账本（**不是**实例哨兵）。
 
 ### 14.3 两个 0 哨兵（必须显式处理，禁止当作"空/放行"）
 
@@ -180,20 +191,76 @@
 
 | 字段 | 0 的含义 | 用途 |
 |---|---|---|
-| `book_id = 0` | **实例级事件**，不隶属任何账本 | `login`、`backup_restore` |
-| `actor_uid = 0` | **系统 / 运维操作**，无登录用户 | CLI 执行的 `instance bump` |
+| `book_id = 0` | **实例级事件**，不隶属任何账本 | `login`、`login_failed`、`backup_restore` |
+| `book_id = 0` | **无法归因的尝试**（与上一行不同来源，靠 payload 区分） | 未认证的邀请兑换：邀请不存在 / 不属于调用方自称的那个账本。此时 `before_json` 带 `"bookAttribution":"unattributable"`；真实归属未知，绝不写进 URL 里的那个 `bookID`，否则匿名者可以往任意账本的审计流灌行 |
+| `actor_uid = 0` | **系统 / 运维操作**，无登录用户 | CLI 执行的 `instance bump`；以及未认证入口（邀请兑换）可归因到的唯一主体就是"系统" |
 
 查询约定：`book_id = 0` 即实例级事件，不要把它当成某个真实账本；按账本查审计时应显式排除。
+要区分"真正的实例级事件"与"无法归因的尝试"，看 `before_json` 里有没有 `bookAttribution`。
 
 ### 14.4 before_json
 
 记录**变更前**状态（软删回答不了"删前是什么"，故必须落原文）。
 
-- `create` / `login`：没有"变更前"状态，留空字符串；
-- `delete` / `restore`：序列化被操作的那条交易；
+- `create` / `login`：没有"变更前"状态——交易与账本留空字符串；
+  账户/分类例外，记被创建实体的**关键字段**（理由见下方"create 为什么记关键字段"）；
+- `login_failed`：没有"变更前实体"，只记失败诊断：`{"attempted":<截断后的用户名>,"reason":<失败原因>}`。
+  **绝不记口令**（口令进审计等于把凭据落进备份与日志采集）；
+- `delete` / `restore`：序列化被操作的**整行**（含 `deleted` 变更前取值）；
 - `permission_change`：`{"uid":<目标uid>,"role":<变更前角色>}`；
 - `config_change`：`{"membersCanViewOthers":<变更前bool>}`；
 - `backup_restore`：`{"restoreEpoch":<变更前世代>}`。
+
+各实体的具体落法（新增写入点必须照此填写，否则"变更前后状态"这一半就丢了）：
+
+| 实体 | 动作 | before_json 内容 |
+|---|---|---|
+| `transaction` | `create` | 空 |
+| `transaction` | `delete` / `restore` | 该笔交易整行（转账两侧各一条，`related_id` 可互查） |
+| `book` | `create` | 空 |
+| `book` | `delete` | **账本整行**（`books` 表模型未带 json tag，故字段名为 Go 字段名：`Id`/`Name`/`OwnerUid`/`BookType`/`DefaultCurrency`/`MembersCanViewOthers`/`Deleted`/`CreatedAt`/`UpdatedAt`/`DeletedAt`）。必须含 `"Deleted":false`——它就是"删除前状态"的直接证据；`deleted_at` 之类只在删除后才有的值不得出现在这里 |
+| `book` | `update` | `{"name":<变更前名称>}`，仅在名称**实际变化**时写；改可见性开关仍走 `config_change` |
+| `account` | `create` | 被创建实体的关键字段：`{"name","category","currency","parentId"}` |
+| `account` | `update` | `{"name":<变更前名称>,"parentId":<变更前上级>}` |
+| `account` | `delete` | **账户整行**（带 json tag，camelCase）：`id`/`name`/`category`/`currency`/`balance`/`parentId`/`deleted:false` 等 |
+| `category` | `create` | 被创建实体的关键字段：`{"name","parentId","catType"}` |
+| `category` | `update` | `{"name":<变更前名称>,"parentId":<变更前上级>,"catType":<收支类型>}` |
+| `category` | `delete` | **分类整行**：`id`/`name`/`parentId`/`catType` 等 |
+
+**create 为什么记关键字段**：账本与交易的 create 留空，是因为"这本账叫什么"能从
+`books` 行直接读到，而交易行本身字段齐全、`clientUuid` 还能对上幂等记录。
+账户/分类不同：它们属于账本共享配置，**同名的历史行会被反复重建**（删了再建一个同名的），
+只凭 `entity_id` 回查当前行无法回答"当时建的是哪一类账户、挂在哪个上级下"。
+在 create 行里带上关键字段，等于给配置变更留了一条不依赖当前数据形态的时间线。
+这是对"create 留空"的一处**有意例外**，不是遗漏。
+
+**为什么没有 after_json**：审计表是 append-only，只记"变更前"。要回答"变更后是什么"，
+用 `at` + `entity_id` 去读当前业务行即可；业务行已被软删的，`deleted`/`deleted_at` 就是
+变更后的证据。多写一份 after 快照只会让同一事实有两处可能不一致的来源。
+
+**读与写的顺序要求**：delete 的整行快照必须在**同一事务内、UPDATE 之前**读出
+（GPT-R29 的"先读后写"教训）。事务外读或 UPDATE 之后再读，`before_json` 记到的
+可能是并发改过、甚至已经是删除后的值——那样这份审计就只是在自欺欺人。
+
+### 14.5 关联口径：限流桶键的来源聚合（非枚举，但与 §14.3 的 `book_id = 0` 同属"归属"问题）
+
+邀请入户与登录失败两条限流的桶键都按**来源网段**聚合：
+
+| 来源形态 | 聚合粒度 | 桶键示例 |
+|---|---|---|
+| IPv4 | `/24` | `203.0.113.0/24` |
+| IPv6 | `/64` | `2001:db8:1::/64` |
+| IPv4-mapped IPv6（`::ffff:a.b.c.d`） | 先 `Unmap()` 再按 IPv4 的 `/24` | `203.0.113.0/24` |
+| 不可解析 / 空 | 共享 `unknown` 桶（fail-closed，绝不因解析失败而拿到新配额） | `unknown` |
+
+**明确取舍**：同一 `/24`（IPv4）或 `/64`（IPv6）内的多台设备**共享**一个配额。
+理由与代价：IPv6 隐私扩展（RFC 4941）让一台机器在自己 `/64` 内可轮转出海量地址，
+若按完整地址分桶，配额会被地址数摊薄到形同虚设；家庭自托管场景下，同一出口路由器
+后面的设备本来就该算同一个来源，故接受"同网段共享配额"。两条限流**必须同口径**——
+登录侧与邀请侧粒度不一致时，运维按一侧的经验推断另一侧行为会得出错误结论。
+
+失败尝试的审计里 `clientIP` 字段记录的就是这个**聚合后的桶键**（不是原始地址）：
+取证只需要"哪个网段在撞"，不需要也不应该把一个家庭网络里某台设备的确切地址长期留在库里。
 
 ---
 
