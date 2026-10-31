@@ -129,26 +129,37 @@ func Read(dataDir string) (*Meta, error) {
 // 服务启动时调用一次：既保证后续 /healthz 与 sync/pull 能回报世代，
 // 又保证首次启动就有一个可被备份排除逻辑识别的固定文件。
 func LoadOrCreate(dataDir string) (*Meta, error) {
+	m, _, err := LoadOrCreateWithStatus(dataDir)
+	return m, err
+}
+
+// LoadOrCreateWithStatus 同 LoadOrCreate，额外回报本次是否发生了【新建】（INFRA-04/N4）。
+//
+// 为什么要暴露这一点：`instance bump` 在错误的 EBK_DATA_DIR 下执行时，会静默
+// 新建一个 instance.meta 并递增它——真正的实例纹丝不动、也不报错，而客户端
+// 从此把"新实例"当成另一个实例。只有把"新建"显式交给调用方，CLI 才能警告
+// 运维"你可能指错了目录"。
+func LoadOrCreateWithStatus(dataDir string) (*Meta, bool, error) {
 	m, err := Read(dataDir)
 	if err == nil {
-		return m, nil
+		return m, false, nil
 	}
 	if !errors.Is(err, ErrMetaNotFound) {
 		// 文件存在但非法：不自动修复（见 Validate 注释）
-		return nil, err
+		return nil, false, err
 	}
 	id, err := newInstanceID()
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	m = &Meta{InstanceId: id, RestoreEpoch: 1, RestoredAt: ""}
 	if err := m.Validate(); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if err := write(dataDir, m); err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	return m, nil
+	return m, true, nil
 }
 
 // Bump 恢复后递增世代：restore_epoch += 1 且 restored_at = 当前时间（RFC3339），落盘。
