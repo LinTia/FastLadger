@@ -655,6 +655,26 @@ func validateCLIUsername(username string) error {
 	return nil
 }
 
+// prepareCLIUser 归一化并校验 user create 的输入（INFRA-07 / V-3）。
+//
+// 与 API 侧 service.normalizeAndHash **同一套归一化**：先 TrimSpace 再校验、
+// 入库用归一化后的值。这不仅是格式洁癖——service.Login 用
+// `WHERE username = TrimSpace(input)` 精确匹配，CLI 若把 "  spacy  " 原样入库，
+// 这个账号将永远登录不上（且与 API 注册的 "spacy" 不冲突，是条死账号）。
+func prepareCLIUser(username, password string) (string, string, error) {
+	username = strings.TrimSpace(username)
+	if err := validateCLIUsername(username); err != nil {
+		return "", "", err
+	}
+	if len(password) < 8 {
+		return "", "", fmt.Errorf("密码至少 8 位")
+	}
+	if len(password) > maxPasswordBytes {
+		return "", "", fmt.Errorf("密码过长：最多 %d 字节（超出部分 bcrypt 会丢弃）", maxPasswordBytes)
+	}
+	return username, password, nil
+}
+
 // handleUser 用户创建子命令
 func handleUser(engine *xorm.Engine, args []string) {
 	if len(args) == 0 || args[0] != "create" {
@@ -680,14 +700,9 @@ func handleUser(engine *xorm.Engine, args []string) {
 	// INFRA-07：CLI 必须复用 API 侧同套输入边界（GPT-R45）。
 	// 原实现只查"非空 + 密码 ≥8 位"：超长用户名会撞 schema 约束直接 500 文案、
 	// 超 72 字节的密码会被 bcrypt 静默截断（用户实际口令与他输入的不一致）。
-	if err := validateCLIUsername(username); err != nil {
+	username, password, err := prepareCLIUser(username, password)
+	if err != nil {
 		log.Fatalf("%v", err)
-	}
-	if len(password) < 8 {
-		log.Fatalf("密码至少 8 位")
-	}
-	if len(password) > maxPasswordBytes {
-		log.Fatalf("密码过长：最多 %d 字节（超出部分 bcrypt 会丢弃）", maxPasswordBytes)
 	}
 
 	// 首个 owner 初始化：仅在无任何用户时可用，建好后自动失效（方案 §6.1 / PRD §12.1）

@@ -13,6 +13,8 @@ package config
 // INFRA-06：端口必须是 1-65535 的整数，不能等到 ListenAndServe 才炸。
 
 import (
+	"fmt"
+	"os"
 	"strings"
 	"testing"
 )
@@ -199,4 +201,181 @@ func TestLoadBaseRejectsBadPortINFRA06(t *testing.T) {
 	if _, err := LoadBase(); err == nil {
 		t.Fatal("LoadBase 也应拒绝越界端口")
 	}
+}
+
+// ---------- 差分守卫（吸收自 crosscheck-infra 探针 zz_ccv_config_test.go） ----------
+//
+// legacyLoad 是【重构前】Load 的 1:1 抄写（5c779db^ 版本），用于差分矩阵：
+// 旧代码就校验的条件，新 Load 的错误文本与优先级必须逐字一致。
+// 以后若再动 config 的校验顺序/文案，这条矩阵会立刻指出哪里偏离了历史契约。
+
+func legacyEnvBool(key string, def bool) bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(key))) {
+	case "1", "true", "yes", "on":
+		return true
+	case "0", "false", "no", "off":
+		return false
+	default:
+		return def // 旧口径：无法识别 → 静默回落
+	}
+}
+
+// legacyLoad 重构前的 Load 实现（端口无数值校验；envBool 静默回落；顺序 路径→JWT→保留期）
+func legacyLoad() (*Config, error) {
+	recycleTTL, err := envInt("EBK_RECYCLE_TTL_DAYS", DefaultRecycleTTLDays)
+	if err != nil {
+		return nil, err
+	}
+	inviteTTL, err := envInt("EBK_INVITE_TTL_DAYS", DefaultInviteTTLDays)
+	if err != nil {
+		return nil, err
+	}
+	auditDays, err := envInt("EBK_AUDIT_RETENTION_DAYS", DefaultAuditRetentionDays)
+	if err != nil {
+		return nil, err
+	}
+	c := &Config{
+		HTTPPort:           envOr("EBK_HTTP_PORT", DefaultHTTPPort),
+		DBPath:             envOr("EBK_DB_PATH", DefaultDBPath),
+		DataDir:            envOr("EBK_DATA_DIR", DefaultDataDir),
+		JWTSecret:          os.Getenv("EBK_JWT_SECRET"),
+		EnableRegister:     legacyEnvBool("EBK_ENABLE_REGISTER", false),
+		RecycleTTLDays:     recycleTTL,
+		InviteTTLDays:      inviteTTL,
+		AuditRetentionDays: auditDays,
+	}
+	if strings.TrimSpace(c.HTTPPort) == "" {
+		return nil, fmt.Errorf("EBK_HTTP_PORT 不能为空")
+	}
+	if strings.TrimSpace(c.DBPath) == "" {
+		return nil, fmt.Errorf("EBK_DB_PATH 不能为空")
+	}
+	if strings.TrimSpace(c.DataDir) == "" {
+		return nil, fmt.Errorf("EBK_DATA_DIR 不能为空")
+	}
+	if err := validateJWTSecret(c.JWTSecret); err != nil {
+		return nil, err
+	}
+	if c.RecycleTTLDays <= 0 {
+		return nil, fmt.Errorf("EBK_RECYCLE_TTL_DAYS 必须为正整数，当前=%d", c.RecycleTTLDays)
+	}
+	if c.InviteTTLDays <= 0 {
+		return nil, fmt.Errorf("EBK_INVITE_TTL_DAYS 必须为正整数，当前=%d", c.InviteTTLDays)
+	}
+	if c.AuditRetentionDays <= 0 {
+		return nil, fmt.Errorf("EBK_AUDIT_RETENTION_DAYS 必须为正整数，当前=%d", c.AuditRetentionDays)
+	}
+	for _, v := range []struct {
+		name string
+		n    int
+	}{
+		{"EBK_RECYCLE_TTL_DAYS", c.RecycleTTLDays},
+		{"EBK_INVITE_TTL_DAYS", c.InviteTTLDays},
+		{"EBK_AUDIT_RETENTION_DAYS", c.AuditRetentionDays},
+	} {
+		if v.n > MaxRetentionDays {
+			return nil, fmt.Errorf("%s 超过上限 %d 天，当前=%d", v.name, MaxRetentionDays, v.n)
+		}
+	}
+	return c, nil
+}
+
+// clearEnv 清空相关 EBK_ 变量后按 kv 设置，测试结束【恢复原值】。
+//
+// 必须恢复：否则本矩阵设置的 "x" 之类会泄漏到同包后续测试
+// （探针原实现没做恢复，单独跑没事、合进全量就互相污染）。
+func clearEnv(t *testing.T, kv map[string]string) {
+	t.Helper()
+	tracked := []string{
+		"EBK_HTTP_PORT", "EBK_DB_PATH", "EBK_DATA_DIR", "EBK_JWT_SECRET",
+		"EBK_ENABLE_REGISTER", "EBK_RECYCLE_TTL_DAYS", "EBK_INVITE_TTL_DAYS",
+		"EBK_AUDIT_RETENTION_DAYS", "EBK_WS_MAX_CONN_PER_USER", "EBK_WS_MAX_CONN_TOTAL",
+	}
+	type saved struct {
+		k   string
+		v   string
+		had bool
+	}
+	var prev []saved
+	for _, k := range tracked {
+		old, had := os.LookupEnv(k)
+		prev = append(prev, saved{k, old, had})
+		if err := os.Unsetenv(k); err != nil {
+			t.Fatalf("清理 %s 失败：%v", k, err)
+		}
+	}
+	t.Cleanup(func() {
+		for _, s := range prev {
+			if s.had {
+				_ = os.Setenv(s.k, s.v)
+			} else {
+				_ = os.Unsetenv(s.k)
+			}
+		}
+	})
+	for k, v := range kv {
+		if err := os.Setenv(k, v); err != nil {
+			t.Fatalf("设置 %s 失败：%v", k, err)
+		}
+	}
+}
+
+// TestLoadMatchesLegacyForPreexistingConditions 旧校验条件下的错误必须与重构前逐字一致
+func TestLoadMatchesLegacyForPreexistingConditions(t *testing.T) {
+	validJWT := strings.Repeat("s", 40)
+	same := []struct {
+		name string
+		env  map[string]string
+	}{
+		{"全部默认_应成功", nil},
+		{"端口为空+JWT为空", map[string]string{"EBK_HTTP_PORT": ""}},
+		{"端口为空+DBPath为空", map[string]string{"EBK_HTTP_PORT": "", "EBK_DB_PATH": " "}},
+		{"DBPath空+JWT占位", map[string]string{"EBK_DB_PATH": "", "EBK_JWT_SECRET": "secret"}},
+		{"DataDir空+JWT过短", map[string]string{"EBK_DATA_DIR": "", "EBK_JWT_SECRET": "short"}},
+		{"JWT空+保留期非法", map[string]string{"EBK_RECYCLE_TTL_DAYS": "abc"}},
+		{"JWT占位+保留期零", map[string]string{"EBK_JWT_SECRET": "changeme", "EBK_RECYCLE_TTL_DAYS": "0"}},
+		{"保留期负数+JWT合法", map[string]string{"EBK_JWT_SECRET": validJWT, "EBK_AUDIT_RETENTION_DAYS": "-1"}},
+		{"保留期超上限", map[string]string{"EBK_JWT_SECRET": validJWT, "EBK_INVITE_TTL_DAYS": "36501"}},
+		{"多重非法_端口空_保留期非法_保留期超限",
+			map[string]string{"EBK_HTTP_PORT": "", "EBK_INVITE_TTL_DAYS": "xyz", "EBK_AUDIT_RETENTION_DAYS": "999999999"}},
+	}
+	for _, c := range same {
+		t.Run("一致_"+c.name, func(t *testing.T) {
+			clearEnv(t, c.env)
+			_, errNew := Load()
+			_, errOld := legacyLoad()
+			newStr, oldStr := errString(errNew), errString(errOld)
+			if newStr != oldStr {
+				t.Errorf("错误与重构前不一致：\n  新 Load=%q\n  旧实现=%q", newStr, oldStr)
+			}
+		})
+	}
+
+	// 有意的行为变化（INFRA-05/06）：只要求"新代码确实拦住"，不比对文本
+	changed := []struct {
+		name string
+		env  map[string]string
+	}{
+		{"端口数值非法_新代码现在拦截", map[string]string{"EBK_HTTP_PORT": "abc"}},
+		{"端口超范围_0", map[string]string{"EBK_HTTP_PORT": "0", "EBK_JWT_SECRET": validJWT}},
+		{"端口超范围_65536", map[string]string{"EBK_HTTP_PORT": "65536", "EBK_JWT_SECRET": validJWT}},
+		{"envBool非法值_新代码报错_旧代码静默回落",
+			map[string]string{"EBK_JWT_SECRET": validJWT, "EBK_ENABLE_REGISTER": "enable"}},
+		{"WS上限非法_新变量新校验", map[string]string{"EBK_JWT_SECRET": validJWT, "EBK_WS_MAX_CONN_PER_USER": "x"}},
+	}
+	for _, c := range changed {
+		t.Run("变化_"+c.name, func(t *testing.T) {
+			clearEnv(t, c.env)
+			if _, err := Load(); err == nil {
+				t.Fatalf("%s：新 Load 应拦截，实际放行", c.name)
+			}
+		})
+	}
+}
+
+func errString(err error) string {
+	if err == nil {
+		return "<nil>"
+	}
+	return err.Error()
 }

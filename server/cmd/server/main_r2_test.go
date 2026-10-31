@@ -202,6 +202,51 @@ func TestR2CLIUsernameValidation(t *testing.T) {
 	}
 }
 
+// TestR2PrepareCLIUserNormalizesWhitespace V-3：CLI 必须与 API 同样 TrimSpace 后入库。
+//
+// 原缺陷：API 侧 normalizeAndHash 会 TrimSpace，而 CLI 原样入库——
+// "  spacy  " 经 CLI 建出的账号，在 service.Login 的
+// `WHERE username = TrimSpace(input)` 精确匹配下永远登录不上。
+func TestR2PrepareCLIUserNormalizesWhitespace(t *testing.T) {
+	cases := []struct {
+		name     string
+		username string
+		want     string
+		ok       bool
+	}{
+		{"带首尾空格", "  spacy  ", "spacy", true},
+		{"带制表符", "\talice\t", "alice", true},
+		{"纯空白等价于空", "   ", "", false},
+		{"已干净", "bob", "bob", true},
+		{"内部空格保留", "a b", "a b", true},
+		{"TrimSpace 后超长", " " + strings.Repeat("a", 65) + " ", "", false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, _, err := prepareCLIUser(c.username, "12345678")
+			if !c.ok {
+				if err == nil {
+					t.Fatalf("%q 应被拒绝", c.username)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("%q 应通过：%v", c.username, err)
+			}
+			if got != c.want {
+				t.Fatalf("入库值应为归一化后的 %q，实际 %q", c.want, got)
+			}
+		})
+	}
+	// 密码口径同步回归（≤72 字节，与 API 的 bcrypt 上限一致）
+	if _, _, err := prepareCLIUser("alice", strings.Repeat("p", 73)); err == nil {
+		t.Fatal("73 字节密码应被拒绝（bcrypt 会静默截断）")
+	}
+	if _, _, err := prepareCLIUser("alice", "short"); err == nil {
+		t.Fatal("短于 8 位密码应被拒绝")
+	}
+}
+
 // TestR2UnbackfilledTransferWarning INFRA-11：存在未回填方向的历史转账时必须告警
 func TestR2UnbackfilledTransferWarning(t *testing.T) {
 	engine := openDBWithSchema(t)
