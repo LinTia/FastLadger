@@ -303,43 +303,204 @@ func stage3CallCount(fn *ast.FuncDecl, callee string) int {
 	return n
 }
 
+// stage3FlagPolarity 条件里对目标标志的"期望极性"。
+type stage3FlagPolarity int
+
+const (
+	// stage3PolarityConsistent 同一条件内必须极性一致（全裸引用或全取反），两种都能过。
+	// 这是默认口径：守卫要防的是"把极性抹平"，而不是规定某个业务必须写成哪种。
+	stage3PolarityConsistent stage3FlagPolarity = iota
+	// stage3PolarityPositive 必须存在裸引用（取反深度为偶），且不得有取反引用。
+	stage3PolarityPositive
+	// stage3PolarityNegated 必须存在**一元取反**的引用，且不得有裸引用。
+	stage3PolarityNegated
+)
+
+// stage3FlagRefs 统计条件表达式里对目标标志的引用次数，按"一元取反的奇偶深度"分类。
+//
+// 为什么要按奇偶而不是"出现过 ! 就算取反"：
+//   - `!!replayed` 与 `replayed` 语义等价，若按"出现 ! 即取反"判定，作者可以用双重否定
+//     把裸引用伪装成取反（旧守卫只能靠行为级测试兜住）；
+//   - 把 `!replayed` 手写成 `replayed || !replayed` 之后，条件恒为真，等于"无条件广播"，
+//     而旧守卫只检查"条件里出现过这个标识符"，照样通过。
+//
+// 选择器（res.VisibilityChanged）与裸标识符（changed）都要计入，且**不**重复计数：
+// 前者只匹配 Sel，后者由 Ident 分支处理。
+func stage3FlagRefs(expr ast.Expr, condIdent string) (positive, negated int) {
+	count := func(depth int) {
+		if depth%2 == 1 {
+			negated++
+		} else {
+			positive++
+		}
+	}
+	var walk func(e ast.Expr, depth int)
+	walk = func(e ast.Expr, depth int) {
+		switch n := e.(type) {
+		case nil:
+			return
+		case *ast.ParenExpr:
+			walk(n.X, depth)
+		case *ast.UnaryExpr:
+			if n.Op == token.NOT {
+				walk(n.X, depth+1) // 取反深度 +1：!!x 回到偶数（等价裸引用）
+				return
+			}
+			walk(n.X, depth)
+		case *ast.StarExpr:
+			walk(n.X, depth)
+		case *ast.BinaryExpr:
+			walk(n.X, depth)
+			walk(n.Y, depth)
+		case *ast.SelectorExpr:
+			if strings.Contains(n.Sel.Name, condIdent) {
+				count(depth)
+			}
+			walk(n.X, depth)
+		case *ast.CallExpr:
+			walk(n.Fun, depth)
+			for _, a := range n.Args {
+				walk(a, depth)
+			}
+		case *ast.IndexExpr:
+			walk(n.X, depth)
+			walk(n.Index, depth)
+		case *ast.Ident:
+			if strings.Contains(n.Name, condIdent) {
+				count(depth)
+			}
+		}
+	}
+	walk(expr, 0)
+	return positive, negated
+}
+
 // stage3CallInsideIfReferencing 断言 callee 的调用位于"条件里引用了 condIdent 的 if 分支"内。
+//
+// 加固（审计域微项）：旧实现只做 `strings.Contains(id.Name, condIdent)` 的"出现过吗"检查，
+// 有两个可编译的绕过口子：
+//
+//	if replayed || !replayed { notify(...) }  // 极性被抹平 → 条件恒真 = 无条件广播
+//	if !!replayed { notify(...) }             // 双重否定 → 语义是裸引用，却伪装成"取反"
+//
+// 现在要求：条件里对该标志的引用**极性一致**（不能既裸又取反），取反按一元 `!` 的
+// **奇偶深度**判定。极性混杂直接判失败——它只可能来自手写笔误或刻意绕过。
+//
+// 需要更强口径（必须正向 / 必须取反）的调用方用 stage3CallInsideIfPolarity。
 func stage3CallInsideIfReferencing(fn *ast.FuncDecl, condIdent, callee string) bool {
+	return stage3CallInsideIfPolarity(fn, condIdent, callee, stage3PolarityConsistent)
+}
+
+// stage3CallInsideIfPolarity 同 stage3CallInsideIfReferencing，但额外约束极性与取反形式。
+func stage3CallInsideIfPolarity(fn *ast.FuncDecl, condIdent, callee string, want stage3FlagPolarity) bool {
+	if fn == nil || fn.Body == nil {
+		return false
+	}
 	found := false
 	ast.Inspect(fn.Body, func(node ast.Node) bool {
 		ifs, ok := node.(*ast.IfStmt)
 		if !ok || ifs.Body == nil {
 			return true
 		}
-		condRefs := false
-		ast.Inspect(ifs.Cond, func(c ast.Node) bool {
-			if id, isIdent := c.(*ast.Ident); isIdent && strings.Contains(id.Name, condIdent) {
-				condRefs = true
+		positive, negated := stage3FlagRefs(ifs.Cond, condIdent)
+		if positive+negated == 0 {
+			return true // 本 if 与目标标志无关
+		}
+		switch want {
+		case stage3PolarityConsistent:
+			// 极性混杂（既裸又取反）= 条件被写成恒真/恒假：拒绝
+			if positive > 0 && negated > 0 {
+				return true
+			}
+		case stage3PolarityPositive:
+			if positive == 0 || negated > 0 {
+				return true
+			}
+		case stage3PolarityNegated:
+			if negated == 0 || positive > 0 {
+				return true
+			}
+		}
+		ast.Inspect(ifs.Body, func(b ast.Node) bool {
+			call, isCall := b.(*ast.CallExpr)
+			if !isCall {
+				return true
+			}
+			switch f := call.Fun.(type) {
+			case *ast.SelectorExpr:
+				if f.Sel.Name == callee {
+					found = true
+				}
+			case *ast.Ident:
+				if f.Name == callee {
+					found = true
+				}
 			}
 			return true
 		})
-		if condRefs {
-			ast.Inspect(ifs.Body, func(b ast.Node) bool {
-				call, isCall := b.(*ast.CallExpr)
-				if !isCall {
-					return true
-				}
-				switch f := call.Fun.(type) {
-				case *ast.SelectorExpr:
-					if f.Sel.Name == callee {
-						found = true
-					}
-				case *ast.Ident:
-					if f.Name == callee {
-						found = true
-					}
-				}
-				return true
-			})
-		}
 		return true
 	})
 	return found
+}
+
+// stage3ParseSnippet 把一段源码片段解析成函数声明，供守卫自身的"突变测试"使用。
+//
+// 为什么要给守卫写突变测试：守卫本身是"元断言"，它一旦退化成只要"出现过标识符"就
+// 判通过，所有被它保护的用例都会集体失效而且**没有任何红灯**。因此这里把已知的
+// 绕过写法（混杂极性 / 双重否定）当作输入，断言守卫必须拒绝它们。
+func stage3ParseSnippet(t *testing.T, body string) *ast.FuncDecl {
+	t.Helper()
+	src := "package x\n\nfunc hero(flag bool) {\n" + body + "\n}\n"
+	f, err := parser.ParseFile(token.NewFileSet(), "snippet.go", src, 0)
+	if err != nil {
+		t.Fatalf("解析片段失败：%v\n源码：%s", err, src)
+	}
+	for _, d := range f.Decls {
+		if fn, ok := d.(*ast.FuncDecl); ok {
+			return fn
+		}
+	}
+	t.Fatalf("片段里没有函数声明：%s", src)
+	return nil
+}
+
+// TestStage3GuardRejectsMixedPolarity 守卫自身的突变测试：三种绕过写法必须被拒绝。
+func TestStage3GuardRejectsMixedPolarity(t *testing.T) {
+	// ① 基准：正常写法必须通过
+	ok := stage3ParseSnippet(t, "\tif flag {\n\t\tnotify()\n\t}")
+	if !stage3CallInsideIfReferencing(ok, "flag", "notify") {
+		t.Fatal("基准失败：`if flag { notify() }` 应被判定为「调用位于条件分支内」（守卫过严）")
+	}
+
+	// ② 手写笔误抹平极性：flag || !flag 恒为真，等于无条件广播
+	mixed := stage3ParseSnippet(t, "\tif flag || !flag {\n\t\tnotify()\n\t}")
+	if stage3CallInsideIfReferencing(mixed, "flag", "notify") {
+		t.Fatal("守卫被 `if flag || !flag` 骗过：条件恒真等于无条件执行，必须判失败")
+	}
+
+	// ③ 双重否定：语义等于裸引用，按奇偶深度归入正向
+	double := stage3ParseSnippet(t, "\tif !!flag {\n\t\tnotify()\n\t}")
+	if stage3CallInsideIfPolarity(double, "flag", "notify", stage3PolarityNegated) {
+		t.Fatal("`if !!flag` 不得被当成「取反」：双重否定的取反深度为偶数，语义是裸引用")
+	}
+	if !stage3CallInsideIfPolarity(double, "flag", "notify", stage3PolarityPositive) {
+		t.Fatal("`if !!flag` 应按奇偶深度判定为正向引用")
+	}
+
+	// ④ 真正的取反：只有一元取反能满足 Negated 口径
+	neg := stage3ParseSnippet(t, "\tif !flag {\n\t\tnotify()\n\t}")
+	if !stage3CallInsideIfPolarity(neg, "flag", "notify", stage3PolarityNegated) {
+		t.Fatal("`if !flag` 应被判定为取反引用")
+	}
+	if stage3CallInsideIfPolarity(neg, "flag", "notify", stage3PolarityPositive) {
+		t.Fatal("`if !flag` 不得被判定为正向引用（极性判定失效）")
+	}
+
+	// ⑤ 调用不在条件分支内：一律不通过（否则守卫形同虚设）
+	outside := stage3ParseSnippet(t, "\tif flag {\n\t\tother()\n\t}\n\tnotify()")
+	if stage3CallInsideIfReferencing(outside, "flag", "notify") {
+		t.Fatal("守卫把「条件分支之外」的调用误判为分支内调用")
+	}
 }
 
 // TestBothVisibilityEntriesBroadcast 《落地方案》§5.2 不变量：
