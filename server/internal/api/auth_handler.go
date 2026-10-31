@@ -15,6 +15,8 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"sync"
+	"time"
 
 	"fastledger/internal/model"
 	"fastledger/internal/service"
@@ -99,7 +101,11 @@ func mapLoginErr(c *gin.Context, err error) {
 		// 不区分"用户不存在"与"口令错误"，避免账号枚举
 		fail(c, http.StatusUnauthorized, "用户名或密码错误")
 	case errors.Is(err, service.ErrRateLimited):
-		// A6：与 R46 口径并存——429 不是凭证错误，也不是内部错误
+		// A6：与 R46 口径并存——429 不是凭证错误，也不是内部错误。
+		// R-3：补一条【节流】的服务端日志——429 拒绝不写审计（A6 口径，防审计放大），
+		// 但"某来源正在被限流"必须服务端可见，否则被打满时除了审计里前 10 条失败
+		// 之外一片寂静。每来源最多 1 条/分钟：攻击者高频打 429 不能把日志刷成放大面。
+		logRateLimited(c)
 		fail(c, http.StatusTooManyRequests, "登录尝试过于频繁，请稍后再试")
 	case errors.Is(err, service.ErrAuthUnavailable):
 		logLoginInternalError(c, err)
@@ -110,8 +116,54 @@ func mapLoginErr(c *gin.Context, err error) {
 	}
 }
 
-// logLoginInternalError 登录内部错误的**安全日志**。
+// rateLimitLogState 429 节流日志的状态（R-3）：来源 → 最近一次记录时间。
 //
+// 有界性：来源数理论无上界（每个 IP 一条），故容量封顶 rateLimitLogMaxIPs——
+// 超限时先清过期项，仍满则整体重置（有界降级：极端洪泛下宁可漏记个别来源，
+// 也不让节流表本身变成内存放大面）。
+var rateLimitLogState = struct {
+	sync.Mutex
+	seen map[string]time.Time
+}{seen: make(map[string]time.Time)}
+
+const (
+	// rateLimitLogInterval 同一来源两条 429 日志的最小间隔（R-3：每 IP 每分钟最多 1 条）
+	rateLimitLogInterval = time.Minute
+	// rateLimitLogMaxIPs 节流表的来源数上界
+	rateLimitLogMaxIPs = 4096
+)
+
+// logRateLimited 记录一条【节流的】429 服务端日志。
+//
+// 记录内容只有来源 IP 与固定前缀——不记用户名/口令（与 logLoginInternalError 同一口径）；
+// 不写审计表（429 拒绝不产生审计行是 A6 的既定口径，写审计会让拒绝本身变成放大面）。
+func logRateLimited(c *gin.Context) {
+	ip := "-"
+	if c != nil && c.Request != nil {
+		ip = c.ClientIP()
+	}
+	now := time.Now()
+	rateLimitLogState.Lock()
+	if t, ok := rateLimitLogState.seen[ip]; ok && now.Sub(t) < rateLimitLogInterval {
+		rateLimitLogState.Unlock()
+		return // 同一来源 1 分钟内已记过：跳过
+	}
+	if len(rateLimitLogState.seen) >= rateLimitLogMaxIPs {
+		for k, t := range rateLimitLogState.seen {
+			if now.Sub(t) >= rateLimitLogInterval {
+				delete(rateLimitLogState.seen, k)
+			}
+		}
+		if len(rateLimitLogState.seen) >= rateLimitLogMaxIPs {
+			rateLimitLogState.seen = make(map[string]time.Time) // 有界降级
+		}
+	}
+	rateLimitLogState.seen[ip] = now
+	rateLimitLogState.Unlock()
+	log.Printf("[auth] 登录失败限流已触发（429，同来源 1 分钟内不再重复记录） ip=%s", ip)
+}
+
+// logLoginInternalError 登录内部错误的**安全日志**。
 // 记录：客户端 IP、方法、路径、错误本身（服务端排查所需）。
 // 刻意【不记录】用户名、口令、令牌——它们是凭据/PII，一旦落日志就等于把凭证泄露到
 // 日志采集与备份里；排查登录故障靠 IP + 时间 + 错误链已经足够。

@@ -10,6 +10,9 @@ package api
 
 import (
 	"errors"
+	"net/http/httptest"
+	"os"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -65,5 +68,89 @@ func TestA6LoginPassesRealClientIP(t *testing.T) {
 	if strings.HasPrefix(stub.lastLoginIP, "198.51.100.") {
 		// 防御性断言：这里根本没设置 XFF，若出现伪造网段说明取错了来源
 		t.Fatalf("ClientIP 不应来自伪造网段：%q", stub.lastLoginIP)
+	}
+}
+
+// readAPIHandlerSource 读取本包内的源文件（源码级守卫用，仿 member_test.readServiceSource）
+func readAPIHandlerSource(t *testing.T, name string) string {
+	t.Helper()
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("无法定位测试文件路径")
+	}
+	dir := file[:strings.LastIndex(file, "/")+1]
+	b, err := os.ReadFile(dir + name)
+	if err != nil {
+		// Windows 路径分隔符兜底
+		dir = file[:strings.LastIndex(file, "\\")+1]
+		b, err = os.ReadFile(dir + name)
+		if err != nil {
+			t.Fatalf("读取 %s 失败：%v", name, err)
+		}
+	}
+	return string(b)
+}
+
+// TestA6HandlerMustUseLoginFromIP 源码级守卫（R-5）：登录 handler 必须调用 LoginFromIP。
+//
+// 为什么要钉死：service.Login（2 参兼容入口）会把所有调用归入同一个共享桶
+// （login:invalid）——一旦有人在生产代码里改用它，所有无来源/同来源的流量共享
+// 10 次/15min 配额，互相锁死；这正是登录失败限流设计的反面。handler 只允许走
+// LoginFromIP（按真实对端网段分桶）。
+func TestA6HandlerMustUseLoginFromIP(t *testing.T) {
+	src := readAPIHandlerSource(t, "auth_handler.go")
+	if !strings.Contains(src, "LoginFromIP(req.Username, req.Password") {
+		t.Fatal("auth_handler.go 的 login 未调用 LoginFromIP（限流按来源分桶的入口）")
+	}
+	// 2 参 Login 是兼容入口（归共享桶），生产代码禁止调用：
+	// "Login(" 紧跟左括号才是 2 参形态；LoginFromIP 不匹配该子串
+	if i := strings.Index(src, ".Login("); i >= 0 {
+		line := 1 + strings.Count(src[:i], "\n")
+		t.Fatalf("auth_handler.go 第 %d 行附近调用了 2 参 Login（共享桶，生产禁用）", line)
+	}
+}
+
+// TestA6RateLimitLogIsThrottledPerIP R-3：429 拒绝必须有【节流】的服务端日志——
+// 同一来源 1 分钟内最多 1 条；不同来源各自记录。
+func TestA6RateLimitLogIsThrottledPerIP(t *testing.T) {
+	logBuf := captureLog(t)
+	stub := &stubAuthAPI{loginErr: service.ErrRateLimited}
+	r := newAuthTestRouter(stub, true)
+
+	post := func(remote string) {
+		req := httptest.NewRequest("POST", "/api/v1/auth/login",
+			strings.NewReader(`{"username":"alice","password":"12345678"}`))
+		req.Header.Set("Content-Type", "application/json")
+		req.RemoteAddr = remote
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		if w.Code != 429 {
+			t.Fatalf("前提失败：应返回 429，实际 %d", w.Code)
+		}
+	}
+
+	const ip1, ip2 = "203.0.113.50:1", "203.0.113.51:1"
+	for i := 0; i < 5; i++ {
+		post(ip1) // 同一来源打 5 次：日志必须只出现 1 条（节流）
+	}
+	post(ip2) // 另一来源：应各记 1 条
+
+	logs := logBuf.String()
+	if got := strings.Count(logs, "登录失败限流已触发"); got != 2 {
+		t.Fatalf("两个来源各 1 条 429 日志，实际 %d 条：%s", got, logs)
+	}
+	if n := strings.Count(logs, "ip="+ip1[:strings.Index(ip1, ":")]); n != 1 {
+		t.Fatalf("同一来源的 429 日志应被节流为 1 条，实际 %d 条：%s", n, logs)
+	}
+	// 节流表必须有界（防内存放大）
+	rateLimitLogState.Lock()
+	size := len(rateLimitLogState.seen)
+	rateLimitLogState.Unlock()
+	if size > rateLimitLogMaxIPs {
+		t.Fatalf("429 节流表超过容量上限：%d > %d", size, rateLimitLogMaxIPs)
+	}
+	// 日志里不得出现用户名/口令
+	if strings.Contains(logs, "alice") || strings.Contains(logs, "12345678") {
+		t.Fatalf("429 日志泄露了请求内容：%s", logs)
 	}
 }
