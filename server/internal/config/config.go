@@ -47,6 +47,11 @@ const (
 	DefaultSyncPushPerMinute = 60
 	// DefaultSyncPullPerMinute 单用户 sync/pull 限流默认值/分钟（读路径放宽）。
 	DefaultSyncPullPerMinute = 300
+	// MaxLoginWindowMinutes 登录失败限流窗口上限/分钟（R-7）。
+	//
+	// 窗口 = 被打满后的瘫痪时长：配 1000000 分钟意味着"一次打满永久锁死该 IP"。
+	// 上限取一天（1440 分钟）——对运维足够宽裕，且任何误配都能在一日内自愈。
+	MaxLoginWindowMinutes = 1440
 	// MaxRetentionDays 保留天数上限（100 年）。与 service.maxRetentionDays 同值：
 	// 这里是【配置层】的启动期拦截，那里是【换算层】的运行时拦截，互为纵深防御。
 	MaxRetentionDays = 36500
@@ -201,7 +206,8 @@ func LoadBase() (*Config, error) {
 // validate 全量校验：通用校验 + JWT。
 //
 // INFRA-01：**顺序即契约**——保持与重构前逐字一致（端口/路径 → JWT → 保留期），
-// 不得因为拆分而改变"两个配置同时非法时报哪一条"。
+// 不得因为拆分而改变"两个配置同时非法时报哪一条"。限流参数上限（R-7）追加在末尾，
+// 不改变既有错误的先后。
 func (c *Config) validate() error {
 	if err := c.validatePaths(); err != nil {
 		return err
@@ -209,15 +215,33 @@ func (c *Config) validate() error {
 	if err := c.ValidateRuntime(); err != nil {
 		return err
 	}
-	return c.validateRetention()
+	if err := c.validateRetention(); err != nil {
+		return err
+	}
+	return c.validateThrottle()
 }
 
-// validateCommon 通用校验：路径 + 保留期（不含 JWT，子命令可用）
+// validateCommon 通用校验：路径 + 保留期 + 限流参数上限（不含 JWT，子命令可用）
 func (c *Config) validateCommon() error {
 	if err := c.validatePaths(); err != nil {
 		return err
 	}
-	return c.validateRetention()
+	if err := c.validateRetention(); err != nil {
+		return err
+	}
+	return c.validateThrottle()
+}
+
+// validateThrottle 限流参数的运行口径上限（R-7）。
+//
+// envInt 已保证正数；这里拦的是"合法但危险"的取值——登录失败限流的窗口就是
+// 被打满后的瘫痪时长，配 1000000 分钟 = 一次打满永久锁死该 IP，必须在启动期拒绝。
+func (c *Config) validateThrottle() error {
+	if c.LoginWindowMinutes > MaxLoginWindowMinutes {
+		return fmt.Errorf("EBK_LOGIN_WINDOW_MINUTES 过大（上限 %d 分钟）：一次打满将锁死该 IP 超过一天，当前=%d",
+			MaxLoginWindowMinutes, c.LoginWindowMinutes)
+	}
+	return nil
 }
 
 // validatePaths 端口与路径必填项（INFRA-06 的端口数值校验也在这里）
