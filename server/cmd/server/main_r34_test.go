@@ -159,7 +159,7 @@ func TestR34PurgeRejectsBadFlagLeavesRows(t *testing.T) {
 	for _, args := range badArgs {
 		t.Setenv(recycleTTLEnv, "")
 		t.Setenv(auditRetentionEnv, "")
-		if _, _, _, _, err := purgeWithOptions(engine, args); err == nil {
+		if _, _, err := purgeWithOptions(engine, args); err == nil {
 			t.Fatalf("%q：非法参数应报错，实际被接受", args)
 		}
 		if got := countRows(t, engine, "transactions"); got != seedTxRows {
@@ -175,8 +175,9 @@ func TestR34PurgeRejectsBadFlagLeavesRows(t *testing.T) {
 	// 阳性对照：合法参数确实会清掉到期数据，证明上面的夹具不是"本来就删不动"的
 	t.Setenv(recycleTTLEnv, "")
 	t.Setenv(auditRetentionEnv, "")
-	recycled, audited, _, _, err := purgeWithOptions(engine,
+	res, _, err := purgeWithOptions(engine,
 		[]string{"--recycle-ttl-days", "1", "--audit-retention-days", "1"})
+	recycled, audited := res.Recycled, res.Audited
 	if err != nil {
 		t.Fatalf("合法参数不应报错：%v", err)
 	}
