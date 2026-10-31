@@ -17,6 +17,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net/netip"
 	"strings"
 	"time"
 
@@ -76,7 +77,20 @@ const (
 	inviteReasonEmailTaken = "email_taken"
 	// inviteReasonBookDeleted 账本已被删除（GPT-R43）
 	inviteReasonBookDeleted = "book_deleted"
+	// inviteReasonBookFull 账本成员已达上限（PRD §12 决策 6，兑换的容量类拒绝原因）。
+	//
+	// 以前这里是全函数唯一【绕过 inviteFailed】的失败出口：直接 `return nil, ErrBookFull`，
+	// 既没有 reason 码、也没有任何审计行。于是"账本顶到 20 人之后，所有入户尝试在审计里
+	// 完全不可见"——而"有人持续试图挤进已满的账本"正是最该被看见的信号之一。
+	// 现在与其余 6 个失败出口同口径：走 inviteFailed 留 result=rejected + 本原因码。
+	inviteReasonBookFull = "book_full"
 )
+
+// inviteAttributionUnattributable 审计 payload 的归属标记：本次尝试无法归因到任何账本。
+//
+// 只出现在"邀请不存在 / 不属于该账本"这条分支上——那条分支里 book_id 取实例哨兵 0，
+// 单看 book_id=0 会被误读成"登录/备份恢复"这类实例级事件，故用本标记显式区分。
+const inviteAttributionUnattributable = "unattributable"
 
 // GPT-R40：邀请撤销的失败语义，全部**继承**既有错误树（用 %w 包装），
 // 因此不需要改动 mapSvcErr，也不会新开一套 HTTP 状态码契约。
@@ -459,7 +473,7 @@ func (s *MemberService) RevokeInvite(actor, bookID, inviteID int64) error {
 		// GPT-R42：撤销失败同样留痕——"谁在什么时候试图废止一个不可废止的邀请"
 		// 对排查误操作与安全观察都有价值。actor 是已认证用户，故不再是哨兵 0。
 		return s.inviteFailed(inviteEventRevoke, bookID, actor, inviteID,
-			inviteRejectReason(hasInvite, &inv, now), "")
+			inviteRejectReason(hasInvite, &inv, now), inviteAuditFields{})
 	}
 
 	// GPT-R42：成功撤销与审计【同事务】——成功也是一个需要解释的状态变更。
@@ -488,10 +502,12 @@ func (s *MemberService) RevokeInvite(actor, bookID, inviteID int64) error {
 //   - errors.Join 让 errors.Is(err, ErrInviteInvalid) 继续成立（HTTP 映射不变），
 //     同时把审计异常留在错误链里，服务日志能看到。这是一次失败被完整地记录，
 //     而不是挑一半报上去。
-func (s *MemberService) inviteFailed(event string, bookID, actorUID, inviteID int64, reason, clientIP string) error {
+//
+// 审计字段（f）由调用方给出：取证线索（IP 桶）、归属标记等都在里面，
+// 而不是在签名上逐个加字符串参数——本函数有 7 个调用点，参数一多就难免漏传。
+func (s *MemberService) inviteFailed(event string, bookID, actorUID, inviteID int64, reason string, f inviteAuditFields) error {
 	biz := inviteRejectError(reason)
-	auditErr := s.appendInviteRejectedAudit(bookID, actorUID, inviteID, event, reason,
-		inviteAuditFields{ClientIP: clientIP})
+	auditErr := s.appendInviteRejectedAudit(bookID, actorUID, inviteID, event, reason, f)
 	if auditErr != nil {
 		return errors.Join(biz, fmt.Errorf("邀请审计写入失败：%w", auditErr))
 	}
@@ -553,6 +569,10 @@ func inviteRejectError(reason string) error {
 	case inviteReasonBookDeleted:
 		// 并入"邀请无效"：兑换入口未认证，不能让它变成账本存在性的探测器
 		return ErrInviteBookUnavailable
+	case inviteReasonBookFull:
+		// 容量类拒绝的对外语义保持不变：仍是 ErrBookFull（HTTP 409），
+		// 补的只是"这条拒绝也要留痕"，不得因为补审计而改错错误码。
+		return ErrBookFull
 	default:
 		return ErrInviteInvalid
 	}
@@ -632,6 +652,11 @@ type inviteAuditFields struct {
 	JoinerUid      int64
 	JoinerUsername string
 	ClientIP       string
+	// Unattributed 本次尝试无法归因到任何账本（邀请不存在 / 不属于调用方自称的账本）。
+	//
+	// 只影响 payload：落一行 bookAttribution=unattributable，说明"这行审计不属于它
+	// 表面上看起来的那个账本"。落库的 book_id 同时是实例哨兵 0（见 JoinViaInvite）。
+	Unattributed bool
 }
 
 // inviteAuditPayload 生成审计 payload（会被 JSON 序列化进 before_json）。
@@ -669,6 +694,11 @@ func inviteAuditPayload(event, result, reason string, f inviteAuditFields) map[s
 	}
 	if result == inviteResultRejected && f.ClientIP != "" {
 		p["clientIP"] = f.ClientIP
+	}
+	// 无法归因的尝试必须自带标记：它的 book_id 是实例哨兵 0，
+	// 不加标记会被误读成"登录 / 备份恢复"这类真正的实例级事件。
+	if f.Unattributed {
+		p["bookAttribution"] = inviteAttributionUnattributable
 	}
 	return p
 }
@@ -759,8 +789,24 @@ func (s *MemberService) JoinViaInvite(bookID int64, code, username, email, passw
 	found := has && inv.BookId == bookID
 	if reason := inviteRejectReason(found, &inv, time.Now().Unix()); reason != inviteReasonNone {
 		_ = sess.Rollback()
-		return nil, s.inviteFailed(inviteEventRedeem, bookID, model.AuditActorSystem,
-			inviteIDOrZero(found, inv.Id), reason, ipBucket(clientIP))
+		// A4：**无法归因**的尝试不得写进 URL 路径参数指定的那个账本。
+		//
+		// 兑换入口是未认证的，bookID 完全来自 URL——若照旧把它当审计归属，匿名者
+		// 就能以 10 次/小时/IP 的代价往任意账本的审计流里灌行，而且那些行还带
+		// actor_uid=0（系统哨兵），排查时会被误读成"服务端自己干的事"。
+		// `found==false` 时邀请的真实归属未知或不属于本账本，因此落到实例哨兵 0，
+		// 并在 payload 里打 bookAttribution=unattributable（见 inviteAttributionUnattributable）。
+		//
+		// 为什么不选择"完全不写"：失败尝试的取证价值（有人在撞门户）是策略三的明确要求，
+		// 而"写到 0 号桶"既保住了这条线索，又不再为攻击者提供指向具体账本的写入口。
+		auditBook := bookID
+		fields := inviteAuditFields{ClientIP: ipBucket(clientIP)}
+		if !found {
+			auditBook = model.AuditBookInstance
+			fields.Unattributed = true
+		}
+		return nil, s.inviteFailed(inviteEventRedeem, auditBook, model.AuditActorSystem,
+			inviteIDOrZero(found, inv.Id), reason, fields)
 	}
 	// GPT-R43：账本状态的检查必须在【事务内】、且在写任何东西之前。
 	//
@@ -770,21 +816,22 @@ func (s *MemberService) JoinViaInvite(bookID int64, code, username, email, passw
 	if err := requireActiveBookTx(sess, inv.BookId); err != nil {
 		_ = sess.Rollback()
 		// 对外仍然并入"邀请无效"：兑换入口未认证，不能让它成为账本存在性的探测器。
-		return nil, s.inviteFailed(inviteEventRedeem, bookID, model.AuditActorSystem, inv.Id,
-			inviteReasonBookDeleted, ipBucket(clientIP))
+		// 归属一律取 inv.BookId（此刻 found==true，它已被证明等于路径参数）。
+		return nil, s.inviteFailed(inviteEventRedeem, inv.BookId, model.AuditActorSystem, inv.Id,
+			inviteReasonBookDeleted, inviteAuditFields{ClientIP: ipBucket(clientIP)})
 	}
 	if inv.BoundUsername != "" && !strings.EqualFold(inv.BoundUsername, uname) {
 		_ = sess.Rollback()
-		return nil, s.inviteFailed(inviteEventRedeem, bookID, model.AuditActorSystem, inv.Id,
-			inviteReasonBoundMismatch, ipBucket(clientIP))
+		return nil, s.inviteFailed(inviteEventRedeem, inv.BookId, model.AuditActorSystem, inv.Id,
+			inviteReasonBoundMismatch, inviteAuditFields{ClientIP: ipBucket(clientIP)})
 	}
 	// GPT-R41：邮箱绑定校验。两侧都已过同一个规范化函数，因此这里是精确的
 	// "同一个人"判定；邀请绑了邮箱而兑换方留空时，空串必然不等于绑定值 → 拒绝，
 	// 不会出现"不填邮箱反而能绕过绑定"的洞。
 	if inv.BoundEmail != "" && inv.BoundEmail != email {
 		_ = sess.Rollback()
-		return nil, s.inviteFailed(inviteEventRedeem, bookID, model.AuditActorSystem, inv.Id,
-			inviteReasonBoundMismatch, ipBucket(clientIP))
+		return nil, s.inviteFailed(inviteEventRedeem, inv.BookId, model.AuditActorSystem, inv.Id,
+			inviteReasonBoundMismatch, inviteAuditFields{ClientIP: ipBucket(clientIP)})
 	}
 
 	// GPT-R41：邮箱占用检查必须在事务内、建号之前。
@@ -803,8 +850,8 @@ func (s *MemberService) JoinViaInvite(bookID int64, code, username, email, passw
 		}
 		if emailTaken > 0 {
 			_ = sess.Rollback()
-			return nil, s.inviteFailed(inviteEventRedeem, bookID, model.AuditActorSystem, inv.Id,
-				inviteReasonEmailTaken, ipBucket(clientIP))
+			return nil, s.inviteFailed(inviteEventRedeem, inv.BookId, model.AuditActorSystem, inv.Id,
+				inviteReasonEmailTaken, inviteAuditFields{ClientIP: ipBucket(clientIP)})
 		}
 	}
 
@@ -820,7 +867,12 @@ func (s *MemberService) JoinViaInvite(bookID int64, code, username, email, passw
 	}
 	if memberCount >= maxBookMembers {
 		_ = sess.Rollback()
-		return nil, ErrBookFull
+		// A3：容量类拒绝也必须留痕。以前这里是全函数唯一绕过 inviteFailed 的出口
+		// （直接 return ErrBookFull），于是"账本满员后的持续入户尝试"在审计里完全不可见。
+		// 现在与其余 6 个失败出口同口径；对外错误语义不变（inviteRejectError 把
+		// book_full 映射回 ErrBookFull → HTTP 409）。
+		return nil, s.inviteFailed(inviteEventRedeem, inv.BookId, model.AuditActorSystem, inv.Id,
+			inviteReasonBookFull, inviteAuditFields{ClientIP: ipBucket(clientIP)})
 	}
 
 	u, err := s.auth.insertUserInTx(sess, uname, hash)
@@ -857,7 +909,14 @@ func (s *MemberService) JoinViaInvite(bookID int64, code, username, email, passw
 	//
 	// GPT-R40：WHERE 里带上 `revoked = 0`，使"兑换"与"撤销"互为对方的失败条件——
 	// 撤销抢先提交时本 UPDATE 命中 0 行，整笔回滚，不会出现"撤销了却又入户"。
-	n, err := sess.Where("id = ? AND used_at = 0 AND revoked = 0", inv.Id).
+	//
+	// A9：条件必须是 inviteUsableCond（含 `expires_at > ?`），与 RevokeInvite 的
+	// 撤销条件、inviteRejectReason 的过期判定共用【同一个常量】。
+	// 旧版把四个条件手写了一遍并漏掉 expires_at，于是"兑换说它过期了、撤销也说它过期了，
+	// 但标记已用那一步却认为它还活着"——正是 R42 要消灭的"多套实现打架"。
+	// 用同一个 now（本函数开头判定用的时间轴）而不是再取一次 time.Now()，
+	// 保证"判定过期"与"写入条件"看到的是同一时刻。
+	n, err := sess.Where("id = ? AND "+inviteUsableCond, inv.Id, now).
 		Cols("used_at", "used_by").Update(&model.Invite{UsedAt: now, UsedBy: u.Id})
 	if err != nil {
 		_ = sess.Rollback()
@@ -867,8 +926,8 @@ func (s *MemberService) JoinViaInvite(bookID int64, code, username, email, passw
 		// GPT-R40：命中 0 行说明"撤销或另一个兑换"抢先提交了（redeemed 条件含 revoked = 0）。
 		// 整笔回滚，不留下半截入户；并按 Erlang 失败语义返回 ErrInviteInvalid 以免泄露状态。
 		_ = sess.Rollback()
-		return nil, s.inviteFailed(inviteEventRedeem, bookID, model.AuditActorSystem, inv.Id,
-			inviteReasonAlreadyUsed, ipBucket(clientIP))
+		return nil, s.inviteFailed(inviteEventRedeem, inv.BookId, model.AuditActorSystem, inv.Id,
+			inviteReasonAlreadyUsed, inviteAuditFields{ClientIP: ipBucket(clientIP)})
 	}
 
 	// GPT-R42：成功兑换必须【与状态变更同事务】留痕。
@@ -958,13 +1017,35 @@ func resolveInviteBinding(boundUsername, boundEmail string) (username string, em
 	return username, email, nil
 }
 
-// ipBucket 把客户端 IP 归一化为限流桶键；空值归入 unknown，避免"缺 IP 即绕过"。
+// ipBucket 把客户端 IP 归一化为限流桶键：按【来源网段】聚合——IPv4 /24、IPv6 /64。
+//
+// 口径与 service/auth.go 的 loginKey **完全一致**（v4 → /24、v6 → /64、
+// IPv4-mapped 先 Unmap()），但两处实现各自独立、互不引用（文件所有权隔离）。
+// 一致是硬要求：同一个来源在"登录限流"与"邀请入户限流"里必须落进同等粒度的桶，
+// 否则两套限流语义打架——运维按登录侧的经验推断邀请侧行为时会得出错误结论。
+//
+// 为什么必须聚合而不是原样透传完整地址（对抗验证 ZZ-9 实测复现）：IPv6 隐私扩展
+// （RFC 4941）让一台机器在自己 /64 内可随意轮转出海量地址，按完整地址分桶等于
+// "每换一个地址就是全新配额"，邀请入户 10 次/小时的配额被 /64 内的地址数摊薄成 0。
+//
+// 代价（明示，已同步写入《枚举字典》§14.5 与《落地方案》§8.4.2）：同一 /24（IPv4）
+// 或 /64（IPv6）内的多台设备共享一个邀请入户配额。家庭自托管场景下，同一出口路由器
+// 后面的设备本来就该算同一个来源，可接受；IPv6 若运营商分配的是 /56 段，
+// 则换前缀即可换桶——这是与登录侧同样的残余风险，不在这里单方面收紧。
+//
+// 不可解析的值（正常不应出现）统一归 "unknown" 共享桶：fail-closed，
+// 绝不会因为解析失败而拿到一份新配额。
 func ipBucket(ip string) string {
-	ip = strings.TrimSpace(ip)
-	if ip == "" {
+	addr, err := netip.ParseAddr(strings.TrimSpace(ip))
+	if err != nil {
 		return "unknown"
 	}
-	return ip
+	addr = addr.Unmap() // IPv4-mapped IPv6（::ffff:203.0.113.9）按 IPv4 口径聚合
+	bits := 64
+	if addr.Is4() {
+		bits = 24
+	}
+	return netip.PrefixFrom(addr, bits).Masked().String()
 }
 
 // 便于单元测试替换口令哈希成本（默认沿用 bcrypt.DefaultCost）

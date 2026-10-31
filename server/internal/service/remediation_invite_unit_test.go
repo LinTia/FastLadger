@@ -223,11 +223,16 @@ func TestR40RevokeUsesConditionalUpdateWithRowsAffected(t *testing.T) {
 	if strings.Contains(body, "RoleOf(s.engine") || strings.Contains(body, "s.RoleOf(") {
 		t.Fatal("RevokeInvite 不得使用事务外的 RoleOf（GPT-R28 回归）")
 	}
-	// ⑤ 兑换侧必须带 revoked = 0，才能与撤销互斥
+	// ⑤ 兑换侧必须与撤销共用同一个条件（含 revoked = 0），才能与撤销互斥。
+	//
+	// A9 之后这里不再断言字面量 "used_at = 0 AND revoked = 0"：兑换的标记已用
+	// 复用 inviteUsableCond（used_at / revoked / expires_at 三项），比原来的两条件更强。
+	// 断言"必须引用该常量"，就把"漏掉其中任一条件"这类回归一次性挡住。
 	join := src[strings.Index(src, "func (s *MemberService) JoinViaInvite"):]
 	join = join[:minStringEnd(join, 0)]
-	if !strings.Contains(join, "used_at = 0 AND revoked = 0") {
-		t.Fatal("JoinViaInvite 标记已用的 UPDATE 必须带 revoked = 0，否则撤销与兑换可以双成功（GPT-R40）")
+	if !strings.Contains(join, "inviteUsableCond") {
+		t.Fatal("JoinViaInvite 标记已用的 UPDATE 必须复用 inviteUsableCond（含 revoked = 0），" +
+			"否则撤销与兑换可以双成功（GPT-R40）")
 	}
 }
 

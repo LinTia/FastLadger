@@ -19,14 +19,20 @@ import (
 	"time"
 )
 
+// TestIPBucketNormalization 限流桶键必须按网段聚合（A5：IPv4 /24、IPv6 /64）。
+//
+// 口径与 auth.go 的 loginKey 一致：原样透传完整地址（旧行为）会让 IPv6 隐私扩展
+// 下的地址轮转把 10 次/小时的配额摊薄成 0；不可解析值必须 fail-closed 进 unknown 桶。
 func TestIPBucketNormalization(t *testing.T) {
 	cases := map[string]string{
 		"":                 "unknown",
 		"   ":              "unknown",
-		"192.168.1.10":     "192.168.1.10",
-		" 10.0.0.2 ":       "10.0.0.2",
-		"2001:db8::1":      "2001:db8::1",
-		"::ffff:127.0.0.1": "::ffff:127.0.0.1",
+		"garbage":          "unknown",
+		"999.999.999.999":  "unknown",
+		"192.168.1.10":     "192.168.1.0/24",
+		" 10.0.0.2 ":       "10.0.0.0/24",
+		"2001:db8::1":      "2001:db8::/64",
+		"::ffff:127.0.0.1": "127.0.0.0/24", // IPv4-mapped 先 Unmap 再按 IPv4 口径聚合
 	}
 	for in, want := range cases {
 		if got := ipBucket(in); got != want {
@@ -113,9 +119,16 @@ func TestMemberWritesCheckRowsAffected(t *testing.T) {
 	if got := strings.Count(src, "if n != 1 {"); got < 2 {
 		t.Fatalf("member.go 中 `if n != 1 {` 出现 %d 次，ChangeRole 与 Remove 应各有一处", got)
 	}
-	// 邀请"单次使用"的硬校验：条件更新后必须判 1 行
-	if !strings.Contains(src, "AND used_at = 0") {
-		t.Fatal("member.go 的邀请标记更新必须带 `AND used_at = 0` 条件（D-R08）")
+	// 邀请"单次使用"的硬校验：条件更新后必须判 1 行。
+	//
+	// A9：标记已用的 UPDATE 不再手写条件串，而是复用 inviteUsableCond
+	// （used_at = 0 AND revoked = 0 AND expires_at > ?）——单一实现，
+	// 与撤销路径、过期判定同源。因此这里断言的是"两条都在"，而不是某个字面量残片。
+	if !strings.Contains(src, "inviteUsableCond") {
+		t.Fatal("member.go 的邀请标记更新必须复用 inviteUsableCond（D-R08 / A9：单一条件口径）")
+	}
+	if !strings.Contains(src, `inviteUsableCond = "used_at = 0 AND revoked = 0 AND expires_at > ?"`) {
+		t.Fatal("inviteUsableCond 必须同时含 used_at / revoked / expires_at 三个条件（A9）")
 	}
 }
 

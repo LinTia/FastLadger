@@ -703,14 +703,28 @@ func TestR42FailedRedemptionWritesRejectedAudit(t *testing.T) {
 		}
 	}
 
-	// 未知邀请码：无法归因到任何邀请主键，entity_id 记 0，但仍要有一行
+	// 未知邀请码：无法归因到任何邀请主键，entity_id 记 0，但仍要有一行。
+	//
+	// A4 之后这行的归属也必须是"无法归因"：book_id 取实例哨兵 0（而不是 URL 路径里的
+	// 那个账本），payload 带 bookAttribution=unattributable。否则匿名者可以凭
+	// "<任意 bookID>/members/join" 往任意账本的审计流里灌行。
 	var zeroRows []model.AuditLog
 	if err := e.engine.Where("book_id = ? AND entity_type = ? AND entity_id = 0 AND before_json LIKE ?",
-		e.bookID, model.AuditEntityMember, "%"+inviteReasonNotFound+"%").Find(&zeroRows); err != nil {
+		model.AuditBookInstance, model.AuditEntityMember, "%"+inviteReasonNotFound+"%").Find(&zeroRows); err != nil {
 		t.Fatalf("查询未知邀请码审计失败：%v", err)
 	}
 	if len(zeroRows) == 0 {
-		t.Fatal("未知邀请码的尝试必须留下一条 entity_id=0 的失败审计")
+		t.Fatal("未知邀请码的尝试必须留下一条 entity_id=0、book_id=0（无法归因）的失败审计")
+	}
+	// 反向断言：这条尝试不得落进被自称的那个账本
+	var leaked int64
+	if _, err := e.engine.SQL(
+		"SELECT COUNT(1) FROM audit_logs WHERE book_id = ? AND before_json LIKE ?",
+		e.bookID, "%"+inviteReasonNotFound+"%").Get(&leaked); err != nil {
+		t.Fatalf("统计审计失败：%v", err)
+	}
+	if leaked != 0 {
+		t.Fatalf("无法归因的兑换尝试被写进了账本 %d 的审计流（%d 行）：匿名者可污染任意账本的追溯链", e.bookID, leaked)
 	}
 }
 
@@ -749,7 +763,8 @@ func TestR42NoInviteCodeInAnyAuditRow(t *testing.T) {
 // 不能出现"人没进来、却记了一条入户成功"。
 //
 // 用成员上限（PRD §12 决策 6）制造一个确定性的失败：计数检查在 insertAudit 之前，
-// 因此失败时不应存在任何 accepted 行。
+// 因此失败时不应存在任何 accepted 行（但**必须**有一条 rejected 行——A3 之后
+// "账本已满"也走 inviteFailed，reason=book_full）。
 func TestR42NoAcceptedAuditWhenJoinFails(t *testing.T) {
 	e := newInviteEnv(t)
 	// 先把账本填满到上限 20（owner 已在内）
@@ -770,8 +785,14 @@ func TestR42NoAcceptedAuditWhenJoinFails(t *testing.T) {
 			t.Fatalf("兑换失败却留下了 accepted 审计：%v", p)
 		}
 	}
-	if got := inviteAuditRowsFor(t, e, inv.Id); len(got) != 1 {
-		t.Fatalf("签发成功的审计应保留、兑换失败不得新增 accepted 行，实际 %d 条", len(got))
+	// 签发 1 条 accepted + 1 条 rejected（book_full）：失败路径不再静默。
+	got := inviteAuditRowsFor(t, e, inv.Id)
+	if len(got) != 2 {
+		t.Fatalf("签发应留 1 条 accepted、满员拒绝应留 1 条 rejected，实际共 %d 条", len(got))
+	}
+	rejected := parseInviteAudit(t, got[1])
+	if rejected["result"] != inviteResultRejected || rejected["reason"] != inviteReasonBookFull {
+		t.Fatalf("满员拒绝的审计应为 result=rejected reason=book_full，实际 %v", rejected)
 	}
 }
 
