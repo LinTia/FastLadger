@@ -23,6 +23,7 @@ type Deps struct {
 	Txs         *service.TxService
 	Sync        *service.SyncService
 	Reports     *service.ReportService
+	Budgets     *service.BudgetService
 	Instance    *instance.Meta
 	// Hub 会话撤销踢连用的 Hub（R52）。nil 时会话 handler 回落 ws.DefaultHub，
 	// 与生产接线（main 用 DefaultHub）行为一致；测试可注入独立 Hub 隔离状态。
@@ -76,6 +77,11 @@ func NewRouter(d Deps) *gin.Engine {
 	var rh *reportHandler
 	if d.Reports != nil {
 		rh = &reportHandler{svc: d.Reports}
+	}
+	// WBS 6.3：预算（nil 容忍口径与 Reports 一致）
+	var bh2 *budgetHandler
+	if d.Budgets != nil {
+		bh2 = &budgetHandler{svc: d.Budgets}
 	}
 	sh := &syncHandler{svc: d.Sync}
 	// R52：多端会话（列表 / 撤销）。Hub 为 nil 时回落 DefaultHub（见 session_handler.go）
@@ -179,6 +185,14 @@ func NewRouter(d Deps) *gin.Engine {
 			auth.GET("/books/:id/reports/monthly", rh.monthly)
 			auth.GET("/books/:id/reports/categories", rh.categoryShare)
 			auth.GET("/books/:id/export", rh.export)
+		}
+
+		// 预算（WBS 6.3）：信封式总预算 + 分类月度预算；写操作 owner/admin
+		if bh2 != nil {
+			auth.GET("/books/:id/budgets", bh2.list)
+			auth.POST("/books/:id/budgets", bh2.create)
+			auth.PUT("/books/:id/budgets/:budgetId", bh2.update)
+			auth.DELETE("/books/:id/budgets/:budgetId", bh2.remove)
 		}
 
 		// 增量同步（阶段 3.1 / 3.2）

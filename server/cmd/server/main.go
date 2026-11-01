@@ -167,6 +167,7 @@ func main() {
 	txs := service.NewTxService(engine, versions)
 	syncSvc := service.NewSyncService(engine, txs, meta)
 	reports := service.NewReportService(engine)
+	budgets := service.NewBudgetService(engine)
 	ocrSvc := service.NewOCRService(cfg)
 
 	// WS 订阅资格 + 可见性校验：由 service 提供（ws 不得在 Hub 锁内查库，
@@ -185,6 +186,7 @@ func main() {
 		Txs:           txs,
 		Sync:          syncSvc,
 		Reports:       reports,
+		Budgets:       budgets,
 		OCR:           ocrSvc,
 		Instance:      meta,
 		SchemaVersion: st.Current,

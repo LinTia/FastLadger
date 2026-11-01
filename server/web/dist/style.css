@@ -13,6 +13,7 @@
   --muted-fg: #62748e;          /* 原型 muted-foreground */
   --line: #e2e8f0;
   --danger: #ef4343;            /* 原型 --destructive */
+  --warning: #ed6e0c;           /* 原型 --warning（预算"接近"） */
   --income: #34b262;            /* 收入绿（中国口径：绿=收） */
   --expense: #ef4343;           /* 支出红 */
   --radius: 8px;
@@ -110,6 +111,21 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 }
 .badge.income { background: color-mix(in srgb, var(--income) 12%, #fff); color: var(--income); }
 .badge.expense { background: color-mix(in srgb, var(--expense) 10%, #fff); color: var(--expense); }
+
+/* 预算进度条（原型三态：正常主色 / 接近 ≥80% 橙 / 超支红） */
+.progress {
+  height: 8px; background: var(--muted); border-radius: 999px; overflow: hidden;
+}
+.progress > i {
+  display: block; height: 100%; border-radius: 999px;
+  background: var(--primary); transition: width .4s var(--ease);
+}
+.progress > i.warn { background: var(--warning); }
+.progress > i.over { background: var(--danger); }
+.budget-row { padding: 12px 0; border-bottom: 1px solid var(--line); }
+.budget-row:last-child { border-bottom: 0; }
+.budget-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.budget-head .amt { margin-left: auto; font-size: 13px; color: var(--muted-fg); font-variant-numeric: tabular-nums; }
 
 /* ---------- 账本列表 ---------- */
 .book-list a {

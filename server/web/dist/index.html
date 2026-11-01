@@ -13,6 +13,7 @@
     <a href="#books" id="navBooks" class="hidden">账本</a>
     <a href="#" id="navTxns" class="hidden">交易</a>
     <a href="#" id="navReport" class="hidden">报表</a>
+    <a href="#" id="navBudget" class="hidden">预算</a>
     <a href="#" id="navExport" class="hidden">导出</a>
     <a href="#" id="navAccounts" class="hidden">对账</a>
     <a href="#" id="navRecycle" class="hidden">回收站</a>
@@ -69,6 +70,28 @@
     <menu>
       <button type="button" id="cCancel" class="ghost">取消</button>
       <button type="submit" id="cOk">确认</button>
+    </menu>
+  </form>
+</dialog>
+<dialog id="budgetDlg" class="hidden">
+  <form id="budgetForm" method="dialog">
+    <h3 id="bFormTitle">新增预算</h3>
+    <p class="desc">预算周期为自然月，每月 1 日自动重置进度。</p>
+    <label>类型
+      <select id="bType">
+        <option value="1">分类预算</option>
+        <option value="2">总预算</option>
+      </select>
+    </label>
+    <label id="bCatRow">分类 <select id="bCategory"></select></label>
+    <label>预算金额（元/月）<input id="bAmount" type="text" inputmode="decimal" placeholder="0.00" required></label>
+    <label class="muted" style="flex-direction:row;align-items:center;gap:6px">
+      <input id="bRollover" type="checkbox" style="width:auto"> 结转上月余额（预留，MVP 不生效）
+    </label>
+    <div class="err-msg" id="bErr"></div>
+    <menu>
+      <button type="button" id="bCancel" class="ghost">取消</button>
+      <button type="submit" id="bSubmit">保存</button>
     </menu>
   </form>
 </dialog>

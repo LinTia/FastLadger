@@ -124,17 +124,20 @@ function showNav(book) {
   if (book) {
     $("#navTxns").classList.remove("hidden");
     $("#navReport").classList.remove("hidden");
+    $("#navBudget").classList.remove("hidden");
     $("#navExport").classList.remove("hidden");
     $("#navAccounts").classList.remove("hidden");
     $("#navRecycle").classList.remove("hidden");
     $("#navTxns").href = "#b/" + book.id;
     $("#navReport").href = "#b/" + book.id + "/report";
+    $("#navBudget").href = "#b/" + book.id + "/budget";
     $("#navExport").href = "#b/" + book.id + "/export";
     $("#navAccounts").href = "#b/" + book.id + "/accounts";
     $("#navRecycle").href = "#b/" + book.id + "/recycle";
   } else {
     $("#navTxns").classList.add("hidden");
     $("#navReport").classList.add("hidden");
+    $("#navBudget").classList.add("hidden");
     $("#navExport").classList.add("hidden");
     $("#navAccounts").classList.add("hidden");
     $("#navRecycle").classList.add("hidden");
@@ -916,10 +919,149 @@ function wrapField(label, control) {
   return lab;
 }
 
+/* ---------- 预算管理（对齐原型 /budget：本月总预算 + 分类预算信封，三态进度） ---------- */
+const BUDGET_STATUS_NAME = { normal: "正常", near: "接近", over: "超支" };
+let editingBudgetId = 0; // 0 = 新增
+
+async function renderBudget(bookId) {
+  state.bookId = bookId;
+  await loadBookMeta(bookId);
+  const books = await api("GET", "/books");
+  showNav(books.find((b) => b.id === bookId) || { id: bookId });
+  $("#navBudget").classList.add("active");
+  view.replaceChildren();
+
+  const head = document.createElement("div"); head.className = "card";
+  const h = document.createElement("h2"); h.textContent = "预算管理";
+  const tip = document.createElement("p"); tip.className = "muted"; tip.style.margin = "0";
+  tip.textContent = "预算周期为自然月，每月 1 日自动重置进度。";
+  const addBtn = document.createElement("button");
+  addBtn.textContent = "新增预算"; addBtn.style.cssText = "margin-left:auto;";
+  addBtn.addEventListener("click", () => openBudgetDialog(bookId, null));
+  const headRow = document.createElement("div");
+  headRow.style.cssText = "display:flex;align-items:center;gap:10px;flex-wrap:wrap;";
+  headRow.append(h, tip, addBtn);
+  head.append(headRow);
+  view.append(head);
+
+  const data = await api("GET", "/books/" + bookId + "/budgets");
+  const items = data.items || [];
+  const card = document.createElement("div"); card.className = "card";
+  if (!items.length) {
+    const empty = document.createElement("div"); empty.className = "empty";
+    const ic = document.createElement("div"); ic.className = "icon"; ic.textContent = "✉️";
+    const p = document.createElement("p"); p.textContent = "还没有预算——先设一个本月总预算，或按分类设信封。";
+    empty.append(ic, p); card.append(empty);
+  }
+  for (const it of items) {
+    const row = document.createElement("div"); row.className = "budget-row";
+    const headRow = document.createElement("div"); headRow.className = "budget-head";
+    const name = document.createElement("span"); name.style.fontWeight = "500";
+    name.textContent = it.budgetType === 2 ? "本月总预算" : (it.categoryName || ("分类 " + it.categoryId));
+    const badge = document.createElement("span"); badge.className = "badge " + it.status;
+    badge.style.cssText = it.status === "over" ? "background:color-mix(in srgb, var(--danger) 10%, #fff);color:var(--danger)"
+      : it.status === "near" ? "background:color-mix(in srgb, var(--warning) 12%, #fff);color:var(--warning)" : "";
+    badge.textContent = BUDGET_STATUS_NAME[it.status] || it.status;
+    const amt = document.createElement("span"); amt.className = "amt";
+    amt.textContent = "已用 ¥" + cents2str(it.spent) + " / ¥" + cents2str(it.amount) + " · 剩余 ¥" + cents2str(Math.max(0, it.amount - it.spent));
+    headRow.append(name, badge, amt);
+    const bar = document.createElement("div"); bar.className = "progress";
+    const fill = document.createElement("i");
+    fill.style.width = Math.min(100, it.percent) + "%";
+    if (it.status === "over") fill.className = "over";
+    else if (it.status === "near") fill.className = "warn";
+    bar.append(fill);
+    const ops = document.createElement("div"); ops.style.cssText = "display:flex;gap:8px;margin-top:8px;justify-content:flex-end;";
+    const edit = document.createElement("button"); edit.textContent = "编辑"; edit.className = "ghost";
+    edit.style.padding = "4px 12px";
+    edit.addEventListener("click", () => openBudgetDialog(bookId, it));
+    const del = document.createElement("button"); del.textContent = "删除"; del.className = "danger";
+    del.style.padding = "4px 12px";
+    del.addEventListener("click", async () => {
+      const okD = await confirmDialog({
+        title: "删除预算", desc: "删除「" + (it.budgetType === 2 ? "本月总预算" : (it.categoryName || "分类预算")) + "」？删除后本月进度不再统计。",
+        confirmText: "删除", danger: true
+      });
+      if (!okD) return;
+      try {
+        await api("DELETE", "/books/" + bookId + "/budgets/" + it.id);
+        toast("预算已删除", "ok");
+        renderBudget(bookId);
+      } catch (err) { toast(err.message, "err"); }
+    });
+    ops.append(edit, del);
+    row.append(headRow, bar, ops);
+    card.append(row);
+  }
+  view.append(card);
+}
+
+// 预算对话框：新增（edit=null）或编辑（edit=预算视图）
+function openBudgetDialog(bookId, edit) {
+  const dlg = $("#budgetDlg");
+  editingBudgetId = edit ? edit.id : 0;
+  $("#bFormTitle").textContent = edit ? "编辑预算" : "新增预算";
+  $("#bErr").textContent = "";
+  $("#bAmount").value = edit ? cents2str(edit.amount) : "";
+  $("#bRollover").checked = !!(edit && edit.rollover);
+  // 类型：编辑时只读（类型/挂靠不可改，与"删了重建"审计语义一致）
+  const typeSel = $("#bType");
+  const catRow = $("#bCatRow");
+  typeSel.value = edit ? String(edit.budgetType) : "1";
+  typeSel.disabled = !!edit;
+  catRow.classList.toggle("hidden", !!edit && edit.budgetType === 2);
+  if (!edit) catRow.classList.remove("hidden");
+  // 分类下拉（支出分类；编辑总预算时不需要）
+  const sel = $("#bCategory");
+  sel.replaceChildren();
+  for (const c of state.categories) {
+    if (c.catType !== 2) continue; // 预算只挂支出分类（服务端同样校验）
+    const o = document.createElement("option");
+    o.value = String(c.id);
+    o.textContent = c.parentId ? "└ " + c.name : c.name;
+    sel.append(o);
+  }
+  if (edit && edit.categoryId) sel.value = String(edit.categoryId);
+
+  dlg.classList.remove("hidden");
+  if (typeof dlg.showModal === "function") dlg.showModal(); else dlg.setAttribute("open", "");
+  $("#bCancel").onclick = () => closeBudgetDlg();
+  $("#budgetForm").onsubmit = async (ev) => {
+    ev.preventDefault();
+    const cents = str2cents($("#bAmount").value);
+    if (!cents || cents <= 0) { $("#bErr").textContent = "请输入大于 0 的金额"; return; }
+    const body = { amount: cents, rollover: $("#bRollover").checked };
+    const done = btnPending($("#bSubmit"), "保存中…");
+    try {
+      if (editingBudgetId) {
+        body.name = "";
+        await api("PUT", "/books/" + bookId + "/budgets/" + editingBudgetId, body);
+        toast("预算已更新", "ok");
+      } else {
+        body.budgetType = Number(typeSel.value);
+        body.categoryId = body.budgetType === 2 ? 0 : Number(sel.value);
+        body.name = body.budgetType === 2 ? "" : "分类预算";
+        await api("POST", "/books/" + bookId + "/budgets", body);
+        toast("预算已创建", "ok");
+      }
+      closeBudgetDlg();
+      renderBudget(bookId);
+    } catch (err) {
+      $("#bErr").textContent = err.message;
+      toast(err.message, "err");
+    } finally { done(); }
+  };
+}
+function closeBudgetDlg() {
+  const dlg = $("#budgetDlg");
+  dlg.close ? dlg.close() : dlg.removeAttribute("open");
+  dlg.classList.add("hidden");
+}
+
 /* ---------- 路由 ---------- */
 async function route() {
   const hash = location.hash || "#";
-  const m = hash.match(/^#b\/(\d+)(?:\/(accounts|recycle|report|export))?/);
+  const m = hash.match(/^#b\/(\d+)(?:\/(accounts|recycle|report|export|budget))?/);
   try {
     if (!state.token) { renderLogin(); return; }
     if (m) {
@@ -928,6 +1070,7 @@ async function route() {
       else if (m[2] === "recycle") await renderRecycle(bookId);
       else if (m[2] === "report") await renderReport(bookId);
       else if (m[2] === "export") await renderExport(bookId);
+      else if (m[2] === "budget") await renderBudget(bookId);
       else await renderTxns(bookId);
     } else if (hash === "#books" || hash === "#") {
       await renderBooks();

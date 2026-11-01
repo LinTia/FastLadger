@@ -428,6 +428,9 @@ func TestQAS3VisibilityCondWiredIntoAllReadPaths(t *testing.T) {
 		{"report.go", reportFile, "Monthly"},
 		{"report.go", reportFile, "CategoryShare"},
 		{"report.go", reportFile, "ExportRows"},
+		// WBS 6.3：预算进度的"已用"聚合同样读交易表（关闭互看时只统计本人支出）。
+		// 直接调用者是 BudgetService.spent（List 逐预算委托它聚合）
+		{"budget.go", qas3Parse(t, "budget.go"), "spent"},
 	} {
 		fn := qas3Func(c.ast, c.fn)
 		if fn == nil {
@@ -441,7 +444,7 @@ func TestQAS3VisibilityCondWiredIntoAllReadPaths(t *testing.T) {
 	// txVisibilityCond 必须在 visibility.go 里定义，且**只能**由这些读路径使用（防止散落实现）
 	users := qas3AllCallers(t, "txVisibilityCond")
 	want := map[string]bool{"List": true, "Get": true, "Pull": true, "ListDeleted": true,
-		"Monthly": true, "CategoryShare": true, "ExportRows": true}
+		"Monthly": true, "CategoryShare": true, "ExportRows": true, "spent": true}
 	for name := range users {
 		if !want[name] {
 			t.Errorf("txVisibilityCond 被非读路径 %q 调用：请确认没有第四处自定义过滤", name)

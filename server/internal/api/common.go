@@ -71,6 +71,10 @@ func mapSvcErr(c *gin.Context, err error) {
 		fail(c, http.StatusNotFound, "分类不存在")
 	case errors.Is(err, service.ErrTransactionNotFound):
 		fail(c, http.StatusNotFound, "交易不存在")
+	case errors.Is(err, service.ErrBudgetNotFound):
+		fail(c, http.StatusNotFound, "预算不存在")
+	case errors.Is(err, service.ErrBudgetConflict):
+		fail(c, http.StatusConflict, "该分类已存在生效预算（或总预算已设置）")
 	case errors.Is(err, service.ErrInvalidCreate),
 		errors.Is(err, service.ErrInvalidArgument),
 		errors.Is(err, service.ErrAccountInvalid),
