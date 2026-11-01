@@ -75,6 +75,12 @@ func NewRouter(d Deps) *gin.Engine {
 	seh := newSessionHandler(d.AuthService, d.Hub)
 	ocr := &ocrHandler{svc: d.OCR, maxBytes: ocrImageLimit(d.Config.OCRMaxImageBytes)}
 
+	// Web 端静态资源（WBS 5.9）：NoRoute 兜底，显式路由（/healthz、/api/v1、/ws）
+	// 永远优先；embed 为空时跳过挂载（服务照常，仅 Web 不可用）。
+	if wh := newWebHandler(); wh != nil {
+		r.NoRoute(wh)
+	}
+
 	r.GET("/healthz", func(c *gin.Context) {
 		data := gin.H{
 			"status":        "up",

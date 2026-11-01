@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FastLedger</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header id="topbar" class="hidden">
+  <span class="brand" id="brand">FastLedger</span>
+  <nav>
+    <a href="#books" id="navBooks" class="hidden">账本</a>
+    <a href="#" id="navTxns" class="hidden">交易</a>
+    <a href="#" id="navAccounts" class="hidden">对账</a>
+    <a href="#" id="navRecycle" class="hidden">回收站</a>
+  </nav>
+  <span id="whoami"></span>
+  <button id="logoutBtn" class="ghost hidden">退出</button>
+</header>
+<main>
+  <div id="view" aria-live="polite"></div>
+</main>
+<div id="toast" class="hidden" role="status"></div>
+<dialog id="formDlg" class="hidden">
+  <form id="txForm" method="dialog">
+    <h3 id="formTitle">记一笔</h3>
+    <label>类型
+      <select id="fType">
+        <option value="2">支出</option>
+        <option value="1">收入</option>
+        <option value="3">转账</option>
+      </select>
+    </label>
+    <label>金额（元）<input id="fAmount" type="text" inputmode="decimal" placeholder="0.00" required></label>
+    <label id="fAccountRow">账户 <select id="fAccount"></select></label>
+    <label id="fToRow" class="hidden">转入账户 <select id="fTo"></select></label>
+    <label id="fCatRow">分类 <select id="fCategory"></select></label>
+    <label>日期 <input id="fDate" type="date" required></label>
+    <label>备注 <input id="fNote" type="text" maxlength="255" placeholder="可选"></label>
+    <menu>
+      <button type="button" id="fCancel" class="ghost">取消</button>
+      <button type="submit" id="fSubmit">保存</button>
+    </menu>
+  </form>
+</dialog>
+<script src="/app.js"></script>
+</body>
+</html>

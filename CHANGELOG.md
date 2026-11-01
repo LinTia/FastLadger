@@ -2,6 +2,16 @@
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.44] - 2026-11-01
+
+### Web 端（WBS 5.9，go:embed 单二进制托管）
+
+- **定位**（《新手开发完整指南》§23 / PRD §5.2）：浏览器打开 `http://host:port/` 即可浏览、检索、批量编辑、对账；不做 OCR（OCR 交给客户端）。**当前交付：浏览/检索/筛选/分页、记一笔（单笔收/支 + 转账）、批量删除（逐条幂等 DELETE）、回收站恢复、账户对账视图**；交易字段级编辑（PUT）涉及转账对侧联动与幂等语义，被 CI 守卫明确禁止注册直至实现完整更新能力（见 `TestQATransactionRoutesContract` 注释），作为独立后端批次排期。
+- **零构建工具链**：`server/web/dist/` 手写原生 HTML/JS/CSS，`go:embed` 打进单个二进制（自托管卖点，不引入 npm/Node）。
+- **挂载策略**：gin `NoRoute` 兜底——显式路由（`/healthz`、`/api/v1/*`、`/ws`）永远优先；仅 GET/HEAD 服务静态文件，未命中回退 `index.html`；API 与 WS 前缀、非 GET 请求绝不回退静态页（保持 404 JSON，防止客户端把 HTML 当 JSON 解析）；`fs.ValidPath` 前置校验拒绝目录穿越；`X-Content-Type-Options: nosniff`。
+- **前端安全口径**：全部用户数据经 `textContent` 渲染（禁止 innerHTML 拼接，防 XSS）；token 仅存 localStorage 并经 `Authorization` 头携带，401 统一清会话回登录页；金额全程整数分（字符串运算转元，禁浮点）。
+- 测试：`web_handler_test.go`（根路径/静态命中/SPA 回退/API 404 不被吞/目录穿越拒绝）。
+
 ## [1.43] - 2026-11-01
 
 ### OCR 双模式服务端兜底（WBS 5.7 重定向：PaddleOCR 方案）
