@@ -255,9 +255,9 @@ func TestPurgeExpiredSessions(t *testing.T) {
 	// 三类行：有效（登录产生的那行）、早已过期、早已撤销
 	seed := []model.TokenSession{
 		{Jti: "purge-expired", Uid: claims.Uid, CreatedAt: now - 100000,
-			ExpiresAt: now - 100 * 86400, RevokedAt: 0, LastSeenAt: now - 100000},
+			ExpiresAt: now - 100*86400, RevokedAt: 0, LastSeenAt: now - 100000},
 		{Jti: "purge-revoked-long-ago", Uid: claims.Uid, CreatedAt: now - 100000,
-			ExpiresAt: now + 86400, RevokedAt: now - 100 * 86400, LastSeenAt: now - 100000},
+			ExpiresAt: now + 86400, RevokedAt: now - 100*86400, LastSeenAt: now - 100000},
 	}
 	for i := range seed {
 		if _, err := e.engine.Insert(&seed[i]); err != nil {
