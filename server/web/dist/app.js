@@ -284,38 +284,42 @@ async function renderTxns(bookId) {
     const table = document.createElement("table");
     const thead = document.createElement("thead");
     const trh = document.createElement("tr");
-    ["", "日期", "类型", "账户", "分类", "备注/商户", "金额"].forEach((t, i) => {
+    ["", "日期", "类型", "账户", "分类", "备注/商户", "金额", ""].forEach((t, i) => {
       const th = document.createElement("th"); th.textContent = t; if (i === 6) th.className = "num"; trh.append(th);
     });
     thead.append(trh); table.append(thead);
-    const tbody = document.createElement("tbody");
-    for (const tx of items) {
-      const tr = document.createElement("tr");
-      const tdC = document.createElement("td");
-      const chk = document.createElement("input"); chk.type = "checkbox"; chk.dataset.id = String(tx.id);
-      chk.addEventListener("change", () => {
-        if (chk.checked) state.sel.add(tx.id); else state.sel.delete(tx.id);
-        refreshSel();
-      });
-      tdC.append(chk);
-      const tdT = document.createElement("td"); tdT.textContent = fmtTime(tx.txTime);
-      const tdTy = document.createElement("td"); tdTy.textContent = TX_TYPE_NAME[tx.txType] || tx.txType;
-      const tdA = document.createElement("td");
-      tdA.textContent = tx.txType === 3 ? accountName(tx.accountId) + " → " + accountName(tx.toAccountId) : accountName(tx.accountId);
-      const tdCat = document.createElement("td"); tdCat.textContent = tx.txType === 3 ? "—" : categoryName(tx.categoryId);
-      const tdN = document.createElement("td");
-      tdN.textContent = (tx.note || "") + (tx.merchant ? (tx.note ? " · " : "") + tx.merchant : "");
-      tdN.className = "muted";
-      const tdM = document.createElement("td"); tdM.className = "num " + (tx.txType === 1 ? "income" : tx.txType === 2 ? "expense" : "transfer");
-      tdM.textContent = (tx.txType === 1 ? "+" : tx.txType === 2 ? "-" : "") + "¥" + cents2str(tx.amount);
-      tr.append(tdC, tdT, tdTy, tdA, tdCat, tdN, tdM);
-      tbody.append(tr);
-    }
-    if (!items.length) {
-      const tr = document.createElement("tr");
-      const td = document.createElement("td"); td.colSpan = 7; td.className = "muted"; td.textContent = "没有符合条件的交易。";
-      tr.append(td); tbody.append(tr);
-    }
+  const tbody = document.createElement("tbody");
+  for (const tx of items) {
+    const tr = document.createElement("tr");
+    const tdC = document.createElement("td");
+    const chk = document.createElement("input"); chk.type = "checkbox"; chk.dataset.id = String(tx.id);
+    chk.addEventListener("change", () => {
+      if (chk.checked) state.sel.add(tx.id); else state.sel.delete(tx.id);
+      refreshSel();
+    });
+    tdC.append(chk);
+    const tdT = document.createElement("td"); tdT.textContent = fmtTime(tx.txTime);
+    const tdTy = document.createElement("td"); tdTy.textContent = TX_TYPE_NAME[tx.txType] || tx.txType;
+    const tdA = document.createElement("td");
+    tdA.textContent = tx.txType === 3 ? accountName(tx.accountId) + " → " + accountName(tx.toAccountId) : accountName(tx.accountId);
+    const tdCat = document.createElement("td"); tdCat.textContent = tx.txType === 3 ? "—" : categoryName(tx.categoryId);
+    const tdN = document.createElement("td");
+    tdN.textContent = (tx.note || "") + (tx.merchant ? (tx.note ? " · " : "") + tx.merchant : "");
+    tdN.className = "muted";
+    const tdM = document.createElement("td"); tdM.className = "num " + (tx.txType === 1 ? "income" : tx.txType === 2 ? "expense" : "transfer");
+    tdM.textContent = (tx.txType === 1 ? "+" : tx.txType === 2 ? "-" : "") + "¥" + cents2str(tx.amount);
+    const tdOp = document.createElement("td");
+    const editBtn = document.createElement("button"); editBtn.textContent = "编辑"; editBtn.className = "ghost";
+    editBtn.addEventListener("click", () => openTxEditForm(bookId, tx, load));
+    tdOp.append(editBtn);
+    tr.append(tdC, tdT, tdTy, tdA, tdCat, tdN, tdM, tdOp);
+    tbody.append(tr);
+  }
+  if (!items.length) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td"); td.colSpan = 8; td.className = "muted"; td.textContent = "没有符合条件的交易。";
+    tr.append(td); tbody.append(tr);
+  }
     table.append(tbody); tableWrap.append(table);
 
     const pager = document.createElement("div"); pager.className = "pager";
@@ -414,6 +418,68 @@ function openTxForm(bookId, onDone) {
       dlg.classList.add("hidden");
       onDone();
     } catch (err) { toast(err.message, true); }
+  };
+}
+
+/* ---------- 编辑交易（WBS 5.9b：PUT 全量替换，类型不可改） ---------- */
+function openTxEditForm(bookId, tx, onDone) {
+  const dlg = $("#editDlg");
+  $("#eType").textContent = TX_TYPE_NAME[tx.txType] || String(tx.txType);
+  $("#eAmount").value = cents2str(tx.amount);
+  $("#eDate").value = new Date(tx.txTime * 1000).toISOString().slice(0, 10);
+  $("#eNote").value = tx.note || "";
+  // 账户下拉：转账需避开"与对手方相同"，这里先全量填充，提交时校验
+  fillSelect($("#eAccount"), state.accounts);
+  fillSelect($("#eTo"), state.accounts);
+  $("#eAccount").value = String(tx.accountId);
+  if (tx.txType === 3) $("#eTo").value = String(tx.toAccountId);
+  // 分类下拉：只列与交易类型匹配的 catType（服务端会校验一致）
+  const catRow = $("#eCatRow"), toRow = $("#eToRow");
+  if (tx.txType === 3) {
+    catRow.classList.add("hidden");
+    toRow.classList.remove("hidden");
+  } else {
+    toRow.classList.add("hidden");
+    catRow.classList.remove("hidden");
+    const cats = state.categories.filter((c) => c.catType === tx.txType);
+    fillSelect($("#eCategory"), cats);
+    $("#eCategory").value = String(tx.categoryId || "");
+    if (!cats.find((c) => c.id === tx.categoryId)) $("#eCategory").value = String(cats.length ? cats[0].id : "0");
+  }
+  dlg.classList.remove("hidden");
+  if (typeof dlg.showModal === "function") dlg.showModal(); else dlg.setAttribute("open", "");
+  $("#eCancel").onclick = () => { dlg.close ? dlg.close() : dlg.removeAttribute("open"); dlg.classList.add("hidden"); };
+  $("#txEditForm").onsubmit = async (e) => {
+    e.preventDefault();
+    const cents = str2cents($("#eAmount").value);
+    if (cents === null || cents <= 0) { toast("金额格式不合法（最多两位小数）", true); return; }
+    const body = {
+      clientUuid: uuid(),
+      txType: tx.txType,
+      accountId: Number($("#eAccount").value),
+      amount: cents,
+      categoryId: tx.txType === 3 ? 0 : Number($("#eCategory").value),
+      paymentChannel: tx.paymentChannel || 0,
+      txTime: dateStartUnix($("#eDate").value, false),
+      timezoneOffset: -new Date().getTimezoneOffset(),
+      comment: $("#eNote").value,
+      baseVersion: tx.syncVersion || 0,
+    };
+    if (tx.txType === 3) {
+      body.toAccountId = Number($("#eTo").value);
+      if (!body.toAccountId || body.toAccountId === body.accountId) { toast("转账需选择不同的两个账户", true); return; }
+    } else if (!body.accountId || !body.categoryId) { toast("请选择账户与分类", true); return; }
+    const btn = $("#eSubmit");
+    btn.disabled = true;
+    try {
+      await api("PUT", "/books/" + bookId + "/transactions/" + tx.id, body);
+      toast("已保存修改");
+      dlg.close ? dlg.close() : dlg.removeAttribute("open");
+      dlg.classList.add("hidden");
+      onDone();
+    } catch (err) {
+      toast(err.message + (String(err.message).indexOf("并发") >= 0 ? "（请刷新列表后重试）" : ""), true);
+    } finally { btn.disabled = false; }
   };
 }
 

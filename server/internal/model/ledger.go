@@ -262,11 +262,13 @@ type IdempotencyRecord struct {
 	CreatedAt     int64
 }
 
-// 幂等操作类型（idempotency_records.op）——由迁移 0005 引入
+// 幂等操作类型（idempotency_records.op）——create/delete/restore 由迁移 0005 引入，
+// update 由 WBS 5.9b 引入（op 为自由 VARCHAR，无 CHECK 约束，无需迁移）
 const (
 	IdemOpCreate  = "create"
 	IdemOpDelete  = "delete"
 	IdemOpRestore = "restore"
+	IdemOpUpdate  = "update"
 )
 
 func (IdempotencyRecord) TableName() string { return "idempotency_records" }

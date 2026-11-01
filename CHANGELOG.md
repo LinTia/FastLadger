@@ -2,6 +2,18 @@
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.45] - 2026-11-01
+
+### 交易更新（WBS 5.9b：PUT /books/:id/transactions/:txId，Web 端同批接入）
+
+- **守卫解除**：`TestQATransactionRoutesContract` 的 `PUT` 禁令解除——完整更新能力（转账对侧联动 + 余额净额重算 + 幂等摘要域 + before_json 审计）已实现，语义见 `docs/FastLedger-交易更新语义设计.md`；`/transfer`、`/batch` 第二条创建路径禁令不变；`TestQAS3SingleCreateEntry` 白名单登记 `UpdateReceipt` 为变更路径（不新增行、不调 `insertTxRow`，复用 `createChangeBalance` 唯一余额写入路径）。
+- **语义裁决**：PUT 全量替换；**类型不可改**（互转必然伴随配对行的诞生/销毁，改类型 = 删除 + 重建，400 引导）；权限与 Delete 同口径（事务内重读角色，member 仅本人）；转账整笔双侧对称更新、禁止单边；`baseVersion` 乐观锁（>0 时校验行 sync_version，过期 409）。
+- **余额净额重算**：按账户聚合"新 − 旧"差额，净额为 0 的账户不触碰（不刷 sync_version/updated_at）；逐账户走 `createChangeBalance` 原子 UPDATE（溢出边界 + RowsAffected 校验）；负债账户符号由 `signedBalanceDelta` 统一处理。
+- **幂等**：`op=update`（`IdemOpUpdate`）复用 `idempotency_records`，唯一键天然容纳，**零迁移**（schema 保持 v7）；摘要域 `transaction.update/v1`，`clientUuid` 与 `baseVersion` 不参与业务身份摘要；重放返回原版本 + `replayed=true`，不做终态校验（无任何写入，与 Create 重放同语义，理由记录于设计 §7）。
+- **审计**：每行一条 `update` 审计，`before_json` = 变更前整行快照，与业务写入同事务。
+- **Web 端**：交易列表新增"编辑"入口（独立编辑对话框，类型只读展示）；金额分↔元字符串转换禁浮点；分类下拉按 catType 过滤；提交携带 `baseVersion`（列表行 syncVersion），409 时提示刷新重试。
+- 测试：服务层 12 例（净额/搬运/负债符号/转账双侧+换向/类型拒绝/重放/同键冲突/权限/已删 404/乐观锁/校验/单次版本递增）；本地全量 plain 全绿；`gofmt -l` 为空。
+
 ## [1.44] - 2026-11-01
 
 ### Web 端（WBS 5.9，go:embed 单二进制托管）

@@ -492,15 +492,19 @@ func TestQAS3ListCountUsesSameCondition(t *testing.T) {
 // 阶段 4 的澄清：Delete/Restore（经 mutateVisibility）是【变更】路径而非【创建】路径，
 // 它不新增交易行、不走幂等创建回执，但需要反向余额——因此被显式授权调用
 // createChangeBalance，并在此白名单内登记。它依旧不得调用 insertTxRow。
+//
+// WBS 5.9b 的澄清：Update（UpdateReceipt）同属【变更】路径——不新增交易行、
+// 不调 insertTxRow，只做"旧施加量回退 + 新施加量落地"的净额重算，必须复用同一条
+// 原子 UPDATE（见 docs/FastLedger-交易更新语义设计.md §5），同样显式登记于此。
 func TestQAS3SingleCreateEntry(t *testing.T) {
 	// 各底层原语的【授权调用方】白名单（阶段 4 起分化）：
 	//   - createChangeBalance（余额原子改动）：除两个创建 helper 外，额外允许阶段 4 的
-	//     mutateVisibility——删除/恢复做的是"精确反向"，必须复用同一条原子 UPDATE，
-	//     绝不许另起"先读余额再写回"的路径。
+	//     mutateVisibility（删除/恢复"精确反向"）与 5.9b 的 UpdateReceipt（更新"净额重算"）——
+	//     两者都必须复用同一条原子 UPDATE，绝不许另起"先读余额再写回"的路径。
 	//   - insertTxRow（写交易行）：仍然【只】允许两个创建 helper。
-	//     删除/恢复不新增行，只改 deleted 标志，因此它出现在别处即为异常。
+	//     变更路径（删除/恢复/更新）不新增行，因此它出现在别处即为异常。
 	allowedCallers := map[string]map[string]bool{
-		"createChangeBalance": {"createSingleInTx": true, "createTransferInTx": true, "mutateVisibility": true},
+		"createChangeBalance": {"createSingleInTx": true, "createTransferInTx": true, "mutateVisibility": true, "UpdateReceipt": true},
 		"insertTxRow":         {"createSingleInTx": true, "createTransferInTx": true},
 	}
 	for _, callee := range []string{"createChangeBalance", "insertTxRow"} {

@@ -114,6 +114,35 @@ func (h *ledgerHandler) getTransaction(c *gin.Context) {
 	ok(c, tx)
 }
 
+// updateTransaction WBS 5.9b：更新一笔交易（PUT 全量替换，转账整笔联动）。
+// 校验、余额净额重算、幂等（op=update）、审计均在服务层完成
+// （语义见 docs/FastLedger-交易更新语义设计.md）。
+//
+// GPT-C04 口径与 create/delete 一致：幂等重放（replayed=true）不广播。
+func (h *ledgerHandler) updateTransaction(c *gin.Context) {
+	bookID, good := bookID(c)
+	if !good {
+		return
+	}
+	txID, good := pathID(c, "txId", "交易 ID 非法")
+	if !good {
+		return
+	}
+	var req service.UpdateRequest
+	if !bindJSON(c, &req) {
+		return
+	}
+	res, err := h.txs.UpdateReceipt(c.Request.Context(), currentUID(c), bookID, txID, req)
+	if err != nil {
+		mapSvcErr(c, err)
+		return
+	}
+	if !res.Replayed {
+		notifyDataChanged(bookID, res.Version)
+	}
+	ok(c, res)
+}
+
 // deleteTransaction 阶段 4：删除一笔交易（整笔，含转账对侧）。
 // 软删 + 余额精确反向 + 版本递增 + 审计 + 幂等回执，均在服务层完成。
 //

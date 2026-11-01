@@ -157,6 +157,8 @@ func NewRouter(d Deps) *gin.Engine {
 		auth.GET("/books/:id/transactions", lh.listTransactions)
 		auth.GET("/books/:id/transactions/:txId", lh.getTransaction)
 		auth.POST("/books/:id/transactions", lh.createTransaction)
+		// WBS 5.9b：更新（全量替换，转账整笔联动；语义见 docs/FastLedger-交易更新语义设计.md）
+		auth.PUT("/books/:id/transactions/:txId", lh.updateTransaction)
 		// 阶段 4：删除 / 恢复（整笔，含转账对侧）
 		auth.DELETE("/books/:id/transactions/:txId", lh.deleteTransaction)
 		auth.POST("/books/:id/transactions/:txId/restore", lh.restoreTransaction)

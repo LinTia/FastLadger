@@ -250,13 +250,16 @@ func TestQACreateTransactionRejectsBadBookID(t *testing.T) {
 	}
 }
 
-// TestQATransactionRoutesContract 交易路由契约（阶段 2 创建/查询 + 阶段 4 删除/恢复/回收站）
+// TestQATransactionRoutesContract 交易路由契约（阶段 2 创建/查询 + 阶段 4 删除/恢复/回收站 + 5.9b 更新）
 //
 // 《转账入口裁决》§5 禁止第二条创建路径，因此 /transfer、/batch 之类永远不许出现。
 //
-// DELETE 曾经被明令禁止，理由是"提前注册却未实现，会变成能删但余额不回滚的隐患"
+// DELETE 曾被明令禁止，理由是"提前注册却未实现，会变成能删但余额不回滚的隐患"
 // （见 CHANGELOG 阶段 2/3）。阶段 4 已实现删除/恢复（整笔、余额精确反向、审计、
-// 幂等回执），故 DELETE 转入 allowed；PUT（改交易）仍未实现，继续禁止。
+// 幂等回执），故 DELETE 转入 allowed。
+// PUT 曾与 DELETE 同禁（"能改但余额不联动"）；WBS 5.9b 已实现完整更新能力
+// （转账对侧联动 + 余额净额重算 + op=update 幂等摘要域 + before_json 审计，
+// 见 docs/FastLedger-交易更新语义设计.md），故转入 allowed。
 func TestQATransactionRoutesContract(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := NewRouter(Deps{Config: &config.Config{}, SchemaVersion: 1})
@@ -274,14 +277,14 @@ func TestQATransactionRoutesContract(t *testing.T) {
 		"DELETE /api/v1/books/:id/transactions/:txId",
 		"POST /api/v1/books/:id/transactions/:txId/restore",
 		"GET /api/v1/books/:id/recycle",
+		// WBS 5.9b：更新（全量替换，转账整笔联动）
+		"PUT /api/v1/books/:id/transactions/:txId",
 	} {
 		if count[allowed] != 1 {
 			t.Errorf("路由 %s 应注册且仅注册一次，实际 %d", allowed, count[allowed])
 		}
 	}
 	for _, forbidden := range []string{
-		// 改交易尚未实现：先开路由会变成"能改但余额不联动"
-		"PUT /api/v1/books/:id/transactions/:txId",
 		// 《转账入口裁决》§5：禁止第二条创建路径
 		"POST /api/v1/books/:id/transactions/transfer",
 		"POST /api/v1/books/:id/transactions/batch",
