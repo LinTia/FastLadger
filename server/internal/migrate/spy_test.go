@@ -116,6 +116,8 @@ func newLatestSchemaStub(applied []int64) *schemaStub {
 			"budgets": true, "schema_migrations": true,
 			// 0007（R52 多端会话）
 			"token_sessions": true,
+			// 0008（WBS 6.6 长期 API Token）
+			"auth_tokens": true,
 		},
 		columns: map[string]map[string]bool{
 			"transactions":        setOf(txs),
@@ -124,6 +126,11 @@ func newLatestSchemaStub(applied []int64) *schemaStub {
 			"token_sessions": setOf([]string{
 				"id", "jti", "uid", "created_at", "expires_at",
 				"revoked_at", "user_agent", "last_seen_at",
+			}),
+			// 0008（人工抄录自 0008_auth_tokens.up.sql）
+			"auth_tokens": setOf([]string{
+				"id", "uid", "token_hash", "name", "created_at",
+				"expires_at", "revoked_at", "last_used_at",
 			}),
 		},
 		indexSQL: map[string]string{
@@ -152,6 +159,8 @@ func newLatestSchemaStub(applied []int64) *schemaStub {
 			// 0007
 			"idx_token_sessions_uid": "CREATE INDEX idx_token_sessions_uid ON token_sessions(uid, revoked_at)",
 			"idx_token_sessions_exp": "CREATE INDEX idx_token_sessions_exp ON token_sessions(expires_at)",
+			// 0008
+			"idx_auth_tokens_uid": "CREATE INDEX idx_auth_tokens_uid ON auth_tokens(uid, revoked_at)",
 		},
 	}
 	return s

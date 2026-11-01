@@ -8,6 +8,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"fastledger/internal/model"
 	"fastledger/internal/service"
@@ -43,7 +44,12 @@ func mapAuthErr(c *gin.Context, err error) {
 // R52：校验从 Verify 换成 VerifyWithClaims（同一份判定逻辑，多返回 claims）——
 // VerifyWithClaims 内部已含 jti 会话强校验（撤销/缺失/过期即 401），
 // 并把当前会话 jti 放进上下文供会话管理接口使用。
-func JWTAuth(authSvc *service.AuthService) gin.HandlerFunc {
+//
+// WBS 6.6：`flt_` 前缀的明文走长期 API Token（PAT）路径——哈希查 auth_tokens，
+// 撤销/过期/账号禁用即 401。PAT 不是会话：不写 jtiKey（currentJTI 返回空串，
+// 会话管理接口的"当前会话"语义对 PAT 请求自然不成立）。patSvc 为 nil 时
+// PAT 一律按无效凭证拒绝（fail-closed，与生产未配置等价）。
+func JWTAuth(authSvc *service.AuthService, patSvc *service.PATService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		h := c.GetHeader("Authorization")
 		if h == "" {
@@ -57,7 +63,24 @@ func JWTAuth(authSvc *service.AuthService) gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-		claims, u, err := authSvc.VerifyWithClaims(strings.TrimSpace(parts[1]))
+		raw := strings.TrimSpace(parts[1])
+		if service.IsPAT(raw) {
+			if patSvc == nil {
+				fail(c, http.StatusUnauthorized, "登录已失效，请重新登录")
+				c.Abort()
+				return
+			}
+			u, err := patSvc.VerifyPAT(raw)
+			if err != nil {
+				mapAuthErr(c, err)
+				c.Abort()
+				return
+			}
+			c.Set(uidKey, u.Id)
+			c.Next()
+			return
+		}
+		claims, u, err := authSvc.VerifyWithClaims(raw)
 		if err != nil {
 			mapAuthErr(c, err)
 			c.Abort()
@@ -82,7 +105,11 @@ func JWTAuth(authSvc *service.AuthService) gin.HandlerFunc {
 //
 // 注意：本中间件**不能**挂在已经套了 JWTAuth 的路由组下面——那样无 Authorization 头的
 // 请求会先被 JWTAuth 以 401 拦掉，?token= 回退永远不会生效。路由注册见 router.go。
-func wsAuth(authSvc *service.AuthService) gin.HandlerFunc {
+//
+// WBS 6.6：`flt_` 前缀走 PAT 路径；连接上限取 Token 的 expires_at，
+// 0（永不过期）以 now+100 年兜底——保证"连接不得比凭证活得久"的契约成立，
+// 同时撤销语义不受影响（撤销后哈希查不到有效行，握手即 401，PRD §10.528）。
+func wsAuth(authSvc *service.AuthService, patSvc *service.PATService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		raw := bearerToken(c.GetHeader("Authorization"))
 		if raw == "" {
@@ -96,6 +123,26 @@ func wsAuth(authSvc *service.AuthService) gin.HandlerFunc {
 		if authSvc == nil {
 			fail(c, http.StatusUnauthorized, "登录已失效，请重新登录")
 			c.Abort()
+			return
+		}
+		if service.IsPAT(raw) {
+			if patSvc == nil {
+				fail(c, http.StatusUnauthorized, "登录已失效，请重新登录")
+				c.Abort()
+				return
+			}
+			exp, u, err := patSvc.VerifyPATWithExpiry(raw)
+			if err != nil {
+				mapAuthErr(c, err)
+				c.Abort()
+				return
+			}
+			if exp == 0 {
+				exp = time.Now().AddDate(100, 0, 0).Unix()
+			}
+			c.Set(uidKey, u.Id)
+			c.Set(ws.TokenExpContextKey, exp)
+			c.Next()
 			return
 		}
 		claims, u, err := authSvc.VerifyWithClaims(raw)

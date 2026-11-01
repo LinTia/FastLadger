@@ -277,6 +277,8 @@ var goldenScripts = []goldenScript{
 	{"0006_tx_direction_backfill.up.sql", "dc2b5a4ffd2f32788500eb8dd0efe027ecb1be8db3ef7bb26795114f2f0ea30a"},
 	// 0007（R52 多端会话）：新建表，发布时按约定登记指纹
 	{"0007_token_sessions.up.sql", "4949d8601decbf11165330f4b048518a13230047f8f6348faf3cf2a7f531a2b1"},
+	// 0008（WBS 6.6 长期 API Token）：新建表，发布时按约定登记指纹
+	{"0008_auth_tokens.up.sql", "49f1ef103bc3ad7ffa56d6d01023e18a9bd0e5b240e9d4a629b8fc85d7e97e2c"},
 }
 
 // TestContainsFold 纯函数自检（断言的索引定义匹配用它）

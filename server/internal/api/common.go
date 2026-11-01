@@ -84,6 +84,9 @@ func mapSvcErr(c *gin.Context, err error) {
 		fail(c, http.StatusBadRequest, "数量或价格非法（十进制字符串，数量>0、价格≥0）")
 	case errors.Is(err, service.ErrBudgetConflict):
 		fail(c, http.StatusConflict, "该分类已存在生效预算（或总预算已设置）")
+	case errors.Is(err, service.ErrPATNotFound):
+		// 跨用户/不存在/已撤销统一 404，不泄露存在性（service.Revoke 口径）
+		fail(c, http.StatusNotFound, "Token 不存在")
 	case errors.Is(err, service.ErrInvalidCreate),
 		errors.Is(err, service.ErrInvalidArgument),
 		errors.Is(err, service.ErrAccountInvalid),

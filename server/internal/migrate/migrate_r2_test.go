@@ -113,8 +113,8 @@ func buildV7(t *testing.T, e *xorm.Engine) {
 	if err != nil {
 		t.Fatalf("基线：空库 Apply 到最新版失败：%v", err)
 	}
-	if n != 7 {
-		t.Fatalf("基线：空库应应用 7 个迁移（0001..0007），实际 %d", n)
+	if n != 8 {
+		t.Fatalf("基线：空库应应用 8 个迁移（0001..0008），实际 %d", n)
 	}
 	if st, err := migrate.Check(e); err != nil || !st.OK {
 		t.Fatalf("基线：最新版库 Check 应 OK：st=%+v err=%v", st, err)
@@ -133,12 +133,12 @@ func TestR2OldDBOnlyV1UpgradesToLatest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("老库（仅 v1）升级失败：%v", err)
 	}
-	if n != 6 {
-		t.Fatalf("期望应用 6 个（0002..0007），实际 %d", n)
+	if n != 7 {
+		t.Fatalf("期望应用 7 个（0002..0008），实际 %d", n)
 	}
 	st, err := migrate.Check(engine)
-	if err != nil || !st.OK || st.Current != 7 {
-		t.Fatalf("升级后 Check 应 OK@v7：st=%+v err=%v", st, err)
+	if err != nil || !st.OK || st.Current != 8 {
+		t.Fatalf("升级后 Check 应 OK@v8：st=%+v err=%v", st, err)
 	}
 	for _, c := range []string{"creator_uid", "source", "timezone_offset", "direction"} {
 		if !hasColumn(t, db, "transactions", c) {
@@ -160,11 +160,11 @@ func TestR2OldDBV4UpgradesToLatest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("v4 老库升级失败：%v", err)
 	}
-	if n != 3 {
-		t.Fatalf("期望应用 3 个（0005..0007），实际 %d", n)
+	if n != 4 {
+		t.Fatalf("期望应用 4 个（0005..0008），实际 %d", n)
 	}
-	if st, err := migrate.Check(engine); err != nil || !st.OK || st.Current != 7 {
-		t.Fatalf("v4 老库升级后 Check 应 OK@v7：st=%+v err=%v", st, err)
+	if st, err := migrate.Check(engine); err != nil || !st.OK || st.Current != 8 {
+		t.Fatalf("v4 老库升级后 Check 应 OK@v8：st=%+v err=%v", st, err)
 	}
 	if !hasColumn(t, db, "idempotency_records", "op") {
 		t.Fatal("v4 老库升级后仍缺列 op")
@@ -192,12 +192,12 @@ func TestR2MissingNonIdempotentVersionSelfHeals(t *testing.T) {
 				t.Fatalf("缺 %d 时 Apply 应自愈，实际失败：%v", gap, err)
 			}
 			st, err := migrate.Check(engine)
-			if err != nil || !st.OK || st.Current != 7 {
-				t.Fatalf("自愈后 Check 应 OK@v7：st=%+v err=%v", st, err)
+			if err != nil || !st.OK || st.Current != 8 {
+				t.Fatalf("自愈后 Check 应 OK@v8：st=%+v err=%v", st, err)
 			}
 			got := versionsOfDB(t, db)
-			if fmt.Sprint(got) != "[1 2 3 4 5 6 7]" {
-				t.Fatalf("自愈后版本集合应为 [1 2 3 4 5 6 7]，实际 %v", got)
+			if fmt.Sprint(got) != "[1 2 3 4 5 6 7 8]" {
+				t.Fatalf("自愈后版本集合应为 [1 2 3 4 5 6 7 8]，实际 %v", got)
 			}
 		})
 	}
@@ -221,11 +221,11 @@ func TestR2EmptyVersionTableHealsToLatest(t *testing.T) {
 		t.Fatalf("零记录场景 Apply 应一路自愈：%v", err)
 	}
 	st, err := migrate.Check(engine)
-	if err != nil || !st.OK || st.Current != 7 {
-		t.Fatalf("零记录自愈后 Check 应 OK@v7：st=%+v err=%v", st, err)
+	if err != nil || !st.OK || st.Current != 8 {
+		t.Fatalf("零记录自愈后 Check 应 OK@v8：st=%+v err=%v", st, err)
 	}
-	if got := versionsOfDB(t, db); fmt.Sprint(got) != "[1 2 3 4 5 6 7]" {
-		t.Fatalf("自愈后版本集合应为 [1 2 3 4 5 6 7]，实际 %v", got)
+	if got := versionsOfDB(t, db); fmt.Sprint(got) != "[1 2 3 4 5 6 7 8]" {
+		t.Fatalf("自愈后版本集合应为 [1 2 3 4 5 6 7 8]，实际 %v", got)
 	}
 }
 
@@ -268,7 +268,7 @@ func TestR2UnknownVersionIsActionable(t *testing.T) {
 	engine, db := openReal(t, "r2unknown.db")
 	buildV7(t, engine)
 	if _, err := db.Exec(
-		`INSERT OR REPLACE INTO schema_migrations(version, name, applied_at) VALUES (8, '0008_future.up.sql', 0)`); err != nil {
+		`INSERT OR REPLACE INTO schema_migrations(version, name, applied_at) VALUES (9, '0009_future.up.sql', 0)`); err != nil {
 		t.Fatalf("插入未知版本失败：%v", err)
 	}
 
@@ -290,7 +290,7 @@ func TestR2UnknownVersionIsActionable(t *testing.T) {
 			t.Fatalf("错误信息应包含可行动指引 %q，实际：%v", want, errApply)
 		}
 	}
-	if got := versionsOfDB(t, db); len(got) != 8 {
+	if got := versionsOfDB(t, db); len(got) != 9 {
 		t.Fatalf("Apply 不得擅动版本集合，实际 %v", got)
 	}
 }
@@ -302,7 +302,7 @@ func TestR2UnknownVersionIsActionable(t *testing.T) {
 func TestR2CheckCatchesStructureWithoutVersion(t *testing.T) {
 	engine, db := openReal(t, "r2d.db")
 	applyManual(t, db, "0001_init.up.sql")
-	for v := int64(2); v <= 7; v++ {
+	for v := int64(2); v <= 8; v++ {
 		if _, err := db.Exec(
 			`INSERT OR REPLACE INTO schema_migrations(version, name, applied_at) VALUES (?, ?, 0)`,
 			v, fmt.Sprintf("%04d_x.up.sql", v)); err != nil {
@@ -338,7 +338,7 @@ func TestR2CheckCatchesStructureWithoutVersion(t *testing.T) {
 	if _, err := migrate.Check(engine); err == nil {
 		t.Fatal("未修复前 Check 必须持续拒绝启动（不许假 OK）")
 	}
-	if got := versionsOfDB(t, db); fmt.Sprint(got) != "[1 2 3 4 5 6 7]" {
+	if got := versionsOfDB(t, db); fmt.Sprint(got) != "[1 2 3 4 5 6 7 8]" {
 		t.Fatalf("Apply 不得擅动版本集合，实际 %v", got)
 	}
 	if !hasColumn(t, db, "transactions", "direction") {
@@ -407,10 +407,10 @@ func TestR2_0006BackfillDirection(t *testing.T) {
 
 	n, err := migrate.Apply(engine)
 	if err != nil {
-		t.Fatalf("应用 0006/0007 失败：%v", err)
+		t.Fatalf("应用 0006..0008 失败：%v", err)
 	}
-	if n != 2 {
-		t.Fatalf("期望应用 0006/0007 共 2 个，实际 %d", n)
+	if n != 3 {
+		t.Fatalf("期望应用 0006..0008 共 3 个，实际 %d", n)
 	}
 	got := map[int64]int64{}
 	rows, err := db.Query(`SELECT id, direction FROM transactions ORDER BY id`)

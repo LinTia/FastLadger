@@ -2,6 +2,22 @@
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.53] - 2026-11-02
+
+### 长期 API Token（WBS 6.6，迁移 0008）+ Web 端三页补齐（设置/成员/投资账户详情）
+
+- **迁移 0008**（schema v7 → **v8**）：新建 `auth_tokens`（uid / token_hash / name / created_at / expires_at / revoked_at / last_used_at + idx_auth_tokens_uid）。与 PRD §370 的口径偏差（如实登记）：① 列名 `uid`（对齐 0007 token_sessions 的命名）；② **不存明文，只存 SHA-256 哈希**——PRD 的 token 列落地为 token_hash，明文仅在创建响应出现一次（同 GitHub PAT 语义）。
+- **三道迁移守卫全部登记**：versionAssertions[8]（表/列/索引）+ goldenScripts 指纹 + TestAssertionCoversAllArtifacts 机械全量比对；既有迁移基线测试同步更新到 v8（R2 系列"应应用 N 个"等硬编码）。
+- **PAT 服务** `internal/service/token.go`：Create（`flt_` 前缀 + 32 字节随机 hex，有效数上限 20）/ List（绝不含哈希）/ Revoke（跨用户·不存在·已撤销统一 404，不泄露存在性）/ VerifyPAT（撤销·过期 → ErrTokenRevoked；账号禁用 → 同会话口径；last_used_at 按 1 小时粒度回写）。
+- **鉴权中间件**：JWTAuth / wsAuth 按 `flt_` 前缀分流——PAT 走哈希查表（撤销即 401，PRD §10.528 的 WS 握手拒绝同样成立），JWT 照旧走会话强校验；PAT 不是会话，不写 jti。WS 连接上限取 PAT 的 expires_at（0 = 永不过期时以 now+100 年兜底，保持"连接不得比凭证活得久"契约）。
+- **API**：`GET/POST /users/me/tokens`、`DELETE /users/me/tokens/:tokenId`（JWT 与 PAT 均可调用——PAT 可自管理）。
+- **Web 端（对齐原版原型文案）**：
+  - **设置页**（#settings）：安全设置 · 长期 API Token（生成→一次性明文展示+复制 / 列表含创建·最近使用·状态 / 撤销二次确认"撤销立即生效…不可恢复"）+ 退出登录（"退出后需要重新登录。本地数据会保留。"）；
+  - **家庭成员页**（#b/:id/members）：成员列表（所有者/管理员/普通成员徽标、已开启/已关闭账本可见）、邀请成员（角色选择+可选绑定用户名→邀请码一次性展示+复制）、设为管理员/降级为成员、移除成员（"移除后该成员将无法再访问家庭账本。"）；
+  - **投资账户详情**（#b/:id/account/:accId）：对账页投资账户（类别 5）点入——账户余额（=现金部分）+ 该账户持仓明细（标的/数量/成本/现价/市值/盈亏）+ 市值合计，复用既有 holdings API 零后端改动。
+- **已知限制（如实说明）**：撤销 PAT 后，已建立的 WS 长连接不会被主动踢断（PAT 无 jti 无法定位连接），但下一次握手即被拒；存量连接最长活到其连接上限。
+- 测试：service 3 例 + api 1 例（生命周期：生成→PAT 直调业务 API→列表脱敏→撤销即 401）；本地全量 `go test ./...` 全绿。
+
 ## [1.52] - 2026-11-02
 
 ### 投资与净资产（WBS 6.4 / 6.5，零迁移，阶段 6 收官）

@@ -128,6 +128,7 @@ function showNav(book) {
     $("#navInvest").classList.remove("hidden");
     $("#navExport").classList.remove("hidden");
     $("#navAccounts").classList.remove("hidden");
+    $("#navMembers").classList.remove("hidden");
     $("#navRecycle").classList.remove("hidden");
     $("#navTxns").href = "#b/" + book.id;
     $("#navReport").href = "#b/" + book.id + "/report";
@@ -135,6 +136,7 @@ function showNav(book) {
     $("#navInvest").href = "#b/" + book.id + "/invest";
     $("#navExport").href = "#b/" + book.id + "/export";
     $("#navAccounts").href = "#b/" + book.id + "/accounts";
+    $("#navMembers").href = "#b/" + book.id + "/members";
     $("#navRecycle").href = "#b/" + book.id + "/recycle";
   } else {
     $("#navTxns").classList.add("hidden");
@@ -143,8 +145,10 @@ function showNav(book) {
     $("#navInvest").classList.add("hidden");
     $("#navExport").classList.add("hidden");
     $("#navAccounts").classList.add("hidden");
+    $("#navMembers").classList.add("hidden");
     $("#navRecycle").classList.add("hidden");
   }
+  $("#navSettings").classList.toggle("hidden", !state.token);
 }
 $("#logoutBtn").addEventListener("click", () => { clearSession(); route(); });
 $("#brand").addEventListener("click", () => location.hash = "#books");
@@ -604,6 +608,12 @@ async function renderAccounts(bookId) {
     const tdB = document.createElement("td"); tdB.className = "num " + (a.balance < 0 ? "balance-neg" : "balance-pos");
     tdB.textContent = (a.currency || "CNY") === "CNY" ? "¥" + cents2str(a.balance) : a.currency + " " + cents2str(a.balance);
     tr.append(tdN, tdC, tdB);
+    // 投资账户（类别 5）可点入持仓明细（对齐原型：投资账户详情页）
+    if (a.category === 5) {
+      tr.style.cursor = "pointer";
+      tr.title = "查看持仓明细";
+      tr.addEventListener("click", () => { location.hash = "#b/" + bookId + "/account/" + a.id; });
+    }
     tbody.append(tr);
   }
   table.append(tbody);
@@ -1334,13 +1344,322 @@ function openPriceDialog(bookId, instrumentId, name, current) {
     });
 }
 
+/* ---------- 设置页（API Token 管理，对齐原型：安全设置/长期 API Token/退出登录） ---------- */
+
+async function renderSettings() {
+  const books = await api("GET", "/books");
+  showNav(books.length ? books[0] : null);
+  document.querySelectorAll("[data-nav]").forEach((a) => a.classList.remove("active"));
+  $("#navSettings").classList.add("active");
+  view.replaceChildren();
+
+  const h = document.createElement("h2"); h.textContent = "设置";
+  view.append(h);
+
+  // API Token 卡片
+  const card = document.createElement("div"); card.className = "card";
+  const sh = document.createElement("h3"); sh.textContent = "安全设置 · 长期 API Token";
+  card.append(sh);
+  const desc = document.createElement("p"); desc.className = "muted";
+  desc.textContent = "开发/API 用——此 Token 拥有你的账户完全访问权限，请勿泄露。明文只在生成时显示一次，关闭后无法再查看。";
+  card.append(desc);
+
+  // 一次性明文展示区（生成后渲染）
+  const freshWrap = document.createElement("div");
+
+  const genBtn = document.createElement("button"); genBtn.textContent = "生成新 Token";
+  genBtn.addEventListener("click", () => {
+    const name = dlgInput("", "用途备注（如：快捷指令）");
+    openInvestDialog("生成长期 API Token", [{ label: "用途备注", control: name }], async () => {
+      const data = await api("POST", "/users/me/tokens", { name: name.value.trim() });
+      toast("Token 已生成——请立即复制保存", "ok");
+      renderSettingsFresh(data.token, data.item);
+    });
+  });
+  // 生成后重渲染列表 + 顶部明文条
+  const renderSettingsFresh = (plaintext, item) => {
+    freshWrap.replaceChildren();
+    const box = document.createElement("div");
+    box.style.cssText = "border:1px solid var(--primary);border-radius:12px;padding:12px;margin:10px 0;background:color-mix(in srgb, var(--primary) 6%, #fff);";
+    const warn = document.createElement("p"); warn.style.cssText = "margin:0 0 6px;font-weight:600;";
+    warn.textContent = "请立即复制保存（仅此一次展示）：";
+    const code = document.createElement("code");
+    code.style.cssText = "display:block;word-break:break-all;font-size:12px;user-select:all;";
+    code.textContent = plaintext;
+    const cp = document.createElement("button"); cp.textContent = "复制"; cp.className = "ghost"; cp.style.marginTop = "8px";
+    cp.addEventListener("click", async () => {
+      try { await navigator.clipboard.writeText(plaintext); toast("Token 已复制", "ok"); }
+      catch (_) { toast("复制失败，请手动选中复制", "err"); }
+    });
+    box.append(warn, code, cp);
+    freshWrap.append(box);
+    loadTokens();
+    void item;
+  };
+  card.append(genBtn, freshWrap);
+
+  // Token 列表
+  const listBox = document.createElement("div");
+  card.append(listBox);
+  async function loadTokens() {
+    const items = await api("GET", "/users/me/tokens");
+    listBox.replaceChildren();
+    if (!items.length) {
+      const empty = document.createElement("p"); empty.className = "muted"; empty.textContent = "还没有长期 Token。";
+      listBox.append(empty);
+      return;
+    }
+    const table = document.createElement("table");
+    const thead = document.createElement("thead"); const trh = document.createElement("tr");
+    ["备注", "创建时间", "最近使用", "状态", ""].forEach((t, i) => { const th = document.createElement("th"); th.textContent = t; if (i >= 1) th.className = "num"; trh.append(th); });
+    thead.append(trh); table.append(thead);
+    const tbody = document.createElement("tbody");
+    for (const it of items) {
+      const tr = document.createElement("tr");
+      const mk = (t, cls) => { const td = document.createElement("td"); td.textContent = t; if (cls) td.className = cls; return td; };
+      tr.append(
+        mk(it.name || "—"),
+        mk(fmtTime(it.createdAt), "num muted"),
+        mk(it.lastUsedAt ? fmtTime(it.lastUsedAt) : "从未使用", "num muted"),
+        mk(it.revokedAt ? "已撤销" : "有效", it.revokedAt ? "muted" : "income")
+      );
+      const tdOps = document.createElement("td"); tdOps.className = "row-actions";
+      if (!it.revokedAt) {
+        const b = document.createElement("button"); b.textContent = "撤销"; b.className = "danger";
+        b.addEventListener("click", async () => {
+          const okD = await confirmDialog({
+            title: "撤销 Token", desc: "撤销立即生效，使用该 Token 的客户端/快捷指令将无法再访问。此操作不可恢复。",
+            confirmText: "撤销", danger: true,
+          });
+          if (!okD) return;
+          try {
+            await api("DELETE", "/users/me/tokens/" + it.id);
+            toast("Token 已撤销", "ok");
+            loadTokens();
+          } catch (err) { toast(err.message, "err"); }
+        });
+        tdOps.append(b);
+      }
+      tr.append(tdOps);
+      tbody.append(tr);
+    }
+    table.append(tbody); listBox.append(table);
+  }
+  await loadTokens();
+  view.append(card);
+
+  // 退出登录卡片（对齐原型文案）
+  const out = document.createElement("div"); out.className = "card";
+  const oh = document.createElement("h3"); oh.textContent = "退出登录";
+  const ob = document.createElement("button"); ob.textContent = "退出登录"; ob.className = "danger";
+  ob.addEventListener("click", async () => {
+    const okD = await confirmDialog({ title: "退出登录", desc: "退出后需要重新登录。本地数据会保留。", confirmText: "退出", danger: true });
+    if (!okD) return;
+    clearSession();
+    toast("已退出登录", "info");
+    route();
+  });
+  out.append(oh, ob);
+  view.append(out);
+}
+
+/* ---------- 家庭成员页（对齐原型：家庭成员/邀请成员/角色/移除成员） ---------- */
+async function renderMembers(bookId) {
+  state.bookId = bookId;
+  await loadBookMeta(bookId);
+  const books = await api("GET", "/books");
+  showNav(books.find((b) => b.id === bookId) || { id: bookId });
+  $("#navMembers").classList.add("active");
+  view.replaceChildren();
+
+  const card = document.createElement("div"); card.className = "card";
+  const row = document.createElement("div"); row.style.cssText = "display:flex;align-items:center;gap:10px;";
+  const h = document.createElement("h2"); h.style.margin = "0"; h.textContent = "家庭成员";
+  const invBtn = document.createElement("button"); invBtn.textContent = "邀请成员"; invBtn.style.marginLeft = "auto";
+  invBtn.addEventListener("click", () => {
+    const roleSel = document.createElement("select");
+    [[3, "普通成员"], [2, "管理员"]].forEach(([v, t]) => {
+      const o = document.createElement("option"); o.value = v; o.textContent = t; roleSel.append(o);
+    });
+    const bound = dlgInput("", "可选：限定用户名（空 = 任何人凭码加入）");
+    openInvestDialog("邀请成员", [
+      { label: "角色", control: roleSel },
+      { label: "绑定用户名", control: bound },
+    ], async () => {
+      const data = await api("POST", "/books/" + bookId + "/members/invite",
+        { role: Number(roleSel.value), boundUsername: bound.value.trim() });
+      openInvestDialog("邀请码已生成（请复制给对方）", [], async () => { /* 只展示 */ });
+      const box = $("#investFields");
+      box.replaceChildren();
+      const code = document.createElement("code");
+      code.style.cssText = "display:block;word-break:break-all;font-size:14px;font-weight:600;user-select:all;margin:6px 0;";
+      code.textContent = data.code;
+      const note = document.createElement("p"); note.className = "muted"; note.style.margin = "0";
+      note.textContent = "对方在登录页选择「加入账本」并输入邀请码即可。有效期见邀请设置（默认 7 天）。";
+      const cp = document.createElement("button"); cp.textContent = "复制邀请码"; cp.className = "ghost";
+      cp.addEventListener("click", async () => {
+        try { await navigator.clipboard.writeText(data.code); toast("邀请码已复制", "ok"); }
+        catch (_) { toast("复制失败，请手动选中复制", "err"); }
+      });
+      box.append(code, note, cp);
+      $("#iSubmit").classList.add("hidden");
+      toast("已生成邀请码", "ok");
+    });
+  });
+  row.append(h, invBtn);
+  card.append(row);
+  const tip = document.createElement("p"); tip.className = "muted"; tip.textContent = "角色决定写权限：管理员可管理账户/分类与他人的交易；普通成员只能记录和查看自己权限范围内的账目。";
+  card.append(tip);
+
+  const members = await api("GET", "/books/" + bookId + "/members");
+  const me = await api("GET", "/users/me");
+  const table = document.createElement("table");
+  const thead = document.createElement("thead"); const trh = document.createElement("tr");
+  ["成员姓名", "角色", "可见性", ""].forEach((t) => { const th = document.createElement("th"); th.textContent = t; trh.append(th); });
+  thead.append(trh); table.append(thead);
+  const tbody = document.createElement("tbody");
+  const myUid = me.id;
+  for (const mb of members) {
+    const tr = document.createElement("tr");
+    const tdN = document.createElement("td"); tdN.textContent = mb.username + (mb.uid === myUid ? "（我）" : "");
+    const tdR = document.createElement("td");
+    const badge = document.createElement("span"); badge.className = "badge";
+    badge.textContent = mb.role === 1 ? "所有者" : (mb.role === 2 ? "管理员" : "普通成员");
+    tdR.append(badge);
+    const tdV = document.createElement("td");
+    const vbadge = document.createElement("span"); vbadge.className = "badge " + (mb.canViewOthers ? "income" : "");
+    vbadge.textContent = mb.canViewOthers ? "已开启账本可见" : "已关闭账本可见";
+    tdV.append(vbadge);
+    const tdOps = document.createElement("td"); tdOps.className = "row-actions";
+    if (mb.role === 3) {
+      const bUp = document.createElement("button"); bUp.textContent = "设为管理员"; bUp.className = "ghost";
+      bUp.addEventListener("click", async () => {
+        try {
+          await api("PUT", "/books/" + bookId + "/members/" + mb.uid, { role: 2 });
+          toast("已设为管理员", "ok");
+          renderMembers(bookId);
+        } catch (err) { toast(err.message, "err"); }
+      });
+      tdOps.append(bUp);
+    } else if (mb.role === 2) {
+      const bDown = document.createElement("button"); bDown.textContent = "降级为成员"; bDown.className = "ghost";
+      bDown.addEventListener("click", async () => {
+        try {
+          await api("PUT", "/books/" + bookId + "/members/" + mb.uid, { role: 3 });
+          toast("已降级为成员", "ok");
+          renderMembers(bookId);
+        } catch (err) { toast(err.message, "err"); }
+      });
+      tdOps.append(bDown);
+    }
+    if (mb.role !== 1) {
+      const bDel = document.createElement("button"); bDel.textContent = "移除成员"; bDel.className = "danger";
+      bDel.addEventListener("click", async () => {
+        const okD = await confirmDialog({
+          title: "移除成员", desc: "移除后该成员将无法再访问家庭账本。", confirmText: "确认移除", danger: true,
+        });
+        if (!okD) return;
+        try {
+          await api("DELETE", "/books/" + bookId + "/members/" + mb.uid);
+          toast("成员已移除", "ok");
+          renderMembers(bookId);
+        } catch (err) { toast(err.message, "err"); }
+      });
+      tdOps.append(bDel);
+    }
+    tr.append(tdN, tdR, tdV, tdOps);
+    tbody.append(tr);
+  }
+  table.append(tbody);
+  card.append(table);
+  view.append(card);
+}
+
+/* ---------- 投资账户详情（对账页投资账户点入：账户信息 + 该账户持仓） ---------- */
+async function renderAccountDetail(bookId, accId) {
+  state.bookId = bookId;
+  await loadBookMeta(bookId);
+  const books = await api("GET", "/books");
+  showNav(books.find((b) => b.id === bookId) || { id: bookId });
+  $("#navAccounts").classList.add("active");
+  view.replaceChildren();
+
+  // 账户信息（含余额）——列表里已有，直接取；找不到就单独拉
+  let acc = state.accounts.find((a) => a.id === accId);
+  if (!acc) {
+    acc = await api("GET", "/books/" + bookId + "/accounts/" + accId);
+  }
+
+  const card = document.createElement("div"); card.className = "card";
+  const back = document.createElement("button"); back.textContent = "← 返回对账"; back.className = "ghost";
+  back.style.marginBottom = "10px";
+  back.addEventListener("click", () => location.hash = "#b/" + bookId + "/accounts");
+  const h = document.createElement("h2");
+  h.textContent = (acc ? acc.name : "账户") + " · " + (ACC_CAT_NAME[acc && acc.category] || "投资账户");
+  const bal = document.createElement("p");
+  bal.style.cssText = "font-size:20px;font-weight:600;";
+  bal.textContent = "账户余额 ¥" + cents2str(acc ? acc.balance : 0);
+  const note = document.createElement("p"); note.className = "muted";
+  note.textContent = "投资账户余额 = 现金部分；下方持仓市值另计入总资产（不在账户余额内）。";
+  card.append(back, h, bal, note);
+  view.append(card);
+
+  // 该账户的持仓
+  const hdata = await api("GET", "/books/" + bookId + "/holdings");
+  const holdings = (hdata.items || []).filter((it) => it.accountId === accId);
+  const hCard = document.createElement("div"); hCard.className = "card";
+  const hh = document.createElement("h2"); hh.textContent = "持仓明细";
+  hCard.append(hh);
+  if (!holdings.length) {
+    const empty = document.createElement("div"); empty.className = "empty";
+    const ic = document.createElement("div"); ic.className = "icon"; ic.textContent = "📈";
+    const p = document.createElement("p"); p.textContent = "该账户暂无持仓——到「资产」页添加。";
+    empty.append(ic, p); hCard.append(empty);
+  } else {
+    const table = document.createElement("table");
+    const thead = document.createElement("thead"); const trh = document.createElement("tr");
+    ["标的", "数量", "成本", "现价", "市值", "浮动盈亏"].forEach((t, i) => {
+      const th = document.createElement("th"); th.textContent = t; if (i >= 1) th.className = "num"; trh.append(th);
+    });
+    thead.append(trh); table.append(thead);
+    const tbody = document.createElement("tbody");
+    let totalMV = 0;
+    for (const it of holdings) {
+      totalMV += it.marketValue;
+      const tr = document.createElement("tr");
+      const mk = (t, cls) => { const td = document.createElement("td"); td.textContent = t; if (cls) td.className = cls; return td; };
+      tr.append(
+        mk(it.instrumentName || "标的 " + it.instrumentId),
+        mk(it.quantity, "num"),
+        mk("¥" + cents2str(it.costAmount), "num"),
+        mk(it.currentPrice, "num muted"),
+        mk("¥" + cents2str(it.marketValue), "num"),
+        mk((it.profitLoss >= 0 ? "+" : "") + "¥" + cents2str(Math.abs(it.profitLoss)), "num " + (it.profitLoss >= 0 ? "income" : "expense"))
+      );
+      tbody.append(tr);
+    }
+    table.append(tbody); hCard.append(table);
+    const total = document.createElement("p");
+    total.style.cssText = "text-align:right;font-weight:600;margin:10px 0 0;";
+    total.textContent = "市值合计 ¥" + cents2str(totalMV);
+    hCard.append(total);
+  }
+  view.append(hCard);
+}
+
 /* ---------- 路由 ---------- */
 async function route() {
   const hash = location.hash || "#";
-  const m = hash.match(/^#b\/(\d+)(?:\/(accounts|recycle|report|export|budget|invest))?/);
+  // 投资账户详情：#b/:id/account/:accId（先于一般 #b/:id/... 匹配）
+  const md = hash.match(/^#b\/(\d+)\/account\/(\d+)/);
+  const m = hash.match(/^#b\/(\d+)(?:\/(accounts|recycle|report|export|budget|invest|members))?/);
   try {
     if (!state.token) { renderLogin(); return; }
-    if (m) {
+    if (md) {
+      await renderAccountDetail(Number(md[1]), Number(md[2]));
+    } else if (hash === "#settings") {
+      await renderSettings();
+    } else if (m) {
       const bookId = Number(m[1]);
       if (m[2] === "accounts") await renderAccounts(bookId);
       else if (m[2] === "recycle") await renderRecycle(bookId);
@@ -1348,6 +1667,7 @@ async function route() {
       else if (m[2] === "export") await renderExport(bookId);
       else if (m[2] === "budget") await renderBudget(bookId);
       else if (m[2] === "invest") await renderInvest(bookId);
+      else if (m[2] === "members") await renderMembers(bookId);
       else await renderTxns(bookId);
     } else if (hash === "#books" || hash === "#") {
       await renderBooks();

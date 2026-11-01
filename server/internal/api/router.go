@@ -25,6 +25,7 @@ type Deps struct {
 	Reports     *service.ReportService
 	Budgets     *service.BudgetService
 	Invest      *service.InvestService
+	PATs        *service.PATService
 	Instance    *instance.Meta
 	// Hub 会话撤销踢连用的 Hub（R52）。nil 时会话 handler 回落 ws.DefaultHub，
 	// 与生产接线（main 用 DefaultHub）行为一致；测试可注入独立 Hub 隔离状态。
@@ -89,6 +90,11 @@ func NewRouter(d Deps) *gin.Engine {
 	if d.Invest != nil {
 		ih = &investHandler{svc: d.Invest}
 	}
+	// WBS 6.6：长期 API Token（PAT）。nil 时 flt_ 凭证一律 401（fail-closed）。
+	var ph *patHandler
+	if d.PATs != nil {
+		ph = &patHandler{svc: d.PATs}
+	}
 	sh := &syncHandler{svc: d.Sync}
 	// R52：多端会话（列表 / 撤销）。Hub 为 nil 时回落 DefaultHub（见 session_handler.go）
 	seh := newSessionHandler(d.AuthService, d.Hub)
@@ -124,10 +130,16 @@ func NewRouter(d Deps) *gin.Engine {
 		// WebSocket：**不挂在 JWTAuth 组下**。
 		// 浏览器 WS 无法设置 Authorization 头，wsAuth 需要在本路由内自行
 		// "先读 Header、再回退 ?token="；若被 JWTAuth 先拦，回退分支永远不会生效。
-		v1.GET("/ws", wsAuth(d.AuthService), ws.ServeWS)
+		v1.GET("/ws", wsAuth(d.AuthService, d.PATs), ws.ServeWS)
 
-		auth := v1.Group("", JWTAuth(d.AuthService))
+		auth := v1.Group("", JWTAuth(d.AuthService, d.PATs))
 		auth.GET("/users/me", ah.me)
+		// WBS 6.6：长期 API Token 管理（生成/列表/撤销；明文仅创建响应出现一次）
+		if ph != nil {
+			auth.GET("/users/me/tokens", ph.list)
+			auth.POST("/users/me/tokens", ph.create)
+			auth.DELETE("/users/me/tokens/:tokenId", ph.revoke)
+		}
 		auth.POST("/ocr/recognize", ocr.recognize)
 		auth.POST("/ocr/parse", ocr.parse)
 		// WBS 5.8：云端 LLM 文本兜底（默认关闭，需请求体 consent=true）

@@ -169,6 +169,7 @@ func main() {
 	reports := service.NewReportService(engine)
 	budgets := service.NewBudgetService(engine)
 	invest := service.NewInvestService(engine, versions)
+	pats := service.NewPATService(engine)
 	ocrSvc := service.NewOCRService(cfg)
 
 	// WS 订阅资格 + 可见性校验：由 service 提供（ws 不得在 Hub 锁内查库，
@@ -189,6 +190,7 @@ func main() {
 		Reports:       reports,
 		Budgets:       budgets,
 		Invest:        invest,
+		PATs:          pats,
 		OCR:           ocrSvc,
 		Instance:      meta,
 		SchemaVersion: st.Current,

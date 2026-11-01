@@ -119,6 +119,21 @@ var versionAssertions = map[int64]versionAssert{
 			"idx_token_sessions_exp": "",
 		},
 	},
+	// 0008（WBS 6.6 长期 API Token）：auth_tokens 是 PAT 鉴权的唯一事实来源——
+	// 表/列缺失等于所有 flt_ 令牌 401，启动期必须核验。哈希唯一约束落在
+	// token_hash 列定义内（UNIQUE），无独立索引对象；管理列表按 (uid, revoked_at)。
+	8: {
+		tables: []string{"auth_tokens"},
+		columns: map[string][]string{
+			"auth_tokens": {
+				"uid", "token_hash", "name", "created_at",
+				"expires_at", "revoked_at", "last_used_at",
+			},
+		},
+		indexes: map[string]string{
+			"idx_auth_tokens_uid": "",
+		},
+	},
 }
 
 // verifyVersion 只读检查某版本的产物是否真实存在
