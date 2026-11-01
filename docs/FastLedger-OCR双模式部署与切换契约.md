@@ -25,7 +25,7 @@
 
 | 变量 | 默认值 | 说明 |
 |---|---:|---|
-| `EBK_OCR_FALLBACK_URL` | 空 | 空值禁用服务端识别；配置本机 OCR base URL，例如 `http://127.0.0.1:8500` |
+| `EBK_OCR_FALLBACK_URL` | 空 | 空值禁用服务端识别；配置本机 OCR **base URL**，例如 `http://127.0.0.1:8500`。**Go 侧自动追加 `/ocr` 路径**，配置值不要自带 `/ocr` 后缀（否则拼成 `/ocr/ocr`） |
 | `EBK_OCR_TIMEOUT_MS` | 8000 | 下游请求超时，正整数，最大 120000 |
 | `EBK_OCR_MAX_IMAGE_BYTES` | 10485760 | 最大请求图片字节数，正整数，不得超过 10 MiB |
 | `EBK_OCR_RATE_PER_MIN` | 10 | uid 每分钟识别/解析共享次数，正整数，最大 1000 |
@@ -49,7 +49,9 @@ NoNewPrivileges=true
 PrivateTmp=true
 ```
 
-将 `EBK_OCR_FALLBACK_URL=http://127.0.0.1:8500` 配入 FastLedger 服务环境后重启 FastLedger；回退时清空该值并重启即可。此文档描述部署契约，不代表已部署或已验证生产服务。
+将 `EBK_OCR_FALLBACK_URL=http://127.0.0.1:8500`（base URL，Go 自动追加 `/ocr`）配入 FastLedger 服务环境后重启 FastLedger；回退时清空该值并重启即可。
+
+**生产部署状态（2026-11-01）**：已部署并验证。`/opt/ocr-fallback/.venv`（rapidocr-onnxruntime 1.4.4 / onnxruntime 1.31.1 / fastapi / uvicorn / pillow，清华源）、`/etc/systemd/system/ocr-fallback.service`（active，enabled，仅监听 127.0.0.1:8500，MemoryMax=1G）、`EBK_OCR_FALLBACK_URL` 已配入 `/opt/fastledger/env`。实测：真图识别 score≈0.99、parse `¥1,234.56`→123456 分、停 sidecar→503 友好回退→恢复、`ocr:<uid>` 10 次/分钟共享配额第 11 次 429、RSS≈205MB。
 
 ## 失败语义与验收
 
