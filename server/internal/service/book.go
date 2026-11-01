@@ -105,7 +105,9 @@ func (s *BookService) Create(uid int64, name string, bookType int8) (*model.Book
 
 // List 我加入的账本（不含已删除）
 func (s *BookService) List(uid int64) ([]model.Book, error) {
-	var books []model.Book
+	// 显式初始化为空切片：nil 切片会 JSON 序列化成 null（而非 []），
+	// 客户端（Web/Flutter）读列表长度会崩——空账本列表必须返回 []
+	books := make([]model.Book, 0, 8)
 	err := s.engine.SQL(
 		`SELECT b.* FROM books b
 		 INNER JOIN book_members m ON m.book_id = b.id AND m.deleted = 0

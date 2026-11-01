@@ -143,7 +143,7 @@ async function renderBooks() {
   const card = document.createElement("div"); card.className = "card book-list";
   const h = document.createElement("h2"); h.textContent = "我的账本";
   card.append(h);
-  const books = await api("GET", "/books");
+  const books = (await api("GET", "/books")) || [];
   if (!books.length) {
     const p = document.createElement("p"); p.className = "muted"; p.textContent = "暂无账本——先在客户端创建一个账本。";
     card.append(p);
@@ -163,8 +163,8 @@ async function loadBookMeta(bookId) {
     api("GET", "/books/" + bookId + "/accounts"),
     api("GET", "/books/" + bookId + "/categories"),
   ]);
-  state.accounts = accs;
-  state.categories = cats;
+  state.accounts = accs || [];
+  state.categories = cats || [];
   return { accs, cats };
 }
 function accountName(id) {
@@ -256,6 +256,8 @@ async function renderTxns(bookId) {
   }
 
   function renderTable(data) {
+    // 防御：老后端对空列表可能返回 null，统一兜底为空数组
+    const items = data.items || [];
     tableWrap.replaceChildren();
     const table = document.createElement("table");
     const thead = document.createElement("thead");
@@ -265,7 +267,7 @@ async function renderTxns(bookId) {
     });
     thead.append(trh); table.append(thead);
     const tbody = document.createElement("tbody");
-    for (const tx of data.items) {
+    for (const tx of items) {
       const tr = document.createElement("tr");
       const tdC = document.createElement("td");
       const chk = document.createElement("input"); chk.type = "checkbox"; chk.dataset.id = String(tx.id);
@@ -287,7 +289,7 @@ async function renderTxns(bookId) {
       tr.append(tdC, tdT, tdTy, tdA, tdCat, tdN, tdM);
       tbody.append(tr);
     }
-    if (!data.items.length) {
+    if (!items.length) {
       const tr = document.createElement("tr");
       const td = document.createElement("td"); td.colSpan = 7; td.className = "muted"; td.textContent = "没有符合条件的交易。";
       tr.append(td); tbody.append(tr);
