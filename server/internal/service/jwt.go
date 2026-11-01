@@ -34,6 +34,13 @@ var (
 	ErrTokenBadSign = errors.New("token 签名校验失败")
 	// ErrTokenExpired 已过期
 	ErrTokenExpired = errors.New("token 已过期")
+	// ErrTokenRevoked 会话已失效（R52 多端会话强校验）。
+	//
+	// 与 ErrTokenExpired 的语义区别面向客户端："该设备已被主动登出 / 会话不存在"，
+	// HTTP 层据此给出可区分的 401 文案，让客户端清掉本地凭证重新登录，
+	// 而不是当成网络抖动重试。覆盖三种情况：无会话行（存量令牌/伪造）、已撤销、
+	// 会话行自身过期。
+	ErrTokenRevoked = errors.New("token 对应的会话已失效")
 )
 
 type jwtHeader struct {
@@ -45,22 +52,33 @@ func b64urlEncode(b []byte) string { return base64.RawURLEncoding.EncodeToString
 
 func b64urlDecode(s string) ([]byte, error) { return base64.RawURLEncoding.DecodeString(s) }
 
-// SignJWT 签发 HS256 token，带 jti（便于后续吊销）
+// SignJWT 签发 HS256 token，带 jti（便于后续吊销）。
 func SignJWT(secret string, uid int64, ttl time.Duration) (string, error) {
+	tok, _, err := signJWTWithClaims(secret, uid, ttl)
+	return tok, err
+}
+
+// signJWTWithClaims 同 SignJWT，额外返回解析出的 claims（含 jti / exp）。
+//
+// 供登录路径把"签发令牌"与"落会话行"放进同一事务（R52）：会话行需要 jti 与 exp，
+// 从签名后的 token 再解析一遍既绕又脆，直接返回构造时的 claims。
+// 既有调用点（jwt_test 等）继续走 SignJWT，公开签名不变。
+func signJWTWithClaims(secret string, uid int64, ttl time.Duration) (string, *Claims, error) {
+	claims := &Claims{Uid: uid, Jti: newJTI(), Exp: time.Now().Add(ttl).Unix()}
 	hb, err := json.Marshal(jwtHeader{Alg: jwtAlgHS256, Typ: "JWT"})
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
-	cb, err := json.Marshal(Claims{Uid: uid, Jti: newJTI(), Exp: time.Now().Add(ttl).Unix()})
+	cb, err := json.Marshal(claims)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	signing := b64urlEncode(hb) + "." + b64urlEncode(cb)
 	mac := hmac.New(sha256.New, []byte(secret))
 	if _, err := mac.Write([]byte(signing)); err != nil {
-		return "", err
+		return "", nil, err
 	}
-	return signing + "." + b64urlEncode(mac.Sum(nil)), nil
+	return signing + "." + b64urlEncode(mac.Sum(nil)), claims, nil
 }
 
 // ParseJWT 校验并解析 token

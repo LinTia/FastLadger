@@ -258,13 +258,16 @@ func (s *AuthService) insertUserInTx(sess *xorm.Session, username, passwordHash 
 
 // Login 校验口令并签发 token（含 jti）。
 //
-// 兼容入口：不携带来源 IP 的调用方（单测 / CLI 直调）统一归入 unknown 桶。
-// 生产 HTTP 入口必须走 LoginFromIP（按真实 ClientIP 分桶）。
+// 兼容入口：不携带来源 IP 与 User-Agent 的调用方（单测 / CLI 直调）统一归入
+// unknown 桶、UA 记空串。生产 HTTP 入口必须走 LoginFromIP。
 func (s *AuthService) Login(username, password string) (string, error) {
-	return s.LoginFromIP(username, password, "")
+	return s.LoginFromIP(username, password, "", "")
 }
 
 // LoginFromIP 校验口令并签发 token（含 jti），按来源网段做失败限流（A6 / R-1）。
+//
+// userAgent 为客户端自报的 User-Agent（仅作会话列表展示，不参与鉴权决策；
+// 允许为空串——CLI / 单测场景）。
 //
 // 执行顺序即契约：
 //  1. **限流判定在最前**：超限直接 ErrRateLimited（HTTP 429）——不查库、不写审计，
@@ -283,7 +286,7 @@ func (s *AuthService) Login(username, password string) (string, error) {
 //   - 凭证类（ErrBadCredentials / ErrAccountDisabled）→ 统一 401；
 //   - 限流（ErrRateLimited）→ 429——它不是凭证错误，也不是内部错误，客户端应退避重试；
 //   - 依赖类（ErrAuthUnavailable）→ 503：数据库故障 / 成功审计写入失败 / 令牌签发失败。
-func (s *AuthService) LoginFromIP(username, password, clientIP string) (string, error) {
+func (s *AuthService) LoginFromIP(username, password, clientIP, userAgent string) (string, error) {
 	key := loginKey(clientIP)
 	// ① 失败限流：先占位（失败才计数——见方法注释第 2 条）
 	slot, allowed := s.loginLimiter.AllowWithToken(key, s.loginMaxAttempts, s.loginWindow)
@@ -334,9 +337,28 @@ func (s *AuthService) LoginFromIP(username, password, clientIP string) (string, 
 		model.AuditActionLogin, model.AuditEntityUser, u.Id, nil, "server"); err != nil {
 		return "", fmt.Errorf("%w：登录审计写入失败，已拒绝签发令牌：%w", ErrAuthUnavailable, err)
 	}
-	token, err := SignJWT(s.secret, u.Id, s.ttl)
+	// ③ 签发令牌 + 落会话行（R52，同一事务）：
+	// 会话落库失败就不签发令牌，绝不产生"有令牌无会话"的中间态——该状态在
+	// Verify 的 jti 强校验下等于必然 401；与其签发一个必然失效的令牌，不如当场
+	// 失败并归为依赖不可用（ErrAuthUnavailable → HTTP 503，可重试）。
+	// 事务刻意放在 bcrypt 校验与审计之后：到这里才开事务，把占住唯一 SQLite
+	// 连接的时间压到最短（两次 INSERT 级别）。
+	token, claims, err := signJWTWithClaims(s.secret, u.Id, s.ttl)
 	if err != nil {
 		return "", fmt.Errorf("%w：签发令牌失败：%w", ErrAuthUnavailable, err)
+	}
+	now := time.Now().Unix()
+	sess := s.engine.NewSession()
+	defer sess.Close()
+	if err := sess.Begin(); err != nil {
+		return "", fmt.Errorf("%w：会话事务开启失败：%w", ErrAuthUnavailable, err)
+	}
+	if err := insertSession(sess, u.Id, claims, userAgent, now); err != nil {
+		_ = sess.Rollback()
+		return "", fmt.Errorf("%w：%v，已拒绝签发令牌", ErrAuthUnavailable, err)
+	}
+	if err := sess.Commit(); err != nil {
+		return "", fmt.Errorf("%w：会话事务提交失败：%w", ErrAuthUnavailable, err)
 	}
 	return token, nil
 }
@@ -397,6 +419,16 @@ func (s *AuthService) Verify(token string) (*model.User, error) {
 // 用途（GPT-R51）：WebSocket 是长连接，握手之后不再经过任何中间件，
 // 服务端必须在握手时把 JWT 的 exp 交下去，让连接有一个生命周期上限。
 // 独立成方法而不是改 Verify 的签名，是为了不动既有调用点；两者判定逻辑完全同一份。
+//
+// R52 追加强校验（除解析 JWT、确认账号有效之外）：jti 必须命中一行
+// 【未撤销、未过期】的会话记录——
+//   - 无会话行：0007 之前签发的存量令牌升级后一律失效（预期行为，重新登录即可），
+//     或伪造 jti；刻意不做自动补登记（无法补出可信 exp/UA，且会给撤销开豁免通道）；
+//   - 已撤销（revoked_at > 0）→ ErrTokenRevoked（HTTP 层给出可区分的 401 文案）；
+//   - 会话行过期 → 同上。
+//
+// 校验顺序刻意在"账号存在/未禁用"之后：先排除账号级失效，再查会话级状态，
+// 让"禁用/删除"这类账号管理动作不受会话表状态影响。
 func (s *AuthService) VerifyWithClaims(token string) (*Claims, *model.User, error) {
 	claims, err := ParseJWT(s.secret, token)
 	if err != nil {
@@ -413,5 +445,12 @@ func (s *AuthService) VerifyWithClaims(token string) (*Claims, *model.User, erro
 	if u.Disabled {
 		return nil, nil, ErrAccountDisabled
 	}
+	now := time.Now().Unix()
+	row, err := s.checkSessionActive(claims, now)
+	if err != nil {
+		return nil, nil, err
+	}
+	// best-effort 回写最近活跃时间（1 小时粒度，失败不影响本次鉴权）
+	s.touchLastSeen(claims, row, now)
 	return claims, &u, nil
 }
