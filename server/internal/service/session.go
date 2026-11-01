@@ -135,7 +135,14 @@ type SessionItem struct {
 // includeRevoked=false（默认口径）：排除已撤销与已过期的行——列表语义是
 // "当前有效的登录凭证"；历史行交给 db purge 按保留期回收。
 // includeRevoked=true：保留全部行（排障/核对撤销时刻用）。
-// 排序：最近活跃优先，其次按签发时间倒序。
+// 排序：最近活跃优先，其次按签发时间倒序，末位以 id DESC 收口。
+//
+// 为什么必须有 id 这个 tie-breaker（race 模式实测暴露的真缺陷）：created_at /
+// last_seen_at 都是【秒级】时间戳，同一用户在 1 秒内登录两台设备时两个键都会
+// 并列，SQL 此时返回顺序未定义（取决于走哪个索引与扫描方向）——表现为"同一份
+// 数据两次查询顺序不同"（race 构建更容易触发）、客户端刷新列表时同秒会话来回
+// 跳动。id 是自增主键、全局唯一且与签发顺序一致，作为末位排序键即可把顺序
+// 完全钉死。
 func (s *AuthService) ListSessions(uid int64, includeRevoked bool, now int64) ([]SessionItem, error) {
 	if uid <= 0 {
 		return nil, fmt.Errorf("%w：uid 非法（uid=%d）", ErrInvalidArgument, uid)
@@ -148,7 +155,7 @@ func (s *AuthService) ListSessions(uid int64, includeRevoked bool, now int64) ([
 		q = q.And("revoked_at = 0").And("expires_at > ?", now)
 	}
 	var rows []model.TokenSession
-	if err := q.Desc("last_seen_at").Desc("created_at").Find(&rows); err != nil {
+	if err := q.Desc("last_seen_at").Desc("created_at").Desc("id").Find(&rows); err != nil {
 		return nil, fmt.Errorf("查询会话列表失败：%w", err)
 	}
 	items := make([]SessionItem, 0, len(rows))

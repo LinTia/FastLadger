@@ -182,6 +182,29 @@ type sessionDTOView struct {
 	Current    bool   `json:"current"`
 }
 
+// currentJti 精确取出该令牌对应的"当前会话"jti。
+//
+// 刻意【不】按列表下标取（[0]）：同一用户在同一秒内登录的多个会话，created_at
+// 相同，列表的相对顺序不构成可依赖的契约（race 构建下调度不同即可翻转）——
+// 按 current 标记过滤并断言恰好 1 条，测试才不依赖任何排序实现细节。
+// 产品侧的顺序稳定性由 ListSessions 的 id tie-breaker 保证（见 service/session.go）。
+func (e *sessionAPIEnv) currentJti(token string) string {
+	e.t.Helper()
+	items := e.listSessions(token, false)
+	var jti string
+	n := 0
+	for _, it := range items {
+		if it.Current {
+			n++
+			jti = it.Jti
+		}
+	}
+	if n != 1 {
+		e.t.Fatalf("应恰好 1 条 current 会话，实际 %d（共 %d 条）：%v", n, len(items), items)
+	}
+	return jti
+}
+
 // TestSessionListMarksCurrent 登录落会话 + 列表标记 current + UA 透传。
 func TestSessionListMarksCurrent(t *testing.T) {
 	e := newSessionAPIEnv(t)
@@ -216,7 +239,7 @@ func TestRevokeSessionThenHTTP401(t *testing.T) {
 	e.register("api-revoke-user")
 	tok1 := e.login("api-revoke-user", "UA-revoke/1.0")
 	tok2 := e.login("api-revoke-user", "UA-revoke/1.0")
-	jti1 := e.listSessions(tok1, false)[0].Jti
+	jti1 := e.currentJti(tok1)
 
 	resp := e.do(http.MethodDelete, "/api/v1/auth/sessions/"+jti1, tok1)
 	if resp.Code != 0 {
@@ -285,7 +308,7 @@ func TestRevokeSessionCrossUserIs404(t *testing.T) {
 	e.register("api-cross-b")
 	tokA := e.login("api-cross-a", "UA-A/1.0")
 	tokB := e.login("api-cross-b", "UA-B/1.0")
-	jtiA := e.listSessions(tokA, false)[0].Jti
+	jtiA := e.currentJti(tokA)
 
 	resp := e.do(http.MethodDelete, "/api/v1/auth/sessions/"+jtiA, tokB)
 	if resp.Code != http.StatusNotFound {
@@ -329,7 +352,7 @@ func TestRevokedTokenCannotHandshakeWS(t *testing.T) {
 	e := newSessionAPIEnv(t)
 	e.register("api-ws-deny")
 	tok := e.login("api-ws-deny", "UA-ws/1.0")
-	jti := e.listSessions(tok, false)[0].Jti
+	jti := e.currentJti(tok)
 
 	if resp := e.do(http.MethodDelete, "/api/v1/auth/sessions/"+jti, tok); resp.Code != 0 {
 		t.Fatalf("撤销失败：%d %s", resp.Code, resp.Msg)
@@ -351,7 +374,7 @@ func TestWSConnectionKickedOnRevoke(t *testing.T) {
 	e := newSessionAPIEnv(t)
 	e.register("api-ws-kick")
 	tok := e.login("api-ws-kick", "UA-wskick/1.0")
-	jti := e.listSessions(tok, false)[0].Jti
+	jti := e.currentJti(tok)
 
 	wsURL := "ws" + strings.TrimPrefix(e.srv.URL, "http") + "/api/v1/ws?token=" + tok
 	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
