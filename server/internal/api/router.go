@@ -24,6 +24,7 @@ type Deps struct {
 	Sync        *service.SyncService
 	Reports     *service.ReportService
 	Budgets     *service.BudgetService
+	Invest      *service.InvestService
 	Instance    *instance.Meta
 	// Hub 会话撤销踢连用的 Hub（R52）。nil 时会话 handler 回落 ws.DefaultHub，
 	// 与生产接线（main 用 DefaultHub）行为一致；测试可注入独立 Hub 隔离状态。
@@ -82,6 +83,11 @@ func NewRouter(d Deps) *gin.Engine {
 	var bh2 *budgetHandler
 	if d.Budgets != nil {
 		bh2 = &budgetHandler{svc: d.Budgets}
+	}
+	// WBS 6.4/6.5：投资与净资产
+	var ih *investHandler
+	if d.Invest != nil {
+		ih = &investHandler{svc: d.Invest}
 	}
 	sh := &syncHandler{svc: d.Sync}
 	// R52：多端会话（列表 / 撤销）。Hub 为 nil 时回落 DefaultHub（见 session_handler.go）
@@ -193,6 +199,20 @@ func NewRouter(d Deps) *gin.Engine {
 			auth.POST("/books/:id/budgets", bh2.create)
 			auth.PUT("/books/:id/budgets/:budgetId", bh2.update)
 			auth.DELETE("/books/:id/budgets/:budgetId", bh2.remove)
+		}
+
+		// 投资与净资产（WBS 6.4 / 6.5）：标的库 + 持仓 + 手动行情 + 净资产汇总
+		if ih != nil {
+			auth.GET("/books/:id/instruments", ih.listInstruments)
+			auth.POST("/books/:id/instruments", ih.createInstrument)
+			auth.PUT("/books/:id/instruments/:instrumentId", ih.updateInstrument)
+			auth.DELETE("/books/:id/instruments/:instrumentId", ih.deleteInstrument)
+			auth.POST("/books/:id/instruments/:instrumentId/price", ih.setPrice)
+			auth.GET("/books/:id/holdings", ih.listHoldings)
+			auth.POST("/books/:id/holdings", ih.createHolding)
+			auth.PUT("/books/:id/holdings/:holdingId", ih.updateHolding)
+			auth.DELETE("/books/:id/holdings/:holdingId", ih.deleteHolding)
+			auth.GET("/books/:id/net-worth", ih.netWorth)
 		}
 
 		// 增量同步（阶段 3.1 / 3.2）

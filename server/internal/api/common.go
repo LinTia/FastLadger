@@ -73,6 +73,15 @@ func mapSvcErr(c *gin.Context, err error) {
 		fail(c, http.StatusNotFound, "交易不存在")
 	case errors.Is(err, service.ErrBudgetNotFound):
 		fail(c, http.StatusNotFound, "预算不存在")
+	case errors.Is(err, service.ErrInstrumentNotFound):
+		fail(c, http.StatusNotFound, "标的不存在")
+	case errors.Is(err, service.ErrHoldingNotFound):
+		fail(c, http.StatusNotFound, "持仓不存在")
+	case errors.Is(err, service.ErrInstrumentInUse):
+		fail(c, http.StatusConflict, "该标的下仍有持仓记录，无法删除")
+	case errors.Is(err, service.ErrInvalidQuantity),
+		errors.Is(err, service.ErrInvalidPrice):
+		fail(c, http.StatusBadRequest, "数量或价格非法（十进制字符串，数量>0、价格≥0）")
 	case errors.Is(err, service.ErrBudgetConflict):
 		fail(c, http.StatusConflict, "该分类已存在生效预算（或总预算已设置）")
 	case errors.Is(err, service.ErrInvalidCreate),

@@ -14,6 +14,7 @@
     <a href="#" id="navTxns" class="hidden">交易</a>
     <a href="#" id="navReport" class="hidden">报表</a>
     <a href="#" id="navBudget" class="hidden">预算</a>
+    <a href="#" id="navInvest" class="hidden">资产</a>
     <a href="#" id="navExport" class="hidden">导出</a>
     <a href="#" id="navAccounts" class="hidden">对账</a>
     <a href="#" id="navRecycle" class="hidden">回收站</a>
@@ -92,6 +93,17 @@
     <menu>
       <button type="button" id="bCancel" class="ghost">取消</button>
       <button type="submit" id="bSubmit">保存</button>
+    </menu>
+  </form>
+</dialog>
+<dialog id="investDlg" class="hidden">
+  <form id="investForm" method="dialog">
+    <h3 id="iFormTitle">新增</h3>
+    <div id="investFields"></div>
+    <div class="err-msg" id="iErr"></div>
+    <menu>
+      <button type="button" id="iCancel" class="ghost">取消</button>
+      <button type="submit" id="iSubmit">保存</button>
     </menu>
   </form>
 </dialog>

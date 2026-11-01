@@ -168,6 +168,7 @@ func main() {
 	syncSvc := service.NewSyncService(engine, txs, meta)
 	reports := service.NewReportService(engine)
 	budgets := service.NewBudgetService(engine)
+	invest := service.NewInvestService(engine, versions)
 	ocrSvc := service.NewOCRService(cfg)
 
 	// WS 订阅资格 + 可见性校验：由 service 提供（ws 不得在 Hub 锁内查库，
@@ -187,6 +188,7 @@ func main() {
 		Sync:          syncSvc,
 		Reports:       reports,
 		Budgets:       budgets,
+		Invest:        invest,
 		OCR:           ocrSvc,
 		Instance:      meta,
 		SchemaVersion: st.Current,

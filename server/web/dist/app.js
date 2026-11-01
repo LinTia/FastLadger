@@ -125,12 +125,14 @@ function showNav(book) {
     $("#navTxns").classList.remove("hidden");
     $("#navReport").classList.remove("hidden");
     $("#navBudget").classList.remove("hidden");
+    $("#navInvest").classList.remove("hidden");
     $("#navExport").classList.remove("hidden");
     $("#navAccounts").classList.remove("hidden");
     $("#navRecycle").classList.remove("hidden");
     $("#navTxns").href = "#b/" + book.id;
     $("#navReport").href = "#b/" + book.id + "/report";
     $("#navBudget").href = "#b/" + book.id + "/budget";
+    $("#navInvest").href = "#b/" + book.id + "/invest";
     $("#navExport").href = "#b/" + book.id + "/export";
     $("#navAccounts").href = "#b/" + book.id + "/accounts";
     $("#navRecycle").href = "#b/" + book.id + "/recycle";
@@ -138,6 +140,7 @@ function showNav(book) {
     $("#navTxns").classList.add("hidden");
     $("#navReport").classList.add("hidden");
     $("#navBudget").classList.add("hidden");
+    $("#navInvest").classList.add("hidden");
     $("#navExport").classList.add("hidden");
     $("#navAccounts").classList.add("hidden");
     $("#navRecycle").classList.add("hidden");
@@ -1058,10 +1061,283 @@ function closeBudgetDlg() {
   dlg.classList.add("hidden");
 }
 
+/* ---------- 投资资产（对齐原型：资产总览/家庭净资产/总资产/总负债 + 持仓） ---------- */
+const INSTR_TYPE_NAME = { 1: "股票", 2: "基金", 3: "债券", 4: "贵金属", 5: "外汇", 6: "其他" };
+
+async function renderInvest(bookId) {
+  state.bookId = bookId;
+  await loadBookMeta(bookId);
+  const books = await api("GET", "/books");
+  showNav(books.find((b) => b.id === bookId) || { id: bookId });
+  $("#navInvest").classList.add("active");
+  view.replaceChildren();
+
+  // 资产总览（原型文案：资产总览/总资产/总负债/家庭净资产）
+  const nw = await api("GET", "/books/" + bookId + "/net-worth");
+  const ov = document.createElement("div");
+  ov.className = "card";
+  const oh = document.createElement("h2"); oh.textContent = "资产总览";
+  ov.append(oh);
+  const grid = document.createElement("div");
+  grid.style.cssText = "display:grid;grid-template-columns:repeat(4,1fr);gap:12px;";
+  const mkCell = (label, val, color) => {
+    const c = document.createElement("div");
+    const l = document.createElement("div"); l.className = "muted"; l.style.fontSize = "13px"; l.textContent = label;
+    const n = document.createElement("div"); n.style.cssText = "font-size:20px;font-weight:600;" + (color ? "color:" + color : "");
+    n.textContent = "¥" + cents2str(val);
+    c.append(l, n);
+    return c;
+  };
+  grid.append(
+    mkCell("总资产", nw.totalAssets),
+    mkCell("总负债", nw.totalLiabilities, "var(--expense)"),
+    mkCell("持仓市值", nw.holdingsValue),
+    mkCell("家庭净资产", nw.netWorth, nw.netWorth >= 0 ? "var(--primary)" : "var(--expense)")
+  );
+  ov.append(grid);
+  const note = document.createElement("p"); note.className = "muted"; note.style.margin = "10px 0 0";
+  note.textContent = "净资产 = 总资产（含持仓市值）− 总负债；负债账户余额为正表示欠款。";
+  ov.append(note);
+  view.append(ov);
+
+  // 持仓列表
+  const hdata = await api("GET", "/books/" + bookId + "/holdings");
+  const holdings = hdata.items || [];
+  const hCard = document.createElement("div"); hCard.className = "card";
+  const hRow = document.createElement("div"); hRow.style.cssText = "display:flex;align-items:center;gap:10px;";
+  const hh = document.createElement("h2"); hh.style.margin = "0"; hh.textContent = "持仓";
+  const addHolding = document.createElement("button"); addHolding.textContent = "添加持仓"; addHolding.style.marginLeft = "auto";
+  addHolding.addEventListener("click", () => openHoldingDialog(bookId));
+  hRow.append(hh, addHolding);
+  hCard.append(hRow);
+  if (!holdings.length) {
+    const empty = document.createElement("div"); empty.className = "empty";
+    const ic = document.createElement("div"); ic.className = "icon"; ic.textContent = "📈";
+    const p = document.createElement("p"); p.textContent = "暂无持仓——先在下方标的库添加标的，再录入持仓。";
+    empty.append(ic, p); hCard.append(empty);
+  } else {
+    const table = document.createElement("table");
+    const thead = document.createElement("thead"); const trh = document.createElement("tr");
+    ["标的", "数量", "成本", "现价", "市值", "浮动盈亏", ""].forEach((t, i) => {
+      const th = document.createElement("th"); th.textContent = t;
+      if (i >= 1) th.className = "num";
+      trh.append(th);
+    });
+    thead.append(trh); table.append(thead);
+    const tbody = document.createElement("tbody");
+    for (const it of holdings) {
+      const tr = document.createElement("tr");
+      const tdN = document.createElement("td");
+      tdN.textContent = (it.instrumentName || "标的 " + it.instrumentId) + " · " + (INSTR_TYPE_NAME[it.instrumentType] || "");
+      const mk = (t, cls) => { const td = document.createElement("td"); td.textContent = t; if (cls) td.className = cls; return td; };
+      tr.append(
+        tdN,
+        mk(it.quantity, "num"),
+        mk("¥" + cents2str(it.costAmount), "num"),
+        mk(it.currentPrice, "num muted"),
+        mk("¥" + cents2str(it.marketValue), "num"),
+        mk((it.profitLoss >= 0 ? "+" : "") + "¥" + cents2str(Math.abs(it.profitLoss)), "num " + (it.profitLoss >= 0 ? "income" : "expense"))
+      );
+      const tdOps = document.createElement("td"); tdOps.className = "row-actions";
+      const bEdit = document.createElement("button"); bEdit.textContent = "编辑"; bEdit.className = "ghost";
+      bEdit.addEventListener("click", () => openHoldingDialog(bookId, it));
+      const bPrice = document.createElement("button"); bPrice.textContent = "录价"; bPrice.className = "ghost";
+      bPrice.addEventListener("click", () => openPriceDialog(bookId, it.instrumentId, it.instrumentName || "", it.currentPrice));
+      const bDel = document.createElement("button"); bDel.textContent = "删除"; bDel.className = "danger";
+      bDel.addEventListener("click", async () => {
+        const okD = await confirmDialog({ title: "删除持仓", desc: "删除该持仓后其市值不再计入净资产。", confirmText: "删除", danger: true });
+        if (!okD) return;
+        try {
+          await api("DELETE", "/books/" + bookId + "/holdings/" + it.id);
+          toast("持仓已删除", "ok");
+          renderInvest(bookId);
+        } catch (err) { toast(err.message, "err"); }
+      });
+      tdOps.append(bEdit, bPrice, bDel);
+      tr.append(tdOps);
+      tbody.append(tr);
+    }
+    table.append(tbody); hCard.append(table);
+  }
+  view.append(hCard);
+
+  // 标的库
+  const idata = await api("GET", "/books/" + bookId + "/instruments");
+  const instruments = idata.items || [];
+  const iCard = document.createElement("div"); iCard.className = "card";
+  const iRow = document.createElement("div"); iRow.style.cssText = "display:flex;align-items:center;gap:10px;";
+  const ih = document.createElement("h2"); ih.style.margin = "0"; ih.textContent = "标的库";
+  const addInstr = document.createElement("button"); addInstr.textContent = "新增标的"; addInstr.style.marginLeft = "auto";
+  addInstr.addEventListener("click", () => openInstrumentDialog(bookId));
+  iRow.append(ih, addInstr);
+  iCard.append(iRow);
+  if (!instruments.length) {
+    const empty = document.createElement("div"); empty.className = "empty";
+    const ic = document.createElement("div"); ic.className = "icon"; ic.textContent = "🏷️";
+    const p = document.createElement("p"); p.textContent = "标的库为空（MVP 手动录入行情，不做自动行情）。";
+    empty.append(ic, p); iCard.append(empty);
+  } else {
+    const table = document.createElement("table");
+    const thead = document.createElement("thead"); const trh = document.createElement("tr");
+    ["名称", "类型", "市场", "代码", ""].forEach((t, i) => { const th = document.createElement("th"); th.textContent = t; if (i >= 2) th.className = "num"; trh.append(th); });
+    thead.append(trh); table.append(thead);
+    const tbody = document.createElement("tbody");
+    for (const it of instruments) {
+      const tr = document.createElement("tr");
+      const mk = (t, cls) => { const td = document.createElement("td"); td.textContent = t; if (cls) td.className = cls; return td; };
+      tr.append(
+        mk(it.name),
+        mk(INSTR_TYPE_NAME[it.type] || it.type, "muted"),
+        mk(it.market || "—", "muted"),
+        mk(it.code || "—", "num")
+      );
+      const tdOps = document.createElement("td"); tdOps.className = "row-actions";
+      const bEdit = document.createElement("button"); bEdit.textContent = "编辑"; bEdit.className = "ghost";
+      bEdit.addEventListener("click", () => openInstrumentDialog(bookId, it));
+      const bDel = document.createElement("button"); bDel.textContent = "删除"; bDel.className = "danger";
+      bDel.addEventListener("click", async () => {
+        const okD = await confirmDialog({ title: "删除标的", desc: "仍有持仓引用的标的无法删除。", confirmText: "删除", danger: true });
+        if (!okD) return;
+        try {
+          await api("DELETE", "/books/" + bookId + "/instruments/" + it.id);
+          toast("标的已删除", "ok");
+          renderInvest(bookId);
+        } catch (err) { toast(err.message, "err"); }
+      });
+      tdOps.append(bEdit, bDel);
+      tr.append(tdOps);
+      tbody.append(tr);
+    }
+    table.append(tbody); iCard.append(table);
+  }
+  view.append(iCard);
+}
+
+// 通用投资对话框字段构造：fields = [{label, control}]
+function openInvestDialog(title, fields, onSubmit) {
+  const dlg = $("#investDlg");
+  $("#iFormTitle").textContent = title;
+  $("#iErr").textContent = "";
+  const box = $("#investFields");
+  box.replaceChildren();
+  for (const f of fields) {
+    const lab = document.createElement("label");
+    lab.style.cssText = "display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted-fg);margin-bottom:10px;";
+    lab.append(document.createTextNode(f.label), f.control);
+    box.append(lab);
+  }
+  dlg.classList.remove("hidden");
+  if (typeof dlg.showModal === "function") dlg.showModal(); else dlg.setAttribute("open", "");
+  $("#iCancel").onclick = () => closeInvestDlg();
+  $("#investForm").onsubmit = async (ev) => {
+    ev.preventDefault();
+    const done = btnPending($("#iSubmit"), "保存中…");
+    try {
+      await onSubmit();
+      closeInvestDlg();
+    } catch (err) {
+      $("#iErr").textContent = err.message;
+      toast(err.message, "err");
+    } finally { done(); }
+  };
+}
+function closeInvestDlg() {
+  const dlg = $("#investDlg");
+  dlg.close ? dlg.close() : dlg.removeAttribute("open");
+  dlg.classList.add("hidden");
+}
+function dlgInput(value, placeholder) {
+  const i = document.createElement("input");
+  i.type = "text"; i.value = value || ""; if (placeholder) i.placeholder = placeholder;
+  return i;
+}
+
+function openInstrumentDialog(bookId, edit) {
+  const name = dlgInput(edit && edit.name, "如：贵州茅台");
+  const typeSel = document.createElement("select");
+  Object.entries(INSTR_TYPE_NAME).forEach(([v, t]) => {
+    const o = document.createElement("option"); o.value = v; o.textContent = t;
+    if (edit && String(edit.type) === v) o.selected = true;
+    typeSel.append(o);
+  });
+  const market = dlgInput(edit && edit.market, "SH / SZ / HK…");
+  const code = dlgInput(edit && edit.code, "600519");
+  openInvestDialog(edit ? "编辑标的" : "新增标的",
+    [{ label: "名称", control: name }, { label: "类型", control: typeSel }, { label: "市场（选填）", control: market }, { label: "代码（选填）", control: code }],
+    async () => {
+      const body = { name: name.value.trim(), type: Number(typeSel.value), market: market.value.trim(), code: code.value.trim() };
+      if (edit) {
+        await api("PUT", "/books/" + bookId + "/instruments/" + edit.id, body);
+        toast("标的已更新", "ok");
+      } else {
+        await api("POST", "/books/" + bookId + "/instruments", body);
+        toast("标的已创建", "ok");
+      }
+      renderInvest(bookId);
+    });
+}
+
+function openHoldingDialog(bookId, edit) {
+  const acctSel = document.createElement("select");
+  for (const a of state.accounts) {
+    const o = document.createElement("option"); o.value = String(a.id); o.textContent = a.name;
+    acctSel.append(o);
+  }
+  if (edit && edit.accountId) acctSel.value = String(edit.accountId);
+  acctSel.disabled = !!edit;
+  const instrSel = document.createElement("select");
+  // 拉取标的库填充（异步页面数据在 renderInvest 已加载，这里直接用 API 再取一次最稳）
+  api("GET", "/books/" + bookId + "/instruments").then((d) => {
+    instrSel.replaceChildren();
+    for (const it of d.items || []) {
+      const o = document.createElement("option"); o.value = String(it.id);
+      o.textContent = it.name + (it.code ? "（" + it.code + "）" : "");
+      instrSel.append(o);
+    }
+    if (edit && edit.instrumentId) { instrSel.value = String(edit.instrumentId); instrSel.disabled = true; }
+  });
+  const qty = dlgInput(edit && edit.quantity, "如 1000.50");
+  const cost = dlgInput(edit ? cents2str(edit.costAmount) : "", "买入总成本（元）");
+  const price = dlgInput(edit && edit.currentPrice !== "0" ? edit.currentPrice : "", "元/份");
+  openInvestDialog(edit ? "编辑持仓" : "添加持仓",
+    [{ label: "账户", control: acctSel }, { label: "标的", control: instrSel },
+     { label: "数量", control: qty }, { label: "买入总成本（元，选填）", control: cost },
+     { label: "现价（元/份，选填）", control: price }],
+    async () => {
+      const costCents = str2cents(cost.value);
+      const body = {
+        quantity: qty.value.trim(), costAmount: costCents === null ? 0 : costCents,
+        currentPrice: price.value.trim() === "" ? "0" : price.value.trim()
+      };
+      if (edit) {
+        await api("PUT", "/books/" + bookId + "/holdings/" + edit.id, body);
+        toast("持仓已更新", "ok");
+      } else {
+        body.accountId = Number(acctSel.value);
+        body.instrumentId = Number(instrSel.value);
+        await api("POST", "/books/" + bookId + "/holdings", body);
+        toast("持仓已添加", "ok");
+      }
+      renderInvest(bookId);
+    });
+}
+
+function openPriceDialog(bookId, instrumentId, name, current) {
+  const price = dlgInput(current !== "0" ? current : "", "元/份");
+  openInvestDialog("录入行情 · " + name,
+    [{ label: "最新价（元/份）", control: price }],
+    async () => {
+      await api("POST", "/books/" + bookId + "/instruments/" + instrumentId + "/price",
+        { price: price.value.trim() });
+      toast("行情已更新（持仓现价同步刷新）", "ok");
+      renderInvest(bookId);
+    });
+}
+
 /* ---------- 路由 ---------- */
 async function route() {
   const hash = location.hash || "#";
-  const m = hash.match(/^#b\/(\d+)(?:\/(accounts|recycle|report|export|budget))?/);
+  const m = hash.match(/^#b\/(\d+)(?:\/(accounts|recycle|report|export|budget|invest))?/);
   try {
     if (!state.token) { renderLogin(); return; }
     if (m) {
@@ -1071,6 +1347,7 @@ async function route() {
       else if (m[2] === "report") await renderReport(bookId);
       else if (m[2] === "export") await renderExport(bookId);
       else if (m[2] === "budget") await renderBudget(bookId);
+      else if (m[2] === "invest") await renderInvest(bookId);
       else await renderTxns(bookId);
     } else if (hash === "#books" || hash === "#") {
       await renderBooks();

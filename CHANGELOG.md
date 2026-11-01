@@ -2,6 +2,20 @@
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.52] - 2026-11-02
+
+### 投资与净资产（WBS 6.4 / 6.5，零迁移，阶段 6 收官）
+
+- **零迁移**：instruments / instrument_prices / holdings 三表 0001 已预建（holding.go 的 Holding 结构体阶段 3 同步已补，本批复用）；新增 `github.com/shopspring/decimal` v1.4.0（直接依赖）。
+- **标的库** `internal/service/invest.go`：Create/Update/Delete/List——类型枚举 1~6（字典 §4）、名称 1~64 字符；软删前校验持仓引用（有持仓 → ErrInstrumentInUse 409）；写操作 owner/admin、版本递增、审计（实体 `instrument`，《枚举字典》§14.2 补行）。
+- **持仓**：AddHolding/UpdateHolding/DeleteHolding——数量/现价为**十进制字符串**（decimal 解析，禁 float），数量 > 0、价格 ≥ 0、成本 ≥ 0（负数/非法一律报错，WBS 6.4 硬约束）；挂靠账户须属本账本；版本递增 + 审计（实体 `holding`）。
+- **手动行情**（PRD §12 决策 #3，MVP 唯一价格来源）：`POST .../instruments/:id/price`——append instrument_prices 历史行 + 同事务刷新该标的全簿持仓 current_price（冗余缓存）+ 审计；行情失败保留旧价（PRD §9.8）。
+- **市值/盈亏**：市值(分) = quantity × price × 100（decimal `Round(0)` 半进到分）；浮动盈亏 = 市值 − cost_amount。
+- **净资产（WBS 6.5）**：`GET /books/:id/net-worth`——总资产 = Σ资产账户(1~9) + Σ持仓市值；总负债 = Σ负债账户(10~15)（**正 = 欠款**，字典 §2）；净资产 = 总资产 − 总负债；按账户分类分组返回（资产构成）。
+- **Web 端（对齐原型文案）**：导航新增"资产"；页面 =「资产总览」四卡（总资产/总负债/持仓市值/家庭净资产）+ 持仓表（数量/成本/现价/市值/浮动盈亏红绿）+ 标的库表；新增/编辑标的、添加/编辑持仓、录价对话框（录价即同步刷新持仓现价）。
+- 测试：service 4 例（标的 CRUD+引用保护+审计/decimal 校验与市值盈亏/录价刷新/净资产公式含负债正=欠款与 member 可读）+ handler 2 例（路由鉴权/CRUD+录价+净资产流）；本地全量 `go test ./...` 全绿，gofmt 干净。
+- 至此**阶段 6 全部完成**（6.1 报表 / 6.2 导出 / 6.3 预算 / 6.4 投资 / 6.5 净资产）。
+
 ## [1.51] - 2026-11-02
 
 ### 预算（WBS 6.3：信封式总预算 + 分类月度预算，零迁移）

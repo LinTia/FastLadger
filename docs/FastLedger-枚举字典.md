@@ -180,6 +180,8 @@
 | `account` | 账户（账本级共享配置，`entity_id` = accounts.id） |
 | `category` | 分类（账本级共享配置，`entity_id` = categories.id） |
 | `budget` | 预算（账本级共享配置，`entity_id` = budgets.id；WBS 6.3） |
+| `instrument` | 标的（账本级共享配置，`entity_id` = instruments.id；WBS 6.4 行情录入也落本实体） |
+| `holding` | 持仓（账本级共享配置，`entity_id` = holdings.id；WBS 6.4） |
 | `instance` | 实例（`entity_id` = 新 `restore_epoch`） |
 
 账户与分类是账本共享配置，PRD §10.9「给定**任一写操作** … 可查到操作者、时间、实体与
