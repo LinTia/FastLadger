@@ -902,6 +902,11 @@ CREATE INDEX idx_audit_entity ON audit_logs(entity_type, entity_id);
 |  | DELETE `/books/{id}/budgets/{bid}` | 删除 |
 | 同步 | GET `/books/{id}/sync/pull` | 拉取增量（参数：afterVersion、limit；服务端校验成员资格） |
 |  | POST `/books/{id}/sync/push` | 每个离线创建项调用同一个 TxService.Create，携带稳定 clientUuid |
+| 会话（[1.42]） | GET `/auth/sessions` | 本人会话列表（默认仅有效会话，标记 `current`；`?includeRevoked=1` 含已撤销/已过期行） |
+|  | DELETE `/auth/sessions` | 撤销本人除当前会话外的全部有效会话（"登出其它设备"；返回撤销数量） |
+|  | DELETE `/auth/sessions/{jti}` | 撤销本人指定会话（跨用户/不存在统一 404，不泄露存在性；允许撤销当前会话）；撤销成功即主动断开该会话的 WS 连接（4003） |
+
+> **多端会话（[1.42]，WBS 5.10）的代价与升级说明**：登录时签发令牌与写 `token_sessions` 在**同一事务**（会话落库失败即不签发令牌，HTTP 503，不产生"有令牌无会话"的中间态）；每次鉴权在 JWT 校验之外多一次按 `jti`（UNIQUE 索引）的 SQLite 点查——单机亚毫秒级，这是"撤销即时生效"的必要代价；`last_seen` 按 1 小时粒度回写，避免活跃会话的写放大。**升级到 schema v7 后，存量令牌（v6 及之前签发）没有会话记录，Verify 一律拒绝（401），用户重新登录即可**；过期/已撤销超 7 天的会话行由 `db purge` 回收（保留期固定 7 天，不开放配置）。
 
 **`sync/push` 响应契约**（整体 HTTP 200，逐项给结果，便于客户端按项重试）：
 
@@ -989,7 +994,7 @@ CREATE INDEX idx_audit_entity ON audit_logs(entity_type, entity_id);
 - **`forceFullResync=true` 的客户端语义**（PRD §12.1 决策 3）：丢弃该账本本地缓存中当前用户无权访问的记录，以 `afterVersion=0` **全量重拉该账本**（不清空整个本地库）；不需要重拉其他账本。
 - **`version` 必须存在**：客户端以它为"是否有新数据"的唯一判据；缺失时按"有更新"处理并触发一次 pull（fail-safe）。
 - 客户端只处理"当前已订阅账本"的事件；WS 事件只用于通知有新版本，**不直接推进已同步游标**；断线自动重连，重连后走 `sync/pull?afterVersion=上次完整应用的版本` 补漏。
-- **服务端主动关闭码**（阶段 5 客户端必须按此实现）：令牌过期以 **`4001`** 关闭，客户端须**重新登录后再重连**；连接数超上限（单用户 `EBK_WS_MAX_CONN_PER_USER` / 全局 `EBK_WS_MAX_CONN_TOTAL`）以 **`4002`** 关闭并附带一条 `{"event":"error","code":"connection_rejected",...}` 错误帧，客户端应**指数退避重连，禁止立即冲击重连**。
+- **服务端主动关闭码**（阶段 5 客户端必须按此实现）：令牌过期以 **`4001`** 关闭，客户端须**重新登录后再重连**；连接数超上限（单用户 `EBK_WS_MAX_CONN_PER_USER` / 全局 `EBK_WS_MAX_CONN_TOTAL`）以 **`4002`** 关闭并附带一条 `{"event":"error","code":"connection_rejected",...}` 错误帧，客户端应**指数退避重连，禁止立即冲击重连**。会话被用户撤销（多端会话管理，[1.42]）以 **`4003`** 关闭，客户端须**清除本地凭证并回到登录页**——该设备的会话已被主动登出，用旧令牌重连只会得到 401。
 - 发送缓冲溢出：服务端丢弃该条通知并计数（不影响已提交事务），客户端须以**周期性 pull（建议 60s）+ 重连必 pull** 兜底，不得依赖 WS 的"至少一次"投递。
 
 #### `member_removed` 的投递保证（服务端契约，[1.30]）

@@ -2,6 +2,19 @@
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.42] - 2026-11-01
+
+### 多端会话查看与撤销（WBS 5.10 / GPT-R52 落地）
+
+- **迁移 `0007_token_sessions`**（终态 schema v7）：`jti`（UNIQUE）、`uid`、`created_at`、`expires_at`、`revoked_at`、`user_agent`、`last_seen_at`；索引 `(uid, revoked_at)` 与 `(expires_at)`；golden 指纹与 versionAssertions 守卫同步登记。
+- **签发即落库**：`Login` / `LoginFromIP` 签发令牌与写会话行在同一事务，会话落库失败即不签发（503，不产生"有令牌无会话"的中间态）；`user_agent` 由 HTTP 层透传（仅展示用）。
+- **Verify 强校验**：`VerifyWithClaims` 在 JWT 校验之外必须命中一行未撤销、未过期的会话记录；已撤销/无记录返回新错误 `ErrTokenRevoked`，HTTP 层 401 文案可区分（"会话已撤销或已失效，请重新登录"）。
+- **会话 API**（JWTAuth 组内，`internal/api/session_handler.go`）：`GET /auth/sessions`（列表，标记 `current`，`?includeRevoked=1` 含已撤销）、`DELETE /auth/sessions`（登出其它设备）、`DELETE /auth/sessions/:jti`（撤销指定设备；跨用户/不存在统一 404；允许撤销当前会话）。
+- **WS 主动断开**：`wsAuth` 把 `claims.Jti` 交给连接（`ws.TokenJtiContextKey`）；撤销后 `Hub.KickJti` 主动断开该会话全部在线连接，关闭码 **4003**（客户端应清除凭证回到登录页，不得无脑重连）。
+- **清理**：`db purge` 追加会话回收统计（已过期 + 已撤销超 7 天，保留期固定，不开放配置）。
+- ⚠️ **升级说明**：升级到 schema v7 后，**存量令牌（v6 及之前签发）无会话记录，一律 401——用户需重新登录**。这是预期行为，不做自动补登记（无法补出可信的 exp/UA，且会给撤销语义开豁免通道）。
+- 测试：全量 `run_tests.sh plain` 710 PASS / 0 FAIL（新增 20 例：`service/session_test.go`、`api/session_api_test.go`（含 WS 4003 端到端）、`ws/hub_kick_test.go`）。
+
 ## [1.41] - 2026-10-30
 
 ### GPT v1.9 阶段 0–3 第二轮补充复核（GPT-R53）
