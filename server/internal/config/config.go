@@ -101,6 +101,12 @@ type Config struct {
 	// SyncPullPerMinute 单用户 sync/pull 限流/分钟（EBK_SYNC_PULL_PER_MINUTE，默认 300，
 	// 读路径放宽）。与 push 各自独立 key 空间，也与登录/邀请限流完全隔离。
 	SyncPullPerMinute int
+
+	// OCR fallback settings. An empty URL disables image OCR fallback.
+	OCRFallbackURL   string
+	OCRTimeoutMS     int
+	OCRMaxImageBytes int64
+	OCRRatePerMin    int
 }
 
 // newConfig 从环境变量读取全部配置项（只读取、不校验）。
@@ -152,7 +158,32 @@ func newConfig() (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+	ocrTimeout, err := envInt("EBK_OCR_TIMEOUT_MS", 8000)
+	if err != nil {
+		return nil, err
+	}
+	ocrMaxImageBytes, err := envInt("EBK_OCR_MAX_IMAGE_BYTES", 10*1024*1024)
+	if err != nil {
+		return nil, err
+	}
+	ocrRate, err := envInt("EBK_OCR_RATE_PER_MIN", 10)
+	if err != nil {
+		return nil, err
+	}
+	if ocrTimeout > 120000 {
+		return nil, fmt.Errorf("EBK_OCR_TIMEOUT_MS 超过上限 120000，当前=%d", ocrTimeout)
+	}
+	if ocrMaxImageBytes > 10*1024*1024 {
+		return nil, fmt.Errorf("EBK_OCR_MAX_IMAGE_BYTES 超过上限 10485760，当前=%d", ocrMaxImageBytes)
+	}
+	if ocrRate > 1000 {
+		return nil, fmt.Errorf("EBK_OCR_RATE_PER_MIN 超过上限 1000，当前=%d", ocrRate)
+	}
+	ocrURL := strings.TrimSpace(os.Getenv("EBK_OCR_FALLBACK_URL"))
+
 	return &Config{
+		OCRFallbackURL: ocrURL, OCRTimeoutMS: ocrTimeout,
+		OCRMaxImageBytes: int64(ocrMaxImageBytes), OCRRatePerMin: ocrRate,
 		HTTPPort:           envOr("EBK_HTTP_PORT", DefaultHTTPPort),
 		DBPath:             envOr("EBK_DB_PATH", DefaultDBPath),
 		DataDir:            envOr("EBK_DATA_DIR", DefaultDataDir),

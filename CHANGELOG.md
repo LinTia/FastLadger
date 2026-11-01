@@ -2,6 +2,19 @@
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.43] - 2026-11-01
+
+### OCR 双模式服务端兜底（WBS 5.7 重定向：PaddleOCR 方案）
+
+- **新 API**（JWTAuth 组内）：`POST /api/v1/ocr/recognize`（multipart image ≤10MiB → 转发本机兜底服务，返回 `engine:"server"` + lines）、`POST /api/v1/ocr/parse`（纯规则文本解析，返回候选 `amountCents`（整数分，禁 float）/`direction`/`occurredDate`/`description`/`confidence`）。
+- **保守解析契约**：仅当金额、方向、日期均可无歧义确认才产候选；非法千分位（`¥10,00`）、多金额、多日期、带符号金额（`+/-`）、精度>2、溢出、矛盾方向一律空候选，绝不猜测。
+- **MIME 内容嗅探**：服务端按图片魔数判定真实类型（PNG/JPEG/WebP/BMP/TIFF），不信任客户端 multipart 头；非白名单内容 400 且不消耗配额、不触达下游。
+- **下游强契约**：Python 兜底（`rapidocr_onnxruntime`，仅监听 127.0.0.1:8500）响应的 `engine` 字段被严格校验；Go 侧 `DisallowUnknownFields` + 引擎标识比对，字段漂移 fail-closed。
+- **配置 4 项**（fail-fast）：`EBK_OCR_FALLBACK_URL`（空=禁用）/ `EBK_OCR_TIMEOUT_MS`(8000，上限 120000) / `EBK_OCR_MAX_IMAGE_BYTES`(10MiB，上限 10MiB) / `EBK_OCR_RATE_PER_MIN`(10，上限 1000)。
+- **限流**：`ocr:<uid>` 每用户每分钟共享桶（recognize/parse 合并计），复用既有有界滑动窗口限流器独立实例。
+- **隐私与安全边界**：OCR 图片仅上传至用户自托管服务器本机兜底服务（内存处理、不落盘、无 access log）；OCR 链路绝不写 transactions/audit（端到端测试断言增量 0）；该裁决替代旧 PRD §4.4/§5.1/§8.3/§9.2 口径，契约见 `docs/FastLedger-OCR双模式部署与切换契约.md`。
+- 无数据库迁移（schema 保持 v7）。测试：规则解析边界（全角/千分位/三种日期/负号/歧义/噪声）、嗅探单测、下游互操作（MIME 转发、engine 校验、未知字段拒绝）、端到端（真实登录 + multipart + 503 回退 + 429 + 零账务写入）。
+
 ## [1.42] - 2026-11-01
 
 ### 多端会话查看与撤销（WBS 5.10 / GPT-R52 落地）

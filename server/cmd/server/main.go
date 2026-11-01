@@ -166,6 +166,7 @@ func main() {
 	categories := service.NewCategoryService(engine, versions)
 	txs := service.NewTxService(engine, versions)
 	syncSvc := service.NewSyncService(engine, txs, meta)
+	ocrSvc := service.NewOCRService(cfg)
 
 	// WS 订阅资格 + 可见性校验：由 service 提供（ws 不得在 Hub 锁内查库，
 	// 只在 Subscribe / RefreshVisibility 的锁外调用本函数并缓存结果）
@@ -182,6 +183,7 @@ func main() {
 		Categories:    categories,
 		Txs:           txs,
 		Sync:          syncSvc,
+		OCR:           ocrSvc,
 		Instance:      meta,
 		SchemaVersion: st.Current,
 	})

@@ -1,0 +1,22 @@
+[Unit]
+Description=FastLedger private OCR fallback
+After=network.target
+
+[Service]
+Type=simple
+User=fastledger
+Group=fastledger
+WorkingDirectory=/opt/fastledger/ocr_service
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/opt/fastledger/venv/bin/uvicorn app:app --host 127.0.0.1 --port 8500 --workers 1 --no-access-log
+Restart=on-failure
+RestartSec=3
+MemoryMax=1G
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/run
+
+[Install]
+WantedBy=multi-user.target
