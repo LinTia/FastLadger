@@ -123,13 +123,19 @@ function showNav(book) {
   $("#whoami").textContent = state.whoami || "";
   if (book) {
     $("#navTxns").classList.remove("hidden");
+    $("#navReport").classList.remove("hidden");
+    $("#navExport").classList.remove("hidden");
     $("#navAccounts").classList.remove("hidden");
     $("#navRecycle").classList.remove("hidden");
     $("#navTxns").href = "#b/" + book.id;
+    $("#navReport").href = "#b/" + book.id + "/report";
+    $("#navExport").href = "#b/" + book.id + "/export";
     $("#navAccounts").href = "#b/" + book.id + "/accounts";
     $("#navRecycle").href = "#b/" + book.id + "/recycle";
   } else {
     $("#navTxns").classList.add("hidden");
+    $("#navReport").classList.add("hidden");
+    $("#navExport").classList.add("hidden");
     $("#navAccounts").classList.add("hidden");
     $("#navRecycle").classList.add("hidden");
   }
@@ -656,16 +662,272 @@ async function renderRecycle(bookId) {
   view.append(card);
 }
 
+/* ---------- 收支报表（对齐原型 /report：收支趋势 + 本月支出分类占比 + 本月/上月切换） ---------- */
+let reportMonthOffset = 0; // 0=本月，1=上月（原型口径）
+
+async function renderReport(bookId) {
+  state.bookId = bookId;
+  await loadBookMeta(bookId);
+  const books = await api("GET", "/books");
+  showNav(books.find((b) => b.id === bookId) || { id: bookId });
+  $("#navReport").classList.add("active");
+  view.replaceChildren();
+
+  // 标题 + 月份切换（本月/上月）
+  const head = document.createElement("div");
+  head.className = "card";
+  const h = document.createElement("h2"); h.textContent = "收支报表";
+  const nav = document.createElement("div"); nav.style.cssText = "display:flex;gap:8px;align-items:center;";
+  const mkMonthBtn = (label, off) => {
+    const b = document.createElement("button");
+    b.textContent = label;
+    b.className = reportMonthOffset === off ? "" : "ghost";
+    b.addEventListener("click", () => { reportMonthOffset = off; renderReport(bookId); });
+    return b;
+  };
+  nav.append(mkMonthBtn("本月", 0), mkMonthBtn("上月", 1));
+  head.append(h, nav);
+  view.append(head);
+
+  const month = monthShift(reportMonthOffset);
+
+  // 卡 1：收支趋势（近 6 月，柱状）
+  const trend = await api("GET", "/books/" + bookId + "/reports/monthly?months=6");
+  const trendCard = document.createElement("div"); trendCard.className = "card";
+  const t2 = document.createElement("h2"); t2.textContent = "收支趋势"; t2.className = "";
+  const sub = document.createElement("span"); sub.className = "muted"; sub.textContent = " 近 6 个月（转账不计收支）";
+  t2.append(sub);
+  trendCard.append(t2);
+  const bars = document.createElement("div");
+  bars.style.cssText = "display:flex;align-items:flex-end;gap:14px;height:140px;padding:8px 4px 0;";
+  const items = trend.items || [];
+  let maxV = 1;
+  for (const p of items) maxV = Math.max(maxV, p.income, p.expense);
+  for (const p of items) {
+    const col = document.createElement("div");
+    col.style.cssText = "flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;justify-content:flex-end;";
+    const pair = document.createElement("div");
+    pair.style.cssText = "display:flex;gap:3px;align-items:flex-end;height:100%;width:100%;justify-content:center;";
+    const mkBar = (v, color, title) => {
+      const bar = document.createElement("div");
+      bar.style.cssText = "width:16px;border-radius:4px 4px 0 0;background:" + color +
+        ";height:" + Math.round(v / maxV * 100) + "%;min-height:2px;";
+      bar.title = title;
+      return bar;
+    };
+    pair.append(
+      mkBar(p.income, "var(--income)", p.month + " 收入 ¥" + cents2str(p.income)),
+      mkBar(p.expense, "var(--expense)", p.month + " 支出 ¥" + cents2str(p.expense))
+    );
+    const x = document.createElement("span"); x.className = "muted"; x.style.fontSize = "11px";
+    x.textContent = p.month.slice(5);
+    col.append(pair, x);
+    bars.append(col);
+  }
+  trendCard.append(bars);
+  const legend = document.createElement("div"); legend.className = "muted";
+  legend.style.cssText = "display:flex;gap:16px;margin-top:8px;font-size:12px;";
+  legend.append(mkLegend("var(--income)", "收入"), mkLegend("var(--expense)", "支出"));
+  trendCard.append(legend);
+  view.append(trendCard);
+
+  // 卡 2：本月支出分类占比（排行）
+  const share = await api("GET", "/books/" + bookId + "/reports/categories?type=2&month=" + encodeURIComponent(month));
+  const shareCard = document.createElement("div"); shareCard.className = "card";
+  const t3 = document.createElement("h2");
+  t3.textContent = (reportMonthOffset === 0 ? "本月" : "上月") + "支出分类占比";
+  shareCard.append(t3);
+  const rows = share.items || [];
+  if (!rows.length) {
+    const empty = document.createElement("div"); empty.className = "empty";
+    const ic = document.createElement("div"); ic.className = "icon"; ic.textContent = "📊";
+    const p = document.createElement("p"); p.textContent = "该月暂无支出记录。";
+    empty.append(ic, p); shareCard.append(empty);
+  } else {
+    let total = 0;
+    for (const r of rows) total += r.total;
+    const table = document.createElement("table");
+    const thead = document.createElement("thead"); const trh = document.createElement("tr");
+    ["分类排行", "笔数", "金额", "占比"].forEach((t, i) => {
+      const th = document.createElement("th"); th.textContent = t;
+      if (i >= 1) th.className = "num";
+      trh.append(th);
+    });
+    thead.append(trh); table.append(thead);
+    const tbody = document.createElement("tbody");
+    for (const r of rows) {
+      const tr = document.createElement("tr");
+      const tdN = document.createElement("td"); tdN.textContent = r.name;
+      const tdC = document.createElement("td"); tdC.className = "num muted"; tdC.textContent = String(r.count);
+      const tdA = document.createElement("td"); tdA.className = "num"; tdA.textContent = "¥" + cents2str(r.total);
+      const tdP = document.createElement("td"); tdP.className = "num muted";
+      tdP.textContent = (total > 0 ? Math.round(r.total / total * 100) : 0) + "%";
+      tr.append(tdN, tdC, tdA, tdP);
+      tbody.append(tr);
+    }
+    table.append(tbody); shareCard.append(table);
+  }
+  view.append(shareCard);
+}
+
+function mkLegend(color, label) {
+  const s = document.createElement("span");
+  const dot = document.createElement("span");
+  dot.style.cssText = "display:inline-block;width:10px;height:10px;border-radius:3px;background:" + color + ";margin-right:4px;";
+  s.append(dot, document.createTextNode(label));
+  return s;
+}
+
+// monthShift(0)=本月 "YYYY-MM"，(1)=上月（与服务端 CST 口径对齐；本地时区即用户认知口径）
+function monthShift(offset) {
+  const d = new Date();
+  d.setDate(1);
+  d.setMonth(d.getMonth() - offset);
+  const p = (n) => String(n).padStart(2, "0");
+  return d.getFullYear() + "-" + p(d.getMonth() + 1);
+}
+
+/* ---------- 数据导出（对齐原型 /export：时间范围 + 收支类型 + 格式卡片 + 导出字段勾选） ---------- */
+const EXPORT_FIELDS = [
+  ["time", "时间"], ["type", "类型"], ["amount", "金额"], ["category", "分类"],
+  ["account", "账户"], ["toAccount", "对方账户"], ["channel", "渠道"],
+  ["merchant", "商户"], ["note", "备注"]
+];
+
+async function renderExport(bookId) {
+  state.bookId = bookId;
+  await loadBookMeta(bookId);
+  const books = await api("GET", "/books");
+  showNav(books.find((b) => b.id === bookId) || { id: bookId });
+  $("#navExport").classList.add("active");
+  view.replaceChildren();
+
+  const card = document.createElement("div"); card.className = "card";
+  const h = document.createElement("h2"); h.textContent = "数据导出";
+  card.append(h);
+
+  // 时间范围
+  const sec1 = document.createElement("p"); sec1.className = "muted"; sec1.style.fontWeight = "500";
+  sec1.textContent = "时间范围";
+  const row1 = document.createElement("div"); row1.style.cssText = "display:flex;gap:10px;flex-wrap:wrap;margin:6px 0 12px;";
+  const dFrom = document.createElement("input"); dFrom.type = "date"; dFrom.id = "xFrom";
+  const dTo = document.createElement("input"); dTo.type = "date"; dTo.id = "xTo";
+  row1.append(wrapField("开始日期", dFrom), wrapField("结束日期", dTo));
+
+  // 收支类型
+  const sec2 = document.createElement("p"); sec2.className = "muted"; sec2.style.fontWeight = "500";
+  sec2.textContent = "收支类型";
+  const typeSel = document.createElement("select");
+  [["0", "全部"], ["1", "收入"], ["2", "支出"], ["3", "转账"]].forEach(([v, t]) => {
+    const o = document.createElement("option"); o.value = v; o.textContent = t; typeSel.append(o);
+  });
+  const row2 = document.createElement("div"); row2.style.margin = "6px 0 12px";
+  row2.append(wrapField("类型", typeSel));
+
+  // 导出格式（两卡片，对齐原型 CSV / JSON）
+  const sec3 = document.createElement("p"); sec3.className = "muted"; sec3.style.fontWeight = "500";
+  sec3.textContent = "导出格式";
+  const fmtRow = document.createElement("div"); fmtRow.style.cssText = "display:flex;gap:12px;margin:6px 0 12px;flex-wrap:wrap;";
+  const fmtCards = {};
+  [["csv", "CSV", "带 UTF-8 BOM，Excel 可直接打开"], ["json", "JSON", "原始结构化数据，适合备份"]].forEach(([v, name, desc]) => {
+    const box = document.createElement("label");
+    box.style.cssText = "flex:1;min-width:180px;border:1px solid var(--line);border-radius:12px;padding:12px;display:flex;gap:8px;align-items:flex-start;cursor:pointer;";
+    const radio = document.createElement("input"); radio.type = "radio"; radio.name = "xFormat"; radio.value = v;
+    if (v === "csv") radio.checked = true;
+    const txt = document.createElement("span");
+    const b1 = document.createElement("b"); b1.textContent = name;
+    const p1 = document.createElement("p"); p1.className = "muted"; p1.style.margin = "2px 0 0"; p1.textContent = desc;
+    txt.append(b1, p1);
+    box.append(radio, txt);
+    fmtRow.append(box);
+    fmtCards[v] = box;
+  });
+
+  // 导出字段（勾选，默认全选）
+  const sec4 = document.createElement("p"); sec4.className = "muted"; sec4.style.fontWeight = "500";
+  sec4.textContent = "导出字段";
+  const fieldRow = document.createElement("div");
+  fieldRow.style.cssText = "display:flex;gap:10px 16px;flex-wrap:wrap;margin:6px 0 16px;";
+  const boxes = [];
+  for (const [key, label] of EXPORT_FIELDS) {
+    const lab = document.createElement("label");
+    lab.style.cssText = "display:flex;align-items:center;gap:5px;cursor:pointer;";
+    const cb = document.createElement("input"); cb.type = "checkbox"; cb.value = key; cb.checked = true;
+    lab.append(cb, document.createTextNode(label));
+    fieldRow.append(lab);
+    boxes.push(cb);
+  }
+
+  // 动作按钮（对齐原型："导出 CSV 文件" / "导出 JSON 文件"）
+  const actions = document.createElement("div"); actions.style.cssText = "display:flex;gap:10px;flex-wrap:wrap;";
+  const btnCsv = document.createElement("button"); btnCsv.textContent = "导出 CSV 文件";
+  const btnJson = document.createElement("button"); btnJson.textContent = "导出 JSON 文件"; btnJson.className = "ghost";
+  actions.append(btnCsv, btnJson);
+  card.append(sec1, row1, sec2, row2, sec3, fmtRow, sec4, fieldRow, actions);
+  view.append(card);
+
+  const doExport = async (format, btn) => {
+    const fields = boxes.filter((b) => b.checked).map((b) => b.value);
+    if (!fields.length) { toast("请至少勾选一个导出字段", "err"); return; }
+    const q = new URLSearchParams({ format, fields: fields.join(",") });
+    if (typeSel.value !== "0") q.set("type", typeSel.value);
+    const min = dateStartUnix(dFrom.value, false), max = dateStartUnix(dTo.value, true);
+    if (min) q.set("minTime", String(min));
+    if (max) q.set("maxTime", String(max));
+    const done = btnPending(btn, "导出中…");
+    try {
+      const resp = await fetch(API + "/books/" + bookId + "/export?" + q.toString(), {
+        headers: { Authorization: "Bearer " + state.token }
+      });
+      if (!resp.ok) {
+        let msg = "导出失败（HTTP " + resp.status + "）";
+        try { const j = await resp.json(); if (j && j.msg) msg = j.msg; } catch (_) { /* 文件响应无 JSON */ }
+        throw new Error(msg);
+      }
+      const count = Number(resp.headers.get("X-Export-Count") || "0");
+      if (count === 0) { toast("没有可导出的数据", "info"); return; }
+      if (resp.headers.get("X-Export-Truncated") === "1") {
+        toast("结果超过 10000 条，已截断", "info");
+      }
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const p = (n) => String(n).padStart(2, "0");
+      const now = new Date();
+      a.href = url;
+      a.download = "FastLedger_导出_" + now.getFullYear() + p(now.getMonth() + 1) + p(now.getDate()) + "." + format;
+      document.body.append(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast("已导出 " + count + " 条记录", "ok");
+    } catch (err) {
+      toast(err.message, "err");
+    } finally { done(); }
+  };
+  btnCsv.addEventListener("click", () => doExport("csv", btnCsv));
+  btnJson.addEventListener("click", () => doExport("json", btnJson));
+}
+
+function wrapField(label, control) {
+  const lab = document.createElement("label");
+  lab.style.cssText = "display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted-fg);";
+  lab.append(document.createTextNode(label), control);
+  return lab;
+}
+
 /* ---------- 路由 ---------- */
 async function route() {
   const hash = location.hash || "#";
-  const m = hash.match(/^#b\/(\d+)(?:\/(accounts|recycle))?/);
+  const m = hash.match(/^#b\/(\d+)(?:\/(accounts|recycle|report|export))?/);
   try {
     if (!state.token) { renderLogin(); return; }
     if (m) {
       const bookId = Number(m[1]);
       if (m[2] === "accounts") await renderAccounts(bookId);
       else if (m[2] === "recycle") await renderRecycle(bookId);
+      else if (m[2] === "report") await renderReport(bookId);
+      else if (m[2] === "export") await renderExport(bookId);
       else await renderTxns(bookId);
     } else if (hash === "#books" || hash === "#") {
       await renderBooks();

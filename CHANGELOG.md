@@ -2,6 +2,17 @@
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.50] - 2026-11-02
+
+### 阶段 6 前半：基础报表 + 数据导出（WBS 6.1 / 6.2，零迁移、纯读聚合）
+
+- **报表 API**：`GET /books/:id/reports/monthly?months=N`（最近 N 月收支趋势，1~24 归一化默认 6）与 `GET /books/:id/reports/categories?type=1|2&month=YYYY-MM`（指定月分类占比，按金额降序）；**转账不计收支**（PRD §4.3.1/§5.3）；**月份边界固定 CST（UTC+8）**——PRD §12 决策 #4"MVP 仅 CNY"，用固定偏移不依赖服务器 tzdata。
+- **导出 API**：`GET /books/:id/export?format=csv|json&fields=...&type&minTime&maxTime&accountId&categoryId`；CSV **UTF-8 BOM + CRLF**（Excel 直开无乱码）+ `sanitizeCSVCell` 公式注入防护（`= + - @` 开头或含 \t \r 前置单引号，WBS 6.2 硬约束）；字段白名单 9 列（time/type/amount/category/account/toAccount/channel/merchant/note）可裁剪；行数上限 10000，超出截断并经 `X-Export-Truncated` / `X-Export-Count` 头如实告知（不静默少给）；金额导出为"元"字符串（整数分纯整数字符串换算，禁 float）。
+- **可见性红线**：报表与导出是"看得到全部明细"的另一种形态——Monthly / CategoryShare / ExportRows 三个读路径全部挂 `txVisibilityCond`，`TestQAS3VisibilityCondWiredIntoAllReadPaths` 白名单同步扩项（登记先例同 updateReceipt）；测试验证关闭互看后 member 只能聚合本人记录。
+- **Web 端（对齐原版可交互原型）**：导航新增"报表/导出"；报表页=收支趋势（近 6 月柱状）+ 本月支出分类占比（分类排行，本月/上月切换，文案对齐原型"收支报表/收支趋势/分类排行"）；导出页=时间范围 + 收支类型 + 导出格式卡片（CSV/JSON）+ 导出字段勾选 + "导出 CSV 文件/导出 JSON 文件"，空数据 toast"没有可导出的数据"、成功"已导出 N 条记录"、文件名 `FastLedger_导出_日期.后缀`——页面结构与文案严格对照原型；零 innerHTML、金额整数分。
+- 测试：service 5 例（月度聚合/可见性/分类占比/导出与截断/CSV 防护与元串）+ handler 3 例（路由鉴权/信封契约/CSV+JSON 导出与零账务）；本地全量 `go test ./...` 全绿，`gofmt -l` 干净。
+- 遗留：6.3 预算（需迁移 0008 + 三道迁移守卫登记）、6.4/6.5 投资与净资产，属下一批次。
+
 ## [1.49] - 2026-11-02
 
 ### 全局主题设计规范 + 新版可交互原型（纯前端/文档，零后端改动）

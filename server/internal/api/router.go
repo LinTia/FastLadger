@@ -22,6 +22,7 @@ type Deps struct {
 	Categories  *service.CategoryService
 	Txs         *service.TxService
 	Sync        *service.SyncService
+	Reports     *service.ReportService
 	Instance    *instance.Meta
 	// Hub 会话撤销踢连用的 Hub（R52）。nil 时会话 handler 回落 ws.DefaultHub，
 	// 与生产接线（main 用 DefaultHub）行为一致；测试可注入独立 Hub 隔离状态。
@@ -70,6 +71,12 @@ func NewRouter(d Deps) *gin.Engine {
 	ah := &authHandler{authSvc: d.AuthService, enableRegister: d.Config.EnableRegister}
 	bh := &bookHandler{books: d.Books, members: d.Members}
 	lh := &ledgerHandler{accounts: d.Accounts, categories: d.Categories, txs: d.Txs}
+	// WBS 6.1/6.2：报表与导出（只读聚合）。nil 容忍与 Txs 同口径：测试可省略，
+	// 路由仍注册（调用时 500 由 nil 检查兜底不如直接不挂——这里选择显式判空挂载）
+	var rh *reportHandler
+	if d.Reports != nil {
+		rh = &reportHandler{svc: d.Reports}
+	}
 	sh := &syncHandler{svc: d.Sync}
 	// R52：多端会话（列表 / 撤销）。Hub 为 nil 时回落 DefaultHub（见 session_handler.go）
 	seh := newSessionHandler(d.AuthService, d.Hub)
@@ -166,6 +173,13 @@ func NewRouter(d Deps) *gin.Engine {
 		auth.POST("/books/:id/transactions/:txId/restore", lh.restoreTransaction)
 		// 阶段 4.1：回收站视图。路径不与 /transactions/:txId 的通配段冲突
 		auth.GET("/books/:id/recycle", lh.listRecycleBin)
+
+		// 报表与导出（WBS 6.1 / 6.2，只读聚合；报表读路径同样受可见性开关约束）
+		if rh != nil {
+			auth.GET("/books/:id/reports/monthly", rh.monthly)
+			auth.GET("/books/:id/reports/categories", rh.categoryShare)
+			auth.GET("/books/:id/export", rh.export)
+		}
 
 		// 增量同步（阶段 3.1 / 3.2）
 		auth.GET("/books/:id/sync/pull", sh.pull)

@@ -401,10 +401,14 @@ func qas3Callees(fn *ast.FuncDecl) map[string]bool {
 //
 // 阶段 4 追加第四处：ListDeleted（回收站视图）。回收站同样受可见性开关约束——
 // 否则"关闭互看"后，成员仍能从回收站看到别人删掉的账目明细。
+//
+// WBS 6.1/6.2 追加三处：报表聚合（Monthly / CategoryShare）与导出（ExportRows）。
+// 报表与导出是"看得到全部明细"的另一种形态，漏挂条件 = 关闭互看下的越权读取。
 func TestQAS3VisibilityCondWiredIntoAllReadPaths(t *testing.T) {
 	txFile := qas3Parse(t, "tx.go")
 	syncFile := qas3Parse(t, "sync.go")
 	visFile := qas3Parse(t, "visibility.go")
+	reportFile := qas3Parse(t, "report.go")
 
 	if qas3Func(visFile, "txVisibilityCond") == nil {
 		t.Fatal("visibility.go 中找不到 txVisibilityCond")
@@ -420,6 +424,10 @@ func TestQAS3VisibilityCondWiredIntoAllReadPaths(t *testing.T) {
 		{"sync.go", syncFile, "Pull"},
 		// 阶段 4：回收站视图也是读路径，必须同样按可见性过滤
 		{"recycle.go", qas3Parse(t, "recycle.go"), "ListDeleted"},
+		// WBS 6.1/6.2：报表聚合与导出（登记先例同 updateReceipt 变更路径）
+		{"report.go", reportFile, "Monthly"},
+		{"report.go", reportFile, "CategoryShare"},
+		{"report.go", reportFile, "ExportRows"},
 	} {
 		fn := qas3Func(c.ast, c.fn)
 		if fn == nil {
@@ -432,7 +440,8 @@ func TestQAS3VisibilityCondWiredIntoAllReadPaths(t *testing.T) {
 
 	// txVisibilityCond 必须在 visibility.go 里定义，且**只能**由这些读路径使用（防止散落实现）
 	users := qas3AllCallers(t, "txVisibilityCond")
-	want := map[string]bool{"List": true, "Get": true, "Pull": true, "ListDeleted": true}
+	want := map[string]bool{"List": true, "Get": true, "Pull": true, "ListDeleted": true,
+		"Monthly": true, "CategoryShare": true, "ExportRows": true}
 	for name := range users {
 		if !want[name] {
 			t.Errorf("txVisibilityCond 被非读路径 %q 调用：请确认没有第四处自定义过滤", name)
