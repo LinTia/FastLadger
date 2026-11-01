@@ -176,7 +176,8 @@ func TestAuthzBookDeleteMustLeaveAudit(t *testing.T) {
 	if row.At <= 0 {
 		t.Fatal("删除审计缺少时间戳（PRD §10.9 要求可查到'时间'）")
 	}
-	for _, want := range []string{`"Name":"家账"`, `"Deleted":false`} {
+	// before_json 键名按 model.Book 序列化契约（2026-11-01 起为 lowerCamel json tag）
+	for _, want := range []string{`"name":"家账"`, `"deleted":false`} {
 		if !strings.Contains(row.BeforeJson, want) {
 			t.Fatalf("删除审计的 before_json 不是变更前整行：缺 %s\n实际：%s", want, row.BeforeJson)
 		}

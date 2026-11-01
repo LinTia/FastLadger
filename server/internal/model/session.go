@@ -7,14 +7,14 @@ package model
 // VerifyWithClaims 强校验"该 jti 存在且未撤销、未过期"，因此 0007 之前
 // 签发的存量令牌升级后一律失效（用户重新登录即可，属预期）。
 type TokenSession struct {
-	Id         int64  `xorm:"pk autoincr"`
-	Jti        string `xorm:"varchar(64) notnull unique"`
-	Uid        int64  `xorm:"notnull"`
-	CreatedAt  int64  `xorm:"notnull"`
-	ExpiresAt  int64  `xorm:"notnull"`
-	RevokedAt  int64  `xorm:"notnull default 0"`
-	UserAgent  string `xorm:"varchar(255) notnull default ''"`
-	LastSeenAt int64  `xorm:"notnull default 0"`
+	Id         int64  `xorm:"pk autoincr" json:"id"`
+	Jti        string `xorm:"varchar(64) notnull unique" json:"jti"`
+	Uid        int64  `xorm:"notnull" json:"uid"`
+	CreatedAt  int64  `xorm:"notnull" json:"createdAt"`
+	ExpiresAt  int64  `xorm:"notnull" json:"expiresAt"`
+	RevokedAt  int64  `xorm:"notnull default 0" json:"revokedAt"`
+	UserAgent  string `xorm:"varchar(255) notnull default ''" json:"userAgent"`
+	LastSeenAt int64  `xorm:"notnull default 0" json:"lastSeenAt"`
 }
 
 func (TokenSession) TableName() string { return "token_sessions" }

@@ -138,13 +138,14 @@ func TestWA1DeleteLeavesAudit(t *testing.T) {
 	}
 
 	// before_json 必须是变更前的整行：名称、归属、可见性开关、以及 deleted=false 都在里面。
-	// 字段名按 model.Book 的序列化结果（books 表模型未带 json tag，故为 Go 字段名）。
+	// 字段名按 model.Book 的序列化结果——2026-11-01 起模型补齐 lowerCamel json tag
+	// （与 Account/Category/Transaction 的 API 序列化口径一致），此前为 Go 字段名。
 	for _, want := range []string{
-		`"Id":` + fmt.Sprint(b.Id),
-		`"Name":"待删账本"`,
-		`"OwnerUid":` + fmt.Sprint(e.uid),
-		`"MembersCanViewOthers":true`,
-		`"Deleted":false`, // 变更前状态：删除前一刻还没删
+		`"id":` + fmt.Sprint(b.Id),
+		`"name":"待删账本"`,
+		`"ownerUid":` + fmt.Sprint(e.uid),
+		`"membersCanViewOthers":true`,
+		`"deleted":false`, // 变更前状态：删除前一刻还没删
 	} {
 		if !strings.Contains(row.BeforeJson, want) {
 			t.Fatalf("删除审计的 before_json 不是变更前整行：缺 %s\n实际：%s", want, row.BeforeJson)
