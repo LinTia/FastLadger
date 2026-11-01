@@ -107,6 +107,14 @@ type Config struct {
 	OCRTimeoutMS     int
 	OCRMaxImageBytes int64
 	OCRRatePerMin    int
+
+	// 云端 LLM 文本兜底（WBS 5.8）。默认关闭：EBK_LLM_BASE_URL 为空即禁用。
+	// 仅传脱敏后的文本，绝不传图片；每次调用仍需请求体明示 consent=true（双侧开关）。
+	LLMBaseURL    string
+	LLMAPIKey     string
+	LLMModel      string
+	LLMTimeoutMS  int
+	LLMRatePerMin int
 }
 
 // newConfig 从环境变量读取全部配置项（只读取、不校验）。
@@ -181,9 +189,34 @@ func newConfig() (*Config, error) {
 	}
 	ocrURL := strings.TrimSpace(os.Getenv("EBK_OCR_FALLBACK_URL"))
 
+	// LLM 文本兜底（5.8）：URL 为空 = 默认关闭；一旦配置 URL 则 key/model 必须齐全，
+	// 半配置启动即失败——防止"以为开了兜底其实静默没开"的假可用。
+	llmURL := strings.TrimSpace(os.Getenv("EBK_LLM_BASE_URL"))
+	llmKey := strings.TrimSpace(os.Getenv("EBK_LLM_API_KEY"))
+	llmModel := strings.TrimSpace(os.Getenv("EBK_LLM_MODEL"))
+	llmTimeout, err := envInt("EBK_LLM_TIMEOUT_MS", 15000)
+	if err != nil {
+		return nil, err
+	}
+	llmRate, err := envInt("EBK_LLM_RATE_PER_MIN", 5)
+	if err != nil {
+		return nil, err
+	}
+	if llmTimeout > 120000 {
+		return nil, fmt.Errorf("EBK_LLM_TIMEOUT_MS 超过上限 120000，当前=%d", llmTimeout)
+	}
+	if llmRate > 1000 {
+		return nil, fmt.Errorf("EBK_LLM_RATE_PER_MIN 超过上限 1000，当前=%d", llmRate)
+	}
+	if llmURL != "" && (llmKey == "" || llmModel == "") {
+		return nil, fmt.Errorf("EBK_LLM_BASE_URL 已配置但 EBK_LLM_API_KEY / EBK_LLM_MODEL 缺失：LLM 兜底为半配置状态，拒绝启动")
+	}
+
 	return &Config{
 		OCRFallbackURL: ocrURL, OCRTimeoutMS: ocrTimeout,
 		OCRMaxImageBytes: int64(ocrMaxImageBytes), OCRRatePerMin: ocrRate,
+		LLMBaseURL: llmURL, LLMAPIKey: llmKey, LLMModel: llmModel,
+		LLMTimeoutMS: llmTimeout, LLMRatePerMin: llmRate,
 		HTTPPort:           envOr("EBK_HTTP_PORT", DefaultHTTPPort),
 		DBPath:             envOr("EBK_DB_PATH", DefaultDBPath),
 		DataDir:            envOr("EBK_DATA_DIR", DefaultDataDir),

@@ -49,6 +49,13 @@ type OCRService struct {
 	maxImageBytes int64
 	ratePerMin    int
 	limiter       *Limiter
+	// LLM 文本兜底（WBS 5.8）：默认关闭（llmURL 空），独立配额桶
+	llmURL        string
+	llmKey        string
+	llmModel      string
+	llmClient     *http.Client
+	llmRatePerMin int
+	llmLimiter    *Limiter
 }
 
 func NewOCRService(cfg *config.Config) *OCRService {
@@ -65,11 +72,14 @@ func NewOCRService(cfg *config.Config) *OCRService {
 		}
 		endpoint = strings.TrimSpace(cfg.OCRFallbackURL)
 	}
+	llmURL, llmKey, llmModel, llmClient, llmRate := wireLLM(cfg)
 	return &OCRService{
 		fallbackURL: endpoint,
 		client: &http.Client{Timeout: time.Duration(timeout) * time.Millisecond,
 			CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }},
 		maxImageBytes: maxBytes, ratePerMin: rate, limiter: NewLimiter(),
+		llmURL: llmURL, llmKey: llmKey, llmModel: llmModel,
+		llmClient: llmClient, llmRatePerMin: llmRate, llmLimiter: NewLimiter(),
 	}
 }
 

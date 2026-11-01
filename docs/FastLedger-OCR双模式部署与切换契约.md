@@ -21,6 +21,24 @@
 
 `recognize` 与 `parse` 共用 uid 每分钟限额，默认 10 次，限流返回 429。图片最大 10 MiB，在 multipart 解析前限制请求体；服务未配置或下游异常统一 503。不得把候选自动写入交易，用户确认仍由既有交易入口处理。
 
+### 云端 LLM 文本兜底（WBS 5.8，2026-11-01 新增）
+
+- `POST /api/v1/ocr/llm-parse`：JSON `{ "text": "...", "consent": true }`。返回 `data={candidates:[...]}`，候选字段与 `parse` 完全一致（`confidence` 为 LLM 自报值，服务端复核后透传，仍不用于过滤决策）。
+- **默认关闭**：`EBK_LLM_BASE_URL` 为空即禁用（503"未启用"）。配置 URL 则 `EBK_LLM_API_KEY` / `EBK_LLM_MODEL` 必须齐全，半配置启动即失败（fail-fast）。
+- **双侧开关**：服务端配置是第一道；每次调用必须请求体 `consent=true`，缺失/ false → 400。
+- **仅传文本**：本端点只接收文本，不存在图片通道。出站前对 ≥11 位纯数字串（手机号/银行卡/证件号）做 `前3****后4` 掩码；金额（带分隔符）不受影响。
+- **不信任 LLM 输出**：候选逐字段服务端复核——金额正整数且 ≤ 1 亿分、方向仅 `income/expense`、日期必须是合法 `YYYY-MM-DD`、confidence ∈ [0,1]、描述截断 255 字、候选数 ≤ 20；非法候选直接丢弃（不修正、不取绝对值），整体非 JSON / 上游非 2xx → 503。
+- **独立配额**：`llm:<uid>` 每分钟桶（`EBK_LLM_RATE_PER_MIN`，默认 5），与 `ocr:<uid>` 完全隔离。
+- 下游为 OpenAI 兼容 `POST {EBK_LLM_BASE_URL}/chat/completions`（Bearer 认证，temperature=0，禁跟随重定向，响应体有界 1 MiB）。**绝不写 transactions/audit**。
+
+| 变量 | 默认值 | 说明 |
+|---|---:|---|
+| `EBK_LLM_BASE_URL` | 空 | 空 = 禁用（默认）；配置则 key/model 必须齐全 |
+| `EBK_LLM_API_KEY` | 空 | Bearer 认证密钥 |
+| `EBK_LLM_MODEL` | 空 | 模型名 |
+| `EBK_LLM_TIMEOUT_MS` | 15000 | 下游超时，正整数，最大 120000 |
+| `EBK_LLM_RATE_PER_MIN` | 5 | uid 每分钟 LLM 兜底次数，正整数，最大 1000 |
+
 ## 环境变量
 
 | 变量 | 默认值 | 说明 |

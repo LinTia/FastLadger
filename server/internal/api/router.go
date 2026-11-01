@@ -111,6 +111,8 @@ func NewRouter(d Deps) *gin.Engine {
 		auth.GET("/users/me", ah.me)
 		auth.POST("/ocr/recognize", ocr.recognize)
 		auth.POST("/ocr/parse", ocr.parse)
+		// WBS 5.8：云端 LLM 文本兜底（默认关闭，需请求体 consent=true）
+		auth.POST("/ocr/llm-parse", ocr.llmParse)
 
 		// 多端会话（R52，WBS 5.10 / PRD §10.10）：列表 / 登出其它设备 / 撤销指定设备。
 		// DELETE 的两个路由同一静态节点（sessions）分挂 handler 与 :jti 参数子节点，

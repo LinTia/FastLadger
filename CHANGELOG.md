@@ -2,6 +2,17 @@
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.46] - 2026-11-01
+
+### 云端 LLM 文本兜底（WBS 5.8，默认关闭）
+
+- 新端点 `POST /api/v1/ocr/llm-parse`：JSON `{text, consent}`，返回候选结构与 `/ocr/parse` 一致；**绝不写 transactions/audit**（e2e 断言零账务副作用）。
+- **默认关闭**：`EBK_LLM_BASE_URL` 为空即禁用（503）；配置则 `EBK_LLM_API_KEY`/`EBK_LLM_MODEL` 必须齐全，半配置启动即失败。**双侧开关**：服务端配置之外，每次调用必须 `consent=true`（缺失 → 400）。
+- **仅传文本 + 出站脱敏**：不存在图片通道；≥11 位纯数字串（手机号/银行卡/证件号）出站前 `前3****后4` 掩码，金额不受影响。
+- **不信任 LLM**：候选逐字段服务端复核（金额正整数 ≤ 1 亿分、方向仅 income/expense、日期合法、confidence ∈ [0,1]、描述 ≤ 255 字、候选 ≤ 20），非法候选丢弃不修正；整体非 JSON / 上游非 2xx → 503。下游为 OpenAI 兼容 chat/completions（Bearer，temperature=0，禁重定向，响应有界）。
+- **独立配额**：`llm:<uid>` 每分钟桶（默认 5），与 `ocr:<uid>` 隔离。契约更新：`docs/FastLedger-OCR双模式部署与切换契约.md`。
+- 测试：service 7 例（脱敏/happy/consent/disabled/上游失败/候选校验/限流与桶隔离）+ handler 3 例（401/400/503/200 e2e + 零账务）；`gofmt -l` 为空。
+
 ## [1.45] - 2026-11-01
 
 ### 交易更新（WBS 5.9b：PUT /books/:id/transactions/:txId，Web 端同批接入）
