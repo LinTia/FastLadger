@@ -14,15 +14,18 @@ import (
 
 // Deps 路由依赖
 type Deps struct {
-	Config        *config.Config
-	AuthService   *service.AuthService
-	Books         *service.BookService
-	Members       *service.MemberService
-	Accounts      *service.AccountService
-	Categories    *service.CategoryService
-	Txs           *service.TxService
-	Sync          *service.SyncService
-	Instance      *instance.Meta
+	Config      *config.Config
+	AuthService *service.AuthService
+	Books       *service.BookService
+	Members     *service.MemberService
+	Accounts    *service.AccountService
+	Categories  *service.CategoryService
+	Txs         *service.TxService
+	Sync        *service.SyncService
+	Instance    *instance.Meta
+	// Hub 会话撤销踢连用的 Hub（R52）。nil 时会话 handler 回落 ws.DefaultHub，
+	// 与生产接线（main 用 DefaultHub）行为一致；测试可注入独立 Hub 隔离状态。
+	Hub           *ws.Hub
 	SchemaVersion int64
 }
 
@@ -67,6 +70,8 @@ func NewRouter(d Deps) *gin.Engine {
 	bh := &bookHandler{books: d.Books, members: d.Members}
 	lh := &ledgerHandler{accounts: d.Accounts, categories: d.Categories, txs: d.Txs}
 	sh := &syncHandler{svc: d.Sync}
+	// R52：多端会话（列表 / 撤销）。Hub 为 nil 时回落 DefaultHub（见 session_handler.go）
+	seh := newSessionHandler(d.AuthService, d.Hub)
 
 	r.GET("/healthz", func(c *gin.Context) {
 		data := gin.H{
@@ -96,6 +101,13 @@ func NewRouter(d Deps) *gin.Engine {
 
 		auth := v1.Group("", JWTAuth(d.AuthService))
 		auth.GET("/users/me", ah.me)
+
+		// 多端会话（R52，WBS 5.10 / PRD §10.10）：列表 / 登出其它设备 / 撤销指定设备。
+		// DELETE 的两个路由同一静态节点（sessions）分挂 handler 与 :jti 参数子节点，
+		// 不构成 gin 路由树冲突（冲突仅发生在"同层静态段 vs 参数段"）。
+		auth.GET("/auth/sessions", seh.list)
+		auth.DELETE("/auth/sessions", seh.revokeOthers)
+		auth.DELETE("/auth/sessions/:jti", seh.revokeOne)
 
 		auth.GET("/books", bh.list)
 		auth.POST("/books", bh.create)

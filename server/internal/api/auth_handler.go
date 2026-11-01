@@ -33,7 +33,8 @@ type authAPI interface {
 	Register(username, password string) (*model.User, error)
 	// LoginFromIP 登录：clientIP 取 gin 的 ClientIP()（router.go 已 SetTrustedProxies(nil)，
 	// 恒等于 TCP 对端）。登录失败限流按它分桶，绝不能用请求头拼出来的值。
-	LoginFromIP(username, password, clientIP string) (string, error)
+	// userAgent 为客户端自报的 User-Agent（R52 会话列表展示用，允许为空串）。
+	LoginFromIP(username, password, clientIP, userAgent string) (string, error)
 	GetByID(uid int64) (*model.User, error)
 }
 
@@ -75,7 +76,8 @@ func (h *authHandler) login(c *gin.Context) {
 	}
 	// ClientIP 必须传真实对端地址：登录失败限流按它分桶（A6）。
 	// router.go 已 SetTrustedProxies(nil)，因此它不受 X-Forwarded-For 操纵。
-	token, err := h.authSvc.LoginFromIP(req.Username, req.Password, c.ClientIP())
+	// User-Agent 仅作会话列表展示（R52），客户端可伪造、不参与鉴权决策。
+	token, err := h.authSvc.LoginFromIP(req.Username, req.Password, c.ClientIP(), c.GetHeader("User-Agent"))
 	if err != nil {
 		mapLoginErr(c, err)
 		return

@@ -148,6 +148,17 @@ type Client struct {
 	// 该连接就会按过期权限收发明细。Subscribe 每次写某账本的 canView 时把 visSeq 自增，
 	// RefreshVisibility 回写前比对自己快照到的序号，不一致即放弃本次写入（让更新的结果生效）。
 	visSeq map[int64]uint64
+
+	// ---- 多端会话（R52）----
+	// jti 本连接绑定的会话标识：ServeWS 在 Register 前经 SetJti 写入，此后只读。
+	// KickJti 按它定位"同一会话"的全部在线连接（撤销会话 → 主动断开）。
+	// jti 为空串的连接（仅可能来自直调 ServeWS 的测试或未来新入口）不可被踢。
+	jti string
+	// kickCh 会话撤销信号：Kick() 关闭它，写循环收到即发 4003 关闭帧并退出。
+	// 惰性创建（字面量构造的 Client 也安全）。
+	kickCh chan struct{}
+	// kicked kickCh 是否已关闭（与 kickCh 同锁保护，保证 Kick 幂等且只关一次）
+	kicked bool
 }
 
 // NewClient 构造一个连接级客户端（Send/BookIds/canView/visSeq 均已初始化）。
@@ -208,6 +219,47 @@ func (c *Client) SubscriptionCount() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return len(c.BookIds)
+}
+
+// SetJti 绑定会话 jti（R52：连接建立时由 ServeWS 调用一次，此后不再修改）。
+func (c *Client) SetJti(jti string) {
+	c.mu.Lock()
+	c.jti = jti
+	c.mu.Unlock()
+}
+
+// Jti 读取绑定的会话 jti（Hub.KickJti 与观测/测试用）。
+func (c *Client) Jti() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.jti
+}
+
+// Kick 请求断开该连接（R52 会话撤销路径，幂等）。
+// 返回 true 表示本次调用真正触发了断开；false 表示此前已被踢过。
+func (c *Client) Kick() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.kicked {
+		return false
+	}
+	if c.kickCh == nil {
+		c.kickCh = make(chan struct{})
+	}
+	c.kicked = true
+	close(c.kickCh)
+	return true
+}
+
+// Kicked 返回会话撤销信号通道（写循环监听）。通道只会在 Kick 时被关闭一次，
+// 其余任何路径都不得关闭它。
+func (c *Client) Kicked() <-chan struct{} {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.kickCh == nil {
+		c.kickCh = make(chan struct{})
+	}
+	return c.kickCh
 }
 
 // subBucket 按 uid 计量的订阅令牌桶状态（SYNC-01：限流必须按 uid 而不是按连接）。
@@ -446,6 +498,35 @@ func (h *Hub) Count() int {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	return len(h.clients)
+}
+
+// KickJti 主动断开绑定指定会话（jti）的全部在线连接（R52 多端会话撤销）。
+//
+// 返回真正触发断开的连接数（0 = 该会话当前没有在线连接）。
+// 实现说明：遍历注册表而不是维护 jti→连接索引 —— 本方法只在"撤销会话"这一
+// 低频事件被调用，而索引需要在 Register/Unregister 两条路径上同步维护，漏同步的
+// 后果是"静默漏踢"或条目泄漏；在线连接数受 SYNC-01 上限约束，遍历代价有界。
+//
+// 锁顺序：Hub.mu(读) → Client.mu（与包注释的单向序一致；Kick 只取 Client.mu）。
+func (h *Hub) KickJti(jti string) int {
+	if jti == "" {
+		return 0
+	}
+	h.mu.RLock()
+	targets := make([]*Client, 0, 2)
+	for c := range h.clients {
+		if c.Jti() == jti {
+			targets = append(targets, c)
+		}
+	}
+	h.mu.RUnlock()
+	kicked := 0
+	for _, c := range targets {
+		if c.Kick() {
+			kicked++
+		}
+	}
+	return kicked
 }
 
 // Generation 读取某账本当前的权限 generation（观测/测试用）。

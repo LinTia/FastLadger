@@ -37,6 +37,10 @@ const (
 	// 与 uidContextKey 同理：ws 不能导入 api，故由 ws 导出该契约常量，
 	// api.wsAuth 直接引用它（而不是各写一份字面量），避免两边漂移。
 	TokenExpContextKey = "token_exp"
+	// TokenJtiContextKey 认证中间件写入上下文的会话 jti（R52 多端会话）。
+	// 契约与 TokenExpContextKey 相同：api.wsAuth 写入，ServeWS 读取并绑定到连接；
+	// 撤销会话时 api 层调 Hub.KickJti 按它主动断开全部在线连接。
+	TokenJtiContextKey = "token_jti"
 	// closeTokenExpired 令牌到期时服务端主动发送的关闭码。
 	// 4000-4999 是 WebSocket 规范留给应用层自定义的区间；
 	// 客户端据此"重新登录后再重连"，而不是当成网络抖动无脑重连。
@@ -45,6 +49,10 @@ const (
 	// 客户端据此**退避重连**（说明服务端在限连接，重试要拉开间隔），
 	// 而不是立即重连形成冲击。
 	closeTooManyConnections = 4002
+	// closeSessionRevoked 会话被撤销时服务端主动发送的关闭码（R52）。
+	// 客户端据此【清除本地凭证并回到登录页】：该设备的会话已被用户主动登出，
+	// 重连（哪怕换了新 token 之前的旧 token）也只会得到 401。
+	closeSessionRevoked = 4003
 )
 
 // wsErrorMsg 服务端主动下行的错误通知（订阅被拒等）。
@@ -145,6 +153,14 @@ func ServeWS(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "msg": "登录已失效，请重新登录"})
 		return
 	}
+	// R52：会话 jti（wsAuth 从 claims 取出并放入上下文）。
+	// 生产路径必然存在；缺失（仅可能来自直调 ServeWS 的测试或未来的新入口）时
+	// 连接照常建立，只是不可被 KickJti 踢出——撤销该会话后要等 token 到期才会关闭。
+	// 新增 WS 入口时必须同步写入 jti（fail-closed 依赖 api.wsAuth 这一条链）。
+	jti := ""
+	if v, ok := c.Get(TokenJtiContextKey); ok {
+		jti, _ = v.(string)
+	}
 
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
@@ -177,7 +193,8 @@ func ServeWS(c *gin.Context) {
 	hub := DefaultHub
 
 	client := NewClient()
-	client.UID = uid // 连接绑定认证用户（R05）：广播按这个 uid 做可见性过滤
+	client.UID = uid   // 连接绑定认证用户（R05）：广播按这个 uid 做可见性过滤
+	client.SetJti(jti) // R52：绑定会话 jti，撤销会话时 KickJti 按它定位连接
 	if err := hub.Register(client); err != nil {
 		// SYNC-01：连接数超上限（单用户 / 全局）。必须在握手后立即明确拒绝并
 		// 关闭——带结构化错误帧 + 关闭码 4002，客户端据此退避重连，而不是把
@@ -219,7 +236,8 @@ func ServeWS(c *gin.Context) {
 		}
 	}()
 
-	// 写循环：发消息 + 定时 ping（保活、检测断线）
+	// 写循环：发消息 + 定时 ping（保活、检测断线）+ 会话撤销信号（R52）
+	kick := client.Kicked() // 通道在循环外取一次；只在 Kick 时被关闭，无需重建
 	ticker := time.NewTicker(pingPeriod)
 	defer ticker.Stop()
 	for {
@@ -229,6 +247,13 @@ func ServeWS(c *gin.Context) {
 			// 而不是让它把这次断开当成网络抖动去无脑重连。
 			_ = conn.WriteControl(websocket.CloseMessage,
 				websocket.FormatCloseMessage(closeTokenExpired, "token expired"),
+				time.Now().Add(writeWait))
+			return
+		case <-kick:
+			// R52：会话被撤销（api 层 Hub.KickJti 触发）。带 4003 关闭码，
+			// 客户端据此清除本地凭证回到登录页，而不是当成网络抖动重连。
+			_ = conn.WriteControl(websocket.CloseMessage,
+				websocket.FormatCloseMessage(closeSessionRevoked, "session revoked"),
 				time.Now().Add(writeWait))
 			return
 		case m := <-client.Send: // Send 永不 close，无需 ok 分支

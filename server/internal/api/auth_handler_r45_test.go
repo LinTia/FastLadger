@@ -38,6 +38,8 @@ type stubAuthAPI struct {
 	lastPass string
 	// lastLoginIP 记录登录入口透传的 clientIP
 	lastLoginIP string
+	// lastLoginUA 记录登录入口透传的 User-Agent（R52：会话展示用透传）
+	lastLoginUA string
 }
 
 func (s *stubAuthAPI) Register(username, password string) (*model.User, error) {
@@ -53,14 +55,16 @@ func (s *stubAuthAPI) Register(username, password string) (*model.User, error) {
 }
 
 func (s *stubAuthAPI) Login(username, password string) (string, error) {
-	return s.LoginFromIP(username, password, "")
+	return s.LoginFromIP(username, password, "", "")
 }
 
 // LoginFromIP 实现 authAPI 接口（生产入口按 ClientIP 分桶做失败限流，A6）。
 // 替身只透传预设错误/令牌；分桶与计数逻辑由 service 层自己的用例覆盖，
-// 这里额外把透传的 clientIP 记下来，供断言"登录入口必须传真实对端地址"。
-func (s *stubAuthAPI) LoginFromIP(username, password, clientIP string) (string, error) {
+// 这里额外把透传的 clientIP / User-Agent 记下来，供断言"登录入口必须传真实
+// 对端地址"与"UA 原样透传给会话记录（R52）"。
+func (s *stubAuthAPI) LoginFromIP(username, password, clientIP, userAgent string) (string, error) {
 	s.lastLoginIP = clientIP
+	s.lastLoginUA = userAgent
 	if s.loginErr != nil {
 		return "", s.loginErr
 	}
