@@ -2,6 +2,17 @@
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.47] - 2026-11-01
+
+### 第五阶段客户端批次（WBS 5.1 / 5.2 / 5.6 / 5.3，`client/` Flutter 工程）
+
+- **5.1 工程骨架**：`flutter create`（Android/Windows/Web 目标，Flutter 3.47.9）；`ApiClient`（Bearer + {code,msg,data} 信封统一解包、401 清会话回调、multipart 上传）、`TokenStore`/`LocalStore` 抽象（内存实现，生产接 secure storage/sqflite 的接入点）、`Outbox` 持久化离线队列（**clientUuid 入队即生成并持久化**，flush 2xx 出队 / 4xx 丢弃 / 5xx·网络异常留队重试，重放同键幂等）；登录页 + 账本列表首页。
+- **5.2 CRUD 页面**：账本详情（交易列表/下拉刷新）、记一笔/编辑表单（**类型只读**——服务端契约类型不可改；金额字符串↔整数分禁 double；编辑携带 `baseVersion` 乐观锁，409 提示刷新）、删除（确认弹窗，幂等 clientUuid）；账户管理（浏览/新增/删除）、分类管理（浏览/新增/删除，catType 区分收支）。
+- **5.6 端侧规则引擎**：`lib/parse/receipt_parser.dart` 与服务端 `ocr_parse.go` **同语义**（全角规范化、千分位、整数转分禁 double、带符号金额拒绝、平台名不判方向、滑窗合并、唯一确认才出候选、confidence 恒 0）；测试向量与 Go 行为对齐（含"HH:MM 的时数字被当第二金额→整窗丢弃"的已知保守语义）。
+- **5.3 Windows 热键 + 截图 + 确认弹窗**：平台通道 `fastledger/hotkey`（C++ RegisterHotKey + GDI+ PrintWindow 截图，PW_RENDERFULLCONTENT 支持 DirectComposition 内容）；`runOcrFlow` 编排：截图 → 服务端 recognize → **端侧离线 parse 优先** → 空则服务端 parse → `TxConfirmDialog` 候选确认弹窗（勾选 + 选账户 + 用户点击才入账）；空候选/503/429/异常一律回退手动提示，**绝不自动入账**。
+- **验证口径（诚实声明）**：Dart 侧 `flutter analyze` 0 issues、`flutter test` **50/50 全绿**（规则引擎向量 / outbox 幂等 / 信封与 401 / 金额往返 / 表单与弹窗 widget 测试 / 热键通道 mock / OCR 编排）；**C++ runner 侧（hotkey_handler.cpp / flutter_window.cpp / CMake）因本机无 Visual Studio 无法编译与运行时验证**，首次 Windows 构建须人工复核——客户端整体未做真机/桌面运行时验证。
+- 测试基建：无代理环境变量下 flutter_tester 方可连接（本地 WebSocket 被系统代理拦截为已知环境问题）。
+
 ## [1.46] - 2026-11-01
 
 ### 云端 LLM 文本兜底（WBS 5.8，默认关闭）

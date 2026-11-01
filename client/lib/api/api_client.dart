@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
@@ -64,6 +65,46 @@ class ApiClient {
 
   Future<dynamic> delete(String path, {Map<String, String>? query}) async {
     final env = await _send('DELETE', _uri(path, query));
+    return env.data;
+  }
+
+  /// multipart 文件上传（OCR recognize 用）。返回解信封后的 data。
+  Future<dynamic> postMultipart(
+      String path, String fileField, Uint8List bytes, String filename) async {
+    final token = await tokens.read();
+    var request = http.MultipartRequest('POST', _uri(path));
+    if (token != null && token.isNotEmpty) {
+      request.headers['Authorization'] = 'Bearer $token';
+    }
+    request.files.add(
+        http.MultipartFile.fromBytes(fileField, bytes, filename: filename));
+    final http.StreamedResponse streamed;
+    try {
+      streamed = await _http.send(request);
+    } catch (_) {
+      throw ApiException(0, '网络不可用，请检查服务器地址与网络');
+    }
+    final text = await streamed.stream.bytesToString();
+    ApiEnvelope env;
+    try {
+      final decoded = jsonDecode(text) as Map<String, dynamic>;
+      env = ApiEnvelope(
+        (decoded['code'] as num?)?.toInt() ?? -1,
+        (decoded['msg'] as String?) ?? '',
+        decoded['data'],
+      );
+    } catch (_) {
+      throw ApiException(streamed.statusCode, '响应解析失败（非 JSON 信封）');
+    }
+    if (streamed.statusCode == 401) {
+      await tokens.clear();
+      onUnauthorized?.call();
+      throw ApiException(401, env.msg.isEmpty ? '登录已过期，请重新登录' : env.msg);
+    }
+    if (streamed.statusCode < 200 || streamed.statusCode >= 300 || env.code != 0) {
+      throw ApiException(streamed.statusCode,
+          env.msg.isEmpty ? '请求失败（HTTP ${streamed.statusCode}）' : env.msg);
+    }
     return env.data;
   }
 

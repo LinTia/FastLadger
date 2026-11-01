@@ -4,6 +4,9 @@ import '../api/api_client.dart';
 import '../api/ledger_api.dart';
 import '../core/money.dart';
 import '../core/uuid.dart';
+import '../hotkey/hotkey_service.dart';
+import '../ocr/ocr_api.dart';
+import '../ocr/ocr_flow.dart';
 import 'accounts_page.dart';
 import 'categories_page.dart';
 import 'tx_form_page.dart';
@@ -31,11 +34,38 @@ class _BookDetailPageState extends State<BookDetailPage> {
   List<dynamic> _accounts = const [];
   List<dynamic> _categories = const [];
   String? _error;
+  HotkeyService? _hotkeys;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _registerHotkey();
+  }
+
+  /// WBS 5.3：Windows 全局热键（默认 Ctrl+Alt+F）→ 截图 → OCR → 确认弹窗。
+  /// OCR 与账本共用同一 ApiClient（token 一致）。
+  Future<void> _registerHotkey() async {
+    final ocr = OcrApi(widget.ledger.client);
+    final hk = createWindowsHotkeyService(
+        onHotkey: () => runOcrFlow(
+              context,
+              ocr: ocr,
+              ledger: widget.ledger,
+              bookId: widget.bookId,
+              accounts: _accounts,
+              categories: _categories,
+              screenshot: () => _hotkeys!.screenshot(),
+            ));
+    if (hk == null) return;
+    final ok = await hk.register();
+    if (ok && mounted) setState(() => _hotkeys = hk);
+  }
+
+  @override
+  void dispose() {
+    _hotkeys?.unregister();
+    super.dispose();
   }
 
   Future<void> _load() async {
