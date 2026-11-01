@@ -4,8 +4,9 @@
 //
 //	fastledger                                   # 启动 HTTP 服务
 //	fastledger db migrate                        # 手动执行数据库迁移
-//	fastledger db purge                          # 回收站与审计的到期硬清除（可用
-//	                                             #   --recycle-ttl-days / --audit-retention-days 覆盖）
+//	fastledger db purge                          # 回收站、审计与多端会话的到期硬清除（可用
+//	                                             #   --recycle-ttl-days / --audit-retention-days 覆盖；
+//	                                             #   会话保留期固定 7 天）
 //	fastledger instance bump                     # 恢复后递增 restore_epoch（不随备份恢复）
 //	fastledger user create --username u --password p [--owner]
 //	                                             # --owner 仅在【无任何用户】时可用（首个 owner 初始化）
@@ -321,11 +322,13 @@ func warnUnbackfilledTransfers(engine *xorm.Engine) {
 	}
 }
 
-// handleDBPurge 回收站与审计的到期硬清除（WBS 4.1 / 4.3，PRD §12.1）。
+// handleDBPurge 回收站与审计、多端会话的到期硬清除（WBS 4.1 / 4.3，PRD §12.1；R52）。
 //
 // 与迁移同一口径：**仅 CLI 手动执行**，服务启动绝不静默删数据。
 // 保留天数默认取环境变量（EBK_RECYCLE_TTL_DAYS / EBK_AUDIT_RETENTION_DAYS），
 // 可用 --recycle-ttl-days / --audit-retention-days 覆盖（便于演练与应急）。
+// 会话行的保留期是固定 7 天（service.SessionRetentionDays），不开放配置：
+// 会话行的价值远低于审计，配置面越少越好。
 //
 // GPT-R34：参数解析【先于任何 DELETE】完成，且非法输入一律 fail-fast。
 // GPT-R38/INFRA-08：--dry-run 只扫描统计、绝不 DELETE；正式执行改为
@@ -341,12 +344,16 @@ func handleDBPurge(engine *xorm.Engine, args []string) {
 	}
 	if opts.DryRun {
 		log.Printf("[dry-run] 预览：回收站将硬清除 %d 条（TTL=%d 天，明细：%s）；"+
-			"审计将清除 %d 条（保留 %d 天）。本次【未删除任何数据】，去掉 --dry-run 后执行。",
-			res.Recycled, opts.RecycleTTLDays, res.bookDetail(), res.Audited, opts.AuditRetentionDays)
+			"审计将清除 %d 条（保留 %d 天）；会话将清除 %d 条（已撤销/已过期超 %d 天）。"+
+			"本次【未删除任何数据】，去掉 --dry-run 后执行。",
+			res.Recycled, opts.RecycleTTLDays, res.bookDetail(), res.Audited,
+			opts.AuditRetentionDays, res.Sessions, service.SessionRetentionDays)
 		return
 	}
-	log.Printf("清理完成：回收站硬清除 %d 条（TTL=%d 天，账本 %d 个）；审计清除 %d 条（保留 %d 天）",
-		res.Recycled, opts.RecycleTTLDays, len(res.Books), res.Audited, opts.AuditRetentionDays)
+	log.Printf("清理完成：回收站硬清除 %d 条（TTL=%d 天，账本 %d 个）；审计清除 %d 条（保留 %d 天）；"+
+		"会话清除 %d 条（已撤销/已过期超 %d 天）",
+		res.Recycled, opts.RecycleTTLDays, len(res.Books), res.Audited,
+		opts.AuditRetentionDays, res.Sessions, service.SessionRetentionDays)
 }
 
 // purgeOptions db purge 解析后的参数（天数均为已校验的正整数）
@@ -374,6 +381,8 @@ type purgeResult struct {
 	// Recycled / Audited 回收站与审计的条数合计
 	Recycled int64
 	Audited  int64
+	// Sessions 会话行清除条数（R52：已过期 + 已撤销超保留期；dry-run 时为扫描预计数）
+	Sessions int64
 }
 
 // bookDetail 人读的按账本明细（"1:3条 2:0条"）
@@ -408,7 +417,7 @@ func purgeWithOptions(engine *xorm.Engine, args []string) (*purgeResult, *purgeO
 		return nil, nil, err
 	}
 	if opts.DryRun {
-		res := &purgeResult{DryRun: true, Books: plan.Books}
+		res := &purgeResult{DryRun: true, Books: plan.Books, Sessions: plan.SessionsPending}
 		for _, b := range plan.Books {
 			res.Recycled += b.Pending
 		}
@@ -452,6 +461,16 @@ func scanPurge(engine *xorm.Engine, opts *purgeOptions) (*purgePlan, error) {
 		return nil, fmt.Errorf("统计到期审计失败：%w", err)
 	}
 	plan.AuditPending = audit
+	// R52：会话行的扫描统计。cutoff 必须与 service.PurgeExpiredSessions 的
+	// 执行口径【逐字一致】（固定 7 天保留），统计才不是空头支票。
+	var sessions int64
+	if err := engine.DB().DB.QueryRow(
+		`SELECT COUNT(1) FROM token_sessions WHERE expires_at <= ? OR (revoked_at > 0 AND revoked_at <= ?)`,
+		now-int64(service.SessionRetentionDays)*secondsPerDay,
+		now-int64(service.SessionRetentionDays)*secondsPerDay).Scan(&sessions); err != nil {
+		return nil, fmt.Errorf("统计到期会话失败：%w", err)
+	}
+	plan.SessionsPending = sessions
 	return plan, nil
 }
 
@@ -478,24 +497,35 @@ func executePurge(engine *xorm.Engine, plan *purgePlan, opts *purgeOptions) (*pu
 		return res, fmt.Errorf("审计保留期清除失败：%w（回收站已完成：%v）", err, progress.Completed)
 	}
 	res.Audited = audited
+	// R52：会话清理放在最后（它依赖 0007 的表存在；回收站/审计失败时不碰它）
+	sessions, err := purgeSessionFn(engine, plan.Now)
+	if err != nil {
+		return res, fmt.Errorf("会话保留期清除失败：%w（回收站/审计已完成：%v）", err, progress.Completed)
+	}
+	res.Sessions = sessions
 	return res, nil
 }
 
 // purgePlan 扫描阶段的计划
 type purgePlan struct {
-	Books        []purgeBookPlan
-	AuditPending int64
-	Cutoff       int64
-	Now          int64
+	Books           []purgeBookPlan
+	AuditPending    int64
+	SessionsPending int64
+	Cutoff          int64
+	Now             int64
 }
 
-// purgeBookFn / purgeAuditFn 生产路径指向真实清除；测试可注入故障（INFRA-08）
+// purgeBookFn / purgeAuditFn / purgeSessionFn 生产路径指向真实清除；测试可注入故障（INFRA-08）
 var (
 	purgeBookFn = func(txs *service.TxService, bookID int64, ttlDays int, now int64) (int64, error) {
 		return txs.PurgeExpiredTransactions(bookID, ttlDays, now)
 	}
 	purgeAuditFn = func(engine *xorm.Engine, retentionDays int, now int64) (int64, error) {
 		return service.PurgeAuditLogs(engine, retentionDays, now)
+	}
+	// purgeSessionFn R52：会话行清理（固定 7 天保留，无参数）
+	purgeSessionFn = func(engine *xorm.Engine, now int64) (int64, error) {
+		return service.PurgeExpiredSessions(engine, now)
 	}
 )
 
