@@ -1,0 +1,156 @@
+{
+  "$schema": "FastLedger design tokens v1.0",
+  "$doc": "docs/FastLedger-Web设计规范.md",
+  "$source": "prototype/assets/index-VjxVMuh2.css :root variables",
+  "color": {
+    "theme": {
+      "background": "#f9f8f5",
+      "foreground": "#1f2e26",
+      "card": "#ffffff",
+      "cardForeground": "#1f2e26",
+      "popover": "#ffffff",
+      "popoverForeground": "#1f2e26",
+      "primary": "#34b262",
+      "primaryHover": "#2fa257",
+      "primaryForeground": "#ffffff",
+      "secondary": "#eaf6ee",
+      "secondaryForeground": "#288a4c",
+      "muted": "#f2f8f4",
+      "mutedForeground": "#758a80",
+      "accent": "#eaf6ee",
+      "accentForeground": "#288a4c",
+      "border": "#e3e8e6",
+      "input": "#e3e8e6",
+      "ring": "#34b262",
+      "destructive": "#ef4343",
+      "destructiveHover": "#e03535",
+      "destructiveForeground": "#ffffff"
+    },
+    "semantic": {
+      "success": "#31a545",
+      "successForeground": "#f2fdf1",
+      "warning": "#ed6e0c",
+      "warningForeground": "#fff6eb",
+      "info": "#2463eb",
+      "infoForeground": "#f5f7ff",
+      "income": "#34b262",
+      "expense": "#ef4343",
+      "transfer": "#758a80",
+      "balanceNegative": "#ef4343",
+      "toastOkBg": "#234d33",
+      "toastInfoBg": "#2f4858"
+    },
+    "neutral": {
+      "50": "#f5f6f7",
+      "100": "#f2f3f5",
+      "200": "#eff0f1",
+      "300": "#dee0e3",
+      "400": "#d0d3d6",
+      "500": "#bbbfc4",
+      "600": "#8f959e",
+      "650": "#51565d",
+      "700": "#646a73",
+      "800": "#373c43",
+      "900": "#2b2f36",
+      "950": "#1f2329",
+      "1000": "#000000"
+    },
+    "chart": {
+      "chart-1": "#34b262",
+      "chart-2": "#34b2a1",
+      "chart-3": "#3484b2",
+      "chart-4": "#3444b2",
+      "chart-5": "#6234b2"
+    },
+    "categoryPalette": {
+      "$note": "分类图标 12 色循环（500 阶前景 + 50 阶浅底）",
+      "green": { "fg": "#32a645", "bg": "#e4fae1" },
+      "blue": { "fg": "#5083fb", "bg": "#f0f4ff" },
+      "orange": { "fg": "#ed6d0c", "bg": "#fff3e5" },
+      "purple": { "fg": "#9f6ff1", "bg": "#f5f0fe" },
+      "teal": { "fg": "#10a893", "bg": "#e2f8f5" },
+      "pink": { "fg": "#df58a5", "bg": "#fef0f8" },
+      "red": { "fg": "#f54a45", "bg": "#fef0f0" },
+      "amber": { "fg": "#e5ce00", "bg": "#ffffdb" },
+      "cyan": { "fg": "#1295ca", "bg": "#e7f8fe" },
+      "indigo": { "fg": "#757df0", "bg": "#f2f3fd" },
+      "violet": { "fg": "#cf5ecf", "bg": "#fceefc" },
+      "lime": { "fg": "#7b9207", "bg": "#f2f8d3" }
+    },
+    "overlay": {
+      "mask": "rgba(0,0,0,.4)",
+      "textSelection": "rgba(20,86,240,.3)",
+      "divider": "rgba(31,35,41,.15)"
+    }
+  },
+  "typography": {
+    "fontFamily": "\"Noto Sans SC\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", \"PingFang SC\", \"Microsoft YaHei\", Roboto, sans-serif",
+    "weights": { "normal": 400, "medium": 500, "semibold": 600, "bold": 700 },
+    "scale": {
+      "xs": { "size": "0.75rem", "lineHeight": 1.333 },
+      "sm": { "size": "0.875rem", "lineHeight": 1.428 },
+      "base": { "size": "1rem", "lineHeight": 1.55 },
+      "lg": { "size": "1.125rem", "lineHeight": 1.55 },
+      "xl": { "size": "1.25rem", "lineHeight": 1.4 },
+      "amountHero": { "size": "1.375-1.75rem", "weight": 600 }
+    },
+    "numeric": "font-variant-numeric: tabular-nums（金额与表格数字）"
+  },
+  "spacing": {
+    "base": "0.25rem",
+    "scale": { "1": "4px", "2": "8px", "3": "12px", "4": "16px", "5": "20px", "6": "24px" },
+    "layout": {
+      "contentMaxWidth": "980px",
+      "cardPadding": "18px",
+      "cardPaddingMobile": "14px",
+      "pagePaddingMobile": "10px",
+      "bottomTabHeight": "56px",
+      "minTouchTarget": "44px"
+    },
+    "breakpoints": { "sm": "640px" }
+  },
+  "radius": {
+    "xs": "2px",
+    "default": "8px",
+    "lg": "12px",
+    "xl": "14px",
+    "full": "999px"
+  },
+  "shadow": {
+    "sm": "0px 2px 12px 0px rgba(0,0,0,.02)",
+    "default": "0px 2px 12px 0px rgba(0,0,0,.05), 0px 1px 2px -1px rgba(0,0,0,.05)",
+    "md": "0px 2px 12px 0px rgba(0,0,0,.05), 0px 2px 4px -1px rgba(0,0,0,.05)",
+    "lg": "0px 2px 12px 0px rgba(0,0,0,.05), 0px 4px 6px -1px rgba(0,0,0,.05)",
+    "dialog": "0px 2px 12px 0px rgba(0,0,0,.05), 0px 8px 10px -1px rgba(0,0,0,.05)"
+  },
+  "motion": {
+    "ease": "cubic-bezier(.4,0,.2,1)",
+    "easeOut": "cubic-bezier(0,0,.2,1)",
+    "duration": { "press": ".1s", "hover": ".15s", "dialog": ".18s", "page": ".22s", "toast": ".2s" },
+    "animations": ["fadeUp", "dialogIn", "toastIn", "toastOut", "shimmer", "fadeOut", "spin", "pulse"],
+    "reducedMotion": "prefers-reduced-motion: reduce 时关闭全部动画与过渡"
+  },
+  "components": {
+    "button": {
+      "padding": "7px 16px",
+      "radius": "8px",
+      "variants": ["primary", "ghost", "destructive"],
+      "focusRing": "2px solid color-mix(in srgb, #34b262 45%, transparent), offset 2px",
+      "pressedScale": 0.98
+    },
+    "input": {
+      "focusRing": "0 0 0 3px color-mix(in srgb, #34b262 18%, transparent)",
+      "errorBorder": "#ef4343"
+    },
+    "progress": {
+      "normal": "#34b262",
+      "near": "#ed6e0c (>=80%)",
+      "over": "#ef4343"
+    }
+  },
+  "informationArchitecture": {
+    "bottomTabs": ["首页", "记一笔", "报表", "我的"],
+    "profileMenu": ["账户管理", "分类管理", "预算", "投资资产", "家庭成员", "数据导出", "设置"],
+    "pages13": ["登录", "首页账单", "截图识别记账", "手动记账/转账", "交易详情", "账户", "两级分类", "投资资产", "预算", "报表", "导出", "家庭成员", "我的设置"]
+  }
+}
