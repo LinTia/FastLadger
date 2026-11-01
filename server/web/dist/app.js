@@ -145,15 +145,37 @@ async function renderBooks() {
   card.append(h);
   const books = (await api("GET", "/books")) || [];
   if (!books.length) {
-    const p = document.createElement("p"); p.className = "muted"; p.textContent = "暂无账本——先在客户端创建一个账本。";
+    const p = document.createElement("p"); p.className = "muted"; p.textContent = "还没有账本——在下面创建第一个吧。";
     card.append(p);
   }
   for (const bk of books) {
     const a = document.createElement("a");
     a.href = "#b/" + bk.id;
-    a.textContent = bk.name + (bk.bookType === 2 ? "（投资）" : "");
+    a.textContent = bk.name + (bk.bookType === 2 ? "（家庭）" : "");
     card.append(a);
   }
+  // 创建账本表单（POST /books {"name","bookType"}；1=个人 2=家庭）
+  const form = document.createElement("form");
+  form.style.marginTop = "14px";
+  const name = document.createElement("input");
+  name.placeholder = "新账本名称"; name.required = true; name.maxLength = 40;
+  const typeSel = document.createElement("select");
+  [["1", "个人账本"], ["2", "家庭账本"]].forEach(([v, t]) => {
+    const o = document.createElement("option"); o.value = v; o.textContent = t; typeSel.append(o);
+  });
+  const btn = document.createElement("button"); btn.textContent = "创建账本";
+  form.append(name, typeSel, btn);
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    btn.disabled = true;
+    try {
+      const bk = await api("POST", "/books", { name: name.value, bookType: Number(typeSel.value) });
+      toast("账本已创建");
+      location.hash = "#b/" + bk.id;
+    } catch (err) { toast(err.message, true); }
+    finally { btn.disabled = false; }
+  });
+  card.append(form);
   view.append(card);
 }
 
