@@ -19,13 +19,45 @@ const state = {
 };
 
 /* ---------- 工具 ---------- */
-function toast(msg, isErr) {
+// toast(msg, type)：type ∈ "ok" | "err" | "info"（sonner 风格变体，带前缀图标）
+function toast(msg, type) {
+  if (type !== "ok" && type !== "err" && type !== "info") type = "info";
   const t = $("#toast");
-  t.textContent = msg;
-  t.classList.toggle("err", !!isErr);
-  t.classList.remove("hidden");
+  t.className = type;                       // 重置 + 设定变体（触发重播动画）
+  t.textContent = (type === "ok" ? "✓ " : type === "err" ? "✕ " : "ℹ ") + msg;
   clearTimeout(t._h);
-  t._h = setTimeout(() => t.classList.add("hidden"), 2600);
+  t._h = setTimeout(() => {
+    t.classList.add("out");                 // 先播滑出动画再隐藏
+    setTimeout(() => t.classList.add("hidden"), 200);
+  }, 2600);
+}
+
+// Promise 化确认对话框（替代原生 confirm()，对齐原型 AlertDialog：标题+描述+取消/确认）
+function confirmDialog(opts) {
+  const dlg = $("#confirmDlg");
+  $("#cTitle").textContent = opts.title || "确认操作";
+  $("#cDesc").textContent = opts.desc || "";
+  const ok = $("#cOk");
+  ok.textContent = opts.confirmText || "确认";
+  ok.className = opts.danger ? "danger" : "";
+  dlg.classList.remove("hidden");
+  if (typeof dlg.showModal === "function") dlg.showModal(); else dlg.setAttribute("open", "");
+  return new Promise((resolve) => {
+    $("#cCancel").onclick = () => { close(); resolve(false); };
+    $("#confirmForm").onsubmit = (e) => { e.preventDefault(); close(); resolve(true); };
+    function close() {
+      dlg.close ? dlg.close() : dlg.removeAttribute("open");
+      dlg.classList.add("hidden");
+    }
+  });
+}
+
+// 按钮 pending 态：禁用 + 文案切换，返回恢复函数
+function btnPending(btn, loadingText) {
+  const old = btn.textContent;
+  btn.disabled = true;
+  if (loadingText) btn.textContent = loadingText;
+  return () => { btn.disabled = false; btn.textContent = old; };
 }
 
 // 整数分 → "1,234.56"（字符串运算，无浮点）
@@ -105,33 +137,42 @@ function showNav(book) {
 $("#logoutBtn").addEventListener("click", () => { clearSession(); route(); });
 $("#brand").addEventListener("click", () => location.hash = "#books");
 
-/* ---------- 登录 ---------- */
+/* ---------- 登录（对齐原型：logo 块 + 副标题 + 登录中… loading + 成功 toast） ---------- */
 function renderLogin() {
   showNav(null);
   $("#topbar").classList.add("hidden");
   view.replaceChildren();
   const card = document.createElement("div");
   card.className = "card";
-  const h = document.createElement("h2"); h.textContent = "登录 FastLedger";
+  card.style.maxWidth = "380px";
+  card.style.margin = "48px auto";
+  const logo = document.createElement("div");
+  logo.style.cssText = "font-size:36px;text-align:center;";
+  logo.textContent = "📒";
+  const h = document.createElement("h2"); h.textContent = "登录 FastLedger"; h.style.textAlign = "center";
+  const sub = document.createElement("p"); sub.className = "muted"; sub.style.textAlign = "center";
+  sub.textContent = "家庭智能记账 · 截图秒记";
   const f = document.createElement("form");
+  f.style.cssText = "display:flex;flex-direction:column;gap:10px;margin-top:10px;";
   const u = document.createElement("input"); u.placeholder = "用户名"; u.autocomplete = "username"; u.required = true;
   const p = document.createElement("input"); p.placeholder = "密码"; p.type = "password"; p.autocomplete = "current-password"; p.required = true;
-  const b = document.createElement("button"); b.textContent = "登录"; b.style.marginTop = "10px";
+  const b = document.createElement("button"); b.textContent = "登 录";
   f.append(u, p, b);
   f.addEventListener("submit", async (e) => {
     e.preventDefault();
-    b.disabled = true;
+    const done = btnPending(b, "登录中…");          // 对齐原型 loading 态
     try {
       const data = await api("POST", "/auth/login", { username: u.value, password: p.value });
       state.token = data.accessToken;
       state.whoami = u.value;
       localStorage.setItem("fl_token", state.token);
       localStorage.setItem("fl_whoami", u.value);
+      toast("登录成功，欢迎回来！", "ok");
       location.hash = "#books";
-    } catch (err) { toast(err.message, true); }
-    finally { b.disabled = false; }
+    } catch (err) { toast(err.message, "err"); }
+    finally { done(); }
   });
-  card.append(h, f);
+  card.append(logo, h, sub, f);
   view.append(card);
 }
 
@@ -145,20 +186,26 @@ async function renderBooks() {
   card.append(h);
   const books = (await api("GET", "/books")) || [];
   if (!books.length) {
-    const p = document.createElement("p"); p.className = "muted"; p.textContent = "还没有账本——在下面创建第一个吧。";
-    card.append(p);
+    const empty = document.createElement("div"); empty.className = "empty";
+    const ic = document.createElement("div"); ic.className = "icon"; ic.textContent = "📖";
+    const p = document.createElement("p"); p.textContent = "还没有账本——在下面创建第一个吧。";
+    empty.append(ic, p);
+    card.append(empty);
   }
   for (const bk of books) {
     const a = document.createElement("a");
     a.href = "#b/" + bk.id;
-    a.textContent = bk.name + (bk.bookType === 2 ? "（家庭）" : "");
+    const name = document.createElement("span");
+    name.textContent = bk.name + (bk.bookType === 2 ? "（家庭）" : "");
+    const arrow = document.createElement("span"); arrow.className = "arrow"; arrow.textContent = "›";
+    a.append(name, arrow);
     card.append(a);
   }
   // 创建账本表单（POST /books {"name","bookType"}；1=个人 2=家庭）
   const form = document.createElement("form");
-  form.style.marginTop = "14px";
+  form.style.cssText = "display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;";
   const name = document.createElement("input");
-  name.placeholder = "新账本名称"; name.required = true; name.maxLength = 40;
+  name.placeholder = "新账本名称"; name.required = true; name.maxLength = 40; name.style.flex = "1"; name.style.minWidth = "160px";
   const typeSel = document.createElement("select");
   [["1", "个人账本"], ["2", "家庭账本"]].forEach(([v, t]) => {
     const o = document.createElement("option"); o.value = v; o.textContent = t; typeSel.append(o);
@@ -167,13 +214,13 @@ async function renderBooks() {
   form.append(name, typeSel, btn);
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
-    btn.disabled = true;
+    const done = btnPending(btn, "创建中…");
     try {
       const bk = await api("POST", "/books", { name: name.value, bookType: Number(typeSel.value) });
-      toast("账本已创建");
+      toast("账本已创建", "ok");
       location.hash = "#b/" + bk.id;
-    } catch (err) { toast(err.message, true); }
-    finally { btn.disabled = false; }
+    } catch (err) { toast(err.message, "err"); }
+    finally { done(); }
   });
   card.append(form);
   view.append(card);
@@ -262,6 +309,7 @@ async function renderTxns(bookId) {
   card.append(tableWrap);
 
   async function load() {
+    renderSkeleton(tableWrap);                      // 对齐原型：加载中骨架屏
     const f = state.filter;
     const q = new URLSearchParams();
     q.set("page", String(f.page)); q.set("count", String(f.count));
@@ -275,6 +323,20 @@ async function renderTxns(bookId) {
     const data = await api("GET", "/books/" + bookId + "/transactions?" + q.toString());
     state.sel.clear(); refreshSel();
     renderTable(data);
+    window.scrollTo({ top: 0, behavior: "smooth" }); // 翻页后回顶（原型分页行为）
+  }
+
+  // 骨架屏：数据未返回前占位，避免白屏跳变
+  function renderSkeleton(wrap) {
+    wrap.replaceChildren();
+    const sk = document.createElement("div");
+    sk.setAttribute("aria-busy", "true");
+    for (let i = 0; i < 5; i++) {
+      const bar = document.createElement("div"); bar.className = "skel";
+      bar.style.width = (88 - i * 9) + "%";
+      sk.append(bar);
+    }
+    wrap.append(sk);
   }
 
   function renderTable(data) {
@@ -299,7 +361,11 @@ async function renderTxns(bookId) {
     });
     tdC.append(chk);
     const tdT = document.createElement("td"); tdT.textContent = fmtTime(tx.txTime);
-    const tdTy = document.createElement("td"); tdTy.textContent = TX_TYPE_NAME[tx.txType] || tx.txType;
+    const tdTy = document.createElement("td");
+    const badge = document.createElement("span");        // 对齐原型：类型胶囊徽标
+    badge.className = "badge " + (tx.txType === 1 ? "income" : tx.txType === 2 ? "expense" : "");
+    badge.textContent = TX_TYPE_NAME[tx.txType] || tx.txType;
+    tdTy.append(badge);
     const tdA = document.createElement("td");
     tdA.textContent = tx.txType === 3 ? accountName(tx.accountId) + " → " + accountName(tx.toAccountId) : accountName(tx.accountId);
     const tdCat = document.createElement("td"); tdCat.textContent = tx.txType === 3 ? "—" : categoryName(tx.categoryId);
@@ -317,7 +383,11 @@ async function renderTxns(bookId) {
   }
   if (!items.length) {
     const tr = document.createElement("tr");
-    const td = document.createElement("td"); td.colSpan = 8; td.className = "muted"; td.textContent = "没有符合条件的交易。";
+    const td = document.createElement("td"); td.colSpan = 8;
+    const empty = document.createElement("div"); empty.className = "empty";
+    const ic = document.createElement("div"); ic.className = "icon"; ic.textContent = "🧾";
+    const p = document.createElement("p"); p.textContent = "没有符合条件的交易——换个筛选条件，或记一笔。";
+    empty.append(ic, p); td.append(empty);
     tr.append(td); tbody.append(tr);
   }
     table.append(tbody); tableWrap.append(table);
@@ -344,18 +414,27 @@ async function renderTxns(bookId) {
   });
   delBtn.addEventListener("click", async () => {
     if (!state.sel.size) return;
-    if (!confirm("确认删除选中的 " + state.sel.size + " 条交易？删除后可在回收站恢复。")) return;
-    delBtn.disabled = true;
+    // 对齐原型 AlertDialog：自定义确认对话框替代原生 confirm()
+    const yes = await confirmDialog({
+      title: "删除交易",
+      desc: "将删除选中的 " + state.sel.size + " 条交易，删除后可在回收站恢复。",
+      confirmText: "删除",
+      danger: true,
+    });
+    if (!yes) return;
+    const done = btnPending(delBtn, "删除中…");
     let okN = 0, failN = 0;
-    for (const id of state.sel) {
-      try {
-        await api("DELETE", "/books/" + bookId + "/transactions/" + id + "?clientUuid=" + encodeURIComponent(uuid()));
-        okN++;
-      } catch (_) { failN++; }
-    }
-    toast("删除完成：成功 " + okN + "，失败 " + failN, failN > 0);
-    state.filter.page = 1;
-    await load();
+    try {
+      for (const id of state.sel) {
+        try {
+          await api("DELETE", "/books/" + bookId + "/transactions/" + id + "?clientUuid=" + encodeURIComponent(uuid()));
+          okN++;
+        } catch (_) { failN++; }
+      }
+      toast("删除完成：成功 " + okN + "，失败 " + failN, failN > 0 ? "err" : "ok");
+      state.filter.page = 1;
+      await load();
+    } finally { done(); }
   });
   addBtn.addEventListener("click", () => openTxForm(bookId, load));
   [kw, typeSel, accSel, catSel, dFrom, dTo].forEach((el) => {
@@ -363,12 +442,12 @@ async function renderTxns(bookId) {
   });
   function applyFilters() {
     state.filter = { keyword: kw.value.trim(), type: Number(typeSel.value), accountId: Number(accSel.value), categoryId: Number(catSel.value), minDate: dFrom.value, maxDate: dTo.value, page: 1, count: state.filter.count };
-    load().catch((e) => toast(e.message, true));
+    load().catch((e) => toast(e.message, "err"));
   }
   go.addEventListener("click", applyFilters);
   reset.addEventListener("click", () => { kw.value = ""; typeSel.value = "0"; accSel.value = "0"; catSel.value = "0"; dFrom.value = ""; dTo.value = ""; applyFilters(); });
 
-  try { await load(); } catch (e) { toast(e.message, true); }
+  try { await load(); } catch (e) { toast(e.message, "err"); }
 }
 
 /* ---------- 记一笔 ---------- */
@@ -394,7 +473,7 @@ function openTxForm(bookId, onDone) {
   $("#txForm").onsubmit = async (e) => {
     e.preventDefault();
     const cents = str2cents($("#fAmount").value);
-    if (cents === null || cents <= 0) { toast("金额格式不合法（最多两位小数）", true); return; }
+    if (cents === null || cents <= 0) { toast("金额格式不合法（最多两位小数）", "err"); return; }
     const t = Number($("#fType").value);
     const body = {
       clientUuid: uuid(),
@@ -409,15 +488,18 @@ function openTxForm(bookId, onDone) {
     };
     if (t === 3) {
       body.toAccountId = Number($("#fTo").value);
-      if (!body.toAccountId || body.toAccountId === body.accountId) { toast("转账需选择不同的两个账户", true); return; }
-    } else if (!body.accountId) { toast("请选择账户", true); return; }
+      if (!body.toAccountId || body.toAccountId === body.accountId) { toast("转账需选择不同的两个账户", "err"); return; }
+    } else if (!body.accountId) { toast("请选择账户", "err"); return; }
     try {
-      await api("POST", "/books/" + bookId + "/transactions", body);
-      toast("已记账（等待你确认无误后生效）");
-      dlg.close ? dlg.close() : dlg.removeAttribute("open");
-      dlg.classList.add("hidden");
-      onDone();
-    } catch (err) { toast(err.message, true); }
+      const done = btnPending($("#fSubmit"), "保存中…");
+      try {
+        await api("POST", "/books/" + bookId + "/transactions", body);
+        toast("已记账", "ok");
+        dlg.close ? dlg.close() : dlg.removeAttribute("open");
+        dlg.classList.add("hidden");
+        onDone();
+      } finally { done(); }
+    } catch (err) { toast(err.message, "err"); }
   };
 }
 
@@ -452,7 +534,7 @@ function openTxEditForm(bookId, tx, onDone) {
   $("#txEditForm").onsubmit = async (e) => {
     e.preventDefault();
     const cents = str2cents($("#eAmount").value);
-    if (cents === null || cents <= 0) { toast("金额格式不合法（最多两位小数）", true); return; }
+    if (cents === null || cents <= 0) { toast("金额格式不合法（最多两位小数）", "err"); return; }
     const body = {
       clientUuid: uuid(),
       txType: tx.txType,
@@ -467,19 +549,19 @@ function openTxEditForm(bookId, tx, onDone) {
     };
     if (tx.txType === 3) {
       body.toAccountId = Number($("#eTo").value);
-      if (!body.toAccountId || body.toAccountId === body.accountId) { toast("转账需选择不同的两个账户", true); return; }
-    } else if (!body.accountId || !body.categoryId) { toast("请选择账户与分类", true); return; }
+      if (!body.toAccountId || body.toAccountId === body.accountId) { toast("转账需选择不同的两个账户", "err"); return; }
+    } else if (!body.accountId || !body.categoryId) { toast("请选择账户与分类", "err"); return; }
     const btn = $("#eSubmit");
-    btn.disabled = true;
+    const done = btnPending(btn, "保存中…");
     try {
       await api("PUT", "/books/" + bookId + "/transactions/" + tx.id, body);
-      toast("已保存修改");
+      toast("已保存修改", "ok");
       dlg.close ? dlg.close() : dlg.removeAttribute("open");
       dlg.classList.add("hidden");
       onDone();
     } catch (err) {
-      toast(err.message + (String(err.message).indexOf("并发") >= 0 ? "（请刷新列表后重试）" : ""), true);
-    } finally { btn.disabled = false; }
+      toast(err.message + (String(err.message).indexOf("并发") >= 0 ? "（请刷新列表后重试）" : ""), "err");
+    } finally { done(); }
   };
 }
 
@@ -512,7 +594,14 @@ async function renderAccounts(bookId) {
     tr.append(tdN, tdC, tdB);
     tbody.append(tr);
   }
-  table.append(tbody); card.append(table);
+  table.append(tbody);
+  if (!state.accounts.length) {
+    const empty = document.createElement("div"); empty.className = "empty";
+    const ic = document.createElement("div"); ic.className = "icon"; ic.textContent = "💳";
+    const p = document.createElement("p"); p.textContent = "暂无账户。";
+    empty.append(ic, p); card.append(empty);
+  }
+  card.append(table);
   view.append(card);
 }
 
@@ -546,20 +635,22 @@ async function renderRecycle(bookId) {
     const tdA = document.createElement("td");
     const btn = document.createElement("button"); btn.textContent = "恢复"; btn.className = "ghost";
     btn.addEventListener("click", async () => {
-      btn.disabled = true;
+      const done = btnPending(btn, "恢复中…");
       try {
         await api("POST", "/books/" + bookId + "/transactions/" + tx.id + "/restore?clientUuid=" + encodeURIComponent(uuid()));
-        toast("已恢复");
-        tr.remove();
-      } catch (e) { toast(e.message, true); btn.disabled = false; }
+        toast("已恢复", "ok");
+        tr.classList.add("fade-out");                    // 行淡出后再移除（原型过渡细节）
+        setTimeout(() => tr.remove(), 190);
+      } catch (e) { toast(e.message, "err"); done(); }
     });
     tdA.append(btn); tr.append(tdA);
     tbody.append(tr);
   }
   if (!(data.items || []).length) {
-    const tr = document.createElement("tr");
-    const td = document.createElement("td"); td.colSpan = 6; td.className = "muted"; td.textContent = "回收站为空。";
-    tr.append(td); tbody.append(tr);
+    const empty = document.createElement("div"); empty.className = "empty";
+    const ic = document.createElement("div"); ic.className = "icon"; ic.textContent = "🗑️";
+    const p = document.createElement("p"); p.textContent = "回收站为空——删除的交易会在这里保留，可随时恢复。";
+    empty.append(ic, p); card.append(empty);
   }
   table.append(tbody); card.append(table);
   view.append(card);
@@ -582,7 +673,7 @@ async function route() {
       await renderBooks();
     }
   } catch (e) {
-    toast(e.message, true);
+    toast(e.message, "err");
     if (!state.token) renderLogin();
   }
 }

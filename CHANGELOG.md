@@ -2,6 +2,17 @@
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.48] - 2026-11-01
+
+### Web 端交互对齐可交互原型（prototype/，纯前端静态资源，零后端改动）
+
+- **设计 token 对齐**：按原型打包产物取证（`prototype/assets/index-*.css` 的 `:root`）重写 `style.css`——主色 `#34b262` 绿 / 背景 `#f9f8f5` 暖白 / 破坏色 `#ef4343` / 文字 `#1f2e26` / 悬停底 `#f2f8f4` / 圆角 8–12px / 阴影两级 / 过渡 `.15s cubic-bezier(.4,0,.2,1)`；字体栈首位 `Noto Sans SC`（无外链请求，保持离线口径）。
+- **交互补齐**（此前为无过渡的裸静态样式）：按钮/输入框/链接的 hover·active·focus-visible·disabled 全态；卡片与视图进入动画（fadeUp）；表格行悬停底色；对话框 shadcn 风格进入动画 + backdrop 模糊；Toast 升级 sonner 风格（ok/err/info 三变体 + 前缀图标 + 滑入滑出）；`prefers-reduced-motion` 全量降级；≤640px 窄屏适配（隐藏次要列）。
+- **状态反馈补全**：登录"登 录 → 登录中…"loading（对齐原型）；创建账本/记一笔/编辑/删除/恢复按钮统一 pending 态（`btnPending`，异常安全 finally 恢复）；交易列表加载骨架屏（shimmer）替代白屏跳变；翻页后平滑回顶。
+- **组件对齐**：类型列改胶囊徽标（收入绿/支出红）；批量删除的原生 `confirm()` 替换为自定义确认对话框（AlertDialog 风格：标题+描述+危险色确认键）；账本列表项悬停底色+右箭头；三处空状态改为图标+引导文案（账本/交易/回收站）；回收站恢复成功后行淡出移除。
+- **口径不变**：全部用户数据仍 `textContent` 渲染（零 innerHTML）；金额整数分；401 清会话；无外部网络请求。
+- 验证：`node --check` 语法通过；DOM id 交叉核对 11/11；无 innerHTML/eval。
+
 ## [1.47] - 2026-11-01
 
 ### 第五阶段客户端批次（WBS 5.1 / 5.2 / 5.6 / 5.3，`client/` Flutter 工程）
