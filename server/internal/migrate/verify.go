@@ -101,6 +101,24 @@ var versionAssertions = map[int64]versionAssert{
 		indexes: map[string]string{"idx_idem_unique": "op"},
 	},
 	// 0006 只做 UPDATE 回填（幂等，可安全重跑），无结构产物，不登记。
+	// 0007（R52 多端会话）：token_sessions 是"会话强校验"的唯一事实来源——
+	// 表/列/索引缺失等于全量 401，启动期必须核验。三列之外还登记 revoked_at /
+	// user_agent / last_seen_at：撤销语义与列表展示都依赖它们，缺列启动即失败。
+	7: {
+		tables: []string{"token_sessions"},
+		columns: map[string][]string{
+			"token_sessions": {
+				"jti", "uid", "created_at", "expires_at",
+				"revoked_at", "user_agent", "last_seen_at",
+			},
+		},
+		indexes: map[string]string{
+			// 按 uid 列会话 / 批量撤销走 (uid, revoked_at)；
+			// db purge 的过期回收走 expires_at。两个索引都在 0007 定义。
+			"idx_token_sessions_uid": "",
+			"idx_token_sessions_exp": "",
+		},
+	},
 }
 
 // verifyVersion 只读检查某版本的产物是否真实存在

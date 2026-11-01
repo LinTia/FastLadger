@@ -275,6 +275,8 @@ var goldenScripts = []goldenScript{
 	{"0004_tx_direction.up.sql", "f8772ded12d5ffa73af290c9270c0afc6b6fbfac2841632828fa118c04267251"},
 	{"0005_idem_op.up.sql", "c5f9ce7df2f421e5156bd78c5034d67a06c442a3fa6b0b69e2a8e5d7870a66ab"},
 	{"0006_tx_direction_backfill.up.sql", "dc2b5a4ffd2f32788500eb8dd0efe027ecb1be8db3ef7bb26795114f2f0ea30a"},
+	// 0007（R52 多端会话）：新建表，发布时按约定登记指纹
+	{"0007_token_sessions.up.sql", "4949d8601decbf11165330f4b048518a13230047f8f6348faf3cf2a7f531a2b1"},
 }
 
 // TestContainsFold 纯函数自检（断言的索引定义匹配用它）

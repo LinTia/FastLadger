@@ -92,7 +92,7 @@ type schemaStub struct {
 	indexSQL map[string]string
 }
 
-// newLatestSchemaStub 构造一个"已迁移到 v6 最新结构"的库模型（依据 migrations/*.sql）
+// newLatestSchemaStub 构造一个"已迁移到最新结构（当前 v7）"的库模型（依据 migrations/*.sql）
 func newLatestSchemaStub(applied []int64) *schemaStub {
 	txs := []string{
 		"id", "book_id", "type", "account_id", "to_account_id", "amount", "category_id",
@@ -114,10 +114,17 @@ func newLatestSchemaStub(applied []int64) *schemaStub {
 			"idempotency_records": true, "audit_logs": true, "invites": true,
 			"instruments": true, "instrument_prices": true, "holdings": true,
 			"budgets": true, "schema_migrations": true,
+			// 0007（R52 多端会话）
+			"token_sessions": true,
 		},
 		columns: map[string]map[string]bool{
 			"transactions":        setOf(txs),
 			"idempotency_records": setOf(idem),
+			// 0007（人工抄录自 0007_token_sessions.up.sql）
+			"token_sessions": setOf([]string{
+				"id", "jti", "uid", "created_at", "expires_at",
+				"revoked_at", "user_agent", "last_seen_at",
+			}),
 		},
 		indexSQL: map[string]string{
 			// 0002：部分唯一索引（定义里必须带 WHERE）
@@ -142,6 +149,9 @@ func newLatestSchemaStub(applied []int64) *schemaStub {
 			"idx_instr_price":      "CREATE INDEX idx_instr_price ON instrument_prices(instrument_id, price_time)",
 			"idx_holdings_account": "CREATE INDEX idx_holdings_account ON holdings(book_id, account_id, deleted)",
 			"idx_budget_book":      "CREATE INDEX idx_budget_book ON budgets(book_id, deleted)",
+			// 0007
+			"idx_token_sessions_uid": "CREATE INDEX idx_token_sessions_uid ON token_sessions(uid, revoked_at)",
+			"idx_token_sessions_exp": "CREATE INDEX idx_token_sessions_exp ON token_sessions(expires_at)",
 		},
 	}
 	return s
