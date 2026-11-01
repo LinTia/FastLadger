@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../api/api_client.dart';
 import '../api/ledger_api.dart';
+import 'book_detail_page.dart';
 
 /// 首页：账本列表（骨架期最小可用；CRUD 页面在 5.2 补齐）。
 class HomePage extends StatefulWidget {
@@ -72,8 +73,13 @@ class _HomePageState extends State<HomePage> {
           subtitle: Text('ID ${book['id'] ?? ''} · ${book['bookType'] ?? ''}'),
           trailing: const Icon(Icons.chevron_right),
           onTap: () {
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                content: Text('账本「${book['name'] ?? ''}」详情页在 5.2 批次交付')));
+            Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => BookDetailPage(
+                ledger: widget.ledger,
+                bookId: (book['id'] as num).toInt(),
+                bookName: '${book['name'] ?? ''}',
+              ),
+            ));
           },
         );
       },

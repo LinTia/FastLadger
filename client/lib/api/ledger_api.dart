@@ -102,4 +102,57 @@ class LedgerApi {
       query: {'clientUuid': clientUuid},
     );
   }
+
+  // ---- 账户 CRUD（WBS 5.2）----
+
+  Future<dynamic> createAccount({
+    required int bookId,
+    required String name,
+    required int category,
+    String currency = 'CNY',
+  }) {
+    return client.post('/api/v1/books/$bookId/accounts',
+        {'name': name, 'category': category, 'currency': currency});
+  }
+
+  Future<dynamic> updateAccount({
+    required int bookId,
+    required int accountId,
+    String? name,
+    int? parentId,
+  }) {
+    return client.put('/api/v1/books/$bookId/accounts/$accountId', {
+      'name': ?name,
+      'parentId': ?parentId,
+    });
+  }
+
+  Future<dynamic> deleteAccount(int bookId, int accountId) {
+    return client.delete('/api/v1/books/$bookId/accounts/$accountId');
+  }
+
+  // ---- 分类 CRUD（WBS 5.2）----
+
+  Future<dynamic> createCategory({
+    required int bookId,
+    required String name,
+    required int catType,
+    int parentId = 0,
+  }) {
+    return client.post('/api/v1/books/$bookId/categories',
+        {'name': name, 'catType': catType, 'parentId': parentId});
+  }
+
+  Future<dynamic> updateCategory({
+    required int bookId,
+    required int categoryId,
+    String? name,
+  }) {
+    return client.put('/api/v1/books/$bookId/categories/$categoryId',
+        {'name': ?name});
+  }
+
+  Future<dynamic> deleteCategory(int bookId, int categoryId) {
+    return client.delete('/api/v1/books/$bookId/categories/$categoryId');
+  }
 }
