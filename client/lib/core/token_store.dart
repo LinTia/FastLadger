@@ -1,9 +1,10 @@
 /// 登录令牌的安全存储抽象（WBS 5.1）。
 ///
-/// 骨架期提供两个实现：
-/// - [InMemoryTokenStore]：测试与 Web 首期使用；
-/// - 生产端 Android/iOS 应接 flutter_secure_storage（Keychain/Keystore），
-///   Windows 可接 DPAPI——接入点即本抽象，替换实现无需改动业务层。
+/// 实现清单：
+/// - [InMemoryTokenStore]：测试使用；
+/// - [SecureTokenStore]（secure_token_store.dart）：生产实现——
+///   flutter_secure_storage（Android Keystore / iOS Keychain / Windows DPAPI）。
+///   替换实现无需改动业务层（接缝即本抽象）。
 abstract class TokenStore {
   Future<void> save(String token);
   Future<String?> read();

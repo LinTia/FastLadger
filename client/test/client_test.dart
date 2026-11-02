@@ -129,7 +129,9 @@ void main() {
     });
 
     testWidgets('FastLedgerApp 可渲染（冒烟）', (tester) async {
-      await tester.pumpWidget(const FastLedgerApp());
+      // 注入内存 TokenStore：真插件依赖平台通道，测试环境不可用
+      await tester.pumpWidget(FastLedgerApp(tokenStore: InMemoryTokenStore()));
+      await tester.pumpAndSettle();
       expect(find.byType(LoginPage), findsOneWidget);
     });
   });

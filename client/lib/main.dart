@@ -4,6 +4,7 @@ import 'api/api_client.dart';
 import 'api/ledger_api.dart';
 import 'core/app_settings.dart';
 import 'core/local_store.dart';
+import 'core/secure_token_store.dart';
 import 'core/token_store.dart';
 import 'ui/home_page.dart';
 import 'ui/login_page.dart';
@@ -16,7 +17,10 @@ import 'ui/login_page.dart';
 void main() => runApp(const FastLedgerApp());
 
 class FastLedgerApp extends StatefulWidget {
-  const FastLedgerApp({super.key});
+  /// 生产默认 secure storage（Keystore/Keychain/DPAPI）；
+  /// 测试可注入 InMemoryTokenStore，避免平台通道依赖。
+  final TokenStore? tokenStore;
+  const FastLedgerApp({super.key, this.tokenStore});
 
   @override
   State<FastLedgerApp> createState() => _FastLedgerAppState();
@@ -24,11 +28,13 @@ class FastLedgerApp extends StatefulWidget {
 
 class _FastLedgerAppState extends State<FastLedgerApp> {
   late final AppSettings _settings;
+  late final TokenStore _tokenStore;
 
   @override
   void initState() {
     super.initState();
     _settings = AppSettings(store: InMemoryLocalStore());
+    _tokenStore = widget.tokenStore ?? SecureTokenStore();
     _settings.load();
   }
 
@@ -50,32 +56,37 @@ class _FastLedgerAppState extends State<FastLedgerApp> {
             brightness: Brightness.dark,
             useMaterial3: true),
         themeMode: _settings.themeMode,
-        home: RootGate(settings: _settings),
+        home: RootGate(settings: _settings, tokens: _tokenStore),
       ),
     );
   }
 }
 
 /// 根路由：持有会话状态（有 token → 首页；无 token/401 → 登录页）。
+///
+/// 启动流程：secure storage 读取是异步的——先 `_ready=false` 渲染加载态，
+/// 读到非空令牌才直接进首页（免二次登录）；无令牌进登录页。
 class RootGate extends StatefulWidget {
   final AppSettings settings;
-  const RootGate({super.key, required this.settings});
+  final TokenStore tokens;
+  const RootGate({super.key, required this.settings, required this.tokens});
 
   @override
   State<RootGate> createState() => _RootGateState();
 }
 
 class _RootGateState extends State<RootGate> {
-  late final InMemoryTokenStore _tokens;
+  late final TokenStore _tokens;
   late final ApiClient _client;
   late final AuthApi _auth;
   late final LedgerApi _ledger;
+  bool _ready = false;
   bool _loggedIn = false;
 
   @override
   void initState() {
     super.initState();
-    _tokens = InMemoryTokenStore();
+    _tokens = widget.tokens;
     _client = ApiClient(
       // 生产可通过 --dart-define=FASTLEDGER_BASE_URL=... 覆盖
       baseUrl: const String.fromEnvironment(
@@ -89,16 +100,37 @@ class _RootGateState extends State<RootGate> {
     };
     _auth = AuthApi(_client);
     _ledger = LedgerApi(_client);
+    _restore();
+  }
+
+  /// 启动恢复：secure storage 命中令牌 → 免登录进首页。
+  /// 注意令牌可能已被服务端撤销（5.10 会话强校验）——首个 401 会经
+  /// onUnauthorized 拉回登录页，这里不做网络校验（离线也能进缓存首页）。
+  Future<void> _restore() async {
+    final token = await _tokens.read();
+    if (!mounted) return;
+    setState(() {
+      _loggedIn = token != null && token.isNotEmpty;
+      _ready = true;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    if (!_ready) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
     return _loggedIn
         ? HomePage(
             ledger: _ledger,
             auth: _auth,
             settings: widget.settings,
-            onLogout: () => setState(() => _loggedIn = false),
+            onLogout: () {
+              _tokens.clear();
+              setState(() => _loggedIn = false);
+            },
           )
         : LoginPage(auth: _auth, onLoggedIn: () => setState(() => _loggedIn = true));
   }

@@ -2,6 +2,17 @@
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.56] - 2026-11-02
+
+### Flutter 设置页补齐长期 API Token 管理 + 接入 secure storage（WBS 6.6 客户端侧收口）
+
+- **新依赖**（经 owner 批准）：`flutter_secure_storage ^11.2.0`——Android Keystore / iOS Keychain / Windows DPAPI（v9+ 已弃 CredManager，其 ~2KB 条目上限不适用）。
+- **`core/secure_token_store.dart`**：`SecureTokenStore implements TokenStore`（登录 JWT 唯一条目 `fl_token`；PAT 明文按设计只出现一次，**不持久化**——长期凭证只存服务端哈希）。接缝即既有抽象，业务层零改动；`FastLedgerApp` 增加 `tokenStore` 注入参数（默认 SecureTokenStore，测试传内存实现）。
+- **启动恢复**：secure storage 读取异步化——`RootGate` 先渲染加载态，命中令牌免登录进首页；被撤销的令牌由首个 401 经 onUnauthorized 拉回登录页（离线不阻塞）。退出登录同时清 secure storage。
+- **设置页 PAT 区块**（对照 Web 端 [1.53] 交互）：生成（备注输入 → **明文一次性展示+复制**+"仅此一次展示"警示）→ 列表（备注/创建时间/最近使用/已撤销状态）→ 撤销二次确认；列表加载失败不阻塞设置页其余部分。
+- **诚实口径**：Windows 桌面构建需要系统"开发者模式"（插件 symlink）+ Visual Studio（[1.47] 已登记缺口）——`flutter build windows` 运行时验证仍不可行；本批验证止于 `flutter test`/`analyze`，Windows 真机验证待环境具备。
+- 测试：+7 例（SecureTokenStore 4——注入覆写 FlutterSecureStorage 的替身、断言 key/语义/接缝；设置页 PAT 3——列表渲染/一次性明文/撤销确认），**79/79 全过、analyze 0 issues**。零后端改动。
+
 ## [1.55] - 2026-11-02
 
 ### 阶段 7 运维：Docker 部署单元 + 备份口径对齐 + 恢复演练 + 验收报告（WBS 7.1–7.5）

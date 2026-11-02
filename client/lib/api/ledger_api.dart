@@ -37,6 +37,22 @@ class AuthApi {
     }) as Map<String, dynamic>;
     return (data['revokedSessions'] as num?)?.toInt() ?? 0;
   }
+
+  // ---- 长期 API Token（WBS 6.6 / PRD §296；Web 端 [1.53] 同套 API）----
+
+  /// 本人 Token 列表（含已撤销；服务端保证不含哈希）。
+  Future<List<dynamic>> listTokens() async =>
+      (await client.get('/api/v1/users/me/tokens') as List?) ?? const [];
+
+  /// 生成新 Token：明文**仅在本响应出现一次**（同 GitHub PAT 语义）。
+  Future<Map<String, dynamic>> createToken(String name) async =>
+      await client.post('/api/v1/users/me/tokens', {'name': name})
+          as Map<String, dynamic>;
+
+  /// 撤销本人指定 Token（跨用户/不存在/已撤销 → 404，幂等安全）。
+  Future<void> revokeToken(int id) async {
+    await client.delete('/api/v1/users/me/tokens/$id');
+  }
 }
 
 /// 账本 / 账户 / 分类 / 交易 API（WBS 5.2 CRUD 的客户端侧）。
