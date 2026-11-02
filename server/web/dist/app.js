@@ -153,8 +153,11 @@ function showNav(book) {
 $("#logoutBtn").addEventListener("click", () => { clearSession(); route(); });
 $("#brand").addEventListener("click", () => location.hash = "#books");
 
-/* ---------- 登录（对齐原型：logo 块 + 副标题 + 登录中… loading + 成功 toast） ---------- */
-function renderLogin() {
+/* ---------- 登录/注册（对齐原型：logo 块 + 副标题 + loading + 成功 toast） ----------
+   注册模式为本机试用/自托管新增（PR：登录页无注册入口）；服务端契约：
+   POST /auth/register {username,password} → 仅建号（不返回 token），成功后自动登录。 */
+function renderLogin(mode) {
+  const isRegister = mode === "register";
   showNav(null);
   $("#topbar").classList.add("hidden");
   view.replaceChildren();
@@ -165,30 +168,63 @@ function renderLogin() {
   const logo = document.createElement("div");
   logo.style.cssText = "font-size:36px;text-align:center;";
   logo.textContent = "📒";
-  const h = document.createElement("h2"); h.textContent = "登录 FastLedger"; h.style.textAlign = "center";
+  const h = document.createElement("h2"); h.textContent = isRegister ? "注册 FastLedger" : "登录 FastLedger"; h.style.textAlign = "center";
   const sub = document.createElement("p"); sub.className = "muted"; sub.style.textAlign = "center";
   sub.textContent = "家庭智能记账 · 截图秒记";
   const f = document.createElement("form");
   f.style.cssText = "display:flex;flex-direction:column;gap:10px;margin-top:10px;";
   const u = document.createElement("input"); u.placeholder = "用户名"; u.autocomplete = "username"; u.required = true;
-  const p = document.createElement("input"); p.placeholder = "密码"; p.type = "password"; p.autocomplete = "current-password"; p.required = true;
-  const b = document.createElement("button"); b.textContent = "登 录";
+  const p = document.createElement("input"); p.placeholder = isRegister ? "密码（至少 8 位）" : "密码"; p.type = "password";
+  p.autocomplete = isRegister ? "new-password" : "current-password"; p.required = true;
+  p.minLength = isRegister ? 8 : -1;
+  const b = document.createElement("button"); b.textContent = isRegister ? "注 册" : "登 录";
   f.append(u, p, b);
-  f.addEventListener("submit", async (e) => {
+  if (isRegister) {
+    const p2 = document.createElement("input"); p2.placeholder = "确认密码"; p2.type = "password";
+    p2.autocomplete = "new-password"; p2.required = true;
+    f.append(p2);
+    f.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      if (p.value !== p2.value) { toast("两次输入的密码不一致", "err"); return; }
+      const done = btnPending(b, "注册中…");
+      try {
+        await api("POST", "/auth/register", { username: u.value, password: p.value });
+        const data = await api("POST", "/auth/login", { username: u.value, password: p.value });
+        state.token = data.accessToken;
+        state.whoami = u.value;
+        localStorage.setItem("fl_token", state.token);
+        localStorage.setItem("fl_whoami", u.value);
+        toast("注册成功，已自动登录！", "ok");
+        location.hash = "#books";
+      } catch (err) { toast(err.message, "err"); }
+      finally { done(); }
+    });
+  } else {
+    f.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const done = btnPending(b, "登录中…");          // 对齐原型 loading 态
+      try {
+        const data = await api("POST", "/auth/login", { username: u.value, password: p.value });
+        state.token = data.accessToken;
+        state.whoami = u.value;
+        localStorage.setItem("fl_token", state.token);
+        localStorage.setItem("fl_whoami", u.value);
+        toast("登录成功，欢迎回来！", "ok");
+        location.hash = "#books";
+      } catch (err) { toast(err.message, "err"); }
+      finally { done(); }
+    });
+  }
+  const toggle = document.createElement("a");
+  toggle.href = "#";
+  toggle.className = "muted";
+  toggle.style.cssText = "display:block;text-align:center;margin-top:12px;font-size:13px;";
+  toggle.textContent = isRegister ? "已有账号？返回登录" : "没有账号？注册新账号";
+  toggle.addEventListener("click", (e) => {
     e.preventDefault();
-    const done = btnPending(b, "登录中…");          // 对齐原型 loading 态
-    try {
-      const data = await api("POST", "/auth/login", { username: u.value, password: p.value });
-      state.token = data.accessToken;
-      state.whoami = u.value;
-      localStorage.setItem("fl_token", state.token);
-      localStorage.setItem("fl_whoami", u.value);
-      toast("登录成功，欢迎回来！", "ok");
-      location.hash = "#books";
-    } catch (err) { toast(err.message, "err"); }
-    finally { done(); }
+    renderLogin(isRegister ? "login" : "register");
   });
-  card.append(logo, h, sub, f);
+  card.append(logo, h, sub, f, toggle);
   view.append(card);
 }
 

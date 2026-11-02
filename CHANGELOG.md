@@ -13,6 +13,7 @@
   3. `GdiplusStartup/GdiplusShutdown` 必须写 **`Gdiplus::`** 前缀（`gdiplus.h` 将 `gdiplusinit.h` 包裹在 `namespace Gdiplus` 内，SDK 10.0.26100 头文件实证）；
   4. Flutter 3.47 的 `FlutterEngine` 不再继承 `BinaryMessenger`，`MethodChannel` 第一参数改 `engine()->messenger()`；另按 `/W4 /WX` 重命名遮蔽全局名的局部变量（C4459）。
 - **验证口径（诚实）**：`flutter build windows --debug` 实机成功产出 `build/windows/x64/runner/Debug/fastledger_client.exe` = 编译/链接闭环；**热键触发、截图内容的运行时手工验证仍待 5.3 批次**（需真机交互）。
+- **Web 登录页增加注册入口**（本批补）：此前登录页只有登录（原型基线未覆盖注册场景）；新增"没有账号？注册新账号"切换——注册表单（用户名/密码≥8位/确认密码，前端一致性校验）→ `POST /auth/register` 成功后自动登录进账本页；服务端关闭公开注册（`EBK_ENABLE_REGISTER=false`，生产默认）时按既有契约提示 403 文案。服务端零改动。
 - 流程备注：本批因本机代理中断改经 GitHub API 编排 PR（revert + 分支重放技法），合并后本地 main 需在代理恢复时 `fetch + reset --hard origin/main` 做最终 SHA 对齐（树内容已一致）。
 
 ## [1.56] - 2026-11-02
