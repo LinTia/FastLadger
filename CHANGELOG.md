@@ -2,6 +2,19 @@
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.57] - 2026-11-02
+
+### Windows 桌面首次构建打通 + 开发者模式/工具链验证（PR #1，环境缺口 [1.47] 收口）
+
+- **环境实测闭环**（本机 Win11 26200）：开发者模式开启（⚠️ 实证：仅 `reg add AllowDevelopmentWithoutDevLicense=1` 不生效，必须走设置界面完整启用；生效即时；symlink 普通用户实测可创建）+ VS 2022 Community 17.14（"使用 C++ 的桌面开发"工作负载，MSVC 14.44 + Windows SDK 10.0.26100）+ Flutter 3.47.9 stable（`.tools/flutter` 完全可用）。`flutter doctor` 的 Windows Version/VS 检查项在本机工具沙箱内会因 reg.exe 被拦而"crash"，属误报，真实环境正常。
+- **首次 `flutter build windows` 修复 4 项**（5.3 热键 C++ 代码此前"类型检查通过但从未编译过"的欠账，经 PR #1 合入，squash → `ca43fb7`，CI 绿）：
+  1. runner `CMakeLists.txt` 增加 **`/utf-8`**——MSVC 默认按系统码页（GBK）解析无 BOM UTF-8 中文注释，多字节序列吞行尾换行导致 `hotkey_handler.cpp` 大面积级联语法错误（"printed 未声明"等均为假象）；
+  2. `hotkey_handler.h` 补 `<windows.h>`（HWND）与 `<vector>`/`<cstdint>`；
+  3. `GdiplusStartup/GdiplusShutdown` 必须写 **`Gdiplus::`** 前缀（`gdiplus.h` 将 `gdiplusinit.h` 包裹在 `namespace Gdiplus` 内，SDK 10.0.26100 头文件实证）；
+  4. Flutter 3.47 的 `FlutterEngine` 不再继承 `BinaryMessenger`，`MethodChannel` 第一参数改 `engine()->messenger()`；另按 `/W4 /WX` 重命名遮蔽全局名的局部变量（C4459）。
+- **验证口径（诚实）**：`flutter build windows --debug` 实机成功产出 `build/windows/x64/runner/Debug/fastledger_client.exe` = 编译/链接闭环；**热键触发、截图内容的运行时手工验证仍待 5.3 批次**（需真机交互）。
+- 流程备注：本批因本机代理中断改经 GitHub API 编排 PR（revert + 分支重放技法），合并后本地 main 需在代理恢复时 `fetch + reset --hard origin/main` 做最终 SHA 对齐（树内容已一致）。
+
 ## [1.56] - 2026-11-02
 
 ### Flutter 设置页补齐长期 API Token 管理 + 接入 secure storage（WBS 6.6 客户端侧收口）
