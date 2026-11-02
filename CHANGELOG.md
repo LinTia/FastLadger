@@ -2,6 +2,17 @@
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.55] - 2026-11-02
+
+### 阶段 7 运维：Docker 部署单元 + 备份口径对齐 + 恢复演练 + 验收报告（WBS 7.1–7.5）
+
+- **Docker 单镜像（7.1）**：`deploy/Dockerfile`（多阶段 alpine+musl——CGO 编译 mattn/go-sqlite3，builder/runtime 同 musl 避免链接失败；nonroot；HEALTHCHECK `/healthz`；数据卷 /data；固定 CST 不依赖 tzdata）+ `deploy/docker-compose.yml`（**stop_grace_period: 30s**、命名卷持久化、Caddy 服务在 `profiles: ["tls"]` 下按需启用自动 HTTPS）+ 根 `.dockerignore`（白名单 server/）。**真实构建+容器 healthz/migrate 冒烟由新增 CI `docker-build` job 承担**（服务器与本机均未装 docker，按约定不擅自安装）；CI 冒烟注意：空库启动会被 Check 拒绝——先 `db migrate` 建库再起服务。
+- **每日备份（7.2）**：核对发现调度已在 `/etc/cron.d/fastledger`（每日 03:30，online backup API，并发安全）——**保留口径与 PRD §12 决策#5 不符**（原 30 天），已收紧为**滚动保留最近 7 份**（服务器脚本 + cron 注释 + 仓库副本 `deploy/backup.sh` 三处同步，手动执行验证成功）。
+- **恢复演练（7.3）**：2026-11-02 月度演练**通过**——恢复 db-2026-11-02 → bump（restoreEpoch 1→2，审计落"备份恢复"事件）→ 临时实例 healthz up/restoreEpoch=2 → 六表记录数一致（audit +1 为恢复事件，预期）→ 审计可读 → 清理，生产未受影响。实测修正两个坑并固化进 `deploy/README.md` §3：`instance bump` 必须同时传 `EBK_DB_PATH` 与 `EBK_DATA_DIR`（否则审计静默落 cwd 空库）；正确顺序为**恢复→bump→再启动**（restoreEpoch 启动时读入）。
+- **验收报告（7.5）**：`docs/FastLedger-阶段7-运维与验收报告.md`——7.1–7.5 状态矩阵 + §10.1–§10.9 逐项映射（自动化测试 vs 生产实测证据来源）+ 诚实口径四条（域名/带凭据 E2E/Windows OCR/服务器无 docker）。
+- **待 owner 决策**：外网 HTTPS 阻塞于域名（Caddy 配置就绪，`--profile tls` 一键启用）；DDNS 对固定公网 IP 不适用。
+- 7.4 测试：CI 已含全量+race+真库冒烟，本批追加 docker-build job；服务器 803 PASS/0 FAIL 基线不变。
+
 ## [1.54] - 2026-11-02
 
 ### Flutter 设置页 + 成员页（WBS 5.x 客户端补齐，PRD §4.12 / §7）+ 后端个人资料端点

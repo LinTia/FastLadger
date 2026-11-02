@@ -1,0 +1,63 @@
+# FastLedger 部署单元（WBS 7.1）。
+#
+# 用法：
+#   docker compose up -d                     # 仅应用（HTTP，供反代/内网）
+#   docker compose --profile tls up -d       # 应用 + Caddy 自动 HTTPS（需要域名）
+#
+# 两个 WBS 硬约束的落点：
+#  - stop_grace_period: 30s —— SIGTERM 后应用优雅关机（srv.Shutdown 10s 超时 +
+#    SQLite 关闭最后连接自动 WAL checkpoint），30s 上限留足余量；
+#  - 数据持久化：命名卷 fl-data 挂 /data（库 + WAL + instance 元信息）。
+#
+# HTTPS（外网）需要域名——当前生产为腾讯云轻量固定公网 IP 且未提供域名，
+# Caddy 服务声明在 profile tls 下按需启用；域名确定后只需改两处 CADDY_DOMAIN
+# 并 --profile tls 启动（Caddy 自动向 Let's Encrypt 签发证书，无需手工证书管理）。
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: fastledger:latest
+    container_name: fastledger
+    restart: unless-stopped
+    stop_grace_period: 30s
+    environment:
+      # JWT 签名密钥（≥32 字符，启动强校验）；生产用 .env 文件提供，不入库
+      EBK_JWT_SECRET: "${EBK_JWT_SECRET:?请在 deploy/.env 中设置 EBK_JWT_SECRET（≥32 字符）}"
+    volumes:
+      - fl-data:/data
+    ports:
+      - "127.0.0.1:8080:8080"   # 仅本机回环；外网访问走 Caddy（profile tls）或宿主反代
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: fastledger-caddy
+    profiles: ["tls"]            # 未提供域名时不启动，不阻塞默认部署
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      CADDY_DOMAIN: "${CADDY_DOMAIN:?请设置域名，如 ledger.example.com}"
+    volumes:
+      - caddy-data:/data
+      - caddy-config:/config
+    command: >
+      caddy reverse-proxy
+      --from ${CADDY_DOMAIN}
+      --to app:8080
+
+volumes:
+  fl-data:
+  caddy-data:
+  caddy-config:

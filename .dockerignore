@@ -1,0 +1,8 @@
+# 构建上下文 = 仓库根；只进 server/（go:embed 已含 web/dist 产物）
+*
+!server/
+!deploy/
+# server 内排除测试与本地工具链残留
+server/**/*_test.go
+server/.gocache/
+server/.gopath/

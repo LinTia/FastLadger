@@ -79,3 +79,38 @@ jobs:
       # 阶段 3.3 明确要求：Hub 并发必须由 race detector 证明
       - name: go test -race（Hub 并发 / 事务边界）
         run: go test ./internal/ws/... ./internal/service/... ./internal/api/... -race -count=1
+
+  # WBS 7.1：Docker 单镜像构建 + 容器冒烟（服务器未装 docker，构建证据由 CI 出）
+  docker-build:
+    name: docker build / run / healthz
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build 镜像（CGO + musl 多阶段）
+        run: docker build -f deploy/Dockerfile -t fastledger:ci .
+
+      # 空数据卷启动会被 Check 拒绝（要求先迁移）——先 migrate 建库，再起服务
+      - name: 容器内 db migrate 冒烟（子命令入口 + 建库）
+        run: >-
+          docker run --rm -v fl-ci-data:/data -e EBK_JWT_SECRET=ci-smoke-secret-0123456789abcdef012345
+          fastledger:ci db migrate
+
+      - name: 容器冒烟（healthz 应报 up + schemaVersion）
+        run: |
+          docker run -d --name fl-ci -v fl-ci-data:/data -p 18080:8080
+            -e EBK_JWT_SECRET=ci-smoke-secret-0123456789abcdef012345 fastledger:ci
+          for i in $(seq 1 20); do
+            body=$(curl -s http://127.0.0.1:18080/healthz || true)
+            echo "$body"
+            echo "$body" | grep -q '"status":"up"' && exit 0
+            sleep 1
+          done
+          echo "::error::容器 healthz 未就绪"
+          docker logs fl-ci
+          exit 1
+
+      - name: 清理
+        if: always()
+        run: docker rm -f fl-ci 2>/dev/null || true
