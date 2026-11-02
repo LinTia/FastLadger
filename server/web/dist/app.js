@@ -178,11 +178,10 @@ function renderLogin(mode) {
   p.autocomplete = isRegister ? "new-password" : "current-password"; p.required = true;
   if (isRegister) p.minLength = 8;
   const b = document.createElement("button"); b.textContent = isRegister ? "注 册" : "登 录";
-  f.append(u, p, b);
   if (isRegister) {
     const p2 = document.createElement("input"); p2.placeholder = "确认密码"; p2.type = "password";
     p2.autocomplete = "new-password"; p2.required = true;
-    f.append(p2);
+    f.append(u, p, p2, b);   // 字段顺序：用户名 → 密码 → 确认密码 → 提交按钮
     f.addEventListener("submit", async (e) => {
       e.preventDefault();
       if (p.value !== p2.value) { toast("两次输入的密码不一致", "err"); return; }
@@ -200,6 +199,7 @@ function renderLogin(mode) {
       finally { done(); }
     });
   } else {
+    f.append(u, p, b);
     f.addEventListener("submit", async (e) => {
       e.preventDefault();
       const done = btnPending(b, "登录中…");          // 对齐原型 loading 态
@@ -251,7 +251,29 @@ async function renderBooks() {
     name.textContent = bk.name + (bk.bookType === 2 ? "（家庭）" : "");
     const arrow = document.createElement("span"); arrow.className = "arrow"; arrow.textContent = "›";
     a.append(name, arrow);
-    card.append(a);
+    // 删除账本：仅 owner 可删（服务端 403 兜底），软删 + 审计；对齐原型确认对话框
+    const row = document.createElement("div");
+    row.style.cssText = "display:flex;gap:8px;align-items:center;";
+    a.style.flex = "1";
+    const del = document.createElement("button");
+    del.textContent = "删除"; del.className = "danger";
+    del.addEventListener("click", async () => {
+      const okD = await confirmDialog({
+        title: "删除账本",
+        desc: "删除「" + bk.name + "」后，该账本及其中全部交易、账户、成员关系将不再可见（仅账本所有者可删除）。",
+        confirmText: "删除", danger: true
+      });
+      if (!okD) return;
+      const done = btnPending(del, "删除中…");
+      try {
+        await api("DELETE", "/books/" + bk.id);
+        toast("账本已删除", "ok");
+        await renderBooks();
+      } catch (err) { toast(err.message, "err"); }
+      finally { done(); }
+    });
+    row.append(a, del);
+    card.append(row);
   }
   // 创建账本表单（POST /books {"name","bookType"}；1=个人 2=家庭）
   const form = document.createElement("form");
