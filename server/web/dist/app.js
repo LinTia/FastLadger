@@ -176,7 +176,7 @@ function renderLogin(mode) {
   const u = document.createElement("input"); u.placeholder = "用户名"; u.autocomplete = "username"; u.required = true;
   const p = document.createElement("input"); p.placeholder = isRegister ? "密码（至少 8 位）" : "密码"; p.type = "password";
   p.autocomplete = isRegister ? "new-password" : "current-password"; p.required = true;
-  p.minLength = isRegister ? 8 : -1;
+  if (isRegister) p.minLength = 8;
   const b = document.createElement("button"); b.textContent = isRegister ? "注 册" : "登 录";
   f.append(u, p, b);
   if (isRegister) {
