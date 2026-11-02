@@ -40,6 +40,9 @@ type stubAuthAPI struct {
 	lastLoginIP string
 	// lastLoginUA 记录登录入口透传的 User-Agent（R52：会话展示用透传）
 	lastLoginUA string
+	// emailErr / changeErr 注入 UpdateEmail / ChangePassword 的预设错误
+	emailErr  error
+	changeErr error
 }
 
 func (s *stubAuthAPI) Register(username, password string) (*model.User, error) {
@@ -79,6 +82,22 @@ func (s *stubAuthAPI) GetByID(uid int64) (*model.User, error) {
 		return s.user, nil
 	}
 	return &model.User{Id: uid, Username: "stub"}, nil
+}
+
+// UpdateEmail / ChangePassword 实现 authAPI 新增方法（PRD §4.12）：
+// 替身同样只透传预设错误/结果，业务规则由 service 层用例覆盖。
+func (s *stubAuthAPI) UpdateEmail(uid int64, email string) (*model.User, error) {
+	if s.emailErr != nil {
+		return nil, s.emailErr
+	}
+	return &model.User{Id: uid, Username: "stub", Email: email}, nil
+}
+
+func (s *stubAuthAPI) ChangePassword(uid int64, oldPassword, newPassword string) (int, error) {
+	if s.changeErr != nil {
+		return 0, s.changeErr
+	}
+	return 2, nil
 }
 
 // newAuthTestRouter 只挂被测的两个 handler（不引入 JWT 中间件，避免无关耦合）

@@ -6,6 +6,7 @@ import '../core/money.dart';
 import '../core/uuid.dart';
 import '../hotkey/hotkey_service.dart';
 import '../ocr/ocr_api.dart';
+import 'members_page.dart';
 import '../ocr/ocr_flow.dart';
 import 'accounts_page.dart';
 import 'categories_page.dart';
@@ -154,6 +155,16 @@ class _BookDetailPageState extends State<BookDetailPage> {
         actions: [
           PopupMenuButton<String>(
             onSelected: (key) async {
+              if (key == 'members') {
+                await Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => MembersPage(
+                    ledger: widget.ledger,
+                    bookId: widget.bookId,
+                    bookName: widget.bookName,
+                  ),
+                ));
+                return;
+              }
               await Navigator.of(context).push(MaterialPageRoute(
                 builder: (_) => key == 'accounts'
                     ? AccountsPage(ledger: widget.ledger, bookId: widget.bookId)
@@ -165,6 +176,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
             itemBuilder: (_) => const [
               PopupMenuItem(value: 'accounts', child: Text('账户管理')),
               PopupMenuItem(value: 'categories', child: Text('分类管理')),
+              PopupMenuItem(value: 'members', child: Text('家庭成员')),
             ],
           ),
         ],

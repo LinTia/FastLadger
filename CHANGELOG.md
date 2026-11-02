@@ -2,6 +2,23 @@
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.54] - 2026-11-02
+
+### Flutter 设置页 + 成员页（WBS 5.x 客户端补齐，PRD §4.12 / §7）+ 后端个人资料端点
+
+- **后端（PRD §4.12 缺口补齐，零迁移）**：
+  - `PUT /users/me`（更新邮箱；**用户名为登录标识不开放修改**，口径在注释与本文如实说明）；邮箱宽松格式校验 + 先查后写唯一冲突 409（`ErrEmailTaken`）；允许空串清除（部分唯一索引不含空值）
+  - `POST /users/me/password`（修改密码）：验证旧口令 → 新口令沿用注册强度规则（最短 8 位 / bcrypt 72 字节上限）→ 更新哈希 → **撤销该用户全部会话（含当前）**，响应如实返回下线会话数；长期 API Token 按设计不受改密影响（可单独撤销）
+  - `authAPI` 接口扩两方法；测试 stub 同步实现
+- **Flutter 客户端**（沿用 StatefulWidget + 构造器 DI 风格；全局设置用内置 `ChangeNotifier`，不引第三方）：
+  - `core/app_settings.dart`：主题模式（系统/浅色/深色）与通知开关（**纯本地偏好**——服务端尚无推送通道，如实标注），经 LocalStore 持久化；`main.dart` 以 ListenableBuilder 上根，MaterialApp 三态主题生效
+  - `ui/settings_page.dart`：个人资料卡（用户名只读+锁定提示、邮箱编辑对话框）、账号安全（修改密码三段表单：两次一致性前端校验不发请求；成功后 SnackBar 告知"所有设备已下线"并回登录页）、偏好卡（通知 Switch + 主题 SegmentedButton）、退出登录（确认对话框，原型文案）
+  - `ui/members_page.dart`：成员列表（头像/角色徽标/可见性副标题）、底部弹层成员详情（角色/可见性/实例管理员/uid + 设为管理员/降级为成员/移除成员——移除需确认对话框）、邀请成员（角色下拉+可选绑定用户名 → 邀请码一次性展示+复制）；`book_detail_page` 菜单新增"家庭成员"入口
+  - `ledger_api.dart`：me/updateEmail/changePassword + members/createInvite/changeRole/removeMember
+  - 移动端适配：ListView + 卡片布局、showModalBottomSheet + SafeArea、SnackBar 反馈、403 服务端文案如实透传
+- 测试：service 2 例 + api stub 扩展；Flutter `test/helpers.dart`（按路由分发的 FakeApiHttp）+ 22 例新增（API 8 + AppSettings 4 + SettingsPage 5 + MembersPage 5），**72/72 全过、analyze 0 issues**
+- 本批零迁移、Web 端不受影响；生产部署仅换二进制
+
 ## [1.53] - 2026-11-02
 
 ### 长期 API Token（WBS 6.6，迁移 0008）+ Web 端三页补齐（设置/成员/投资账户详情）

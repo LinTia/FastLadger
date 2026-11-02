@@ -36,6 +36,9 @@ type authAPI interface {
 	// userAgent 为客户端自报的 User-Agent（R52 会话列表展示用，允许为空串）。
 	LoginFromIP(username, password, clientIP, userAgent string) (string, error)
 	GetByID(uid int64) (*model.User, error)
+	// UpdateEmail / ChangePassword（PRD §4.12 个人资料与账号安全）
+	UpdateEmail(uid int64, email string) (*model.User, error)
+	ChangePassword(uid int64, oldPassword, newPassword string) (int, error)
 }
 
 type authHandler struct {
@@ -188,4 +191,43 @@ func (h *authHandler) me(c *gin.Context) {
 		return
 	}
 	ok(c, currentUserDTO(u))
+}
+
+// updateMe PUT /api/v1/users/me  {"email": "..."}
+//
+// 用户名不可改（登录标识与审计归属锚点，MVP 不开放）——请求体里即便带
+// username 也被忽略；口径在服务层注释与 CHANGELOG 如实说明。
+func (h *authHandler) updateMe(c *gin.Context) {
+	var req struct {
+		Email string `json:"email"`
+	}
+	if !bindJSON(c, &req) {
+		return
+	}
+	u, err := h.authSvc.UpdateEmail(currentUID(c), req.Email)
+	if err != nil {
+		mapSvcErr(c, err)
+		return
+	}
+	ok(c, currentUserDTO(u))
+}
+
+// changePassword POST /api/v1/users/me/password  {"oldPassword","newPassword"}
+//
+// 成功后该用户全部会话被撤销（含当前会话）——响应如实返回下线设备数，
+// 客户端应清除本地凭证并引导重新登录。
+func (h *authHandler) changePassword(c *gin.Context) {
+	var req struct {
+		OldPassword string `json:"oldPassword"`
+		NewPassword string `json:"newPassword"`
+	}
+	if !bindJSON(c, &req) {
+		return
+	}
+	revoked, err := h.authSvc.ChangePassword(currentUID(c), req.OldPassword, req.NewPassword)
+	if err != nil {
+		mapSvcErr(c, err)
+		return
+	}
+	ok(c, gin.H{"revokedSessions": revoked, "message": "密码已修改，所有设备已下线，请重新登录"})
 }

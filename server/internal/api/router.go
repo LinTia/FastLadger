@@ -134,6 +134,9 @@ func NewRouter(d Deps) *gin.Engine {
 
 		auth := v1.Group("", JWTAuth(d.AuthService, d.PATs))
 		auth.GET("/users/me", ah.me)
+		// PRD §4.12：个人资料与账号安全（用户名不可改；改密撤销全部会话）
+		auth.PUT("/users/me", ah.updateMe)
+		auth.POST("/users/me/password", ah.changePassword)
 		// WBS 6.6：长期 API Token 管理（生成/列表/撤销；明文仅创建响应出现一次）
 		if ph != nil {
 			auth.GET("/users/me/tokens", ph.list)

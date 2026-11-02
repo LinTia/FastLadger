@@ -2,12 +2,23 @@ import 'package:flutter/material.dart';
 
 import '../api/api_client.dart';
 import '../api/ledger_api.dart';
+import '../core/app_settings.dart';
 import 'book_detail_page.dart';
+import 'settings_page.dart';
 
 /// 首页：账本列表（骨架期最小可用；CRUD 页面在 5.2 补齐）。
 class HomePage extends StatefulWidget {
   final LedgerApi ledger;
-  const HomePage({super.key, required this.ledger});
+  final AuthApi auth;
+  final AppSettings settings;
+  final VoidCallback onLogout;
+  const HomePage({
+    super.key,
+    required this.ledger,
+    required this.auth,
+    required this.settings,
+    required this.onLogout,
+  });
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -37,7 +48,21 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('FastLedger')),
+      appBar: AppBar(title: const Text('FastLedger'), actions: [
+        IconButton(
+          icon: const Icon(Icons.settings_outlined),
+          tooltip: '设置',
+          onPressed: () {
+            Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => SettingsPage(
+                auth: widget.auth,
+                settings: widget.settings,
+                onLogout: widget.onLogout,
+              ),
+            ));
+          },
+        ),
+      ]),
       body: RefreshIndicator(
         onRefresh: _load,
         child: _buildBody(),

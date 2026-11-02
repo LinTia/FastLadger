@@ -1,6 +1,6 @@
 import 'api_client.dart';
 
-/// 认证 API（WBS 5.1：能登录）。
+/// 认证 API（WBS 5.1：能登录；5.x 扩展：个人资料与账号安全，PRD §4.12）。
 class AuthApi {
   final ApiClient client;
   AuthApi(this.client);
@@ -17,6 +17,25 @@ class AuthApi {
     }
     await client.tokens.save(token);
     return token;
+  }
+
+  /// 当前用户（uid/username/email/isInstanceAdmin）。
+  Future<Map<String, dynamic>> me() async =>
+      await client.get('/api/v1/users/me') as Map<String, dynamic>;
+
+  /// 更新邮箱（用户名为登录标识，服务端不开放修改）。
+  Future<Map<String, dynamic>> updateEmail(String email) async =>
+      await client.put('/api/v1/users/me', {'email': email})
+          as Map<String, dynamic>;
+
+  /// 修改密码。成功后服务端撤销全部会话（含当前）——客户端应清理本地凭证
+  /// 并回到登录页。返回撤销的会话数。
+  Future<int> changePassword(String oldPassword, String newPassword) async {
+    final data = await client.post('/api/v1/users/me/password', {
+      'oldPassword': oldPassword,
+      'newPassword': newPassword,
+    }) as Map<String, dynamic>;
+    return (data['revokedSessions'] as num?)?.toInt() ?? 0;
   }
 }
 
@@ -154,5 +173,30 @@ class LedgerApi {
 
   Future<dynamic> deleteCategory(int bookId, int categoryId) {
     return client.delete('/api/v1/books/$bookId/categories/$categoryId');
+  }
+
+  // ---- 家庭成员（阶段 3 / PRD §7，客户端侧补齐）----
+
+  /// 成员列表（uid/username/role/canViewOthers/isInstanceAdmin）。
+  Future<List<dynamic>> members(int bookId) async =>
+      (await client.get('/api/v1/books/$bookId/members') as List?) ?? const [];
+
+  /// 生成邀请码（返回 {code, role, expiresAt}——邀请码只此一次展示）。
+  Future<Map<String, dynamic>> createInvite(int bookId,
+      {required int role, String boundUsername = ''}) async {
+    return await client.post('/api/v1/books/$bookId/members/invite', {
+      'role': role,
+      'boundUsername': boundUsername,
+    }) as Map<String, dynamic>;
+  }
+
+  /// 变更成员角色（2=管理员，3=普通成员；owner 不可变更）。
+  Future<dynamic> changeRole(int bookId, int uid, int role) {
+    return client.put('/api/v1/books/$bookId/members/$uid', {'role': role});
+  }
+
+  /// 移除成员（移除后其令牌对该账本即失去访问权）。
+  Future<dynamic> removeMember(int bookId, int uid) {
+    return client.delete('/api/v1/books/$bookId/members/$uid');
   }
 }

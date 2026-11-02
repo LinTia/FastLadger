@@ -87,6 +87,8 @@ func mapSvcErr(c *gin.Context, err error) {
 	case errors.Is(err, service.ErrPATNotFound):
 		// 跨用户/不存在/已撤销统一 404，不泄露存在性（service.Revoke 口径）
 		fail(c, http.StatusNotFound, "Token 不存在")
+	case errors.Is(err, service.ErrEmailTaken):
+		fail(c, http.StatusConflict, "该邮箱已被其他账号使用")
 	case errors.Is(err, service.ErrInvalidCreate),
 		errors.Is(err, service.ErrInvalidArgument),
 		errors.Is(err, service.ErrAccountInvalid),
