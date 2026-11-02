@@ -41,7 +41,7 @@ bool FlutterWindow::OnCreate() {
   const HWND main_hwnd = GetHandle();
   g_hotkey_channel =
       std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
-          flutter_controller_->engine()->messenger(), "fastledger/hotkey",
+          flutter_controller_->engine(), "fastledger/hotkey",
           &flutter::StandardMethodCodec::GetInstance());
   g_hotkey_channel->SetMethodCallHandler(
       [main_hwnd](const auto& call, auto result) {

@@ -22,9 +22,9 @@ std::atomic<bool> g_registered{false};
 // GDI+ 一次性初始化（进程级）。
 struct GdiPlusBoot {
   ULONG_PTR token = 0;
-  GdiPlusBoot() { Gdiplus::GdiplusStartup(&token, nullptr, nullptr); }
+  GdiPlusBoot() { GdiplusStartup(&token, nullptr, nullptr); }
   ~GdiPlusBoot() {
-    if (token) Gdiplus::GdiplusShutdown(token);
+    if (token) GdiplusShutdown(token);
   }
 };
 GdiPlusBoot& GdiPlus() {
@@ -34,14 +34,13 @@ GdiPlusBoot& GdiPlus() {
 
 // GetImageEncoders 查找 PNG 编码器的 CLSID。
 bool FindPngEncoderClsid(CLSID* out) {
-  UINT num = 0, enc_size = 0;
-  if (Gdiplus::GetImageEncodersSize(&num, &enc_size) != Gdiplus::Ok ||
-      enc_size == 0) {
+  UINT num = 0, size = 0;
+  if (Gdiplus::GetImageEncodersSize(&num, &size) != Gdiplus::Ok || size == 0) {
     return false;
   }
-  std::vector<char> buf(enc_size);
+  std::vector<char> buf(size);
   auto* encoders = reinterpret_cast<Gdiplus::ImageCodecInfo*>(buf.data());
-  if (Gdiplus::GetImageEncoders(num, enc_size, encoders) != Gdiplus::Ok) {
+  if (Gdiplus::GetImageEncoders(num, size, encoders) != Gdiplus::Ok) {
     return false;
   }
   for (UINT i = 0; i < num; ++i) {
@@ -104,13 +103,13 @@ std::vector<uint8_t> CaptureForegroundWindowPng() {
         if (image.Save(stream, &clsid) == Gdiplus::Ok) {
           HGLOBAL hglob = nullptr;
           if (GetHGlobalFromStream(stream, &hglob) == S_OK) {
-            const SIZE_T glob_size = GlobalSize(hglob);
+            const SIZE_T size = GlobalSize(hglob);
             const void* data = GlobalLock(hglob);
             if (data) {
               // GlobalSize 可大于实际流长度；GDI+ 保存后的 PNG 以 IEnd 结尾，
               // 直接复制即可（解码器容忍尾部填充）。
               png.assign(static_cast<const uint8_t*>(data),
-                         static_cast<const uint8_t*>(data) + glob_size);
+                         static_cast<const uint8_t*>(data) + size);
               GlobalUnlock(hglob);
             }
           }

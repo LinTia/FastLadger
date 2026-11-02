@@ -14,14 +14,10 @@
 #ifndef RUNNER_HOTKEY_HANDLER_H_
 #define RUNNER_HOTKEY_HANDLER_H_
 
-#include <windows.h>
-
 #include <flutter/method_channel.h>
 #include <flutter/standard_method_codec.h>
 
-#include <cstdint>
 #include <memory>
-#include <vector>
 
 // 全局通道实例（在 FlutterWindow::OnCreate 中创建）。
 extern std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>

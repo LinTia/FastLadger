@@ -21,11 +21,6 @@ add_executable(${BINARY_NAME} WIN32
 # that need different build settings.
 apply_standard_settings(${BINARY_NAME})
 
-# Sources are UTF-8 (no BOM) with Chinese comments. MSVC defaults to the
-# system code page (GBK on zh-CN) and mis-parses them, swallowing newlines
-# inside multi-byte sequences. Force UTF-8 source/input encoding.
-target_compile_options(${BINARY_NAME} PRIVATE "/utf-8")
-
 # Add preprocessor definitions for the build version.
 target_compile_definitions(${BINARY_NAME} PRIVATE "FLUTTER_VERSION=\"${FLUTTER_VERSION}\"")
 target_compile_definitions(${BINARY_NAME} PRIVATE "FLUTTER_VERSION_MAJOR=${FLUTTER_VERSION_MAJOR}")
