@@ -94,13 +94,16 @@ jobs:
       # 空数据卷启动会被 Check 拒绝（要求先迁移）——先 migrate 建库，再起服务
       - name: 容器内 db migrate 冒烟（子命令入口 + 建库）
         run: >-
-          docker run --rm -v fl-ci-data:/data -e EBK_JWT_SECRET=ci-smoke-secret-0123456789abcdef012345
+          docker run --rm -v fl-ci-data:/data
+          -e EBK_JWT_SECRET=ci-smoke-secret-0123456789abcdef012345
           fastledger:ci db migrate
 
       - name: 容器冒烟（healthz 应报 up + schemaVersion）
         run: |
-          docker run -d --name fl-ci -v fl-ci-data:/data -p 18080:8080
-            -e EBK_JWT_SECRET=ci-smoke-secret-0123456789abcdef012345 fastledger:ci
+          docker run -d --name fl-ci \
+            -v fl-ci-data:/data -p 18080:8080 \
+            -e EBK_JWT_SECRET=ci-smoke-secret-0123456789abcdef012345 \
+            fastledger:ci
           for i in $(seq 1 20); do
             body=$(curl -s http://127.0.0.1:18080/healthz || true)
             echo "$body"
