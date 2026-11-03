@@ -118,6 +118,8 @@ function clearSession() {
 
 /* ---------- 顶部导航 ---------- */
 function showNav(book) {
+  const bn = $("#bottomNav"); if (bn) bn.classList.toggle("hidden", !book);
+  const fab = $("#fab"); if (fab) fab.classList.toggle("hidden", !book);
   $("#topbar").classList.remove("hidden");
   $("#logoutBtn").classList.remove("hidden");
   $("#whoami").textContent = state.whoami || "";
@@ -650,13 +652,17 @@ async function renderAccounts(bookId) {
   $("#navAccounts").classList.add("active");
   view.replaceChildren();
   const card = document.createElement("div"); card.className = "card";
-  const h = document.createElement("h2"); h.textContent = "账户对账";
+  const h = document.createElement("h2"); h.style.display = "flex"; h.style.alignItems = "center"; h.style.justifyContent = "space-between";
+  const ht = document.createElement("span"); ht.textContent = "账户对账";
+  const addBtn = document.createElement("button"); addBtn.textContent = "＋ 新增账户";
+  addBtn.onclick = () => openAcctForm(bookId, null);
+  h.append(ht, addBtn);
   const p = document.createElement("p"); p.className = "muted"; p.textContent = "各账户当前余额（负债账户为欠款）。";
   card.append(h, p);
   const table = document.createElement("table");
   const thead = document.createElement("thead");
   const trh = document.createElement("tr");
-  ["账户", "类型", "余额"].forEach((t, i) => { const th = document.createElement("th"); th.textContent = t; if (i === 2) th.className = "num"; trh.append(th); });
+  ["账户", "类型", "余额", "操作"].forEach((t, i) => { const th = document.createElement("th"); th.textContent = t; if (i === 2) th.className = "num"; trh.append(th); });
   thead.append(trh); table.append(thead);
   const tbody = document.createElement("tbody");
   for (const a of state.accounts) {
@@ -665,12 +671,32 @@ async function renderAccounts(bookId) {
     const tdC = document.createElement("td"); tdC.textContent = ACC_CAT_NAME[a.category] || ("类别 " + a.category); tdC.className = "muted";
     const tdB = document.createElement("td"); tdB.className = "num " + (a.balance < 0 ? "balance-neg" : "balance-pos");
     tdB.textContent = (a.currency || "CNY") === "CNY" ? "¥" + cents2str(a.balance) : a.currency + " " + cents2str(a.balance);
-    tr.append(tdN, tdC, tdB);
+    const tdOp = document.createElement("td");
+    const ra = document.createElement("div"); ra.className = "row-actions";
+    const edit = document.createElement("button"); edit.className = "ghost"; edit.textContent = "编辑";
+    edit.onclick = () => openAcctForm(bookId, a);
+    const del = document.createElement("button"); del.className = "danger"; del.textContent = "删除";
+    del.onclick = async () => {
+      const ok = await confirmDialog({
+        title: "删除账户",
+        desc: "删除「" + a.name + "」后，该账户及其余额将不再可见（仅账本所有者可删除）。",
+        confirmText: "删除", danger: true
+      });
+      if (!ok) return;
+      const done = btnPending(del, "删除中…");
+      try { await api("DELETE", "/books/" + bookId + "/accounts/" + a.id); toast("账户已删除", "ok"); await renderAccounts(bookId); }
+      catch (e) { toast(e.message, "err"); } finally { done(); }
+    };
+    ra.append(edit, del); tdOp.append(ra);
+    tr.append(tdN, tdC, tdB, tdOp);
     // 投资账户（类别 5）可点入持仓明细（对齐原型：投资账户详情页）
     if (a.category === 5) {
       tr.style.cursor = "pointer";
       tr.title = "查看持仓明细";
-      tr.addEventListener("click", () => { location.hash = "#b/" + bookId + "/account/" + a.id; });
+      tr.addEventListener("click", (e) => {
+        if (e.target.closest(".row-actions")) return;
+        location.hash = "#b/" + bookId + "/account/" + a.id;
+      });
     }
     tbody.append(tr);
   }
@@ -678,11 +704,47 @@ async function renderAccounts(bookId) {
   if (!state.accounts.length) {
     const empty = document.createElement("div"); empty.className = "empty";
     const ic = document.createElement("div"); ic.className = "icon"; ic.textContent = "💳";
-    const p = document.createElement("p"); p.textContent = "暂无账户。";
-    empty.append(ic, p); card.append(empty);
+    const p2 = document.createElement("p"); p2.textContent = "暂无账户——点击右上角「新增账户」添加。";
+    empty.append(ic, p2); card.append(empty);
   }
   card.append(table);
   view.append(card);
+}
+
+/* ---------- 账户新增/编辑对话框 ---------- */
+function openAcctForm(bookId, acc) {
+  const dlg = $("#acctDlg");
+  const editing = !!acc;
+  $("#acctFormTitle").textContent = editing ? "编辑账户" : "新增账户";
+  $("#acctName").value = acc ? acc.name : "";
+  fillSelect($("#acctCat"), Object.entries(ACC_CAT_NAME).map(([k, v]) => ({ id: Number(k), name: v })), null);
+  $("#acctCat").value = acc ? String(acc.category) : "1";
+  $("#acctCat").disabled = editing;            // 编辑不支持改类型（后端仅改名称）
+  $("#acctCur").value = acc ? (acc.currency || "CNY") : "CNY";
+  $("#acctCur").disabled = editing;
+  $("#acctErr").textContent = "";
+  dlg.classList.remove("hidden");
+  if (typeof dlg.showModal === "function") dlg.showModal(); else dlg.setAttribute("open", "");
+  $("#acctCancel").onclick = () => { dlg.close ? dlg.close() : dlg.removeAttribute("open"); dlg.classList.add("hidden"); };
+  $("#acctForm").onsubmit = async (e) => {
+    e.preventDefault();
+    const name = $("#acctName").value.trim();
+    if (!name) { $("#acctErr").textContent = "请输入账户名称"; return; }
+    let body;
+    if (editing) {
+      body = { name };
+    } else {
+      body = { name, category: Number($("#acctCat").value), currency: $("#acctCur").value.trim() || "CNY" };
+    }
+    const done = btnPending($("#acctSubmit"), "保存中…");
+    try {
+      if (editing) await api("PUT", "/books/" + bookId + "/accounts/" + acc.id, body);
+      else await api("POST", "/books/" + bookId + "/accounts", body);
+      toast(editing ? "账户已更新" : "账户已创建", "ok");
+      dlg.close ? dlg.close() : dlg.removeAttribute("open"); dlg.classList.add("hidden");
+      await renderAccounts(bookId);
+    } catch (err) { $("#acctErr").textContent = err.message; } finally { done(); }
+  };
 }
 
 /* ---------- 回收站 ---------- */
@@ -880,13 +942,36 @@ async function renderExport(bookId) {
   const h = document.createElement("h2"); h.textContent = "数据导出";
   card.append(h);
 
-  // 时间范围
+  // 时间范围（快速预设 + 自定义）
   const sec1 = document.createElement("p"); sec1.className = "muted"; sec1.style.fontWeight = "500";
   sec1.textContent = "时间范围";
+  const presetRow = document.createElement("div"); presetRow.className = "export-range";
+  const presetBtns = [];
+  [["this", "本月"], ["last", "上月"], ["quarter", "本季度"], ["custom", "自定义"]].forEach(([k, t]) => {
+    const b = document.createElement("button"); b.textContent = t; b.dataset.kind = k;
+    b.className = "active"; presetBtns.push(b); presetRow.append(b);
+  });
   const row1 = document.createElement("div"); row1.style.cssText = "display:flex;gap:10px;flex-wrap:wrap;margin:6px 0 12px;";
   const dFrom = document.createElement("input"); dFrom.type = "date"; dFrom.id = "xFrom";
   const dTo = document.createElement("input"); dTo.type = "date"; dTo.id = "xTo";
   row1.append(wrapField("开始日期", dFrom), wrapField("结束日期", dTo));
+
+  const p2 = (n) => String(n).padStart(2, "0");
+  const isoOf = (d) => d.getFullYear() + "-" + p2(d.getMonth() + 1) + "-" + p2(d.getDate());
+  function setRange(kind) {
+    const now = new Date();
+    let from, to;
+    if (kind === "this") { from = new Date(now.getFullYear(), now.getMonth(), 1); to = now; }
+    else if (kind === "last") { from = new Date(now.getFullYear(), now.getMonth() - 1, 1); to = new Date(now.getFullYear(), now.getMonth(), 0); }
+    else if (kind === "quarter") { const q = Math.floor(now.getMonth() / 3) * 3; from = new Date(now.getFullYear(), q, 1); to = now; }
+    if (kind !== "custom") { dFrom.value = isoOf(from); dTo.value = isoOf(to); }
+    presetBtns.forEach((b) => b.classList.toggle("active", b.dataset.kind === kind));
+  }
+  presetBtns.forEach((b) => b.onclick = () => setRange(b.dataset.kind));
+  [dFrom, dTo].forEach((el) => el.addEventListener("change", () => {
+    presetBtns.forEach((b) => b.classList.toggle("active", b.dataset.kind === "custom"));
+  }));
+  setRange("this");
 
   // 收支类型
   const sec2 = document.createElement("p"); sec2.className = "muted"; sec2.style.fontWeight = "500";
@@ -932,12 +1017,36 @@ async function renderExport(bookId) {
     boxes.push(cb);
   }
 
+  // 数据预览（共 N 条）
+  const previewEl = document.createElement("div"); previewEl.className = "export-preview"; previewEl.textContent = "点击「预览」查看本次导出的记录条数。";
+  const btnPreview = document.createElement("button"); btnPreview.className = "ghost"; btnPreview.textContent = "预览";
+
+  async function updatePreview() {
+    const q = new URLSearchParams();
+    if (typeSel.value !== "0") q.set("type", typeSel.value);
+    const min = dateStartUnix(dFrom.value, false), max = dateStartUnix(dTo.value, true);
+    if (min) q.set("minTime", String(min));
+    if (max) q.set("maxTime", String(max));
+    q.set("count", "1"); q.set("page", "1");
+    const done = btnPending(btnPreview, "预览中…");
+    try {
+      const d = await api("GET", "/books/" + bookId + "/transactions?" + q.toString());
+      const n = (d && d.total) || 0;
+      previewEl.textContent = n > 0 ? "共 " + n + " 条记录将导出。" : "没有可导出的数据（该范围内无交易）。";
+    } catch (e) { previewEl.textContent = "预览失败：" + e.message; }
+    finally { done(); }
+  }
+
   // 动作按钮（对齐原型："导出 CSV 文件" / "导出 JSON 文件"）
   const actions = document.createElement("div"); actions.style.cssText = "display:flex;gap:10px;flex-wrap:wrap;";
   const btnCsv = document.createElement("button"); btnCsv.textContent = "导出 CSV 文件";
   const btnJson = document.createElement("button"); btnJson.textContent = "导出 JSON 文件"; btnJson.className = "ghost";
-  actions.append(btnCsv, btnJson);
-  card.append(sec1, row1, sec2, row2, sec3, fmtRow, sec4, fieldRow, actions);
+  actions.append(btnCsv, btnJson, btnPreview);
+  card.append(sec1, presetRow, row1, sec2, row2, sec3, fmtRow, sec4, fieldRow, actions, previewEl);
+
+  const note = document.createElement("p"); note.className = "export-note";
+  note.textContent = "CSV 含 UTF-8 BOM，Excel 可直接打开（兼容）；JSON 为原始结构化数据，适合备份或开发 API 读取。";
+  card.append(note);
   view.append(card);
 
   const doExport = async (format, btn) => {
@@ -981,6 +1090,8 @@ async function renderExport(bookId) {
   };
   btnCsv.addEventListener("click", () => doExport("csv", btnCsv));
   btnJson.addEventListener("click", () => doExport("json", btnJson));
+  btnPreview.addEventListener("click", updatePreview);
+  updatePreview();
 }
 
 function wrapField(label, control) {
@@ -1571,6 +1682,26 @@ async function renderMembers(bookId) {
 
   const members = await api("GET", "/books/" + bookId + "/members");
   const me = await api("GET", "/users/me");
+
+  // 家庭信息块（P1-4：家庭名称 / 成员数量 / 创建时间）
+  const book = books.find((b) => b.id === bookId) || {};
+  const fblock = document.createElement("div"); fblock.className = "family-block";
+  const fname = document.createElement("div"); fname.className = "fname"; fname.textContent = book.name || "家庭账本";
+  const fmeta = document.createElement("div"); fmeta.className = "fmeta";
+  const mkMeta = (val, label) => {
+    const d = document.createElement("div");
+    const b = document.createElement("b"); b.textContent = val;
+    const s = document.createElement("span"); s.textContent = " " + label;
+    d.append(b, s); return d;
+  };
+  fmeta.append(
+    mkMeta(String(members.length), "名成员"),
+    mkMeta(book.bookType === 2 ? "家庭账本" : "个人账本", "类型"),
+    mkMeta(book.createdAt ? fmtTime(book.createdAt).slice(0, 10) : "—", "创建于")
+  );
+  fblock.append(fname, fmeta);
+  card.append(fblock);
+
   const table = document.createElement("table");
   const thead = document.createElement("thead"); const trh = document.createElement("tr");
   ["成员姓名", "角色", "可见性", ""].forEach((t) => { const th = document.createElement("th"); th.textContent = t; trh.append(th); });
@@ -1706,27 +1837,396 @@ async function renderAccountDetail(bookId, accId) {
 }
 
 /* ---------- 路由 ---------- */
+/* ---------- 日期分组（今天/昨天/前天/N天前） ---------- */
+function dateGroupKey(unixSec) {
+  const d = new Date(unixSec * 1000);
+  return Math.floor(new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime() / 1000);
+}
+function dateGroupLabel(unixSec) {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const d = new Date(unixSec * 1000);
+  const that = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const days = Math.round((today - that) / 86400000);
+  if (days === 0) return "今天";
+  if (days === 1) return "昨天";
+  if (days === 2) return "前天";
+  if (days < 30) return days + " 天前";
+  return (d.getMonth() + 1) + "月" + d.getDate() + "日";
+}
+
+/* ---------- 底部导航 + 中央 FAB（移动端；桌面由顶部导航承载） ---------- */
+function wireBottomNav(bookId, activePath) {
+  const nav = $("#bottomNav");
+  if (!nav) return;
+  nav.querySelectorAll(".tab").forEach((t) => {
+    const p = t.dataset.path || "";
+    t.classList.toggle("active", p === activePath);
+    t.onclick = () => { location.hash = "#b/" + bookId + p; };
+  });
+  const fab = $("#fab");
+  if (fab) fab.onclick = () => openTxForm(bookId, () => route());
+}
+
+/* ---------- 账单流（按日期分组渲染，点击进入详情） ---------- */
+async function renderBillStream(bookId, container) {
+  container.replaceChildren();
+  const sk = document.createElement("div"); sk.setAttribute("aria-busy", "true");
+  for (let i = 0; i < 4; i++) { const b = document.createElement("div"); b.className = "skel"; b.style.width = (90 - i * 12) + "%"; sk.append(b); }
+  container.append(sk);
+  let data;
+  try { data = await api("GET", "/books/" + bookId + "/transactions?page=1&count=60"); }
+  catch (e) { toast(e.message, "err"); return; }
+  const items = data.items || [];
+  container.replaceChildren();
+  if (!items.length) {
+    const empty = document.createElement("div"); empty.className = "empty";
+    const ic = document.createElement("div"); ic.className = "icon"; ic.textContent = "🧾";
+    const p = document.createElement("p"); p.textContent = "还没有账单——点下方「＋ 记一笔」开始记录。";
+    empty.append(ic, p); container.append(empty);
+    return;
+  }
+  const groups = new Map();
+  for (const tx of items) {
+    state.txMap = state.txMap || {}; state.txMap[tx.id] = tx;
+    const key = dateGroupKey(tx.txTime);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(tx);
+  }
+  const keys = [...groups.keys()].sort((a, b) => b - a);
+  for (const key of keys) {
+    const arr = groups.get(key);
+    let daySum = 0;
+    for (const t of arr) { if (t.txType === 1) daySum += t.amount; else if (t.txType === 2) daySum -= t.amount; }
+    const gt = document.createElement("div"); gt.className = "bill-group-title";
+    const lt = document.createElement("span"); lt.textContent = dateGroupLabel(key);
+    const rt = document.createElement("span"); rt.className = "sum";
+    rt.textContent = (daySum >= 0 ? "+" : "-") + "¥" + cents2str(Math.abs(daySum));
+    gt.append(lt, rt); container.append(gt);
+    for (const tx of arr) {
+      const row = document.createElement("div"); row.className = "bill-row";
+      const ico = document.createElement("div"); ico.className = "bill-ico";
+      ico.textContent = tx.txType === 1 ? "💰" : tx.txType === 2 ? "💸" : "🔁";
+      const main = document.createElement("div"); main.className = "bill-main";
+      const t1 = document.createElement("div"); t1.className = "t1";
+      t1.textContent = tx.txType === 3
+        ? (accountName(tx.accountId) + " → " + accountName(tx.toAccountId))
+        : (categoryName(tx.categoryId) || (tx.note || tx.merchant || TX_TYPE_NAME[tx.txType] || "交易"));
+      const t2 = document.createElement("div"); t2.className = "t2";
+      t2.textContent = (tx.note || "") + (tx.merchant ? " · " + tx.merchant : "") + " · " + fmtTime(tx.txTime).slice(11);
+      main.append(t1, t2);
+      const amt = document.createElement("div");
+      amt.className = "bill-amt " + (tx.txType === 1 ? "income" : tx.txType === 2 ? "expense" : "transfer");
+      amt.textContent = (tx.txType === 1 ? "+" : tx.txType === 2 ? "-" : "") + "¥" + cents2str(tx.amount);
+      row.append(ico, main, amt);
+      row.addEventListener("click", () => { location.hash = "#b/" + bookId + "/tx/" + tx.id; });
+      container.append(row);
+    }
+  }
+}
+
+/* ---------- P0-1 首页账单页（总收入/总支出/结余 + 账单流） ---------- */
+async function renderHome(bookId) {
+  state.bookId = bookId;
+  const { accs, cats } = await loadBookMeta(bookId);
+  const books = await api("GET", "/books");
+  const book = books.find((b) => b.id === bookId) || { id: bookId };
+  showNav(book); wireBottomNav(bookId, "");
+  $("#navTxns").classList.remove("active");
+  view.replaceChildren();
+
+  const card = document.createElement("div"); card.className = "card";
+  const h = document.createElement("h2");
+  h.style.display = "flex"; h.style.alignItems = "center"; h.style.justifyContent = "space-between";
+  const ht = document.createElement("span"); ht.textContent = book.name + " · 概览";
+  const add = document.createElement("button"); add.className = "only-desktop"; add.textContent = "＋ 记一笔";
+  add.style.padding = "5px 12px"; add.onclick = () => openTxForm(bookId, () => route());
+  h.append(ht, add);
+  card.append(h);
+
+  const sumWrap = document.createElement("div"); sumWrap.className = "summary";
+  let monthly = [];
+  try { const m = await api("GET", "/books/" + bookId + "/reports/monthly?months=2"); monthly = (m && m.items) || []; } catch (_) {}
+  const cur = monthly[monthly.length - 1] || { income: 0, expense: 0 };
+  let balance = 0; for (const a of accs) balance += a.balance || 0;
+  const mkCard = (label, value, cls, sub) => {
+    const c = document.createElement("div"); c.className = "summary-card " + (cls || "");
+    const l = document.createElement("div"); l.className = "label"; l.textContent = label;
+    const v = document.createElement("div"); v.className = "value"; v.textContent = value;
+    c.append(l, v);
+    if (sub) { const s = document.createElement("div"); s.className = "sub"; s.textContent = sub; c.append(s); }
+    return c;
+  };
+  sumWrap.append(
+    mkCard("本月收入", "+¥" + cents2str(cur.income), "", "家庭总收入"),
+    mkCard("本月支出", "-¥" + cents2str(cur.expense), "", "家庭总支出"),
+    mkCard("结余", "¥" + cents2str(balance), "accent", "净资产")
+  );
+  card.append(sumWrap);
+  view.append(card);
+
+  const stream = document.createElement("div");
+  view.append(stream);
+  await renderBillStream(bookId, stream);
+}
+
+/* ---------- P0-2 交易详情页 ---------- */
+async function renderTxDetail(bookId, txId) {
+  state.bookId = bookId;
+  await loadBookMeta(bookId);
+  const books = await api("GET", "/books");
+  const book = books.find((b) => b.id === bookId) || { id: bookId };
+  showNav(book); wireBottomNav(bookId, "/txns");
+  view.replaceChildren();
+  let tx;
+  try { tx = await api("GET", "/books/" + bookId + "/transactions/" + txId); }
+  catch (e) { toast(e.message, "err"); location.hash = "#b/" + bookId + "/txns"; return; }
+  state.txMap = state.txMap || {}; state.txMap[tx.id] = tx;
+
+  const card = document.createElement("div"); card.className = "card tx-detail";
+  const hero = document.createElement("div"); hero.className = "hero";
+  const amt = document.createElement("div");
+  amt.className = "amt " + (tx.txType === 1 ? "income" : tx.txType === 2 ? "expense" : "transfer");
+  amt.textContent = (tx.txType === 1 ? "+" : tx.txType === 2 ? "-" : "") + "¥" + cents2str(tx.amount);
+  const typ = document.createElement("div"); typ.className = "typ"; typ.textContent = TX_TYPE_NAME[tx.txType] || "交易";
+  hero.append(amt, typ); card.append(hero);
+
+  const rows = document.createElement("div"); rows.className = "rows";
+  const addRow = (k, v) => {
+    const r = document.createElement("div"); r.className = "row";
+    const kk = document.createElement("span"); kk.className = "k"; kk.textContent = k;
+    const vv = document.createElement("span"); vv.className = "v"; vv.textContent = v;
+    r.append(kk, vv); rows.append(r);
+  };
+  addRow("账户", tx.txType === 3 ? (accountName(tx.accountId) + " → " + accountName(tx.toAccountId)) : accountName(tx.accountId));
+  if (tx.txType !== 3) addRow("分类", categoryName(tx.categoryId));
+  addRow("日期", fmtTime(tx.txTime));
+  addRow("备注", tx.note || (tx.merchant ? "商户：" + tx.merchant : "—"));
+  card.append(rows);
+
+  const actions = document.createElement("div"); actions.className = "actions";
+  const editBtn = document.createElement("button"); editBtn.className = "ghost"; editBtn.textContent = "编辑";
+  editBtn.onclick = () => openTxEditForm(bookId, tx, () => renderTxDetail(bookId, txId));
+  const delBtn = document.createElement("button"); delBtn.className = "danger"; delBtn.textContent = "删除";
+  delBtn.onclick = async () => {
+    const ok = await confirmDialog({
+      title: "删除交易",
+      desc: "删除后将无法恢复，账户余额会相应调整。",
+      confirmText: "删除", danger: true
+    });
+    if (!ok) return;
+    const done = btnPending(delBtn, "删除中…");
+    try {
+      await api("DELETE", "/books/" + bookId + "/transactions/" + tx.id + "?clientUuid=" + encodeURIComponent(uuid()));
+      toast("已删除", "ok"); location.hash = "#b/" + bookId + "/txns";
+    } catch (e) { toast(e.message, "err"); } finally { done(); }
+  };
+  actions.append(editBtn, delBtn); card.append(actions);
+  view.append(card);
+}
+
+/* ---------- P0-3 两级分类管理 ---------- */
+function openCatForm(bookId, cat) {
+  const dlg = $("#catDlg");
+  $("#catFormTitle").textContent = cat ? "编辑分类" : "新增分类";
+  $("#catName").value = cat ? cat.name : "";
+  $("#catType").value = String(cat ? cat.catType : 2);
+  const tops = state.categories.filter((c) => !c.parentId && (!cat || c.id !== cat.id));
+  fillSelect($("#catParent"), tops, "无（作为大类）");
+  $("#catParent").value = cat && cat.parentId ? String(cat.parentId) : "0";
+  $("#catErr").textContent = "";
+  dlg.classList.remove("hidden");
+  if (typeof dlg.showModal === "function") dlg.showModal(); else dlg.setAttribute("open", "");
+  $("#catCancel").onclick = () => { dlg.close ? dlg.close() : dlg.removeAttribute("open"); dlg.classList.add("hidden"); };
+  $("#catForm").onsubmit = async (e) => {
+    e.preventDefault();
+    const name = $("#catName").value.trim();
+    if (!name) { $("#catErr").textContent = "请输入分类名称"; return; }
+    const body = { name, catType: Number($("#catType").value), parentId: Number($("#catParent").value) };
+    const done = btnPending($("#catSubmit"), "保存中…");
+    try {
+      if (cat) await api("PUT", "/books/" + bookId + "/categories/" + cat.id, body);
+      else await api("POST", "/books/" + bookId + "/categories", body);
+      toast(cat ? "分类已更新" : "分类已添加", "ok");
+      dlg.close ? dlg.close() : dlg.removeAttribute("open"); dlg.classList.add("hidden");
+      await renderCategories(bookId);
+    } catch (err) { $("#catErr").textContent = err.message; } finally { done(); }
+  };
+}
+async function deleteCategory(bookId, cat) {
+  let n = 0;
+  try { const d = await api("GET", "/books/" + bookId + "/transactions?categoryId=" + cat.id + "&count=1"); n = (d && d.total) || 0; } catch (_) {}
+  const ok = await confirmDialog({
+    title: "删除分类",
+    desc: "删除「" + cat.name + "」后，" + n + " 笔账单将归入「其他」分类，且不可恢复。",
+    confirmText: "删除", danger: true
+  });
+  if (!ok) return;
+  const done = btnPending(document.activeElement, "删除中…");
+  try { await api("DELETE", "/books/" + bookId + "/categories/" + cat.id); toast("分类已删除", "ok"); await renderCategories(bookId); }
+  catch (e) { toast(e.message, "err"); } finally { done(); }
+}
+async function renderCategories(bookId) {
+  state.bookId = bookId;
+  const { cats } = await loadBookMeta(bookId);
+  const books = await api("GET", "/books");
+  const book = books.find((b) => b.id === bookId) || { id: bookId };
+  showNav(book); wireBottomNav(bookId, "");
+  view.replaceChildren();
+
+  const card = document.createElement("div"); card.className = "card";
+  const h = document.createElement("h2"); h.textContent = "分类管理"; card.append(h);
+  const sub = document.createElement("p"); sub.className = "muted";
+  sub.textContent = "管理支出 / 收入的大类与小类；删除分类后，相关账单将归入「其他」。";
+  card.append(sub);
+
+  const addBar = document.createElement("div"); addBar.className = "cat-add";
+  const addTop = document.createElement("button"); addTop.textContent = "＋ 新增大类";
+  addTop.onclick = () => openCatForm(bookId, null);
+  addBar.append(addTop); card.append(addBar);
+
+  let tree = [];
+  try { const t = await api("GET", "/books/" + bookId + "/categories?tree=1"); tree = t || []; } catch (_) {}
+
+  const renderGroup = (catType, title) => {
+    const items = (tree || []).filter((c) => c.catType === catType);
+    const grp = document.createElement("div"); grp.className = "cat-group";
+    const head = document.createElement("div"); head.className = "cat-group-head";
+    const nm = document.createElement("span"); nm.className = "name"; nm.textContent = title;
+    head.append(nm); grp.append(head);
+    if (!items.length) {
+      const e = document.createElement("div"); e.className = "cat-empty";
+      e.textContent = "暂无，点击上方「新增大类」添加。"; grp.append(e);
+    }
+    for (const top of items) {
+      const item = document.createElement("div"); item.className = "cat-item";
+      const ico = document.createElement("div"); ico.className = "cat-ico"; ico.textContent = "📂";
+      const main = document.createElement("div"); main.style.flex = "1";
+      const n = document.createElement("div"); n.className = "cat-name"; n.textContent = top.name;
+      main.append(n);
+      const ra = document.createElement("div"); ra.className = "row-actions";
+      const addSub = document.createElement("button"); addSub.className = "ghost"; addSub.textContent = "＋小类";
+      addSub.onclick = () => openCatForm(bookId, { parentId: top.id, catType: top.catType });
+      const edit = document.createElement("button"); edit.className = "ghost"; edit.textContent = "编辑";
+      edit.onclick = () => openCatForm(bookId, top);
+      const del = document.createElement("button"); del.className = "danger"; del.textContent = "删除";
+      del.onclick = async () => { await deleteCategory(bookId, top); };
+      ra.append(addSub, edit, del);
+      item.append(ico, main, ra); grp.append(item);
+      for (const kid of (top.children || [])) {
+        const ki = document.createElement("div"); ki.className = "cat-item";
+        const kiIco = document.createElement("div"); kiIco.className = "cat-ico"; kiIco.textContent = "🔖";
+        const kiMain = document.createElement("div"); kiMain.style.flex = "1";
+        const kn = document.createElement("div"); kn.className = "cat-name"; kn.textContent = kid.name;
+        kiMain.append(kn);
+        const kra = document.createElement("div"); kra.className = "row-actions";
+        const ke = document.createElement("button"); ke.className = "ghost"; ke.textContent = "编辑";
+        ke.onclick = () => openCatForm(bookId, kid);
+        const kd = document.createElement("button"); kd.className = "danger"; kd.textContent = "删除";
+        kd.onclick = async () => { await deleteCategory(bookId, kid); };
+        kra.append(ke, kd); ki.append(kiIco, kiMain, kra); grp.append(ki);
+      }
+    }
+    card.append(grp);
+  };
+  renderGroup(2, "支出分类");
+  renderGroup(1, "收入分类");
+  view.append(card);
+}
+
+/* ---------- P1-3 我的（聚合入口 + 资料编辑） ---------- */
+async function renderMine(bookId) {
+  state.bookId = bookId;
+  await loadBookMeta(bookId);
+  const books = await api("GET", "/books");
+  const book = books.find((b) => b.id === bookId) || { id: bookId };
+  showNav(book); wireBottomNav(bookId, "/mine");
+  view.replaceChildren();
+
+  const card = document.createElement("div"); card.className = "card";
+  const head = document.createElement("div"); head.className = "mine-head";
+  const av = document.createElement("div"); av.className = "avatar";
+  av.textContent = (state.whoami || "我").slice(0, 1).toUpperCase();
+  const info = document.createElement("div");
+  const w = document.createElement("div"); w.className = "who"; w.textContent = state.whoami || "我";
+  const s = document.createElement("div"); s.className = "sub"; s.textContent = "家庭记账成员";
+  info.append(w, s); head.append(av, info); card.append(head);
+
+  // 资料编辑（邮箱可改；用户名按后端设计为只读）
+  let me = null;
+  try { me = await api("GET", "/users/me"); } catch (_) {}
+  const sec1 = document.createElement("div"); sec1.className = "mine-section-title"; sec1.textContent = "资料";
+  card.append(sec1);
+  const pf = document.createElement("div"); pf.className = "rows";
+  const rowU = document.createElement("div"); rowU.className = "row";
+  const ku = document.createElement("span"); ku.className = "k"; ku.textContent = "用户名";
+  const vu = document.createElement("span"); vu.className = "v"; vu.textContent = (me && me.username) || state.whoami || "—";
+  rowU.append(ku, vu);
+  const rowE = document.createElement("div"); rowE.className = "row"; rowE.style.flexDirection = "column"; rowE.style.alignItems = "stretch"; rowE.style.gap = "6px";
+  const ke = document.createElement("span"); ke.className = "k"; ke.textContent = "邮箱";
+  const eWrap = document.createElement("div"); eWrap.style.display = "flex"; eWrap.style.gap = "8px";
+  const eInput = document.createElement("input"); eInput.type = "email"; eInput.value = (me && me.email) || ""; eInput.placeholder = "未设置"; eInput.style.flex = "1";
+  const eSave = document.createElement("button"); eSave.textContent = "保存"; eSave.className = "ghost";
+  eSave.onclick = async () => {
+    const done = btnPending(eSave, "保存中…");
+    try { await api("PUT", "/users/me", { email: eInput.value.trim() }); toast("资料已更新", "ok"); }
+    catch (err) { toast(err.message, "err"); } finally { done(); }
+  };
+  eWrap.append(eInput, eSave); rowE.append(ke, eWrap);
+  pf.append(rowU, rowE); card.append(pf);
+
+  const sec2 = document.createElement("div"); sec2.className = "mine-section-title"; sec2.textContent = "账本与数据";
+  card.append(sec2);
+  const links = [
+    ["📒", "我的账本", "#books"],
+    ["💳", "账户", "#b/" + bookId + "/accounts"],
+    ["👥", "家庭成员", "#b/" + bookId + "/members"],
+    ["📤", "导出数据", "#b/" + bookId + "/export"],
+    ["📊", "报表", "#b/" + bookId + "/report"],
+    ["🎯", "预算", "#b/" + bookId + "/budget"],
+    ["📈", "资产", "#b/" + bookId + "/invest"],
+    ["♻️", "回收站", "#b/" + bookId + "/recycle"],
+  ];
+  for (const [ico, name, href] of links) {
+    const a = document.createElement("a"); a.className = "mine-link"; a.href = href;
+    const i = document.createElement("div"); i.className = "ico"; i.textContent = ico;
+    const t = document.createElement("span"); t.textContent = name;
+    const ar = document.createElement("span"); ar.className = "arrow"; ar.textContent = "›";
+    a.append(i, t, ar); card.append(a);
+  }
+  view.append(card);
+}
+
 async function route() {
   const hash = location.hash || "#";
-  // 投资账户详情：#b/:id/account/:accId（先于一般 #b/:id/... 匹配）
+  // 交易详情：#b/:id/tx/:txId（先于一般 #b/:id/... 匹配）
+  const mt = hash.match(/^#b\/(\d+)\/tx\/(\d+)/);
+  // 投资账户详情：#b/:id/account/:accId
   const md = hash.match(/^#b\/(\d+)\/account\/(\d+)/);
-  const m = hash.match(/^#b\/(\d+)(?:\/(accounts|recycle|report|export|budget|invest|members))?/);
+  // 账本子路由：txns/categories/mine/accounts/recycle/report/export/budget/invest/members
+  const m = hash.match(/^#b\/(\d+)(?:\/(txns|categories|mine|accounts|recycle|report|export|budget|invest|members))?/);
   try {
     if (!state.token) { renderLogin(); return; }
-    if (md) {
+    if (mt) {
+      await renderTxDetail(Number(mt[1]), Number(mt[2]));
+    } else if (md) {
       await renderAccountDetail(Number(md[1]), Number(md[2]));
     } else if (hash === "#settings") {
       await renderSettings();
     } else if (m) {
       const bookId = Number(m[1]);
-      if (m[2] === "accounts") await renderAccounts(bookId);
-      else if (m[2] === "recycle") await renderRecycle(bookId);
-      else if (m[2] === "report") await renderReport(bookId);
-      else if (m[2] === "export") await renderExport(bookId);
-      else if (m[2] === "budget") await renderBudget(bookId);
-      else if (m[2] === "invest") await renderInvest(bookId);
-      else if (m[2] === "members") await renderMembers(bookId);
-      else await renderTxns(bookId);
+      const sub = m[2];
+      if (sub === "txns") await renderTxns(bookId);
+      else if (sub === "categories") await renderCategories(bookId);
+      else if (sub === "mine") await renderMine(bookId);
+      else if (sub === "accounts") await renderAccounts(bookId);
+      else if (sub === "recycle") await renderRecycle(bookId);
+      else if (sub === "report") await renderReport(bookId);
+      else if (sub === "export") await renderExport(bookId);
+      else if (sub === "budget") await renderBudget(bookId);
+      else if (sub === "invest") await renderInvest(bookId);
+      else if (sub === "members") await renderMembers(bookId);
+      else await renderHome(bookId);                 // 默认落地首页账单页（P0-1）
     } else if (hash === "#books" || hash === "#") {
       await renderBooks();
     } else {

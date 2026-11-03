@@ -194,11 +194,143 @@ dialog p.desc { margin: 0; font-size: 14px; color: var(--muted-fg); }
   html { scroll-behavior: auto; }
 }
 
+/* ---------- 概览卡（首页账单页：总收入/总支出/结余） ---------- */
+.summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; }
+.summary-card {
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-xl);
+  padding: 16px; box-shadow: var(--shadow-sm); animation: fadeUp .22s var(--ease) both;
+}
+.summary-card .label { color: var(--muted-fg); font-size: 13px; }
+.summary-card .value { font-size: 22px; font-weight: 700; margin-top: 6px; font-variant-numeric: tabular-nums; }
+.summary-card.accent { background: var(--primary); border-color: var(--primary); }
+.summary-card.accent .label { color: rgba(255,255,255,.85); }
+.summary-card.accent .value { color: #fff; }
+.summary-card .sub { color: var(--muted-fg); font-size: 12px; margin-top: 4px; }
+
+/* ---------- 账单流（按 今天/昨天/前天/N天前 分组） ---------- */
+.bill-group { margin-top: 14px; }
+.bill-group-title { font-size: 13px; color: var(--muted-fg); font-weight: 600; margin: 4px 2px 8px; display: flex; justify-content: space-between; }
+.bill-group-title .sum { font-weight: 500; }
+.bill-row {
+  display: flex; align-items: center; gap: 12px; padding: 12px 12px; cursor: pointer;
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+  margin-bottom: 8px; transition: background .12s var(--ease), transform .08s var(--ease);
+}
+.bill-row:hover { background: var(--muted); }
+.bill-row:active { transform: scale(.995); }
+.bill-ico { width: 40px; height: 40px; border-radius: 50%; background: var(--primary-soft); color: var(--primary); display: grid; place-items: center; font-size: 18px; flex: 0 0 auto; }
+.bill-main { flex: 1; min-width: 0; }
+.bill-main .t1 { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bill-main .t2 { color: var(--muted-fg); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bill-amt { font-weight: 600; font-variant-numeric: tabular-nums; }
+.bill-amt.income { color: var(--income); }
+.bill-amt.expense { color: var(--expense); }
+.bill-amt.transfer { color: var(--muted-fg); }
+
+/* ---------- 移动端底部导航 + 中央 FAB（原型：首页/账单/记一笔/报表/我的） ---------- */
+#bottomNav { display: none; }
+#fab { display: none; }
+@media (max-width: 768px) {
+  #topbar { display: none; }                       /* 移动端隐藏顶部平铺导航，改用底部 Tab */
+  main { margin: 12px auto 84px; padding: 0 10px; max-width: 560px; }
+  .summary { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .summary-card { padding: 12px; }
+  .summary-card .value { font-size: 18px; }
+  #bottomNav {
+    display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+    background: var(--card); border-top: 1px solid var(--line);
+    box-shadow: 0 -2px 12px -4px rgb(0 0 0 / .12); padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+    justify-content: space-around; align-items: center;
+  }
+  #bottomNav .tab {
+    flex: 1; border: 0; background: transparent; color: var(--muted-fg);
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    padding: 6px 0; font-size: 11px; border-radius: 10px;
+  }
+  #bottomNav .tab .ico { font-size: 20px; line-height: 1; }
+  #bottomNav .tab.active { color: var(--primary); background: var(--primary-soft); }
+  #fab {
+    display: grid; place-items: center; position: fixed; z-index: 31;
+    left: 50%; transform: translateX(-50%) translateY(-50%); bottom: 30px;
+    width: 56px; height: 56px; border-radius: 50%; padding: 0;
+    background: var(--primary); color: #fff; font-size: 26px; line-height: 1;
+    box-shadow: var(--shadow-md); border: 3px solid var(--bg);
+  }
+  #fab:active { transform: translateX(-50%) translateY(-50%) scale(.94); }
+  #toast { bottom: 96px; }
+}
+
+/* ---------- 两级分类管理 ---------- */
+.cat-group { margin-bottom: 14px; }
+.cat-group-head { display: flex; align-items: center; gap: 8px; margin: 6px 2px; }
+.cat-group-head .name { font-weight: 600; }
+.cat-group-head .kind { font-size: 12px; color: var(--muted-fg); background: var(--muted); padding: 1px 8px; border-radius: 999px; }
+.cat-item {
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--card);
+  border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 8px;
+}
+.cat-item .cat-ico { width: 34px; height: 34px; border-radius: 50%; background: var(--primary-soft); color: var(--primary); display: grid; place-items: center; }
+.cat-item .cat-name { font-weight: 500; }
+.cat-item .cat-meta { color: var(--muted-fg); font-size: 12px; }
+.cat-item .row-actions { margin-left: auto; }
+.cat-add { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; align-items: center; }
+.cat-add select, .cat-add input { min-width: 120px; }
+.cat-empty { text-align: center; color: var(--muted-fg); padding: 20px; }
+
+/* ---------- 交易详情 ---------- */
+.tx-detail { max-width: 560px; margin: 0 auto; }
+.tx-detail .hero { text-align: center; padding: 18px 0 10px; }
+.tx-detail .hero .amt { font-size: 34px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.tx-detail .hero .typ { color: var(--muted-fg); font-size: 13px; margin-top: 2px; }
+.rows { margin-top: 8px; }
+.row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 13px 14px; border-bottom: 1px solid var(--line); font-size: 14px; }
+.row:last-child { border-bottom: 0; }
+.row .k { color: var(--muted-fg); }
+.row .v { font-weight: 500; text-align: right; }
+.tx-detail .rows { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-xl); overflow: hidden; }
+.tx-detail .row { padding: 13px 14px; }
+.tx-detail .actions { display: flex; gap: 10px; margin-top: 16px; }
+.tx-detail .actions button { flex: 1; }
+
+/* ---------- 我的（聚合入口） ---------- */
+.mine-head { display: flex; align-items: center; gap: 12px; padding: 8px 2px 14px; }
+.mine-head .avatar { width: 52px; height: 52px; border-radius: 50%; background: var(--primary); color: #fff; display: grid; place-items: center; font-size: 22px; }
+.mine-head .who { font-weight: 600; font-size: 17px; }
+.mine-head .sub { color: var(--muted-fg); font-size: 13px; }
+.mine-section-title { color: var(--muted-fg); font-size: 13px; margin: 16px 2px 8px; font-weight: 600; }
+.mine-link { display: flex; align-items: center; gap: 12px; padding: 13px 14px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 8px; cursor: pointer; text-decoration: none; color: var(--ink); transition: background .12s var(--ease); }
+.mine-link:hover { background: var(--muted); }
+.mine-link .ico { width: 34px; height: 34px; border-radius: 50%; background: var(--primary-soft); color: var(--primary); display: grid; place-items: center; }
+.mine-link .arrow { margin-left: auto; color: var(--muted-fg); }
+
+/* ---------- 家庭信息块 ---------- */
+.family-block { background: var(--primary-soft); border: 1px solid color-mix(in srgb, var(--primary) 25%, transparent); border-radius: var(--radius-xl); padding: 16px; margin-bottom: 16px; }
+.family-block .fname { font-weight: 700; font-size: 16px; color: var(--primary); }
+.family-block .fmeta { display: flex; gap: 18px; margin-top: 8px; color: var(--muted-fg); font-size: 13px; }
+.family-block .fmeta b { color: var(--ink); font-size: 15px; }
+
+/* ---------- 对话框错误提示 ---------- */
+.err-msg { color: var(--danger); font-size: 13px; min-height: 16px; }
+
+/* ---------- 桌面专属按钮（移动端已有 FAB，隐藏避免重复） ---------- */
+.only-desktop { display: inline-block; }
+@media (max-width: 768px) { .only-desktop { display: none !important; } }
+
+/* ---------- 导出预览 ---------- */
+.export-range { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.export-range button { background: transparent; color: var(--muted-fg); border-color: var(--line); }
+.export-range button.active { background: var(--primary-soft); color: var(--primary); border-color: var(--primary); }
+.export-preview { margin-top: 12px; padding: 12px; border: 1px dashed var(--line); border-radius: var(--radius); color: var(--muted-fg); font-size: 13px; }
+.export-note { color: var(--muted-fg); font-size: 12px; margin-top: 10px; line-height: 1.5; }
+
 /* ---------- 窄屏适配（原型为移动优先） ---------- */
 @media (max-width: 640px) {
   #topbar { padding: 8px 12px; gap: 8px; overflow-x: auto; }
-  main { margin: 12px auto; padding: 0 10px; }
+  main { padding: 0 10px; }
   .card { padding: 14px; }
   th:nth-child(1), td:nth-child(1), th:nth-child(5), td:nth-child(5) { display: none; }
   #toast { bottom: 18px; }
+}
+@media (max-width: 768px) and (min-width: 641px) {
+  main { max-width: 560px; }
 }

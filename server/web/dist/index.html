@@ -27,6 +27,13 @@
 <main>
   <div id="view" aria-live="polite"></div>
 </main>
+<nav id="bottomNav">
+  <button class="tab" data-path=""><span class="ico">🏠</span>首页</button>
+  <button class="tab" data-path="/txns"><span class="ico">🧾</span>账单</button>
+  <button id="fab" title="记一笔">＋</button>
+  <button class="tab" data-path="/report"><span class="ico">📊</span>报表</button>
+  <button class="tab" data-path="/mine"><span class="ico">👤</span>我的</button>
+</nav>
 <div id="toast" class="hidden" role="status"></div>
 <dialog id="formDlg" class="hidden">
   <form id="txForm" method="dialog">
@@ -106,6 +113,36 @@
     <menu>
       <button type="button" id="iCancel" class="ghost">取消</button>
       <button type="submit" id="iSubmit">保存</button>
+    </menu>
+  </form>
+</dialog>
+<dialog id="catDlg" class="hidden">
+  <form id="catForm" method="dialog">
+    <h3 id="catFormTitle">新增分类</h3>
+    <label>名称 <input id="catName" type="text" maxlength="20" required></label>
+    <label>类型
+      <select id="catType"><option value="2">支出</option><option value="1">收入</option></select>
+    </label>
+    <label id="catParentRow">上级大类（可选）<select id="catParent"></select></label>
+    <div class="err-msg" id="catErr"></div>
+    <menu>
+      <button type="button" id="catCancel" class="ghost">取消</button>
+      <button type="submit" id="catSubmit">保存</button>
+    </menu>
+  </form>
+</dialog>
+<dialog id="acctDlg" class="hidden">
+  <form id="acctForm" method="dialog">
+    <h3 id="acctFormTitle">新增账户</h3>
+    <label>名称 <input id="acctName" type="text" maxlength="40" required></label>
+    <label>类型
+      <select id="acctCat"></select>
+    </label>
+    <label>币种 <input id="acctCur" type="text" maxlength="8" value="CNY"></label>
+    <div class="err-msg" id="acctErr"></div>
+    <menu>
+      <button type="button" id="acctCancel" class="ghost">取消</button>
+      <button type="submit" id="acctSubmit">保存</button>
     </menu>
   </form>
 </dialog>
