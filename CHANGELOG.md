@@ -2,6 +2,15 @@
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.58] - 2026-11-04
+
+### 手机 PWA 实施指导书（完整移动端 + 完整离线 + 本地备份恢复）
+
+- 新增 `docs/FastLedger-手机PWA实施指导书.md`：基于仓库现状明确推荐路线——在现有 `server/web/dist/` Go embed Web 客户端上演进移动优先 PWA，Flutter 原生端并行保留；不把现有 `client/web/manifest.json` 误认为 PWA 已交付。
+- 指导书覆盖 IndexedDB 本地数据层、Service Worker 静态资源缓存边界、离线账单分析、Outbox / push-pull / 冲突处置、权限变化与 `restore_epoch`、用户级加密备份与本机恢复、浏览器安全及 Android / iOS 真机验收。
+- 增加面向后续 AI 的文档修订指令：要求先更新 PRD、落地方案、开发 WBS 和验收矩阵；提出阶段 5P（5P.1–5P.14）任务拆分及待确认事项。
+- **范围说明**：本次仅新增实施指导书并更新仓库导航；未修改 PRD、落地方案、WBS，未实现 PWA 代码，未宣称离线功能已交付。后续须按指导书先完成文档对齐与技术 PoC。
+
 ## [1.57] - 2026-11-02
 
 ### Windows 桌面首次构建打通 + 开发者模式/工具链验证（PR #1，环境缺口 [1.47] 收口）
