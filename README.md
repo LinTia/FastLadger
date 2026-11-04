@@ -36,6 +36,7 @@
 | [`prototype/`](prototype/) | 完整可交互原型（13 个核心页面，**零外部请求、可离线**） | 看产品长什么样、怎么交互，**可直接在浏览器运行**；**公网在线版：[点此直接体验](https://a38ce1ad4e917321e.app.workbuddy.host/?sharecode=BPE6OFTPKE)**（由 WorkBuddy 托管，无需本地构建） |
 | [`docs/FastLedger-产品需求文档-PRD.md`](docs/FastLedger-产品需求文档-PRD.md) | 产品需求文档（PRD） | 做什么、为什么、范围与验收 |
 | [`docs/FastLedger-落地方案.md`](docs/FastLedger-落地方案.md) | 软件开发 8 环节落地方案 | 整体技术方案、数据模型、API、版本规划 |
+| [`docs/FastLedger-手机PWA实施指导书.md`](docs/FastLedger-手机PWA实施指导书.md) | 手机 PWA 实施指导书 | 完整移动端、完整离线、IndexedDB、同步、离线分析与本地备份恢复；指导后续 PRD / 落地方案 / WBS 修订 |
 | [`docs/FastLedger-新手开发完整指南.md`](docs/FastLedger-新手开发完整指南.md) | 新手开发完整指南（含可照敲代码骨架） | 应届生照着做即可开发 |
 | [`docs/FastLedger-枚举字典.md`](docs/FastLedger-枚举字典.md) | 统一枚举字典（唯一权威来源） | 各端枚举值对齐 |
 | [`docs/ezbookkeeping-代码导读.md`](docs/ezbookkeeping-代码导读.md) | 开源参考项目 ezbookkeeping 代码导读 | 可借鉴的设计与实现 |
