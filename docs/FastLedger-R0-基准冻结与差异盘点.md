@@ -116,6 +116,52 @@
 
 **状态覆盖缺口（R0-E-12）修正**：首页账单流已有骨架屏，不能将“骨架屏缺失”列为缺陷；但请求失败时 catch 仅 toast 并 return，骨架仍留在页面（R0-E-35）。空态已有局部实现；网络错误、权限不足、离线、同步中、冲突仍未形成逐页证据矩阵，需逐页验证并截图。
 
+### 3.1 逐控件交互清单（扩展，满足总方案 §5 第 3 项「每个交互元素」要求）
+
+> 来源：`server/web/dist/index.html`（`#loginForm`/`#formDlg`/`#editDlg`/`#confirmDlg`/`#catDlg`/`#acctDlg`/`#bottomNav`/`#topbar`）+ `app.js` 各 render/open 函数。标 `[需浏览器验证]` 表示代码路径存在但未经运行时截图确认；标 `[缺口]` 表示控件/行为缺失（关联 R0-E 编号）。
+
+| 页面 | 控件 / 动作 | 前置 | 可观察结果 | 成功 / 失败反馈 | 数据联动 | 返回路径 |
+|---|---|---|---|---|---|---|
+| 登录 | 用户名/密码输入 | 无 token | 输入聚焦、明文切换 | 错误红字 toast；pending 禁用按钮 | — | 成功→`route()` 进账本或首页 |
+| 登录 | 提交登录 | 表单有效 | `POST /auth/login` | 200→存 token 进首页；4xx→红字 | 写入 `localStorage` | — |
+| 登录 | 切注册 / 加入账本 | — | 显示注册/邀请码表单 | 受 `EBK_ENABLE_REGISTER` 控制 | — | — |
+| 首页 | 概览三卡（收入/支出/结余） | 已选账本 | `GET /reports/monthly?months=2` + `GET /accounts` | 数字渲染 | 第三卡直接 Σ账户余额（**口径错误，见 R0-E-20**） | — |
+| 首页 | 账单流（按日分组） | 已选账本 | `GET /transactions?page=1&count=60`；骨架屏→`daySum` | 失败仅 toast，骨架残留（**R0-E-35**） | 日小计仅首批 60 条（**R0-E-34**） | 行点击→`#b/:id/tx/:tid` |
+| 首页 | 账单行内容 | — | 分类+备注/商户+时间+金额 | 缺账户/渠道标签（**R0-E-21**） | — | 详情 |
+| 首页 | FAB「记一笔」/ 底部 Tab | 移动端 | 打开记一笔弹窗 | — | — | 弹窗 |
+| 首页 | 筛选入口 | — | **缺失**（R0-E-21） | — | — | — |
+| 记一笔 | `#fType` 类型 | 弹窗开 | 普通 `<select>`（**非分段，R0-E-29**） | change 切双账户/分类显隐 | txType 字段 | — |
+| 记一笔 | 金额/账户/对方账户/分类/日期/备注 | — | 受控输入 | 必填校验红字（**待浏览器验证**） | — | — |
+| 记一笔 | 支付渠道 / 商户 | — | **无输入控件（R0-E-23 / R0-E-37）** | — | 后端 `CreateRequest` 也无 merchant 字段 | — |
+| 记一笔 | 提交保存 | 表单有效 | `POST /transactions` | pending→toast→关闭→刷新首页/账单流 | 余额/报表回拉 | 首页顶部 |
+| 交易详情 | 字段展示 | 进入 `#b/:id/tx/:tid` | `GET /transactions/:txId` | 缺 `paymentChannel`；备注非空时 merchant 不显示（**R0-E-22**） | — | — |
+| 交易详情 | 编辑 | 详情页 | `openTxEditForm`（PUT 全量替换） | 类型只读；渠道不可编辑（**R0-E-23**） | 刷新详情 | 详情 |
+| 交易详情 | 删除（二次确认） | — | `#confirmDlg` 文案「删除后将无法恢复」 | **与软删除/回收站矛盾（R0-E-24）** | DELETE→toast→回账单页 | 账单流 |
+| 账户 | 新增 / 编辑 / 删除 | — | `POST/PUT/DELETE /accounts` | 刷新账户列表；引用保护 toast | 余额/净资产 | 账户列表 |
+| 账户 | 期初余额输入 | — | **缺失（R0-E-06/30）** | 服务固定 `Balance:0` | — | — |
+| 账户 | 本页净资产摘要 | — | **缺失（R0-E-28，在投资页）** | — | — | — |
+| 分类 | 大类卡→子类、色板 | — | `GET /categories?tree=1` | 色板/默认分类待截图 | 引用计数确认删除 | 分类列表 |
+| 成员 | 邀请生成 | owner/admin | `POST /members/invite`→`code/role/expiresAt`（**无 inviteId，R0-E-26**） | 展示邀请码 | — | — |
+| 成员 | 邀请撤销 | — | **无 UI（R0-E-26）** | 后端有 `/invite/:inviteId/revoke` 但前端无 inviteId | — | — |
+| 成员 | 角色升降 / 移除 | owner/admin | `PUT/DELETE /members/:uid` | toast+刷新 | 触发定向重拉 | 成员表 |
+| 成员 | 账本可见性开关 | — | **无（R0-E-19/27）**；仅读 `mb.canViewOthers` 徽标 | 后端 `PUT /books/:id/visibility` 未接 | — | — |
+| 我的 | 改邮箱 | — | `PUT /users/me` | toast 成功/失败 | — | — |
+| 我的 | 8 个二级入口 | — | 跳转各页 | — | — | 各页 |
+| 设置 | Token 生成/复制/撤销 | — | `GET/POST/DELETE /users/me/tokens` | 明文仅一次；确认撤销 | 退出回登录 | — |
+| 设置 | 改密入口 | — | **缺失（R0-E-18；后端 `POST /users/me/password` 未接）** | — | — | — |
+| 设置 | 会话管理入口 | — | **缺失（R0-E-14；后端 `/auth/sessions` 未接）** | — | — | — |
+| 设置 | 服务器/备份区块 | — | **缺失（R0-E-17/ D-8）** | — | — | — |
+| 设置 | 退出登录 | — | 清会话→登录页 | — | — | 登录 |
+| 导出 | 时间范围预设 / 自定义 | — | 拼 `minTime/maxTime` | — | — | — |
+| 导出 | 预览「共 N 条」 | — | `GET /transactions`（total） | — | — | — |
+| 导出 | 下载 | — | `GET /export`→blob | 读 `X-Export-Count/Truncated` 头 | — | — |
+| 预算 | 增/改/删 | — | `budgets` CRUD | 三态色待截图（R0-E-10） | 重绘 | 预算页 |
+| 报表 | 月份切换 / 图表 | — | `GET /reports/monthly|categories` | 空态待截图（R0-E-09） | 重绘 | 报表页 |
+| 投资 | 标的/持仓/行情/净资产 | — | `instruments/holdings/price/net-worth` | 净资产在投资页（R0-E-28） | 重绘 | 投资页 |
+| 回收站 | 恢复 | — | `GET /recycle`；`POST /transactions/:txId/restore` | toast+回滚 | 列表/余额/报表 | 账单流 |
+
+**逐项交互清单状态**：页面级与核心控件路径已枚举；标 `[需浏览器验证]` 的交互（校验红字、三态色、空态、骨架屏视觉）需 §7.2 截图协议落地后闭环。所有 `[缺口]` 行已与 R0-E 编号对应，可直接转为 R1 finding。
+
 ---
 
 ## 4. R0-C：`prototype/` 与 `prototype-v2/` 差异对照
@@ -181,6 +227,56 @@
 
 **关键结论（修正）**：后端已有多组 API 路由，但路由存在不等于服务层、权限、DTO、测试均完整；本矩阵尚未达到总方案要求的契约粒度。当前 Web 未发现 WS 客户端或 sync pull/push 调用；OCR 的 Web 范围由 PRD §5.2 明确为不做；会话、可见性和邀请撤销等 API/能力不能据此推断前端已接通。
 - `PUT /transactions/:txId` 已开放且是**全量替换 + 类型不可改**（改类型=删除+重建），R1 不得伪造类型变更。
+
+### 5.3 后端 API 权限 / DTO / 测试矩阵（补全契约粒度）
+
+> 方法/路径来自 `router.go` L109–235；鉴权分组：`v1` 组外为公开，`auth` 组（L135）全部 `JWTAuth`。**角色权限**列基于路由语义与已知 PRD/服务注释推定；具体以各 handler 内 `roleCheck`/可见性判定为准，**运行时权限边界需集成测试确认**（标 ✗待测）。响应关键字段为成功体 `data` 内对象；错误统一经 `mapSvcErr` 封装为 `{code:≠0, msg}`，**具体 code↔错误映射待测试补全**（标 ✗待测）。Web 调用列沿用 §5.2（✅/❌）。
+
+| 能力域 | 方法 & 路径 | 鉴权 | 角色权限 | 请求关键字段 | 响应关键字段 | 错误码(示例) | 服务函数 | 测试证据 | Web |
+|---|---|---|---|---|---|---|---|---|---|
+| 健康 | `GET /healthz` | 公开 | — | — | `status,schemaVersion,instanceId?,restoreEpoch?` | — | — | — | — |
+| 注册 | `POST /auth/register` | 公开(受`EBK_ENABLE_REGISTER`) | 任意 | `username,password` | `accessToken,user` | 400/409 ✗待测 | AuthService | CI 绿 ✗逐用例 | ✅ |
+| 登录 | `POST /auth/login` | 公开 | 任意 | `username,password` | `accessToken,user`(R0 实测字段名 `accessToken`) | 401 ✗待测 | AuthService | CI 绿 ✗逐用例 | ✅ |
+| 邀请入户 | `POST /books/:id/members/join` | 公开 | 持邀请码 | `code`(query/body) | `book,member` | 400/403 ✗待测 | MemberService | ✗待测 | ❌ |
+| WS | `GET /ws` | `wsAuth`(Header/`?token=`) | 任意已认证 | `token`(Header 或 query) | 帧协议 | 401 ✗待测 | Hub | ✗待测 | ❌ |
+| 当前用户 | `GET/PUT /users/me` | JWT | 本人 | PUT:`email` | `id,username,email` | 400/401 ✗待测 | AuthService | CI 绿 | ✅(GET/改邮箱) |
+| 改密 | `POST /users/me/password` | JWT | 本人 | `oldPassword,newPassword` | `{}`(撤销全部会话) | 400/401 ✗待测 | AuthService | ✗待测 | ❌(R0-E-18) |
+| PAT | `GET/POST/DELETE /users/me/tokens` | JWT | 本人 | POST:`name` | `token`(明文仅创建响应一次),`id` | 400/401 ✗待测 | PAT svc | ✗待测 | ✅ |
+| 会话 | `GET /auth/sessions` | JWT | 本人 | — | `[{jti,device,createdAt,current}]` | 401 ✗待测 | SessionService | WBS5.10 ✗逐用例 | ❌(R0-E-14) |
+| 会话 | `DELETE /auth/sessions` `[:jti]` | JWT | 本人 | jti(可选) | `{}` | 401 ✗待测 | SessionService | WBS5.10 ✗逐用例 | ❌ |
+| OCR | `POST /ocr/{recognize,parse,llm-parse}` | JWT | 任意 | 图片/文本/`consent` | 解析结果 | 400/413 ✗待测 | OCR svc | ✗待测 | ❌(Web 不做,R0-E-08) |
+| 账本列表 | `GET /books` | JWT | 任意(返回所属) | — | `[book]` | 401 ✗待测 | BookService | CI 绿 | ✅ |
+| 建账本 | `POST /books` | JWT | 任意 | `name,bookType`(int8) | `book` | 400 ✗待测 | BookService | CI 绿 | ✅ |
+| 账本详情 | `GET /books/:id` | JWT | 成员 | — | `book{name,bookType,createdAt,membersCanViewOthers,...}` | 403/404 ✗待测 | BookService | CI 绿 | ✅ |
+| 改/删账本 | `PUT/DELETE /books/:id` | JWT | **owner/admin** | PUT:`name` | `book` | 403/404 ✗待测 | BookService | ✗待测 | ✅(GET 接,改/删前端未接→R0-E-32) |
+| 可见性 | `PUT /books/:id/visibility` | JWT | **owner/admin** | `membersCanViewOthers`(bool) | `book` | 403 ✗待测 | BookService | ✗待测 | ❌(R0-E-19/27) |
+| 成员列表 | `GET /books/:id/members` | JWT | 成员 | — | `[{uid,username,role,canViewOthers}]` | 403 ✗待测 | MemberService | CI 绿 | ✅ |
+| 邀请 | `POST /books/:id/members/invite` | JWT | **owner/admin** | `role,boundUsername?,boundEmail?` | `{code,role,expiresAt}`(**无 inviteId**→R0-E-26) | 403/400 ✗待测 | MemberService | ✗待测 | ✅(生成) |
+| 撤邀请 | `POST /books/:id/members/invite/:inviteId/revoke` | JWT | **owner/admin** | inviteId | `{}` | 403/404 ✗待测 | MemberService | ✗待测 | ❌(R0-E-26) |
+| 改/删成员 | `PUT/DELETE /books/:id/members/:uid` | JWT | **owner/admin** | PUT:`role` | `{}` | 403/404 ✗待测 | MemberService | ✗待测 | ✅(生成邀请) |
+| 账户列表/详情 | `GET /books/:id/accounts[/:aid]` | JWT | 成员(受可见性) | — | `[account]{id,name,category,balance,currency,...}` | 403 ✗待测 | AccountService | CI 绿 | ✅ |
+| 账户增改删 | `POST/PUT/DELETE /books/:id/accounts[/:aid]` | JWT | 成员(受可见性;删可能 owner) | 增:`name,category,currency,parentId`(Balance 忽略→0) | `account` | 400/409(引用) ✗待测 | AccountService | CI 绿 | ✅(Balance 强制0→R0-E-06/30) |
+| 分类列表 | `GET /books/:id/categories?tree=1` | JWT | 成员 | `tree` | `[{Category 提升字段,children:[Category]}]`(R0 误判已纠) | 403 ✗待测 | CategoryService | CI 绿 | ✅ |
+| 分类增改删 | `POST/PUT/DELETE /books/:id/categories[/:cid]` | JWT | 成员 | 增:`name,parentId,catType` | `category` | 400/409(引用) ✗待测 | CategoryService | CI 绿 | ✅ |
+| 交易列表 | `GET /books/:id/transactions` | JWT | 成员(受可见性) | `minTime,maxTime,txType,accountId,categoryId,keyword,page,count` | `{items:[tx],total,page,count}` | 403 ✗待测 | TxService | CI 绿 | ✅ |
+| 交易详情 | `GET /books/:id/transactions/:txId` | JWT | 成员 | — | `tx{id,accountId,categoryId,amount,txType,note,merchant,paymentChannel,...}` | 403/404 ✗待测 | TxService | CI 绿 | ✅ |
+| 交易创建 | `POST /books/:id/transactions` | JWT | 成员 | `clientUuid,txType,accountId,toAccountId,amount,categoryId,paymentChannel,txTime,timezoneOffset,comment,source`(**无 merchant 字段→R0-E-37**) | `{resultType,transactionIds,version,replayed}` | 400/409(幂等) ✗待测 | TxService | CI 绿 | ✅ |
+| 交易更新 | `PUT /books/:id/transactions/:txId` | JWT | 成员 | 同创建 + `baseVersion`(**全量替换,类型不可改**→建+删重建) | `{version,replayed,transactionIds}` | 409(版本冲突) ✗待测 | TxService | `TestQATransactionRoutesContract`(守卫:禁 PUT /transfer /batch) | ✅ |
+| 交易删除/恢复 | `DELETE /books/:id/transactions/:txId` `POST .../restore` | JWT | 成员 | — | `{}` | 403/404 ✗待测 | TxService | CI 绿(软删+回收站) | ✅(删除;恢复在回收站) |
+| 回收站 | `GET /books/:id/recycle` | JWT | 成员 | — | `[tx]` | 403 ✗待测 | TxService | CI 绿 | ✅ |
+| 月报/分类占比 | `GET /books/:id/reports/monthly\|categories` | JWT | 成员(受可见性) | `months` | `monthly:{items:[{month,income,expense}]}`;`categories:{items:[{categoryId,amount,ratio}]}` | 403 ✗待测 | ReportService | CI 绿 | ✅ |
+| 导出 | `GET /books/:id/export` | JWT | 成员 | `minTime,maxTime,type,format,fields` | 文件流 + 头 `X-Export-Count/X-Export-Truncated` | 403/400 ✗待测 | ReportService | ✗待测 | ✅ |
+| 预算增改删 | `POST/PUT/DELETE /books/:id/budgets[/:budgetId]` | JWT | **owner/admin(写)** | `name,budgetType,categoryId,periodType,amount,rollover,enabled` | `budget` | 400/403 ✗待测 | BudgetService | ✗待测 | ✅(CRUD 接) |
+| 投资-标的 | `GET/POST/PUT/DELETE /books/:id/instruments[/:instrumentId]` | JWT | 成员 | `name,type,market,code` | `instrument` | 400/403 ✗待测 | InvestService | ✗待测 | ✅ |
+| 投资-持仓 | `GET/POST/PUT/DELETE /books/:id/holdings[/:holdingId]` | JWT | 成员 | `instrumentId,quantity,cost,currentPrice?` | `holding` | 400/403 ✗待测 | InvestService | ✗待测 | ✅ |
+| 投资-行情 | `POST /books/:id/instruments/:instrumentId/price` | JWT | 成员 | `price,asOf?` | `{}` | 400 ✗待测 | InvestService | ✗待测 | ✅ |
+| 净资产 | `GET /books/:id/net-worth` | JWT | 成员 | — | `{totalAssets,totalLiabilities,holdingMarketValue,netWorth}`(公式:资产+持仓市值−负债) | 403 ✗待测 | InvestService | CI 绿 | ✅(投资页) |
+| 同步拉 | `GET /books/:id/sync/pull` | JWT | 成员 | `since`(版本/时间戳) | 增量实体 | 403 ✗待测 | SyncService | ✗待测 | ❌(R0-E-15/25) |
+| 同步推 | `POST /books/:id/sync/push` | JWT | 成员 | 增量实体 | `{ok}` | 403/409 ✗待测 | SyncService | ✗待测 | ❌ |
+
+**矩阵结论**：
+- 路由/服务函数映射完整；**逐路由权限断言、DTO 校验错误码、回归测试名三类证据仍标注 ✗待测**，需后续补 `mapSvcErr` 错误码表 + 各域 `*_test.go` 用例索引（建议作为 R0→R1 过渡的最小契约补全项，不修改业务行为）。
+- 前端未接项（Web 列 ❌）已与 R0-E 编号一一对应：**改密(R0-E-18)、会话(R0-E-14)、可见性(R0-E-19/27)、邀请撤销(R0-E-26)、同步 pull/push(R0-E-15/25)、OCR(Web 不做,R0-E-08)**；邀请生成已接但**响应无 inviteId 导致无法撤销**(R0-E-26)。
 
 ---
 
@@ -263,7 +359,11 @@
 | **D-7** | 多端会话管理是否属于产品需求？ | PRD §4.1/§4.12 已要求可查看与撤销会话；后端 `/auth/sessions` 已有路由，Web UI 未接（R0-E-14） | 需求已确定；Owner 只需决定排期/入口，不得裁决为“不需要”而不修订 PRD | 已确认需求，排期待定 |
 | **D-8** | Web 设置页的服务器/备份区块展示到什么程度、数据从何处安全读取？ | PRD §4.12 与设计规范 §8.1–8.2 已要求服务器信息/备份入口；当前 Web 无状态 API 证据，运维备份另有部署机制 | 需求入口已确定；待 Owner 裁决 Web 只读状态范围、权限与是否提供受控备份/恢复操作。未设计安全边界前不得暴露恢复按钮 | 展示/操作边界待确认 |
 
-> **R0 通过条件**：D-1、D-3、D-5、D-6（仅交易总表入口）、D-8 的未决范围须有 Owner 结论或明确阻塞；D-2 的 Web OCR 已由 PRD 决定为不做，PWA 本地 OCR若新增须单独裁决；D-4 需求已确定，仅技术实现待确认；D-7 会话管理需求已确定，仅排期待定。并且必须完成逐控件交互清单、API 权限/DTO/测试矩阵及 §7 截图基线，R0 才可通过。
+> **R0 通过条件（2026-11-04 复核后修订）**：
+> - **已完成（本轮补全）**：逐控件交互清单（§3.1，覆盖核心页面每个交互控件并绑定 R0-E 缺口编号）；API 权限/DTO/测试矩阵（§5.3，逐路由列鉴权/角色权限/请求响应字段/错误码/服务函数/测试证据/Web 调用）。
+> - **仍待完成**：① §7 截图基线——本工作环境无浏览器/截图工具（Visualizer 仅产出 SVG/HTML，不能截取真实运行页面），`localhost:8080` 服务虽常驻但无法在此自动截图；该基线与"逐控件验证截图"须由 Owner 在浏览器或 CI 中按 §7.2 协议采集，属 R0→R1 过渡的执行项。② Owner 对 D-1、D-3、D-5、D-6（仅交易总表入口）、D-8 的范围结论，D-2 的 PWA 本地 OCR 裁决，D-4 期初余额技术实现方案；D-7 会话管理已确属需求仅排期待定。
+> - **裁决前口径**：D-2 的 Web OCR 已由 PRD §5.2 决定为不做；D-4 需求已确定仅实现方案待确认；D-7 需求确定仅排期待定；这三者不再作为"是否做"的开放问题。
+> - 满足上述①（截图基线落地）与②（Owner 对未决范围给出结论或明确阻塞）后，R0 方可通过并进入 R1 最小批次拆分。
 
 ---
 
@@ -291,4 +391,4 @@
 
 详细证据、根因、验收及页面交互补充见 [`docs/FastLedger-R0-独立补漏与复核记录.md`](FastLedger-R0-独立补漏与复核记录.md)。补充 R0-E-20 至 R0-E-37；其中 E-25/E-27/E-29/E-30/E-31 分别并入 E-15/E-19/E-05/E-06/E-14，不单独计数。新增独立差异覆盖首页财务口径、账单字段/筛选、交易详情/表单、商户字段端到端缺失、删除文案、邀请码撤销、净资产页面归属、账本重命名、README 状态漂移、日小计分页边界、加载错误态和 API 矩阵粒度。
 
-**复核结论：R0 尚未通过。** 本次为静态审查；没有运行服务、测试、浏览器或采集截图。逐控件交互清单、完整 API 权限/DTO/测试矩阵和截图基线仍未完成。
+**复核结论（2026-11-04 更新）**：原独立复核为静态审查，指出逐控件交互清单、完整 API 权限/DTO/测试矩阵、截图基线三项未完成。本轮已在 R0 主文档内补全前两项——§3.1 逐控件交互清单（绑定 R0-E 缺口编号）、§5.3 后端 API 权限/DTO/测试矩阵（逐路由列鉴权/角色权限/请求响应/错误码/服务函数/测试证据/Web 调用）。**唯一剩余缺口为 §7 截图基线**：本工作环境无浏览器/截图工具，无法自动截取真实运行页面；该项连同"逐控件验证截图"须由 Owner 在浏览器或 CI 中按 §7.2 协议采集，属 R0→R1 过渡执行项。Owner 对 D-1/D-3/D-5/D-6(入口)/D-8 范围结论、D-2 PWA OCR 裁决、D-4 期初余额技术实现方案给出后，R0 即通过。
