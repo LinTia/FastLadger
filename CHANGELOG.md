@@ -2,6 +2,19 @@
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.70] - 2026-11-04
+
+### R0 裁决：D-4 期初余额技术模型裁决草案（文档裁决，非代码）
+
+- 新增 `docs/FastLedger-R0-D4-期初余额技术模型裁决草案.md`：基于 Owner 2026-11-04 交互裁决的九原则形成 D-4 技术契约（A–G 输出 + 特别要求自检）。
+- **核对**：PRD §4.5 明确「账户余额由交易实时计算，也支持期初余额」且账户属性含「初始余额」；PRD §6.3 的 `accounts` 表缺 `opening_balance` 列（印证缺口）；当前 `account.go:102/146` 强制 `Balance:0` 是「未满足 PRD」根因，但注释精神（不绕过统一余额机制）须保留。
+- **核心技术约束（源码实读）**：`tx.go:392` `createChangeBalance` 是余额变动唯一实现；`model/ledger.go:116` `balance` 符号约定「负债正=欠款」；`invest.go:544` 净资产按 `balance` 汇总；`sync.go:97` 直接复用 `model.Account` 序列化。
+- **方案**：独立 `opening_balance`（整数分）+ `opening_balance_date`（DATE）列；账户创建事务内原子 seeding 运行余额、绝不经由 `createChangeBalance`、不写 `transactions`；不参与收支/预算/分类统计但经 `balance` 参与账户余额与净资产；资产/负债均以正数表达遵循现有符号约定；创建后原则上不可直接编辑（后续余额纠正为独立需求）；旧账户 `opening=0` 不重复计算。
+- **特别要求自检**：不新增第二套余额写入口；不只改前端（`account.go` + `ledger_handler.go` 真实落库）；不计入普通收入；不擅自改其他产品决策（不碰 reports/budget/networth/category 语义）。
+- **同步更新 R0 主报告 §8**：D-4 状态→**已裁决**；页脚「未关闭」清单移除 D-4（余 D-3 / D-5 / D-6 / D-2(PWA OCR)）。
+- **范围**：仅新增裁决草案、更新 R0 主报告 §8 状态与引用、更新本 CHANGELOG；**未改业务代码、PRD、落地方案、WBS、数据库或 API**；未启动 R1–R7，PWA 未实施。
+- **状态**：**R0 未通过 / 阻塞（D-4 关闭不改变）**；D-3 / D-5 / D-6 / D-2(PWA OCR) 仍待 Owner 裁决；不授权启动 R1。
+
 ## [1.69] - 2026-11-04
 
 ### R0 裁决：D-8 服务器/备份区块裁决草案 + D-1 最终前端基准关闭（文档裁决，非代码）
