@@ -39,7 +39,7 @@
 | [`docs/FastLedger-手机PWA实施指导书.md`](docs/FastLedger-手机PWA实施指导书.md) | 手机 PWA 实施指导书 | 完整移动端、完整离线、IndexedDB、同步、离线分析与本地备份恢复；指导后续 PRD / 落地方案 / WBS 修订 |
 | [`docs/FastLedger-原型还原与PWA分阶段实施总方案.md`](docs/FastLedger-原型还原与PWA分阶段实施总方案.md) | **原型还原与 PWA 分阶段实施总方案** | R0–R7 总路线、原型差异盘点、AI 分批实施纪律、移动端/PWA/离线/备份验收门禁 |
 | [`docs/FastLedger-R0-基准冻结与差异盘点.md`](docs/FastLedger-R0-基准冻结与差异盘点.md) | **R0 基准冻结与差异盘点（交付）** | 13 页/交互矩阵、两版原型差异、当前实现与后端 API 映射、差异根因、截图与覆盖率方法、Owner 裁决清单 |
-| [`docs/FastLedger-R0-独立补漏与复核记录.md`](docs/FastLedger-R0-独立补漏与复核记录.md) | **R0 独立补漏与复核记录** | 修正误判、补充 R0-E-20~36、复核 R0 退出条件；静态复核，R0 尚未通过 |
+| [`docs/FastLedger-R0-独立补漏与复核记录.md`](docs/FastLedger-R0-独立补漏与复核记录.md) | **R0 独立补漏与复核记录** | 修正误判、补充 R0-E-20~37、复核 R0 退出条件；静态复核，R0 尚未通过 |
 | [`docs/FastLedger-新手开发完整指南.md`](docs/FastLedger-新手开发完整指南.md) | 新手开发完整指南（含可照敲代码骨架） | 应届生照着做即可开发 |
 | [`docs/FastLedger-枚举字典.md`](docs/FastLedger-枚举字典.md) | 统一枚举字典（唯一权威来源） | 各端枚举值对齐 |
 | [`docs/ezbookkeeping-代码导读.md`](docs/ezbookkeeping-代码导读.md) | 开源参考项目 ezbookkeeping 代码导读 | 可借鉴的设计与实现 |
