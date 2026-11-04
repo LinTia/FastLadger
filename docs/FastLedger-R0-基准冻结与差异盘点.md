@@ -105,11 +105,11 @@
 | 记一笔 | 支出/收入/转账分段、转账双账户、必填校验红字、pending→toast→返回首页顶部插入 | `#formDlg`（`fType` 为普通 select；含金额/账户/对方账户/分类/日期/备注）；`POST /transactions` | 缺支付渠道/商户输入；类型不是分段控件；其余校验/pending 需浏览器验证 | **部分具备**（见 R0-E-23、29） |
 | 截图识别 | 三级漏斗 → 确认弹窗 → 确认入账（绝不自动入账） | **无**（dist 仅 1 处"截图"文案，无 OCR 调用） | — | **未实现**（R0-E-08，待裁决） |
 | 交易详情 | 全字段、编辑、删除二次确认→toast+余额回滚 | `renderTxDetail` L1974–2015：展示账户/分类/日期/备注；编辑/删除入口存在 | 未展示 paymentChannel；备注非空时 merchant 不显示；删除文案称无法恢复，与回收站/恢复能力矛盾 | **部分具备**（见 R0-E-22、24） |
-| 账户 | 账户卡（余额/类型徽标）、净资产汇总、正负余额色 | `renderAccounts` L647–735；账户 CRUD | 账户列表无净资产摘要（净资产在 `renderInvest` L1246）；无期初余额输入 | **部分具备**（见 R0-E-06、28、30） |
+| 账户 | 账户卡（余额/类型徽标）、净资产汇总、正负余额色 | `renderAccounts` L647–735；账户 CRUD | 账户列表无净资产摘要（净资产在 `renderInvest` L1246）；无期初余额输入 | **部分具备**（见 R0-E-06、28） |
 | 分类 | 大类卡片→子类列表、分类色板 | `renderCategories` L2069；`GET /categories?tree=1` + CRUD | 删除引用计数 [待确认] | 具备 |
 | 预算 | 总进度条 + 信封列表、正常/接近/超支三态 | `renderBudget` L1108；`GET/POST/PUT/DELETE /budgets` | 三态色 [待确认] | 具备，视觉待验 |
 | 报表 | 月度柱状（chart-1 主色）+ 分类占比环形（conic）+ 月份切换 | `renderReport` L804；`GET /reports/monthly?months=6` + `/reports/categories` | 空态 [待确认] | 具备，视觉待验 |
-| 家庭成员 | 角色徽标、账本级可见性开关 + 常驻隐私提示、邀请管理 | `renderMembers` L1636–1775：成员 CRUD、创建邀请码；逐成员显示 `mb.canViewOthers` | 无账本级开关、无常驻隐私提示；MVP 权威字段为 `books.members_can_view_others`，成员级字段仅预留；无邀请码撤销 UI | **部分具备**（见 R0-E-19、26、27） |
+| 家庭成员 | 角色徽标、账本级可见性开关 + 常驻隐私提示、邀请管理 | `renderMembers` L1636–1775：成员 CRUD、创建邀请码；逐成员显示 `mb.canViewOthers` | 无账本级开关、无常驻隐私提示；MVP 权威字段为 `books.members_can_view_others`，成员级字段仅预留；无邀请码撤销 UI | **部分具备**（见 R0-E-19、26） |
 | 导出 | 筛选 + 预览 + CSV/JSON | `renderExport` L933（时间范围预设 + "共N条"预览 + `GET /export` blob 下载 + `X-Export-Count/Truncated`） | 空态/超大截断 [待确认] | 具备 |
 | 设置 | 个人资料、账号安全、API Token、服务器与备份、退出登录 | `renderSettings` L1518–1635：API Token 管理 + 退出；邮箱资料编辑在 `renderMine` L2138–2215 | 资料能力存在但入口在“我的”；设置缺改密 UI、会话管理 UI（R0-E-14）、服务器/备份区块 | **部分具备**（见 R0-E-17、18、14） |
 | 我的 | 菜单中枢 | `renderMine` L2138：头像 + 资料编辑（改邮箱）+ **8 个二级入口**（我的账本/账户/成员/导出/报表/预算/资产/回收站） | — | 具备（8 入口；与平铺顶栏重复，R0-E-01） |
@@ -197,10 +197,10 @@
 | R0-E-05 | 记一笔：类型切换能力存在，但当前为普通 select；校验/pending 仍需实测 | P2 | `index.html` L40–49；`openTxForm` L529–580；规范 §8.2 | UI 交互差异 | 改为可访问的分段控件；双账户显隐与校验按类型验收 |
 | R0-E-06 | 账户：PRD 要求期初余额，但创建服务固定 `Balance:0`，前端无输入入口 | P1 | PRD §4.5；`service/account.go` Create；`index.html` 账户弹窗 | 业务契约未落实 | 保留期初余额需求；实现方案见 D-4，禁止直接计入普通收入 |
 | R0-E-07 | 投资资产：`renderInvest` 存在但独立成页/持仓交互对齐未证 | P1 | `renderInvest` L1246；prototype/ 有独立页 | UI 对齐 / 基准冲突 | 依原型对齐持仓/实物/净资产 |
-| R0-E-08 | 截图识别：Web 无实现，OCR 范围未决 | P1 | dist 无 `/ocr/*` 调用；PRD §5.2 vs 设计规范含截图页 | 产品冲突 | Owner 裁决（R0-G D-2） |
+| R0-E-08 | Web OCR 无实现：这是 PRD §5.2 明确规定的“不做”，不是 Web 缺陷；PWA 浏览器端本地 OCR 属范围扩展 | P3 | PRD §5.2；设计规范截图页；PWA 指导书 | 产品范围边界 | Web 维持无 OCR；如新增 PWA 本地 OCR，先裁决并修订 PRD/WBS |
 | R0-E-09 | 报表：柱状+环形+月份切换已实现，视觉对齐未验收 | P2 | `renderReport` L804 | UI 对齐（待截图） | 主题色柱状 + conic 环形 + 切换 |
 | R0-E-10 | 预算：三态（正常/接近/超支）色未验收 | P2 | `renderBudget` L1108 | UI 对齐（待截图） | 三态色 + 总进度 + 信封 |
-| R0-E-11 | 成员角色徽标的视觉/状态仍待截图验收；可见性开关与隐私提示统一见 R0-E-19、27，不在本项重复统计 | P3 | `renderMembers` L1636–1775 | 视觉验收待做 | 对照 owner/admin/member 徽标和窄屏表格布局采集截图 |
+| R0-E-11 | 成员角色徽标的视觉/状态仍待截图验收；可见性开关与隐私提示统一见 R0-E-19，不在本项重复统计 | P3 | `renderMembers` L1636–1775 | 视觉验收待做 | 对照 owner/admin/member 徽标和窄屏表格布局采集截图 |
 | R0-E-12 | 状态覆盖缺口：局部空态/加载骨架已存在，但网络错误、权限不足、离线、同步中、冲突尚未逐页验收 | P2 | 全局；首页加载失败见 R0-E-35 | 健壮性/UX | 建立逐页状态矩阵；失败态必须清除骨架并提供可恢复反馈 |
 | R0-E-13 | 设计 token 落地：`style.css` 与 `design-tokens.json` 一致性未逐项核 | P2 | `dist/style.css`；规范 §9 L338 | 视觉（token） | 全量 token 对齐，禁散落硬编码 |
 | R0-E-14 | 会话管理 UI 缺失（后端 WBS 5.10 已交付 API） | P2 | `router.go` `/auth/sessions`；前端无调用 | 前端未接 API | 设置页加"登录设备/会话"管理 |
