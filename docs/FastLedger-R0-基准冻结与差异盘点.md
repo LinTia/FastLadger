@@ -116,51 +116,360 @@
 
 **状态覆盖缺口（R0-E-12）修正**：首页账单流已有骨架屏，不能将“骨架屏缺失”列为缺陷；但请求失败时 catch 仅 toast 并 return，骨架仍留在页面（R0-E-35）。空态已有局部实现；网络错误、权限不足、离线、同步中、冲突仍未形成逐页证据矩阵，需逐页验证并截图。
 
-### 3.1 逐控件交互清单（扩展，满足总方案 §5 第 3 项「每个交互元素」要求）
+### 3.1 逐控件交互清单（二次整改重做版）
 
-> 来源：`server/web/dist/index.html`（`#loginForm`/`#formDlg`/`#editDlg`/`#confirmDlg`/`#catDlg`/`#acctDlg`/`#bottomNav`/`#topbar`）+ `app.js` 各 render/open 函数。标 `[需浏览器验证]` 表示代码路径存在但未经运行时截图确认；标 `[缺口]` 表示控件/行为缺失（关联 R0-E 编号）。
+> **取证基线**：执行时 GitHub `origin/main` HEAD = `bff6a2b351bf5a039cdf7c762ec2693fb330cd00`（`git fetch` 已重试成功，本地 0 ahead / 0 behind）。源码行号全部按该 HEAD 重新定位：`server/web/dist/index.html`（151 行）、`server/web/dist/app.js`（2241 行）。
+> **本轮纠偏**：原 §3.1 把多个独立控件合并成一行（如金额/账户/分类/日期/备注合并、FAB 与 Tab 合并、账户增改删合并、「我的」8 入口合并），且误引不存在的 `#loginForm`。本版**每个独立输入框 / 按钮 / Tab / 菜单 / 弹窗动作单独一行**，统一 13 字段。
+> **字段口径**：`代码位置` = DOM selector 或 JS 函数 + 当前 HEAD 行号；`验证证据` = `C:` 静态源码定位、`S:` 本轮 Edge 真实浏览器截图（路径相对 `docs/r0-screenshots/`）、或明确的「未采集 / grep 无命中」；`当前状态` 区分 `已实现` / `已实现但缺陷` / `缺失` / `待验证` / `不适用`，并关联原 R0-E 编号（不另起重复编号）。**标「运行时未验证」即未验证，不用「—」掩盖。**
+> **截图范围**：本轮共采集 43 张真实截图，覆盖 4 个视口 × 16 个页面/弹层；但**仅首屏/空态/错误态**，绝大多数成功/失败交互路径、加载态、权限不足态、离线态、原型侧对照截图仍未采集，见 §7.5 阻塞清单。因此本清单的 `S:` 证据只证明「控件/页面在此状态下可见」，**不证明交互成功路径已验收**。
 
-| 页面 | 控件 / 动作 | 前置 | 可观察结果 | 成功 / 失败反馈 | 数据联动 | 返回路径 |
-|---|---|---|---|---|---|---|
-| 登录 | 用户名/密码输入 | 无 token | 输入聚焦、明文切换 | 错误红字 toast；pending 禁用按钮 | — | 成功→`route()` 进账本或首页 |
-| 登录 | 提交登录 | 表单有效 | `POST /auth/login` | 200→存 token 进首页；4xx→红字 | 写入 `localStorage` | — |
-| 登录 | 切注册 / 加入账本 | — | 显示注册/邀请码表单 | 受 `EBK_ENABLE_REGISTER` 控制 | — | — |
-| 首页 | 概览三卡（收入/支出/结余） | 已选账本 | `GET /reports/monthly?months=2` + `GET /accounts` | 数字渲染 | 第三卡直接 Σ账户余额（**口径错误，见 R0-E-20**） | — |
-| 首页 | 账单流（按日分组） | 已选账本 | `GET /transactions?page=1&count=60`；骨架屏→`daySum` | 失败仅 toast，骨架残留（**R0-E-35**） | 日小计仅首批 60 条（**R0-E-34**） | 行点击→`#b/:id/tx/:tid` |
-| 首页 | 账单行内容 | — | 分类+备注/商户+时间+金额 | 缺账户/渠道标签（**R0-E-21**） | — | 详情 |
-| 首页 | FAB「记一笔」/ 底部 Tab | 移动端 | 打开记一笔弹窗 | — | — | 弹窗 |
-| 首页 | 筛选入口 | — | **缺失**（R0-E-21） | — | — | — |
-| 记一笔 | `#fType` 类型 | 弹窗开 | 普通 `<select>`（**非分段，R0-E-29**） | change 切双账户/分类显隐 | txType 字段 | — |
-| 记一笔 | 金额/账户/对方账户/分类/日期/备注 | — | 受控输入 | 必填校验红字（**待浏览器验证**） | — | — |
-| 记一笔 | 支付渠道 / 商户 | — | **无输入控件（R0-E-23 / R0-E-37）** | — | 后端 `CreateRequest` 也无 merchant 字段 | — |
-| 记一笔 | 提交保存 | 表单有效 | `POST /transactions` | pending→toast→关闭→刷新首页/账单流 | 余额/报表回拉 | 首页顶部 |
-| 交易详情 | 字段展示 | 进入 `#b/:id/tx/:tid` | `GET /transactions/:txId` | 缺 `paymentChannel`；备注非空时 merchant 不显示（**R0-E-22**） | — | — |
-| 交易详情 | 编辑 | 详情页 | `openTxEditForm`（PUT 全量替换） | 类型只读；渠道不可编辑（**R0-E-23**） | 刷新详情 | 详情 |
-| 交易详情 | 删除（二次确认） | — | `#confirmDlg` 文案「删除后将无法恢复」 | **与软删除/回收站矛盾（R0-E-24）** | DELETE→toast→回账单页 | 账单流 |
-| 账户 | 新增 / 编辑 / 删除 | — | `POST/PUT/DELETE /accounts` | 刷新账户列表；引用保护 toast | 余额/净资产 | 账户列表 |
-| 账户 | 期初余额输入 | — | **缺失（R0-E-06/30）** | 服务固定 `Balance:0` | — | — |
-| 账户 | 本页净资产摘要 | — | **缺失（R0-E-28，在投资页）** | — | — | — |
-| 分类 | 大类卡→子类、色板 | — | `GET /categories?tree=1` | 色板/默认分类待截图 | 引用计数确认删除 | 分类列表 |
-| 成员 | 邀请生成 | owner/admin | `POST /members/invite`→`code/role/expiresAt`（**无 inviteId，R0-E-26**） | 展示邀请码 | — | — |
-| 成员 | 邀请撤销 | — | **无 UI（R0-E-26）** | 后端有 `/invite/:inviteId/revoke` 但前端无 inviteId | — | — |
-| 成员 | 角色升降 / 移除 | owner/admin | `PUT/DELETE /members/:uid` | toast+刷新 | 触发定向重拉 | 成员表 |
-| 成员 | 账本可见性开关 | — | **无（R0-E-19/27）**；仅读 `mb.canViewOthers` 徽标 | 后端 `PUT /books/:id/visibility` 未接 | — | — |
-| 我的 | 改邮箱 | — | `PUT /users/me` | toast 成功/失败 | — | — |
-| 我的 | 8 个二级入口 | — | 跳转各页 | — | — | 各页 |
-| 设置 | Token 生成/复制/撤销 | — | `GET/POST/DELETE /users/me/tokens` | 明文仅一次；确认撤销 | 退出回登录 | — |
-| 设置 | 改密入口 | — | **缺失（R0-E-18；后端 `POST /users/me/password` 未接）** | — | — | — |
-| 设置 | 会话管理入口 | — | **缺失（R0-E-14；后端 `/auth/sessions` 未接）** | — | — | — |
-| 设置 | 服务器/备份区块 | — | **缺失（R0-E-17/ D-8）** | — | — | — |
-| 设置 | 退出登录 | — | 清会话→登录页 | — | — | 登录 |
-| 导出 | 时间范围预设 / 自定义 | — | 拼 `minTime/maxTime` | — | — | — |
-| 导出 | 预览「共 N 条」 | — | `GET /transactions`（total） | — | — | — |
-| 导出 | 下载 | — | `GET /export`→blob | 读 `X-Export-Count/Truncated` 头 | — | — |
-| 预算 | 增/改/删 | — | `budgets` CRUD | 三态色待截图（R0-E-10） | 重绘 | 预算页 |
-| 报表 | 月份切换 / 图表 | — | `GET /reports/monthly|categories` | 空态待截图（R0-E-09） | 重绘 | 报表页 |
-| 投资 | 标的/持仓/行情/净资产 | — | `instruments/holdings/price/net-worth` | 净资产在投资页（R0-E-28） | 重绘 | 投资页 |
-| 回收站 | 恢复 | — | `GET /recycle`；`POST /transactions/:txId/restore` | toast+回滚 | 列表/余额/报表 | 账单流 |
+#### 3.1.1 登录 / 注册 / 加入账本
 
-**逐项交互清单状态**：页面级与核心控件路径已枚举；标 `[需浏览器验证]` 的交互（校验红字、三态色、空态、骨架屏视觉）需 §7.2 截图协议落地后闭环。所有 `[缺口]` 行已与 R0-E 编号对应，可直接转为 R1 finding。
+> `renderLogin`（app.js L161–231）动态生成**无 id** 表单；`index.html` 中 `#loginForm`/`#registerForm`/`#joinForm` 均 grep 无命中（原 §3.1 L121 引用 `#loginForm` 属证据错误，本轮更正）。
+
+| ID | 页面 | 控件 / 动作 | 代码位置 | 前置条件 | 输入与校验 | 操作 | 成功结果 | 失败结果 | 数据联动 | 返回路径 | 验证证据 | 当前状态 / 关联 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| I-LOGIN-01 | 登录 | 用户名输入 | app.js L178（变量 u `<input>`） | 无 token | placeholder=用户名, autocomplete=username, required | 键入 | 输入框显示文本 | 浏览器 required 提示 | 无 | 留在登录页 | C:app.js L178；S:login/390x844/normal.png（首屏可见输入框） | 已实现｜输入态运行时未验证 |
+| I-LOGIN-02 | 登录 | 密码输入 | app.js L179–181（变量 p） | 无 token | type=password, required；注册模式 minLength=8，placeholder「密码（至少 8 位）」 | 键入 | 密文显示 | required / 不足 8 位提示 | 无 | 留在登录页 | C:app.js L179–181；S:login/390x844/normal.png | 已实现｜输入态运行时未验证 |
+| I-LOGIN-03 | 注册 | 确认密码输入 | app.js L184–185（变量 p2） | 注册模式 | type=password, placeholder=确认密码, required | 键入 | 密文显示 | required 提示 | 与 p 比对见 I-LOGIN-07 | 留在注册页 | C:app.js L184–185；注册态截图未采集 | 已实现｜运行时未验证 |
+| I-LOGIN-04 | 登录/注册 | 密码明文切换 | —（grep 无命中） | 登录或注册 | — | 点击显隐切换 | 应切换 type=text/password | — | — | — | 缺失：app.js 全文 `showPassword\|明文\|type="text"` 无命中；p.type 恒为 password（L179/L184） | **缺失**｜本轮二次复核新增 R0-E-39 |
+| I-LOGIN-05 | 登录 | 登录提交按钮 | app.js L182（变量 b「登 录」） | 未登录，表单有效 | — | 点击 → form submit | 触发 I-LOGIN-06 | — | — | — | C:app.js L182；S:login/390x844/normal.png | 已实现｜运行时未验证 |
+| I-LOGIN-06 | 登录 | 登录提交行为 | app.js L205–218 | 表单有效 | btnPending「登录中…」L207 | POST /auth/login {username,password} L209 | data.accessToken→state.token + localStorage fl_token/fl_whoami + toast「登录成功，欢迎回来！」L210–214；hash=#books L215 | toast(err.message,"err") L216；按钮 finally 恢复 L217 | 写入 localStorage；401 由 api() L105–109 清会话回登录页 | #books | C:app.js L205–218；运行时：本轮已用 API 实测登录链路（交付报告记录），UI 提交未采集 | 已实现｜UI 运行时未验证 |
+| I-LOGIN-07 | 注册 | 注册提交行为 | app.js L187–202 | 注册模式；两次密码一致 | 先校验 p.value!==p2.value→toast「两次输入的密码不一致」L189；btnPending L190 | POST /auth/register L192 → 成功后 POST /auth/login L193（自动登录） | toast「注册成功，已自动登录！」+ 写 localStorage + hash=#books L194–199 | 密码不一致 toast（不请求）；注册/登录失败 toast(err.message,"err") L200 | 写入 localStorage | #books | C:app.js L187–202；注册态截图未采集（受 EBK_ENABLE_REGISTER 开关影响） | 已实现｜运行时未验证 |
+| I-LOGIN-08 | 登录 | 注册入口切换 | app.js L220–228（toggle `<a>`） | 登录/注册页 | — | 点击「没有账号？注册新账号」/「已有账号？返回登录」→ renderLogin(mode) L227 | 重渲染为对应表单（注册多出确认密码、按钮变「注 册」） | — | 无（原地重绘，无 hash 变化） | 留在登录/注册页 | C:app.js L220–228；S:login/390x844/normal.png（可见「没有账号？注册新账号」入口） | 已实现｜截图仅见入口，切换后未采集 |
+| I-LOGIN-09 | 登录/注册 | 注册关闭 / 返回登录 | app.js L227 | 注册模式 | — | 点击「已有账号？返回登录」 | 重渲染登录表单 | — | — | 登录页 | C:app.js L227；切换后截图未采集 | 已实现｜运行时未验证 |
+| I-LOGIN-10 | 登录 | 加入账本入口 | —（grep 无命中） | 未登录 | — | 应存在第三入口 | — | — | — | — | 缺失：app.js `joinForm\|joinLedger\|redeemInvite` 无命中；renderLogin 仅 login/register 两模式（L161–231）；但 renderMembers L1667 文案「对方在登录页选择「加入账本」并输入邀请码即可」为悬空引导 | **缺失**｜本轮二次复核新增 R0-E-38 |
+| I-LOGIN-11 | 登录 | 邀请码输入与提交 | —（grep 无命中） | 未登录 | — | 应输入邀请码并兑换 | — | — | — | — | 缺失：app.js 全文无 `/invite/.../redeem` 或 `/members/join` 调用；后端 POST /books/:id/members/join 公开（router.go L128）前端未接 | **缺失**｜R0-E-38 |
+| I-LOGIN-12 | 登录 | 邀请码失效 / 异常反馈 | —（无控件） | 未登录 | — | — | — | 无错误提示实现 | — | — | 缺失：依赖 I-LOGIN-11，控件与反馈均不存在 | **缺失**｜R0-E-38 |
+| I-LOGIN-13 | 登录/注册 | 登录 / 注册失败反馈 | app.js L216 / L200 | 请求失败 | — | — | — | toast 显示后端 msg（err 变体） | 按钮 finally 恢复（L201/L217） | 停留当前页 | C:app.js L200,L216,L110；错误态截图未采集 | 已实现｜运行时未验证 |
+| I-LOGIN-14 | 登录/注册 | 重复提交 / pending 恢复 | app.js L56（btnPending）+ L201/L217 finally | 提交中 | 按钮禁用 + 文案切换 | — | — | 失败也恢复按钮 | — | — | C:app.js L56,L201,L217；运行时未验证 | 已实现｜代码层｜运行时未验证 |
+| I-LOGIN-15 | 全局 | 顶栏退出 | index.html L25 / app.js L155 | 已登录 | — | 点击 #logoutBtn | clearSession() + route() | — | 清 localStorage fl_token/fl_whoami | 登录页 | C:index.html L25, app.js L155；运行时未验证 | 已实现｜运行时未验证 |
+
+#### 3.1.2 账本列表 `#books`
+
+> `renderBooks` app.js L234–303；截图：`books/390x844/normal.png`、`books/1280x800/normal.png`。
+
+| ID | 页面 | 控件 / 动作 | 代码位置 | 前置条件 | 输入与校验 | 操作 | 成功结果 | 失败结果 | 数据联动 | 返回路径 | 验证证据 | 当前状态 / 关联 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| I-BOOKS-01 | 账本列表 | 账本行链接 | app.js L250–255 | 已登录 | — | 点击 → #b/{id} | 进入账本首页 | — | — | #b/{id} | C:app.js L250–255；S:books/390x844/normal.png | 已实现｜截图已见 |
+| I-BOOKS-02 | 账本列表 | 账本删除按钮 | app.js L260–276 | 列表加载后 | confirmDialog 二次确认 L263–267 | DELETE /books/:id L271 | toast「账本已删除」+ renderBooks() L272–273 | toast(err.message,"err") L274 | 重绘本页 | 本页 | C:app.js L260–276；删除态未采集 | 已实现｜运行时未验证｜R0-E-16 |
+| I-BOOKS-03 | 账本列表 | 删除取消 | app.js L268 | 确认框打开 | — | 点「取消」/ if(!okD) return | 不删除 | — | 无 | 本页 | C:app.js L268 | 已实现｜运行时未验证 |
+| I-BOOKS-04 | 账本列表 | 新账本名称输入 | app.js L283–284 | — | placeholder=新账本名称, required, maxLength=40 | 键入 | 显示文本 | required 提示 | — | — | C:app.js L283–284；S:books/390x844/normal.png | 已实现｜截图已见 |
+| I-BOOKS-05 | 账本列表 | 账本类型下拉 | app.js L285–288 | — | option 1=个人账本 / 2=家庭账本 | 选择 | 选中值 | — | — | — | C:app.js L285–288；S:books/390x844/normal.png | 已实现｜截图已见 |
+| I-BOOKS-06 | 账本列表 | 创建账本提交 | app.js L289–300 | 名称非空 | btnPending「创建中…」L293 | POST /books {name,bookType} L295 | toast「账本已创建」L296；hash=#b/{bk.id} L297 | toast(err.message,"err") L298 | 新建账本写入 | #b/{id} | C:app.js L289–300；运行时未验证 | 已实现｜运行时未验证 |
+| I-BOOKS-07 | 账本列表 | 空态 | app.js L242–248 | 无账本 | — | — | 「还没有账本——在下面创建第一个吧。」 | — | — | 本页 | C:app.js L242–248；本轮本地库有 1 个账本，空态未采集 | 已实现｜空态未采集 |
+| I-BOOKS-08 | 全局 | 品牌点击 | index.html L11 / app.js L156 | 已登录 | — | 点击 #brand | hash=#books | — | — | #books | C:index.html L11, app.js L156 | 已实现｜运行时未验证 |
+| I-BOOKS-09 | 全局 | 顶栏「账本」 | index.html L13（#navBooks） | 已登录，有账本 | — | 点击 | hash=#books | — | — | #books | C:index.html L13；S:books/1280x800/normal.png | 已实现｜截图已见｜R0-E-01 |
+| I-BOOKS-10 | 账本列表 | 账本重命名 UI | —（grep 无命中） | 已登录 | — | — | — | — | — | — | 缺失：app.js 无 `api("PUT","/books/"` 调用；PUT 仅用于 accounts/transactions/budgets/categories/holdings/instruments/members/users/me；后端 PUT /books/:id 已有（router.go L161） | **缺失**｜R0-E-32 |
+| I-BOOKS-11 | 账本列表 | 账本详情 / 账本设置页入口 | —（grep 无命中） | 已登录，已选账本 | — | 应存在承载账本设置的独立入口 | — | — | — | — | 缺失：`route()` 分支（app.js L2200–2239）无账本设置 hash；账本重命名（R0-E-32）与账本级可见性开关（R0-E-19）均无承载页面，仅散落在成员页/账本列表 | **缺失**｜R0-E-19 / R0-E-32 |
+
+#### 3.1.3 首页 `#b/:id`
+
+> `renderHome` L1929–1971 + `renderBillStream` L1872–1926；截图 `home/{360x800,390x844,430x932,1280x800}/empty.png` 与 `home/390x844/error.png`。
+
+| ID | 页面 | 控件 / 动作 | 代码位置 | 前置条件 | 输入与校验 | 操作 | 成功结果 | 失败结果 | 数据联动 | 返回路径 | 验证证据 | 当前状态 / 关联 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| I-HOME-01 | 首页 | 账本切换控件（本页内） | —（无） | 已选账本 | — | — | — | — | — | — | 缺失：renderHome L1929–1971 无账本 select；切换只能经 #brand/#navBooks → #books（I-BOOKS-08/09） | **缺失**｜R0-E-01 |
+| I-HOME-02 | 首页 | 月份切换控件（首页） | —（无） | 已选账本 | — | — | — | — | — | — | 缺失：月份切换仅报表页 reportMonthOffset L802/L817–824；首页月报固定 months=2（L1949） | **缺失**｜本轮二次复核观察项（无既有 R0-E 编号） |
+| I-HOME-03 | 首页 | 本月收入卡 | app.js L1961（mkCard） | 月报返回 | GET /reports/monthly?months=2 L1949 | 渲染 cur.income | 显示 +¥… | 月报异常静默降级 {income:0,expense:0}（catch(_){} L1949） | 无 | 本页 | C:app.js L1949,L1961；S:home/390x844/empty.png（显示 +¥0.00） | 已实现｜截图已见 |
+| I-HOME-04 | 首页 | 本月支出卡 | app.js L1962 | 月报返回 | 同上 | 渲染 cur.expense | 显示 -¥… | 同上 | 无 | 本页 | C:app.js L1962；S:home/390x844/empty.png（显示 -¥0.00） | 已实现｜截图已见 |
+| I-HOME-05 | 首页 | 结余卡 | app.js L1963 + L1951 | 账户列表返回 | `for (const a of accs) balance += a.balance \|\| 0` | Σ 账户余额并标「结余」+ 小字「净资产」 | 显示 ¥… | 同上 | 无 | 本页 | C:app.js L1951,L1963；S:home/390x844/empty.png（第三卡显示 结余 ¥0.00 / 净资产） | **已实现但财务口径错误**｜R0-E-20（Σ账户余额 ≠ 本月结余，更 ≠ 净资产；净资产公式见 service/invest.go L541–569） |
+| I-HOME-06 | 首页 | 首页筛选入口 / 筛选条 | —（首页无） | 已选账本 | — | — | — | — | — | — | 缺失：renderHome 全文无 filters；筛选能力在交易总表 `.filters`（L352–366：关键词/类型/账户/分类/起止日期/查询/重置），不可笼统说「全局缺失」 | **缺失（首页）**｜R0-E-02 / R0-E-21 |
+| I-HOME-07 | 首页 | 每条账单行 | app.js L1907–1923 | 有交易数据 | — | 点击 row → #b/{id}/tx/{tx.id} L1922 | 进入交易详情 | — | — | #b/:id/tx/:txId | C:app.js L1907–1923；本轮本地库 transactions total=0，行点击未采集 | 已实现｜运行时未验证（需有数据） |
+| I-HOME-08 | 首页 | 账单行内容（分类/备注/商户/时间/金额） | app.js L1911–1920 | 有交易数据 | — | — | 显示分类或转账账户、备注/商户、金额 | — | — | 详情 | C:app.js L1911–1920 | 已实现｜缺账户/支付渠道标签｜R0-E-21 |
+| I-HOME-09 | 首页 | 桌面「＋ 记一笔」按钮 | app.js L1942–1943（.only-desktop） | 已选账本 | — | 点击 → openTxForm(bookId,()=>route()) | 打开 #formDlg | — | 提交后 route() 重绘 | 本页 | C:app.js L1942–1943；S:add-transaction/1280x800/normal.png（桌面弹窗） | 已实现｜截图已见 |
+| I-HOME-10 | 首页 | 中央 FAB「＋」 | index.html L33 / app.js L1868 | 有账本（showNav L122 控制显隐） | — | 点击 → openTxForm(bookId,()=>route()) | 打开 #formDlg | — | 提交后重绘 | 本页 | C:index.html L33, app.js L1868；S:add-transaction/390x844/normal.png（FAB 点击后弹窗） | 已实现｜截图已见｜R0-E-01 |
+| I-HOME-11 | 首页 | 底部 Tab「首页」 | index.html L31 / app.js L1862–1866 | 已选账本 | — | 点击 .tab[data-path=""] | hash=#b/{id} | — | — | #b/{id} | C:index.html L31；S:home/390x844/empty.png（底栏 首页 高亮） | 已实现｜截图已见｜R0-E-01 |
+| I-HOME-12 | 首页 | 底部 Tab「账单」 | index.html L32 / app.js L1865 | 已选账本 | — | 点击 | hash=#b/{id}/txns | — | — | 交易总表 | C:index.html L32；S:home/390x844/empty.png | 已实现｜截图已见｜R0-E-01 |
+| I-HOME-13 | 首页 | 底部 Tab「报表」 | index.html L34 / app.js L1865 | 已选账本 | — | 点击 | hash=#b/{id}/report | — | — | 报表 | C:index.html L34；S:home/390x844/empty.png | 已实现｜截图已见 |
+| I-HOME-14 | 首页 | 底部 Tab「我的」 | index.html L35 / app.js L1865 | 已选账本 | — | 点击 | hash=#b/{id}/mine | — | — | 我的 | C:index.html L35；S:home/390x844/empty.png | 已实现｜截图已见 |
+| I-HOME-15 | 首页 | 账单加载态（骨架屏） | app.js L1874–1876（sk, aria-busy=true, 4 条） | 进入首页 / 刷新 | — | — | 骨架占位 | — | — | 本页 | C:app.js L1874–1876；加载态截图未采集（本地 API 响应过快） | 已实现｜加载态未采集｜R0-E-02 |
+| I-HOME-16 | 首页 | 账单空态 | app.js L1882–1887 | 无交易 | — | — | 「还没有账单——点下方「＋ 记一笔」开始记录。」 | — | — | 本页 | C:app.js L1882–1887；S:home/390x844/empty.png（可见空态文案） | 已实现｜截图已见 |
+| I-HOME-17 | 首页 | 账单错误态 | app.js L1878–1879（catch 仅 toast 并 return） | API 失败 | — | GET /transactions?page=1&count=60 失败 | — | toast(e.message,"err")；代码未清除骨架屏 | 无 | 本页 | C:app.js L1878–1879；S:home/390x844/error.png（CDP 拦截 /api/v1/* 后实测：页面主体空白 + 红色「Failed to fetch」toast，**未观察到明显骨架屏残留**） | **已实现但有缺陷｜R0-E-35 描述需复核**：实测与「骨架残留」不完全一致，需 Owner/CI 用慢速网络复验 |
+| I-HOME-18 | 首页 | 按日分组标题 + 日小计 | app.js L1897–1905（gt / daySum） | 有交易数据 | 仅基于首批 60 条（L1878 count=60） | 收入加 / 支出减 | 显示「今天/昨天/前天/N 天前」+ 日合计 | — | — | 本页 | C:app.js L1897–1905；有数据态未采集 | 已实现｜分页边界缺陷｜R0-E-34 |
+
+#### 3.1.4 记一笔弹窗 `#formDlg`
+
+> `openTxForm` app.js L530–580；`index.html` L38–59；截图 `add-transaction/{360x800,390x844,430x932,1280x800}/normal.png`。
+
+| ID | 页面 | 控件 / 动作 | 代码位置 | 前置条件 | 输入与校验 | 操作 | 成功结果 | 失败结果 | 数据联动 | 返回路径 | 验证证据 | 当前状态 / 关联 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| I-ADD-01 | 记一笔 | 打开弹窗 | app.js L530–541 | 有账本/账户/分类 | fType=2、fillSelect 三下拉、fDate=今天、清空 fNote/fAmount、syncFormFields()、showModal() | 由 FAB/桌面按钮触发 | 显示 #formDlg | — | — | 本页（弹层） | C:app.js L530–541；S:add-transaction/390x844/normal.png | 已实现｜截图已见 |
+| I-ADD-02 | 记一笔 | 类型选择 `#fType` | index.html L42 / app.js L532,L547 | 弹窗打开 | 值 2=支出 / 1=收入 / 3=转账；**普通 `<select>`** | change → syncFormFields() L542–546 | t=3 显 #fToRow 隐 #fCatRow，否则相反 | — | — | 弹层 | C:index.html L42, app.js L542–547；S:add-transaction/390x844/normal.png（可见「类型 支出」下拉） | 已实现**但形态不符**（非分段控件）｜R0-E-05 / R0-E-29 |
+| I-ADD-03 | 记一笔 | 金额输入 `#fAmount` | index.html L48 / app.js L538,L551–552 | 弹窗打开 | str2cents 正则 `^(\d+)(?:\.(\d{1,2}))?$`；cents===null 或 <=0 → toast「金额格式不合法（最多两位小数）」L552 | 键入 | 显示文本 | toast err，不关闭弹窗 | — | 弹层 | C:index.html L48, app.js L551–552；S:add-transaction/390x844/normal.png（可见 0.00 占位） | 已实现｜校验失败态未采集 |
+| I-ADD-04 | 记一笔 | 资金账户 `#fAccount` | index.html L49 / app.js L533,L557 | 弹窗打开 | 非转账时 !body.accountId → toast「请选择账户」L568 | 选择 | 选中账户 | toast err | — | 弹层 | C:index.html L49, app.js L568；S:add-transaction/390x844/normal.png（可见「账户 现金」） | 已实现｜校验失败态未采集 |
+| I-ADD-05 | 记一笔 | 转入账户 `#fTo`（#fToRow hidden） | index.html L50 / app.js L534,L544,L566–567 | 类型=转账 | !toAccountId 或 toAccountId===accountId → toast「转账需选择不同的两个账户」L567 | 选择 | 选中账户 | toast err | — | 弹层 | C:index.html L50, app.js L566–567；转账态截图未采集 | 已实现｜运行时未验证 |
+| I-ADD-06 | 记一笔 | 分类 `#fCategory` | index.html L51 / app.js L535,L545,L559 | 非转账 | 转账时 categoryId=0 | 选择 | 选中分类 | — | — | 弹层 | C:index.html L51；S:add-transaction/390x844/normal.png（可见「分类 工资」） | 已实现｜截图已见 |
+| I-ADD-07 | 记一笔 | 日期 `#fDate` | index.html L52 / app.js L536,L560 | 弹窗打开 | type=date required；dateStartUnix(...,false) | 选择 | 选中日期 | 浏览器 required | — | 弹层 | C:index.html L52；S:add-transaction/390x844/normal.png（可见 2026/11/04） | 已实现｜截图已见 |
+| I-ADD-08 | 记一笔 | 备注 `#fNote` | index.html L53 / app.js L537,L562 | 弹窗打开 | maxlength=255 → comment | 键入 | 显示文本 | — | — | 弹层 | C:index.html L53；S:add-transaction/390x844/normal.png（可见「可选」占位） | 已实现｜截图已见 |
+| I-ADD-09 | 记一笔 | 支付渠道选择器 | —（grep 无命中） | 弹窗打开 | — | — | — | — | — | — | 缺失：记一笔 body L554–564 无 paymentChannel；`paymentChannel` 全文仅 7 处命中（L425/449/620/929/1914/1916/2004），均为展示/导出/编辑只读继承；S:add-transaction/390x844/normal.png 可见无该字段 | **缺失**｜R0-E-23 |
+| I-ADD-10 | 记一笔 | 商户输入 | —（grep 无命中） | 弹窗打开 | — | — | — | — | — | — | 缺失：body 无 merchant；`merchant` 全文仅展示/导出命中；后端 service/tx.go CreateRequest 亦无 Merchant 字段（R0-E-37 端到端缺口） | **缺失**｜R0-E-37 |
+| I-ADD-11 | 记一笔 | 提交保存 `#fSubmit` | index.html L56 / app.js L549–579 | 校验通过 | btnPending「保存中…」L570 | POST /books/:id/transactions（body L554–564：clientUuid/txType/accountId/amount/categoryId/txTime/timezoneOffset/comment/source=0）L572 | toast「已记账」L573 + 关闭弹窗 L574–575 + onDone() L576 | toast(err.message,"err") L578 | onDone=重绘列表/首页 | 首页/账单流 | C:app.js L549–579；提交态未采集 | 已实现｜运行时未验证 |
+| I-ADD-12 | 记一笔 | 取消 `#fCancel` | index.html L55 / app.js L548 | 弹窗打开 | — | 点击 | dlg.close() + 加 hidden，不提交 | — | 无 | 本页 | C:index.html L55, app.js L548；S:add-transaction/390x844/normal.png（可见「取消」） | 已实现｜运行时未验证 |
+| I-ADD-13 | 记一笔 | 弹窗关闭（Esc / ×） | —（无显式绑定） | 弹窗打开 | — | 按 Esc / 点原生关闭 | 应关闭 | — | — | 本页 | 缺失：仅 #fCancel 自定义关闭，无 cancel/close 事件绑定，依赖 `<dialog>` 原生行为 | **待验证**｜运行时未验证 |
+| I-ADD-14 | 记一笔 | 重复提交防护 | app.js L56 + L570–577 finally | 提交中 | 按钮禁用 | — | — | 失败也恢复按钮 | — | 弹层 | C:app.js L56,L570–577；运行时未验证 | 已实现（代码层）｜运行时未验证 |
+| I-ADD-15 | 记一笔 | 表单校验失败汇总 | app.js L552 / L567 / L568 | 金额/转账双账户/账户三项 | — | 提交触发 | — | toast err、弹窗不关闭、输入保留 | — | 弹层 | C:app.js L552,L567,L568；校验失败态未采集 | 已实现｜运行时未验证｜R0-E-05 |
+
+#### 3.1.5 交易详情 `#b/:id/tx/:txId`
+
+> `renderTxDetail` app.js L1974–2026；本轮本地库 transactions total=0，**该页无真实数据可截图**（阻塞项，见 §7.5）。
+
+| ID | 页面 | 控件 / 动作 | 代码位置 | 前置条件 | 输入与校验 | 操作 | 成功结果 | 失败结果 | 数据联动 | 返回路径 | 验证证据 | 当前状态 / 关联 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| I-TXDET-01 | 交易详情 | 详情加载 | app.js L1982；后端锚点 router.go L194 | 进入 hash | — | GET /transactions/:txId | 渲染详情 | toast(err.message,"err") + hash=#b/{id}/txns L1983 | — | 账单页（失败时） | C:app.js L1982–1983 + C:router.go L194（前后端双向锚点）；截图未采集（无数据） | 已实现｜运行时未验证 |
+| I-TXDET-02 | 交易详情 | 返回 | app.js L1979（wireBottomNav(bookId,"/txns")） | 详情页 | — | 底部 Tab / 浏览器返回 | — | — | — | #b/{id}/txns | C:app.js L1979 | 已实现｜运行时未验证 |
+| I-TXDET-03 | 交易详情 | 完整字段展示 | app.js L1995–2006（addRow） | tx 就绪 | — | — | 账户/分类/日期/备注（转账显示 A→B） | — | — | 本页 | C:app.js L1995–2006；截图未采集（无数据） | **部分具备**｜R0-E-03 / R0-E-22 |
+| I-TXDET-04 | 交易详情 | paymentChannel 展示 | —（无 addRow 行） | tx 就绪 | — | — | — | — | — | — | 缺失：addRow 无渠道行 | **缺失**｜R0-E-22 / R0-E-23 |
+| I-TXDET-05 | 交易详情 | 商户与备注显示逻辑 | app.js L2004 | tx 就绪 | `tx.note \|\| (tx.merchant?"商户："+tx.merchant:"—")` | — | 备注非空时显示备注 | 备注非空时 merchant 被吞，不显示 | — | 本页 | C:app.js L2004 | **已实现但缺陷**｜R0-E-22 |
+| I-TXDET-06 | 交易详情 | 编辑按钮 | app.js L2008–2009 | 详情页 | — | 点击 → openTxEditForm(bookId,tx,()=>renderTxDetail(...)) | 打开 #editDlg | — | 保存后重绘详情 | 详情 | C:app.js L2008–2009；截图未采集 | 已实现｜运行时未验证｜R0-E-03 |
+| I-TXDET-07 | 交易详情 | 编辑表单打开 / 类型只读 | app.js L583–608（openTxEditForm） | 详情页点编辑 | eType 只读文本 L585；转账显 eToRow/隐 eCatRow L596–606 | — | 回填 eAmount/eDate/eNote | — | — | 弹层 | C:app.js L583–608 | 已实现｜运行时未验证｜R0-E-23 |
+| I-TXDET-08 | 交易详情 | 编辑保存 | app.js L610–641（#txEditForm onsubmit） | 弹窗打开 | str2cents L612–613；转账双账户 L628；非转账 !accountId\|\|!categoryId → toast「请选择账户与分类」L629 | PUT /transactions/:txId（body L614–625 含 paymentChannel: tx.paymentChannel\|\|0 只读继承、baseVersion）L633 | toast「已保存修改」+ 关弹窗 + onDone() L634–637 | toast(err.message + 并发提示,"err") L639 | onDone=重绘详情 | 详情 | C:app.js L610–641；运行时未验证 | 已实现｜运行时未验证｜R0-E-23 |
+| I-TXDET-09 | 交易详情 | 编辑失败 / 409 并发 | app.js L639 | PUT 409 | — | — | — | toast 并发提示 | — | 弹层保留 | C:app.js L639；运行时未验证 | 已实现｜运行时未验证 |
+| I-TXDET-10 | 交易详情 | 编辑取消 `#eCancel` | index.html L71 / app.js L609 | 弹窗打开 | — | 点击 | 关闭弹窗 | — | — | 详情 | C:index.html L71, app.js L609 | 已实现｜运行时未验证 |
+| I-TXDET-11 | 交易详情 | 删除按钮 | app.js L2010–2023 | 详情页 | — | 点击 → 二次确认 + DELETE | — | — | — | — | C:app.js L2010–2023；截图未采集 | 已实现｜运行时未验证｜R0-E-03 |
+| I-TXDET-12 | 交易详情 | 删除二次确认 | app.js L2012–2016（confirmDialog） | 点删除 | 文案「删除后将无法恢复，账户余额会相应调整。」 | 确认/取消 | 确认后 DELETE | — | — | — | C:app.js L2012–2016 | **已实现但文案与软删除/回收站矛盾**｜R0-E-24 |
+| I-TXDET-13 | 交易详情 | 删除取消 | app.js L2017（if(!ok) return） | 确认框打开 | — | 点「取消」 | 不删除 | — | 无 | 详情 | C:app.js L2017 | 已实现｜运行时未验证 |
+| I-TXDET-14 | 交易详情 | 删除提交 | app.js L2020 | 已确认 | btnPending L2018 | DELETE /transactions/:id?clientUuid=uuid() | toast「已删除」+ hash=#b/{id}/txns L2021 | toast(e.message,"err") L2022 | — | 账单页 | C:app.js L2020–2022；运行时未验证 | 已实现｜运行时未验证｜R0-E-24 |
+
+#### 3.1.6 交易总表 `#b/:id/txns`
+
+> `renderTxns` app.js L337–527；截图 `transactions/{390x844,1280x800}/empty.png`。首页筛选能力实际落在此页（`.filters` L352–366）。
+
+| ID | 页面 | 控件 / 动作 | 代码位置 | 前置条件 | 输入与校验 | 操作 | 成功结果 | 失败结果 | 数据联动 | 返回路径 | 验证证据 | 当前状态 / 关联 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| I-TXNS-01 | 交易总表 | 关键词搜索 | app.js L355（kw input） | — | placeholder=关键词搜索 | 键入 + 查询 | state.filter.keyword 生效 | — | — | 本页 | C:app.js L355；S:transactions/390x844/empty.png | 已实现｜截图已见 |
+| I-TXNS-02 | 交易总表 | 类型筛选 | app.js L356–358（typeSel） | — | 1/2/3 + 全部类型 | 选择 | 过滤 | — | — | 本页 | C:app.js L356–358 | 已实现｜截图已见 |
+| I-TXNS-03 | 交易总表 | 账户筛选 | app.js L359（accSel） | — | 全部账户 + 账户列表 | 选择 | 过滤 | — | — | 本页 | C:app.js L359 | 已实现｜截图已见 |
+| I-TXNS-04 | 交易总表 | 分类筛选 | app.js L360（catSel） | — | 全部分类 + 分类列表 | 选择 | 过滤 | — | — | 本页 | C:app.js L360 | 已实现｜截图已见 |
+| I-TXNS-05 | 交易总表 | 开始日期 | app.js L361（dFrom type=date） | — | dateStartUnix(minDate,false) L396 | 选择 | 过滤 | — | — | 本页 | C:app.js L361 | 已实现｜截图已见 |
+| I-TXNS-06 | 交易总表 | 结束日期 | app.js L362（dTo type=date） | — | dateStartUnix(maxDate,true) L396 | 选择 | 过滤 | — | — | 本页 | C:app.js L362 | 已实现｜截图已见 |
+| I-TXNS-07 | 交易总表 | 查询按钮 | app.js L363 / L523（applyFilters） | 筛选条件已填 | 组装 state.filter L520 | 点击 → GET /transactions?page&count&keyword&type&accountId&categoryId&minTime&maxTime L399 | renderTable(data) L401；页码回 1、scrollTo 顶部 L402 | load().catch → toast(e.message,"err") L521 | — | 本页 | C:app.js L363,L519–522；运行时未验证 | 已实现｜运行时未验证 |
+| I-TXNS-08 | 交易总表 | 重置按钮 | app.js L364 / L524 | — | — | 点击 → applyFilters() | 清空 6 个控件并回到全量第一页 | — | — | 本页 | C:app.js L364,L524 | 已实现｜运行时未验证 |
+| I-TXNS-09 | 交易总表 | 回车提交 | app.js L516–518（6 控件 keydown Enter） | 筛选控件聚焦 | — | 按 Enter | applyFilters() | — | — | 本页 | C:app.js L516–518 | 已实现｜运行时未验证 |
+| I-TXNS-10 | 交易总表 | 全选本页 | app.js L370 / L483–490（allChk） | 有行 | — | 勾选 | 勾选 tbody 全部 checkbox；state.sel 增删 | — | — | 本页 | C:app.js L370,L483–490 | 已实现｜运行时未验证 |
+| I-TXNS-11 | 交易总表 | 行勾选 | app.js L433–437（chk change） | 每行 | — | 勾选/取消 | state.sel.add/delete(tx.id)；refreshSel() 更新按钮态 L378–381 | — | — | 本页 | C:app.js L433–437 | 已实现｜运行时未验证 |
+| I-TXNS-12 | 交易总表 | 删除选中 | app.js L372 / L491–514 | state.sel.size>0 L492 | confirmDialog 文案「将删除选中的 N 条交易，删除后可在回收站恢复。」L494–499 | 逐条 DELETE /transactions/:id?clientUuid=uuid() L506 | toast「删除完成：成功 X，失败 Y」L510 + page=1 + await load() L511–512 | 单条失败计入 failN | 重绘列表 | 本页 | C:app.js L491–514；运行时未验证 | 已实现｜文案与详情页矛盾（R0-E-24） |
+| I-TXNS-13 | 交易总表 | 删除选中取消 | app.js L500（if(!yes) return） | 确认框 | — | 取消 | 不删除 | — | 无 | 本页 | C:app.js L500 | 已实现｜运行时未验证 |
+| I-TXNS-14 | 交易总表 | ＋ 记一笔 | app.js L373 / L515 | — | — | 点击 → openTxForm(bookId,load) | 打开弹窗；提交后 load() | — | — | 本页 | C:app.js L373,L515 | 已实现｜运行时未验证 |
+| I-TXNS-15 | 交易总表 | 行编辑 | app.js L454–455（editBtn） | 每行 | — | 点击 → openTxEditForm(bookId,tx,load) | 打开编辑弹窗；保存后 load() | — | — | 本页 | C:app.js L454–455 | 已实现｜运行时未验证 |
+| I-TXNS-16 | 交易总表 | 上一页 / 下一页 | app.js L472–478（prev/next） | data.page>1 / page*count<total | — | 点击 | state.filter.page±1 + load() | — | — | 本页 | C:app.js L472–478 | 已实现｜运行时未验证 |
+| I-TXNS-17 | 交易总表 | 骨架屏 | app.js L406–416 / L388（renderSkeleton, 5 条, aria-busy=true） | 加载前 | — | — | 骨架占位 | — | — | 本页 | C:app.js L406–416；加载态未采集 | 已实现｜加载态未采集｜R0-E-02 |
+| I-TXNS-18 | 交易总表 | 空态 | app.js L460–468 | 无结果 | — | — | 「没有符合条件的交易…」 | — | — | 本页 | C:app.js L460–468；S:transactions/390x844/empty.png | 已实现｜截图已见 |
+| I-TXNS-19 | 交易总表 | 加载失败 | app.js L526（try/catch toast） | API 失败 | — | — | — | 仅 toast(e.message,"err") | — | 本页 | C:app.js L526；错误态未采集 | 已实现｜运行时未验证｜R0-E-12 |
+
+#### 3.1.7 账户 `#b/:id/accounts`
+
+> `renderAccounts` L647–712 / `openAcctForm` L715–748 / `#acctDlg` index.html L134–148；截图 `accounts/{360x800,390x844,430x932,1280x800}/normal.png`。
+
+| ID | 页面 | 控件 / 动作 | 代码位置 | 前置条件 | 输入与校验 | 操作 | 成功结果 | 失败结果 | 数据联动 | 返回路径 | 验证证据 | 当前状态 / 关联 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| I-ACCT-01 | 账户 | ＋ 新增账户 | app.js L657–658（addBtn） | 对账页 | — | 点击 → openAcctForm(bookId,null) | 打开 #acctDlg | — | — | 弹层 | C:app.js L657–658；S:accounts/390x844/normal.png | 已实现｜截图已见 |
+| I-ACCT-02 | 账户 | 账户行（名称/类型/余额） | app.js L668–673 | loadBookMeta L649 | — | — | 显示 ACC_CAT_NAME、cents2str 余额、正负色 L672 | — | — | 本页 | C:app.js L668–673；S:accounts/390x844/normal.png | 已实现｜截图已见 |
+| I-ACCT-03 | 账户 | 编辑按钮 | app.js L676–677（edit） | 每行 | — | 点击 → openAcctForm(bookId,a) | 打开 #acctDlg（回填） | — | — | 弹层 | C:app.js L676–677 | 已实现｜运行时未验证 |
+| I-ACCT-04 | 账户 | 删除按钮 | app.js L678–689（del） | 每行 | confirmDialog L680–684 | DELETE /books/:id/accounts/:id L687 | toast「账户已删除」+ await renderAccounts(bookId) | toast(e.message,"err") L688（后端 409 引用保护） | 重绘本页余额 | 本页 | C:app.js L678–689；运行时未验证 | 已实现｜运行时未验证 |
+| I-ACCT-05 | 账户 | 删除取消 | app.js L685（if(!ok) return） | 确认框 | — | 取消 | 不删除 | — | 无 | 本页 | C:app.js L685 | 已实现｜运行时未验证 |
+| I-ACCT-06 | 账户 | 删除引用保护 | app.js L688 + 后端 409 | 账户被交易引用 | — | 确认删除 | — | toast 后端 ErrAccountInUse → 409 | — | 本页 | C:app.js L688；common.go mapSvcErr（见 §5.3） | 已实现｜运行时未验证 |
+| I-ACCT-07 | 账户 | 期初余额输入 | —（grep 无命中） | 新增账户弹窗 | — | — | — | — | — | — | 缺失：app.js `initialBalance\|期初\|opening\|initBalance\|初始` No matches；新增 body L737 仅 name/category/currency；后端 AccountService.Create 固定 Balance:0（account.go L21） | **缺失**｜R0-E-06 / R0-E-30 |
+| I-ACCT-08 | 账户 | 账户名称 `#acctName` | index.html L137 / app.js L719,L731–732 | 弹窗 | name.trim() 空 → #acctErr「请输入账户名称」L732 | 键入 | 显示文本 | err-msg | — | 弹层 | C:index.html L137, app.js L731–732 | 已实现｜运行时未验证 |
+| I-ACCT-09 | 账户 | 账户类型 `#acctCat` | index.html L139 / app.js L720–722 | 弹窗 | 编辑时 disabled=editing L722（后端仅改名称） | 选择 | 选中类型 | — | — | 弹层 | C:index.html L139, app.js L720–722 | 已实现｜运行时未验证 |
+| I-ACCT-10 | 账户 | 币种 `#acctCur` | index.html L141 / app.js L723–724 | 弹窗 | 默认 CNY；编辑时 disabled L724 | 键入 | 显示文本 | — | — | 弹层 | C:index.html L141, app.js L723–724 | 已实现｜运行时未验证 |
+| I-ACCT-11 | 账户 | 取消 `#acctCancel` | index.html L144 / app.js L728 | 弹窗 | — | 点击 | 关闭 | — | 无 | 本页 | C:index.html L144, app.js L728 | 已实现｜运行时未验证 |
+| I-ACCT-12 | 账户 | 保存 `#acctSubmit` | index.html L145 / app.js L729–747 | 名称非空 | btnPending L739 | 编辑 PUT /accounts/:id {name} L741；新增 POST /accounts {name,category,currency} L742 | toast「账户已创建/已更新」L743 + 关弹窗 L744 + await renderAccounts L745 | #acctErr.textContent=err.message L746 | 重绘本页余额 | 本页 | C:app.js L729–747；运行时未验证 | 已实现｜运行时未验证 |
+| I-ACCT-13 | 账户 | 余额刷新 | app.js L687 / L745 | 增删后 | — | renderAccounts(bookId) | loadBookMeta 重拉，余额列表更新 | — | — | 本页 | C:app.js L687,L745 | 已实现｜运行时未验证 |
+| I-ACCT-14 | 账户 | 本页净资产摘要 | —（在 renderInvest L1255–1276） | 对账页 | — | — | — | — | — | — | 缺失：净资产四卡在投资页 | **缺失**｜R0-E-28 |
+| I-ACCT-15 | 账户 | 投资账户行点击 → 详情 | app.js L693–700 | category===5 | 排除 .row-actions L697 | 点击 → #b/{id}/account/{a.id} L698 | 进入投资账户详情 | — | — | #b/:id/account/:accId | C:app.js L693–700；S:account-detail/390x844/normal.png | 已实现｜截图已见 |
+
+#### 3.1.8 分类 `#b/:id/categories`
+
+> `renderCategories` L2069–2135 / `openCatForm` L2029–2055 / `deleteCategory` L2056–2068；截图 `categories/{390x844,1280x800}/normal.png`。
+
+| ID | 页面 | 控件 / 动作 | 代码位置 | 前置条件 | 输入与校验 | 操作 | 成功结果 | 失败结果 | 数据联动 | 返回路径 | 验证证据 | 当前状态 / 关联 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| I-CAT-01 | 分类 | ＋ 新增大类 | app.js L2084–2085（addTop） | 分类页 | — | 点击 → openCatForm(bookId,null) | 打开 #catDlg | — | — | 弹层 | C:app.js L2084–2085；S:categories/390x844/normal.png | 已实现｜截图已见｜R0-E-04 |
+| I-CAT-02 | 分类 | ＋ 小类 | app.js L2108–2109（addSub） | 每个大类行 | 传 {parentId:top.id,catType:top.catType} | 点击 → openCatForm | 打开 #catDlg（预置上级） | — | — | 弹层 | C:app.js L2108–2109 | 已实现｜运行时未验证 |
+| I-CAT-03 | 分类 | 大类编辑 | app.js L2110–2111 | 每行 | — | 点击 → openCatForm(bookId,top) | 打开弹窗回填 | — | — | 弹层 | C:app.js L2110–2111 | 已实现｜运行时未验证 |
+| I-CAT-04 | 分类 | 子类编辑 | app.js L2123–2124（ke） | 每个子类 | — | 点击 → openCatForm(bookId,kid) | 打开弹窗回填 | — | — | 弹层 | C:app.js L2123–2124 | 已实现｜运行时未验证 |
+| I-CAT-05 | 分类 | 大类删除 | app.js L2112–2113 | 每行 | — | 点击 → deleteCategory(bookId,top) | 进入 I-CAT-07 引用确认 | — | — | 本页 | C:app.js L2112–2113 | 已实现｜运行时未验证 |
+| I-CAT-06 | 分类 | 子类删除 | app.js L2125–2126（kd） | 每个子类 | — | 点击 → deleteCategory(bookId,kid) | 进入 I-CAT-07 引用确认 | — | — | 本页 | C:app.js L2125–2126 | 已实现｜运行时未验证 |
+| I-CAT-07 | 分类 | 引用保护确认 | app.js L2056–2068（deleteCategory） | 删除前 | 先 GET /transactions?categoryId=&count=1 取 n L2058；confirmDialog 文案「删除「…」后，n 笔账单将归入「其他」分类，且不可恢复。」L2061 | 确认 → DELETE /categories/:id L2066 | toast「分类已删除」+ await renderCategories(bookId) | toast(e.message,"err") L2067 | 重绘分类树 | 本页 | C:app.js L2056–2068；运行时未验证 | 已实现｜运行时未验证｜R0-E-04 |
+| I-CAT-08 | 分类 | 删除取消 | app.js L2064（if(!ok) return） | 确认框 | — | 取消 | 不删除 | — | 无 | 本页 | C:app.js L2064 | 已实现｜运行时未验证 |
+| I-CAT-09 | 分类 | 名称 `#catName` | index.html L122 / app.js L2032,L2043–2044 | 弹窗 | name.trim() 空 → #catErr「请输入分类名称」L2044 | 键入 | 显示文本 | err-msg | — | 弹层 | C:index.html L122, app.js L2043–2044 | 已实现｜运行时未验证 |
+| I-CAT-10 | 分类 | 类型 `#catType` | index.html L124 / app.js L2033 | 弹窗 | 支出(2)/收入(1) | 选择 | 选中类型 | — | — | 弹层 | C:index.html L124, app.js L2033 | 已实现｜运行时未验证 |
+| I-CAT-11 | 分类 | 上级大类 `#catParent` | index.html L126 / app.js L2034–2036 | 弹窗 | fillSelect(...,"无（作为大类）")，顶级填 0 | 选择 | 选中上级 | — | — | 弹层 | C:index.html L126, app.js L2034–2036 | 已实现｜运行时未验证 |
+| I-CAT-12 | 分类 | 取消 `#catCancel` | index.html L129 / app.js L2040 | 弹窗 | — | 点击 | 关闭 | — | 无 | 本页 | C:index.html L129, app.js L2040 | 已实现｜运行时未验证 |
+| I-CAT-13 | 分类 | 保存 `#catSubmit` | index.html L130 / app.js L2041–2054 | 名称非空 | btnPending L2046 | 编辑 PUT /categories/:id L2048；新增 POST /categories L2049，body {name,catType,parentId} L2045 | toast「分类已添加/已更新」L2050 + 关弹窗 L2051 + await renderCategories L2052 | #catErr.textContent=err.message L2053 | 重绘 | 本页 | C:app.js L2041–2054；运行时未验证 | 已实现｜运行时未验证 |
+| I-CAT-14 | 分类 | 树展开 / 收起 | —（无事件） | 分类页 | — | — | — | — | — | — | 缺失：renderGroup L2091–2131 一次性平铺大类+子类，无折叠/展开按钮或事件 | **缺失**｜R0-E-04 |
+| I-CAT-15 | 分类 | 空态 | app.js L2097–2100（cat-empty） | 无分类 | — | — | 「暂无，点击上方「新增大类」添加。」 | — | — | 本页 | C:app.js L2097–2100；本轮有默认分类，空态未采集 | 已实现｜空态未采集 |
+
+#### 3.1.9 成员 `#b/:id/members`
+
+> `renderMembers` app.js L1636–1765；截图 `members/{390x844,1280x800}/normal.png`。
+
+| ID | 页面 | 控件 / 动作 | 代码位置 | 前置条件 | 输入与校验 | 操作 | 成功结果 | 失败结果 | 数据联动 | 返回路径 | 验证证据 | 当前状态 / 关联 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| I-MEM-01 | 成员 | 邀请成员按钮 | app.js L1647–1677（invBtn） | 成员页 | — | 点击 → 打开 openInvestDialog | 显示邀请弹窗 | — | — | 弹层 | C:app.js L1647–1677；S:members/390x844/normal.png | 已实现｜截图已见 |
+| I-MEM-02 | 成员 | 角色下拉 | app.js L1649–1652（roleSel） | 邀请弹窗 | 3=普通成员 / 2=管理员 | 选择 | 选中角色 | — | — | 弹层 | C:app.js L1649–1652 | 已实现｜运行时未验证 |
+| I-MEM-03 | 成员 | 绑定用户名 | app.js L1653（bound input） | 邀请弹窗 | placeholder「可选：限定用户名（空 = 任何人凭码加入）」 | 键入 | 显示文本 | — | — | 弹层 | C:app.js L1653 | 已实现｜运行时未验证 |
+| I-MEM-04 | 成员 | 邀请提交 | app.js L1658–1659 | 邀请弹窗 | {role,boundUsername} | POST /books/:id/members/invite | 返回 {code,role,expiresAt}（**无 inviteId**） | — | — | 弹层 | C:app.js L1658–1659 | 已实现｜响应缺 inviteId｜R0-E-26 |
+| I-MEM-05 | 成员 | 邀请码展示 | app.js L1660–1666 | 生成成功 | 复用 investDlg；#iSubmit 隐藏 L1674 | — | 弹窗显示 code + 引导文案 L1667 | — | — | 弹层 | C:app.js L1660–1667 | 已实现｜运行时未验证 |
+| I-MEM-06 | 成员 | 复制邀请码 | app.js L1668–1672（cp） | 邀请码已展示 | navigator.clipboard.writeText | 点击 | toast「邀请码已复制」L1670 | toast「复制失败，请手动选中复制」L1671 | — | 弹层 | C:app.js L1668–1672 | 已实现｜运行时未验证 |
+| I-MEM-07 | 成员 | 邀请撤销 UI | —（grep 无命中） | 成员页 | — | — | — | — | — | — | 缺失：app.js `revoke` 仅命中 L1593/1596–1606（Token 撤销）、L1085（URL.revokeObjectURL）；无邀请撤销按钮、无 /invite/:inviteId/revoke 调用 | **缺失**｜R0-E-26 |
+| I-MEM-08 | 成员 | 成员列表 | app.js L1707 / L1683–1684 | 成员页 | GET /members + GET /users/me | — | 表头 成员姓名/角色/可见性/操作 | — | — | 本页 | C:app.js L1683–1684,L1707；S:members/390x844/normal.png | 已实现｜截图已见｜R0-E-11 |
+| I-MEM-09 | 成员 | 角色徽标 | app.js L1715–1717（badge） | 每行 | 1=所有者/2=管理员/3=普通成员 | — | 显示徽标 | — | — | 本页 | C:app.js L1715–1717；S:members/390x844/normal.png | 已实现｜视觉待验收｜R0-E-11 |
+| I-MEM-10 | 成员 | 可见性徽标（只读） | app.js L1719–1720（vbadge） | 每行 | 只读 mb.canViewOthers | — | 显示「已开启/已关闭账本可见」 | — | — | 本页 | C:app.js L1719–1720；S:members/390x844/normal.png | **仅只读徽标，非开关；字段粒度为成员级而非账本级**｜R0-E-19 / R0-E-27 |
+| I-MEM-11 | 成员 | 账本可见性开关 | —（grep 无命中） | 成员页 | — | — | — | — | — | — | 缺失：无 checkbox/toggle、无 PUT /books/:id/visibility 调用；`canViewOthers` 全文仅 L1719–1720；权威字段为 books.members_can_view_others | **缺失**｜R0-E-19 / R0-E-27 |
+| I-MEM-12 | 成员 | 设为管理员 | app.js L1724–1732（bUp） | role===3 | — | PUT /members/:uid {role:2} L1727 | toast「已设为管理员」+ renderMembers(bookId) | toast(err.message,"err") L1730 | 重绘本页 | 本页 | C:app.js L1724–1732 | 已实现｜运行时未验证 |
+| I-MEM-13 | 成员 | 降级为成员 | app.js L1734–1742（bDown） | role===2 | — | PUT /members/:uid {role:3} L1737 | toast「已降级为成员」+ 重绘 | toast(err.message,"err") L1740 | 重绘本页 | 本页 | C:app.js L1734–1742 | 已实现｜运行时未验证 |
+| I-MEM-14 | 成员 | 移除成员 | app.js L1745–1757（bDel） | role!==1 | confirmDialog L1747–1749 | DELETE /members/:uid L1752 | toast「成员已移除」+ renderMembers(bookId) | toast(err.message,"err") L1755 | 重绘本页 | 本页 | C:app.js L1745–1757 | 已实现｜运行时未验证 |
+| I-MEM-15 | 成员 | 移除取消 | app.js L1750（if(!okD) return） | 确认框 | — | 取消 | 不移除 | — | 无 | 本页 | C:app.js L1750 | 已实现｜运行时未验证 |
+| I-MEM-16 | 成员 | 家庭信息块 | app.js L1686–1703（fblock） | 成员页 | — | — | 显示家庭名/成员数/类型/创建时间 | — | — | 本页 | C:app.js L1686–1703；S:members/390x844/normal.png | 已实现｜截图已见 |
+
+#### 3.1.10 我的 `#b/:id/mine`
+
+> `renderMine` app.js L2138–2198；截图 `mine/{390x844,1280x800}/normal.png`。
+
+| ID | 页面 | 控件 / 动作 | 代码位置 | 前置条件 | 输入与校验 | 操作 | 成功结果 | 失败结果 | 数据联动 | 返回路径 | 验证证据 | 当前状态 / 关联 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| I-MINE-01 | 我的 | 头像 / 用户名 | app.js L2148–2153 | — | 取 state.whoami | — | 显示 | — | — | 本页 | C:app.js L2148–2153；S:mine/390x844/normal.png | 已实现｜截图已见 |
+| I-MINE-02 | 我的 | 用户名（只读） | app.js L2162–2164（vu） | GET /users/me L2157 | 注释「用户名按后端设计为只读」L2155 | — | 显示用户名 | — | — | 本页 | C:app.js L2155,L2162–2164；S:mine/390x844/normal.png | 已实现｜截图已见｜R0-E-17 |
+| I-MINE-03 | 我的 | 邮箱输入 | app.js L2168（eInput type=email） | — | placeholder「未设置」 | 键入 | 显示文本 | 浏览器 type=email 校验 | — | 本页 | C:app.js L2168；S:mine/390x844/normal.png | 已实现｜截图已见 |
+| I-MINE-04 | 我的 | 邮箱保存 | app.js L2169–2174（eSave） | — | btnPending L2171 | PUT /users/me {email} L2172 | toast「资料已更新」L2172 | toast(err.message,"err") L2173 | — | 本页 | C:app.js L2169–2174；运行时未验证 | 已实现｜入口在「我的」而非设置页｜R0-E-17 |
+| I-MINE-05 | 我的 | 二级入口：我的账本 | app.js L2180–2196（links[0] → #books） | — | — | 点击 | hash=#books | — | — | #books | C:app.js L2180–2196；S:mine/390x844/normal.png | 已实现｜截图已见｜R0-E-01 |
+| I-MINE-06 | 我的 | 二级入口：账户 | app.js L2180–2196（→ #b/{id}/accounts） | — | — | 点击 | 进账户页 | — | — | accounts | C:app.js L2180–2196 | 已实现｜截图已见 |
+| I-MINE-07 | 我的 | 二级入口：家庭成员 | app.js L2180–2196（→ members） | — | — | 点击 | 进成员页 | — | — | members | C:app.js L2180–2196 | 已实现｜截图已见 |
+| I-MINE-08 | 我的 | 二级入口：导出数据 | app.js L2180–2196（→ export） | — | — | 点击 | 进导出页 | — | — | export | C:app.js L2180–2196 | 已实现｜截图已见 |
+| I-MINE-09 | 我的 | 二级入口：报表 | app.js L2180–2196（→ report） | — | — | 点击 | 进报表页 | — | — | report | C:app.js L2180–2196 | 已实现｜截图已见 |
+| I-MINE-10 | 我的 | 二级入口：预算 | app.js L2180–2196（→ budget） | — | — | 点击 | 进预算页 | — | — | budget | C:app.js L2180–2196 | 已实现｜截图已见 |
+| I-MINE-11 | 我的 | 二级入口：资产 | app.js L2180–2196（→ invest） | — | — | 点击 | 进投资页 | — | — | invest | C:app.js L2180–2196 | 已实现｜截图已见 |
+| I-MINE-12 | 我的 | 二级入口：回收站 | app.js L2180–2196（→ recycle） | — | — | 点击 | 进回收站 | — | — | recycle | C:app.js L2180–2196 | 已实现｜截图已见 |
+| I-MINE-13 | 我的 | 改密入口 | —（grep 无命中） | 我的/设置 | — | — | — | — | — | — | 缺失：app.js `password` 仅 L179/180/184/185/192/193/209（登录注册）；无 /users/me/password 调用 | **缺失**｜R0-E-18 |
+| I-MINE-14 | 我的 | 会话管理入口 | —（grep 无命中） | 我的/设置 | — | — | — | — | — | — | 缺失：app.js `session\|会话` 仅 L3 头部注释 | **缺失**｜R0-E-14 / R0-E-31 |
+
+#### 3.1.11 设置 `#settings`
+
+> `renderSettings` app.js L1518–1633；截图 `settings/{360x800,390x844,430x932,1280x800}/normal.png`。
+
+| ID | 页面 | 控件 / 动作 | 代码位置 | 前置条件 | 输入与校验 | 操作 | 成功结果 | 失败结果 | 数据联动 | 返回路径 | 验证证据 | 当前状态 / 关联 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| I-SET-01 | 设置 | 生成新 Token | app.js L1539–1547（genBtn） | 设置页 | dlgInput「用途备注」L1541 | POST /users/me/tokens {name} L1543 | toast「Token 已生成——请立即复制保存」+ renderSettingsFresh(data.token,data.item) L1544–1545 | 由 openInvestDialog 捕获 | 显示明文 + 刷新列表 | 本页 | C:app.js L1539–1547；S:settings/390x844/normal.png | 已实现｜截图已见 |
+| I-SET-02 | 设置 | Token 明文展示 | app.js L1555–1557（code, user-select:all） | 生成后 | — | — | 显示明文（仅一次） | — | — | 本页 | C:app.js L1555–1557 | 已实现｜运行时未验证 |
+| I-SET-03 | 设置 | 复制 Token | app.js L1558–1562（cp） | 生成后 | navigator.clipboard.writeText(plaintext) | 点击 | toast「Token 已复制」L1560 | toast「复制失败，请手动选中复制」L1561 | — | 本页 | C:app.js L1558–1562 | 已实现｜运行时未验证 |
+| I-SET-04 | 设置 | Token 列表 | app.js L1573–1617（loadTokens） | 设置页 | — | GET /users/me/tokens L1574 | 表列 备注/创建时间/最近使用/状态 | — | — | 本页 | C:app.js L1573–1617；S:settings/390x844/normal.png | 已实现｜截图已见 |
+| I-SET-05 | 设置 | 撤销 Token | app.js L1597–1609（b） | !it.revokedAt | confirmDialog L1599–1602 | DELETE /users/me/tokens/:id L1605 | toast「Token 已撤销」+ loadTokens() | toast(err.message,"err") L1608 | 刷新列表 | 本页 | C:app.js L1597–1609 | 已实现｜运行时未验证 |
+| I-SET-06 | 设置 | 撤销取消 | app.js L1603（if(!okD) return） | 确认框 | — | 取消 | 不撤销 | — | 无 | 本页 | C:app.js L1603 | 已实现｜运行时未验证 |
+| I-SET-07 | 设置 | Token 空态 | app.js L1576–1579 | 无 Token | — | — | 「还没有长期 Token。」 | — | — | 本页 | C:app.js L1576–1579；S:settings/390x844/normal.png（本轮无 Token） | 已实现｜截图已见 |
+| I-SET-08 | 设置 | 退出登录 | app.js L1623–1630（ob） | 设置页 | confirmDialog L1625 | clearSession() + toast「已退出登录」+ route() L1627–1629 | — | — | 清 localStorage | 登录页 | C:app.js L1623–1630；S:settings/390x844/normal.png | 已实现｜截图已见 |
+| I-SET-09 | 设置 | 个人资料入口（设置页内） | —（无） | 设置页 | — | — | — | — | — | — | 缺失：资料编辑在 renderMine L2165–2175；设置页无资料入口 | **缺失**｜R0-E-17 |
+| I-SET-10 | 设置 | 改密 UI | —（grep 无命中） | 设置页 | — | — | — | — | — | — | 缺失：见 I-MINE-13；后端 POST /users/me/password 已有（router.go L139） | **缺失**｜R0-E-18 |
+| I-SET-11 | 设置 | 会话管理 UI | —（grep 无命中） | 设置页 | — | — | — | — | — | — | 缺失：见 I-MINE-14；后端 /auth/sessions 已有（router.go L154–156） | **缺失**｜R0-E-14 / R0-E-31 |
+| I-SET-12 | 设置 | 服务器 / 备份区块 | —（grep 无命中） | 设置页 | — | — | — | — | — | — | 缺失：app.js `server\|服务器\|备份\|backup` 仅 L991/L1048 导出格式描述文案；renderSettings L1518–1633 无相关卡片 | **缺失**｜R0-E-17 / D-8 |
+
+#### 3.1.12 报表 `#b/:id/report`
+
+> `renderReport` app.js L804–907；截图 `report/{390x844,1280x800}/empty.png`。
+
+| ID | 页面 | 控件 / 动作 | 代码位置 | 前置条件 | 输入与校验 | 操作 | 成功结果 | 失败结果 | 数据联动 | 返回路径 | 验证证据 | 当前状态 / 关联 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| I-RPT-01 | 报表 | 「本月」按钮 | app.js L817–824（mkMonthBtn 0） | 报表页 | reportMonthOffset===off 决定 active | 点击 → offset=0 + renderReport L821 | 重绘本页（本月） | — | 切换月份 | 本页 | C:app.js L817–824；S:report/390x844/empty.png | 已实现｜截图已见｜R0-E-09 |
+| I-RPT-02 | 报表 | 「上月」按钮 | app.js L817–824（mkMonthBtn 1） | 报表页 | 同上 | 点击 → offset=1 + renderReport | 重绘本页（上月） | — | 切换月份 | 本页 | C:app.js L817–824；S:report/390x844/empty.png | 已实现｜截图已见｜R0-E-09 |
+| I-RPT-03 | 报表 | 月份计算 | app.js L918–924（monthShift） | — | 本地时区 YYYY-MM | — | 生成月份字符串 | — | — | 本页 | C:app.js L918–924 | 已实现｜运行时未验证 |
+| I-RPT-04 | 报表 | 收支趋势数据 | app.js L831（GET /reports/monthly?months=6） | 报表页 | trend.items\|\|[] L839 | — | 柱状图数据 | — | — | 本页 | C:app.js L831；S:report/390x844/empty.png | 已实现｜截图已见 |
+| I-RPT-05 | 报表 | 柱状图 | app.js L837–863（bars/mkBar, maxV 归一化） | 有数据 | — | — | 渲染柱子 | — | — | 本页 | C:app.js L837–863；有数据态未采集 | 已实现｜视觉待验收｜R0-E-09 |
+| I-RPT-06 | 报表 | 图例 | app.js L864–867 / L909–915（mkLegend） | — | — | — | 收入/支出色块 | — | — | 本页 | C:app.js L864–867,L909–915 | 已实现｜视觉待验收｜R0-E-09 |
+| I-RPT-07 | 报表 | 分类占比数据 | app.js L871（GET /reports/categories?type=2&month=） | 月份确定 | share.items\|\|[] L876 | — | 排行表数据 | — | — | 本页 | C:app.js L871；S:report/390x844/empty.png | 已实现｜截图已见 |
+| I-RPT-08 | 报表 | 分类排行表 | app.js L885–905（分类/笔数/金额/占比, Math.round） | 有数据 | — | — | 渲染表格 | — | — | 本页 | C:app.js L885–905；有数据态未采集 | 已实现｜视觉待验收｜R0-E-09 |
+| I-RPT-09 | 报表 | 空态 | app.js L877–881 | 无数据 | — | — | 「该月暂无支出记录。」 | — | — | 本页 | C:app.js L877–881；S:report/390x844/empty.png | 已实现｜截图已见 |
+
+#### 3.1.13 预算 `#b/:id/budget`
+
+> `renderBudget` L1108–1179 / `openBudgetDialog` L1182–1236；截图 `budget/{390x844,1280x800}/empty.png`。
+
+| ID | 页面 | 控件 / 动作 | 代码位置 | 前置条件 | 输入与校验 | 操作 | 成功结果 | 失败结果 | 数据联动 | 返回路径 | 验证证据 | 当前状态 / 关联 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| I-BUD-01 | 预算 | 新增预算 | app.js L1120–1122（addBtn） | 预算页 | — | 点击 → openBudgetDialog(bookId,null) | 打开 #budgetDlg | — | — | 弹层 | C:app.js L1120–1122；S:budget/390x844/empty.png | 已实现｜截图已见｜R0-E-10 |
+| I-BUD-02 | 预算 | 预算行（名称/三态徽标/进度条） | app.js L1138–1155 | GET /budgets L1129 | BUDGET_STATUS_NAME L1105 | — | 显示三态徽标与进度 | — | — | 本页 | C:app.js L1138–1155；有数据态未采集 | 已实现｜三态色待截图｜R0-E-10 |
+| I-BUD-03 | 预算 | 编辑 | app.js L1157–1159（edit） | 每行 | — | 点击 → openBudgetDialog(bookId,it) | 打开弹窗回填 | — | — | 弹层 | C:app.js L1157–1159 | 已实现｜运行时未验证 |
+| I-BUD-04 | 预算 | 删除 | app.js L1160–1173（del） | 每行 | confirmDialog L1163–1166 | DELETE /budgets/:id L1169 | toast「预算已删除」+ renderBudget L1170–1171 | toast(err.message,"err") L1172 | 重绘 | 本页 | C:app.js L1160–1173 | 已实现｜运行时未验证 |
+| I-BUD-05 | 预算 | 删除取消 | app.js L1167（if(!okD) return） | 确认框 | — | 取消 | 不删除 | — | 无 | 本页 | C:app.js L1167 | 已实现｜运行时未验证 |
+| I-BUD-06 | 预算 | 空态 | app.js L1132–1137 | 无预算 | — | — | 「还没有预算——先设一个本月总预算…」 | — | — | 本页 | C:app.js L1132–1137；S:budget/390x844/empty.png | 已实现｜截图已见 |
+| I-BUD-07 | 预算 | 类型 `#bType` | index.html L91 / app.js L1190–1193 | 弹窗 | 编辑时 disabled=!!edit L1193 | 选择 | 选中类型 | — | — | 弹层 | C:index.html L91, app.js L1190–1193 | 已实现｜运行时未验证 |
+| I-BUD-08 | 预算 | 分类 `#bCategory` | index.html L96 / app.js L1197–1206 | 非总预算 | 仅列 catType===2 支出分类 L1200；编辑总预算时 catRow 隐藏 L1194 | 选择 | 选中分类 | — | — | 弹层 | C:index.html L96, app.js L1197–1206 | 已实现｜运行时未验证 |
+| I-BUD-09 | 预算 | 金额 `#bAmount` | index.html L97 / app.js L1187,L1213–1214 | 弹窗 | str2cents；!cents\|\|cents<=0 → #bErr「请输入大于 0 的金额」L1214 | 键入 | 显示文本 | err-msg | — | 弹层 | C:index.html L97, app.js L1213–1214 | 已实现｜运行时未验证 |
+| I-BUD-10 | 预算 | 结转 `#bRollover` | index.html L99 / app.js L1188,L1215 | 弹窗 | 文案「结转上月余额（预留，MVP 不生效）」 | 勾选 | 提交 rollover | — | — | 弹层 | C:index.html L99, app.js L1215 | 已实现（MVP 不生效）｜运行时未验证 |
+| I-BUD-11 | 预算 | 取消 `#bCancel` | index.html L103 / app.js L1210 | 弹窗 | — | 点击 → closeBudgetDlg() L1237–1241 | 关闭 | — | 无 | 本页 | C:index.html L103, app.js L1210 | 已实现｜运行时未验证 |
+| I-BUD-12 | 预算 | 保存 `#bSubmit` | index.html L104 / app.js L1211–1235 | 金额合法 | btnPending L1216 | 编辑 PUT /budgets/:id {amount,rollover,name:""} L1220；新增 POST /budgets {amount,rollover,budgetType,categoryId,name} L1226 | toast「预算已创建/已更新」+ closeBudgetDlg() + renderBudget L1229–1230 | #bErr.textContent=err.message + toast L1232–1233 | 重绘 | 本页 | C:app.js L1211–1235 | 已实现｜运行时未验证 |
+
+#### 3.1.14 投资 / 资产 `#b/:id/invest`
+
+> `renderInvest` L1246–1393 + open*Dialog；截图 `invest/{390x844,1280x800}/empty.png`。
+
+| ID | 页面 | 控件 / 动作 | 代码位置 | 前置条件 | 输入与校验 | 操作 | 成功结果 | 失败结果 | 数据联动 | 返回路径 | 验证证据 | 当前状态 / 关联 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| I-INV-01 | 投资 | 资产总览 4 卡 | app.js L1255–1276（mkCell） | GET /net-worth L1255 | — | — | 总资产/总负债/持仓市值/家庭净资产 | — | — | 本页 | C:app.js L1255–1276；S:invest/390x844/empty.png | 已实现｜位置在投资页｜R0-E-28 / R0-E-07 |
+| I-INV-02 | 投资 | 添加持仓 | app.js L1288–1289（addHolding） | 持仓区 | — | 点击 → openHoldingDialog(bookId) | 打开弹窗 | — | — | 弹层 | C:app.js L1288–1289；S:invest/390x844/empty.png | 已实现｜截图已见｜R0-E-07 |
+| I-INV-03 | 投资 | 持仓编辑 | app.js L1321–1322（bEdit） | 每行 | — | 点击 → openHoldingDialog(bookId,it) | 打开弹窗回填 | — | — | 弹层 | C:app.js L1321–1322 | 已实现｜运行时未验证 |
+| I-INV-04 | 投资 | 录价 | app.js L1323–1324（bPrice） | 每行 | — | 点击 → openPriceDialog(...) | 打开录价弹窗 | — | — | 弹层 | C:app.js L1323–1324 | 已实现｜运行时未验证 |
+| I-INV-05 | 投资 | 持仓删除 | app.js L1325–1334（bDel） | 每行 | confirmDialog L1327 | DELETE /holdings/:id L1330 | toast「持仓已删除」+ renderInvest | toast(err.message,"err") L1333 | 重绘 | 本页 | C:app.js L1325–1334 | 已实现｜运行时未验证 |
+| I-INV-06 | 投资 | 新增标的 | app.js L1349–1350（addInstr） | 标的库 | — | 点击 → openInstrumentDialog(bookId) | 打开弹窗 | — | — | 弹层 | C:app.js L1349–1350；S:invest/390x844/empty.png | 已实现｜截图已见 |
+| I-INV-07 | 投资 | 标的编辑 | app.js L1374–1375（bEdit） | 每行 | — | 点击 → openInstrumentDialog(bookId,it) | 打开弹窗回填 | — | — | 弹层 | C:app.js L1374–1375 | 已实现｜运行时未验证 |
+| I-INV-08 | 投资 | 标的删除 | app.js L1376–1385（bDel） | 每行 | confirmDialog 文案「仍有持仓引用的标的无法删除。」L1378 | DELETE /instruments/:id L1381 | toast「标的已删除」+ renderInvest | toast(err.message,"err") L1384（409） | 重绘 | 本页 | C:app.js L1376–1385 | 已实现｜运行时未验证 |
+| I-INV-09 | 投资 | 空态（持仓 / 标的） | app.js L1292–1297 / L1353–1358 | 无数据 | — | — | 空态文案 | — | — | 本页 | C:app.js L1292–1297,L1353–1358；S:invest/390x844/empty.png | 已实现｜截图已见 |
+| I-INV-10 | 投资 | 通用弹窗字段容器 | app.js L1396–1422（openInvestDialog → #investFields L1401–1407） | — | 动态注入 | — | 渲染字段 | — | — | 弹层 | C:app.js L1396–1422 | 已实现｜运行时未验证 |
+| I-INV-11 | 投资 | 取消 `#iCancel` | index.html L114 / app.js L1410 | 弹窗 | — | 点击 → closeInvestDlg() L1423–1427 | 关闭 | — | 无 | 本页 | C:index.html L114, app.js L1410 | 已实现｜运行时未验证 |
+| I-INV-12 | 投资 | 保存 `#iSubmit` | index.html L115 / app.js L1411–1421 | — | btnPending L1413 | await onSubmit() L1415 + closeInvestDlg() L1416 | 关闭 | #iErr.textContent=err.message + toast L1418–1419 | — | 本页 | C:app.js L1411–1421 | 已实现｜运行时未验证 |
+| I-INV-13 | 投资 | 标的字段（名称/类型/市场/代码） | app.js L1435–1443 | 标的弹窗 | 编辑回填 | POST/PUT /instruments L1449/L1452 | toast + renderInvest L1450/L1453/L1455 | 通用弹窗捕获 | 重绘 | 本页 | C:app.js L1435–1455 | 已实现｜运行时未验证 |
+| I-INV-14 | 投资 | 持仓字段（账户/标的/数量/成本/现价） | app.js L1460–1480 | 持仓弹窗 | 标的异步拉取 L1469；编辑时账户/标的 disabled；str2cents 成本 L1486 | POST/PUT /holdings L1497/L1492 | toast + renderInvest L1500 | 通用弹窗捕获 | 重绘 | 本页 | C:app.js L1460–1500 | 已实现｜运行时未验证 |
+| I-INV-15 | 投资 | 录价字段（最新价） | app.js L1505 | 录价弹窗 | — | POST /instruments/:id/price {price} L1509 | toast「行情已更新…」+ renderInvest L1511–1512 | 通用弹窗捕获 | 现价/市值刷新 | 本页 | C:app.js L1505–1512 | 已实现｜运行时未验证 |
+| I-INV-16 | 投资账户详情 | 返回对账 | app.js L1783–1785（back） | #b/:id/account/:accId | — | 点击 → #b/{id}/accounts | — | — | — | 对账页 | C:app.js L1783–1785；S:account-detail/390x844/normal.png | 已实现｜截图已见 |
+
+#### 3.1.15 导出 `#b/:id/export`
+
+> `renderExport` app.js L933–1095；截图 `export/{390x844,1280x800}/normal.png`。
+
+| ID | 页面 | 控件 / 动作 | 代码位置 | 前置条件 | 输入与校验 | 操作 | 成功结果 | 失败结果 | 数据联动 | 返回路径 | 验证证据 | 当前状态 / 关联 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| I-EXP-01 | 导出 | 时间预设「本月」 | app.js L950–953 / L970（setRange this） | 导出页 | — | 点击 → setRange("this") | 高亮 + 填日期 | — | — | 本页 | C:app.js L950–970；S:export/390x844/normal.png | 已实现｜截图已见 |
+| I-EXP-02 | 导出 | 时间预设「上月」 | app.js L950 / L961–969 | 导出页 | — | 点击 → setRange("last") | 高亮 + 填日期 | — | — | 本页 | C:app.js L961–969；S:export/390x844/normal.png | 已实现｜截图已见 |
+| I-EXP-03 | 导出 | 时间预设「本季度」 | app.js L950 / L966 | 导出页 | — | 点击 → setRange("quarter") | 高亮 + 填日期 | — | — | 本页 | C:app.js L966；S:export/390x844/normal.png | 已实现｜截图已见 |
+| I-EXP-04 | 导出 | 时间预设「自定义」 | app.js L950 / L967 | 导出页 | 不自动填日期 | 点击 | 高亮 custom | — | — | 本页 | C:app.js L967；S:export/390x844/normal.png | 已实现｜截图已见 |
+| I-EXP-05 | 导出 | 开始日期 `#xFrom` | app.js L955 | 导出页 | change 时切到 custom L971–973 | 选择 | 填入日期 | — | — | 本页 | C:app.js L955,L971–973；S:export/390x844/normal.png | 已实现｜截图已见 |
+| I-EXP-06 | 导出 | 结束日期 `#xTo` | app.js L956 | 导出页 | 同上 | 选择 | 填入日期 | — | — | 本页 | C:app.js L956；S:export/390x844/normal.png | 已实现｜截图已见 |
+| I-EXP-07 | 导出 | 收支类型 | app.js L979–982（typeSel） | 导出页 | 0 全部/1 收入/2 支出/3 转账 | 选择 | 选中类型 | — | — | 本页 | C:app.js L979–982；S:export/390x844/normal.png | 已实现｜截图已见 |
+| I-EXP-08 | 导出 | 格式 CSV | app.js L991–995（radio value=csv 默认 checked） | 导出页 | — | 选中 | 选中 CSV | — | — | 本页 | C:app.js L991–995；S:export/390x844/normal.png | 已实现｜截图已见 |
+| I-EXP-09 | 导出 | 格式 JSON | app.js L991–995（radio value=json） | 导出页 | — | 选中 | 选中 JSON | — | — | 本页 | C:app.js L991–995；S:export/390x844/normal.png | 已实现｜截图已见 |
+| I-EXP-10 | 导出 | 字段勾选：time | app.js L927–931 / L1011–1018（EXPORT_FIELDS） | 导出页 | 默认全选 L1014 | 勾选/取消 | 字段列表变化 | — | — | 本页 | C:app.js L927–931,L1011–1018；S:export/390x844/normal.png | 已实现｜截图已见 |
+| I-EXP-11 | 导出 | 字段勾选：type | 同上 | 导出页 | 默认全选 | 勾选/取消 | 字段列表变化 | — | — | 本页 | C:同上；S:export/390x844/normal.png | 已实现｜截图已见 |
+| I-EXP-12 | 导出 | 字段勾选：amount | 同上 | 导出页 | 默认全选 | 勾选/取消 | 字段列表变化 | — | — | 本页 | C:同上；S:export/390x844/normal.png | 已实现｜截图已见 |
+| I-EXP-13 | 导出 | 字段勾选：category | 同上 | 导出页 | 默认全选 | 勾选/取消 | 字段列表变化 | — | — | 本页 | C:同上；S:export/390x844/normal.png | 已实现｜截图已见 |
+| I-EXP-14 | 导出 | 字段勾选：account | 同上 | 导出页 | 默认全选 | 勾选/取消 | 字段列表变化 | — | — | 本页 | C:同上；S:export/390x844/normal.png | 已实现｜截图已见 |
+| I-EXP-15 | 导出 | 字段勾选：toAccount | 同上 | 导出页 | 默认全选 | 勾选/取消 | 字段列表变化 | — | — | 本页 | C:同上；S:export/390x844/normal.png | 已实现｜截图已见 |
+| I-EXP-16 | 导出 | 字段勾选：channel | 同上 | 导出页 | 默认全选 | 勾选/取消 | 字段列表变化 | — | — | 本页 | C:同上；S:export/390x844/normal.png | 已实现｜截图已见 |
+| I-EXP-17 | 导出 | 字段勾选：merchant | 同上 | 导出页 | 默认全选 | 勾选/取消 | 字段列表变化 | — | — | 本页 | C:同上；S:export/390x844/normal.png | 已实现｜截图已见 |
+| I-EXP-18 | 导出 | 字段勾选：note | 同上 | 导出页 | 默认全选 | 勾选/取消 | 字段列表变化 | — | — | 本页 | C:同上；S:export/390x844/normal.png | 已实现｜截图已见 |
+| I-EXP-19 | 导出 | 预览 | app.js L1022 / L1024–1038 / L1093 | 导出页 | btnPending L1031 | GET /transactions?…&count=1&page=1 L1033 | 「共 N 条记录将导出。」L1035 | 「预览失败：…」L1036 | — | 本页 | C:app.js L1024–1038；S:export/390x844/normal.png | 已实现｜截图已见 |
+| I-EXP-20 | 导出 | 自动预览 | app.js L1094（updatePreview()） | 进入页 | — | — | — | — | — | 本页 | C:app.js L1094；S:export/390x844/normal.png | 已实现｜截图已见 |
+| I-EXP-21 | 导出 | 导出 CSV | app.js L1042 / L1091（btnCsv） | 至少 1 字段 | !fields.length → toast「请至少勾选一个导出字段」L1054 | 原生 fetch /export?format=csv&fields=… L1062 → blob | 下载 FastLedger_导出_YYYYMMDD.csv L1081 + toast「已导出 N 条记录」L1086 | toast(err.message,"err") L1088 | — | 本页 | C:app.js L1042–1088；下载动作未采集 | 已实现｜运行时未验证 |
+| I-EXP-22 | 导出 | 导出 JSON | app.js L1043 / L1092（btnJson） | 至少 1 字段 | 同上 | doExport("json") | 下载 .json | 同上 | — | 本页 | C:app.js L1043,L1092；运行时未验证 | 已实现｜运行时未验证 |
+| I-EXP-23 | 导出 | 空数据提示 | app.js L1070–1071（X-Export-Count===0） | 导出返回 0 条 | — | — | — | toast「没有可导出的数据」info | — | 本页 | C:app.js L1070–1071；未采集 | 已实现｜运行时未验证 |
+| I-EXP-24 | 导出 | 截断提示 | app.js L1072–1074（X-Export-Truncated==="1"） | 结果 >10000 条 | — | — | — | toast「结果超过 10000 条，已截断」info | — | 本页 | C:app.js L1072–1074；未采集 | 已实现｜运行时未验证 |
+
+#### 3.1.16 回收站 `#b/:id/recycle`
+
+> `renderRecycle` app.js L751–799；截图 `recycle/{390x844,1280x800}/empty.png`。
+
+| ID | 页面 | 控件 / 动作 | 代码位置 | 前置条件 | 输入与校验 | 操作 | 成功结果 | 失败结果 | 数据联动 | 返回路径 | 验证证据 | 当前状态 / 关联 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| I-REC-01 | 回收站 | 加载 | app.js L766（GET /recycle?page=1&count=100） | 进入页 | — | — | 行渲染 L767–789 | — | — | 本页 | C:app.js L766；S:recycle/390x844/empty.png | 已实现｜截图已见｜R0-E-16 |
+| I-REC-02 | 回收站 | 恢复按钮 | app.js L778–787（btn） | 每行 | btnPending L780 | POST /transactions/:id/restore?clientUuid=uuid() L782 | toast「已恢复」+ 行 fade-out 后 tr.remove() L783–785 | toast(e.message,"err"); done() L786 | 行移除 | 本页 | C:app.js L778–787；有数据态未采集 | 已实现｜运行时未验证 |
+| I-REC-03 | 回收站 | 空态 | app.js L791–796 | 无数据 | — | — | 「回收站为空——…」 | — | — | 本页 | C:app.js L791–796；S:recycle/390x844/empty.png | 已实现｜截图已见 |
+
+**逐控件清单统计**：16 个分组、227 条独立控件/动作；其中「缺失」项均给出 grep 无命中证据并关联 R0-E 编号。本轮二次复核**新发现 2 项**（R0-E-38 加入账本/邀请码兑换断口、R0-E-39 密码明文切换缺失），详见 `docs/FastLedger-R0-独立补漏与复核记录.md` §9，非重复编号。
+
+**状态判定**：§3.1 已按单一控件拆分并可定位到 DOM/JS 行号，但「运行时未验证」项仍大量存在、截图仅覆盖部分状态；按任务单自检规则，**§3.1 仍未达到「每个成功/失败路径均有记录且可验证」的完整通过条件**，不得据此宣称 R0 通过。
+
+**逐控件交互清单状态（二次整改后）**：本版共 16 个页面分组、228 条独立控件/动作，每条 13 字段；原 §3.1 把多个独立控件合并成一行（金额/账户/分类/日期/备注合并、FAB 与 Tab 合并、账户增改删合并、「我的」8 入口合并）的写法已全部拆开，误引的 `#loginForm` 已更正为「`renderLogin` 动态生成、无 id」。本轮二次复核新增两项独立缺口：**R0-E-38**（登录页无「加入账本」入口/邀请码兑换，而 `renderMembers` L1667 有悬空引导，邀请链路在 Web 端断开）、**R0-E-39**（密码明文切换缺失）；另补 I-BOOKS-11「账本详情/账本设置页入口缺失」，关联 R0-E-19 / R0-E-32。
+
+**证据边界（不得夸大）**：`C:` 为静态源码定位；`S:` 为本轮 Edge 真实浏览器截图，仅证明「控件/页面在该状态下可见」，**不证明交互成功路径已验收**。当前 43 张截图只覆盖 normal / empty / error 首屏，绝大多数成功/失败交互路径、加载态、权限不足态、离线态、同步/冲突态与原型侧对照截图均未采集（见 §7.5 与 `docs/r0-screenshots/README.md`）。因此**本清单不构成逐控件运行时验收通过**，标「运行时未验证」即未验证；R0 截图门槛仍为未完成 / 阻塞。
 
 ---
 
@@ -228,55 +537,235 @@
 **关键结论（修正）**：后端已有多组 API 路由，但路由存在不等于服务层、权限、DTO、测试均完整；本矩阵尚未达到总方案要求的契约粒度。当前 Web 未发现 WS 客户端或 sync pull/push 调用；OCR 的 Web 范围由 PRD §5.2 明确为不做；会话、可见性和邀请撤销等 API/能力不能据此推断前端已接通。
 - `PUT /transactions/:txId` 已开放且是**全量替换 + 类型不可改**（改类型=删除+重建），R1 不得伪造类型变更。
 
-### 5.3 后端 API 权限 / DTO / 测试矩阵（补全契约粒度）
+### 5.3 后端 API 权限 / DTO / 测试矩阵（源码取证重做）
 
-> 方法/路径来自 `router.go` L109–235；鉴权分组：`v1` 组外为公开，`auth` 组（L135）全部 `JWTAuth`。**角色权限**列基于路由语义与已知 PRD/服务注释推定；具体以各 handler 内 `roleCheck`/可见性判定为准，**运行时权限边界需集成测试确认**（标 ✗待测）。响应关键字段为成功体 `data` 内对象；错误统一经 `mapSvcErr` 封装为 `{code:≠0, msg}`，**具体 code↔错误映射待测试补全**（标 ✗待测）。Web 调用列沿用 §5.2（✅/❌）。
+> **本矩阵为 R0 二次整改重做版，整体替换 [1.62] 初稿**。全部 `file:line` 均以执行时 `origin/main` HEAD `bff6a2b` 的源码实读为准；权限来自真实 service / guard 函数，DTO 来自 handler 与 struct 定义，错误码追溯 `mapSvcErr` / `mapLoginErr` / `mapAuthErr` / OCR 独立映射，测试证据列具体测试函数 + `file:line` + 断言类型，未找到独立命名测试的接口明确写「未覆盖」。
 
-| 能力域 | 方法 & 路径 | 鉴权 | 角色权限 | 请求关键字段 | 响应关键字段 | 错误码(示例) | 服务函数 | 测试证据 | Web |
+#### 5.3.0 取证基线
+
+- **执行时 `origin/main` HEAD = `bff6a2b351bf5a039cdf7c762ec2693fb330cd00`**（`git rev-parse HEAD` 复核，`fetch` 已复核 0/0）。本矩阵所有 `file:line` 均以该 HEAD 为准，路径相对 `C:/Users/47006/WorkBuddy/fastledger/repo_tmp/`。
+- **本矩阵是静态源码取证，不是运行时验证**：权限判定、DTO 字段、错误码映射、测试函数名与断言类型均来自当前 HEAD 的源码实读（`Read` / `Grep`），**本矩阵自身未做逐路由集成测试运行确认**；本轮二次整改已在 §7.6 真实执行 `go test ./...`（10 包 `ok` / 2 包无测试文件 / `FAIL` 0 / `EXIT_CODE=0`），但按任务单口径 **全量绿不等于逐路由测试覆盖证据**，不得用它或「CI 绿」替代逐用例断言。凡「未经集成测试运行确认」的部分逐项标注：测试证据列中「**未覆盖：未找到独立命名测试**」表示该接口在 `server/**/*_test.go` 中未找到独立命名的测试用例；已列出测试名的行仅表示**源码中存在该命名的测试用例及其断言类型**，不代表本次已执行通过。主表「测试证据」列不出现「CI 绿」「待测」等笼统结论（§5.3.3 与附录引用旧表错值属逐条纠错对照，不作本表结论）。
+- **路径前缀**：除 `GET /healthz`(router.go:109) 外，全部路由挂在 `v1 := r.Group("/api/v1")`(router.go:122) 下，真实路径 = `/api/v1` + 组内路径。旧表把 WS 写作 `/ws` 属错值（见 §5.3.3 #1）。
+- **鉴权分组**：公开 v1 组 `register/login/join`(router.go:124/125/128)；`GET /api/v1/ws` 用独立 `wsAuth(d.AuthService,d.PATs)`(router.go:133，刻意不挂 JWTAuth 组，注释 130-133，浏览器 WS 无法设 Authorization 头，需 Header→`?token=` 回退)；其余全部 `auth := v1.Group("", JWTAuth(d.AuthService, d.PATs))`(router.go:135)。`JWTAuth` 解析 `Authorization: Bearer`，`flt_` 前缀走 PAT 分支且 `patSvc==nil` fail-closed 401(middleware.go:52-93)。全局 `gin.Recovery()`(55)、`r.SetTrustedProxies(nil)`(52-54)、`NoRoute(newWebHandler())`(105-107)。**注册开关** `enableRegister = d.Config.EnableRegister`(router.go:74)，关闭时 403(auth_handler.go:51-54)；**PAT 开关** `if ph != nil`(141，`d.PATs==nil` 不注册 94-97)。
+- **条件挂载（按「路由已注册」计，生产 Deps 全量注入）**：`if ph != nil`(141)、`if rh != nil`(205，`d.Reports==nil` 不挂载 79-82)、`if bh2 != nil`(212，`d.Budgets==nil` 不挂载 84-87)、`if ih != nil`(220，`d.Invest==nil` 不挂载 89-92)。
+- **角色常量**：`model.go:8-10` → `RoleOwner=1 / RoleAdmin=2 / RoleMember=3`。
+- **响应包装**：`ok(c,data)` → `c.JSON(200,{"code":0,"msg":"ok","data":data})`(common.go:17-19)；`fail(c,status,msg)` → `{"code":status,"msg":msg}`(common.go:22-24，**失败响应无 data 字段**)。例外：`GET /api/v1/books/:id/export` 直接 `c.Data(200,ctype,body)`(report_handler.go:138) 文件流 + 响应头，不走信封；`GET /healthz` 用 `c.JSON(200, gin.H{...})`(router.go:119) 直写同形信封。
+- **绑定口径**：`bindJSON`=`c.ShouldBindJSON`(common.go:27-33，失败 400「请求格式错误」)；路径 ID 用 `bookID()`(book_handler.go:19) / `pathID()`(ledger_handler.go:39)；查询参数用 `queryInt64/queryInt`(ledger_handler.go:49/63)。**`binding:"required"` 仅出现在 `service.CreateRequest.clientUuid`(tx.go:100) 与 `service.UpdateRequest.clientUuid`(tx_update.go:38)**；`PushItem`(sync.go:114-126) 刻意不带；其余必填/枚举/默认值在 service 层校验（bookType 默认 family `book.go:46-48`、months 1~24 默认 6 `report.go:76-81`、CreateInvite role 默认 member `member.go:354-356`）。
+- **错误码列口径**：`M`=`mapSvcErr`(common.go:39-136)、`L`=`mapLoginErr`(**auth_handler.go:103-122，不在 common.go**)、`A`=`mapAuthErr`(middleware.go:34-40)、`O`=OCR 独立映射(ocr_handler.go:112-123 / 96-107)。列内写「常量→HTTP『文案』(file:line)」，完整全表见 §5.3.2。`ok()` 信封与 `fail()` 无 data、`export` 文件流三处例外已在响应列逐行标注。
+- **Web 接入判定口径（按路由逐条，三类）**：`✓` = 在 `server/web/dist/app.js` 中找到该路由的直接 `api("METHOD", path)` / `fetch(API+path)` 调用；`间接` = 无直接调用但前端以其它方式达到等价效果；`未接入` = 全文无该路由调用。前端 `const API="/api/v1"`(app.js:9)、`fetch(API+path,opt)`(app.js:102)、`return data.data`(app.js:111)，与后端 `v1` 组及 `ok()` 信封一一对齐，路径比对无前缀歧义；`api()` 返回的 `data.data` 即 `ok()` 信封 `data` 字段，故前端直接取 `data.accessToken`(app.js:194)、`data.code`(app.js:1665)。
+  - **统计（本次以 `router.go` 源码实读 + `app.js` grep 结果重新逐条计数，不引用任何二手数字）**：`router.go` L109–235 共 **63 条**注册路由（含 `GET /healthz`）：`✓` 直接接入 **47** 条、`间接` **1** 条、`未接入` **15** 条。**不含 `/healthz`** 的 62 条业务路由：`✓` 47、`间接` 1、`未接入` 14。
+  - `/healthz` 是**非 UI 的公开健康检查端点**：计入 63 条路由登记，但**不纳入 UI 控件验收分母**；§3.1 按「控件」计，不单列 `/healthz` 控件行（无 UI 控件），仅作 R0-E-17「设置页缺服务器/备份区块」证据链备注。两者分母不同、结论一致，**禁止把本表「未接入」条数与 §3.1 控件条目数直接对齐**。
+  - `#19 GET /api/v1/books/:id` 判为「**间接**」：前端从未单独调用 `GET /books/{id}`；`app.js:342` 等处以 `books.find((b)=>b.id===bookId)` 从 `GET /books` 列表本地取 book 对象，并调用 `/books/:id/...` 子资源。前端源码中 `renderHome`/`openBookFlow` 仅调用 `/books/:id/...` 子资源，未出现单独 `GET /books/{id}` 调用。旧表该行 Web 列写 `✅`，应更正为「间接」。
+  - `#38 GET /api/v1/books/:id/transactions/:txId` 归类「**口径对齐**」：前端 `app.js:1982` 已单独调用该详情接口（含失败分支 L1983），与列表 `GET /transactions` 分列，不是同一行合并；本表补后端锚点 `router.go:194`，与前端 `app.js:1982` 形成双向锚点，Web 判定 `✓` 不变。
+
+#### 5.3.1 主表：router.go L109–235 全部 63 条注册路由（每条独立一行，不按能力域合并省略）
+
+> 权限列写真实 service 方法名 + guard 函数 + `file:line`；无账本成员判定的域明确写「仅 JWTAuth，无账本角色判定」。请求/响应字段来自 handler 与 DTO struct 实读。
+
+| 能力域 | 方法 & 路径（router.go:行） | 鉴权 | 权限判定（服务函数 + file:line） | 允许角色 | 请求关键字段 | 响应关键字段（data 内） | 错误码（映射来源） | 测试证据 | Web 接入 |
 |---|---|---|---|---|---|---|---|---|---|
-| 健康 | `GET /healthz` | 公开 | — | — | `status,schemaVersion,instanceId?,restoreEpoch?` | — | — | — | — |
-| 注册 | `POST /auth/register` | 公开(受`EBK_ENABLE_REGISTER`) | 任意 | `username,password` | `accessToken,user` | 400/409 ✗待测 | AuthService | CI 绿 ✗逐用例 | ✅ |
-| 登录 | `POST /auth/login` | 公开 | 任意 | `username,password` | `accessToken,user`(R0 实测字段名 `accessToken`) | 401 ✗待测 | AuthService | CI 绿 ✗逐用例 | ✅ |
-| 邀请入户 | `POST /books/:id/members/join` | 公开 | 持邀请码 | `code`(query/body) | `book,member` | 400/403 ✗待测 | MemberService | ✗待测 | ❌ |
-| WS | `GET /ws` | `wsAuth`(Header/`?token=`) | 任意已认证 | `token`(Header 或 query) | 帧协议 | 401 ✗待测 | Hub | ✗待测 | ❌ |
-| 当前用户 | `GET/PUT /users/me` | JWT | 本人 | PUT:`email` | `id,username,email` | 400/401 ✗待测 | AuthService | CI 绿 | ✅(GET/改邮箱) |
-| 改密 | `POST /users/me/password` | JWT | 本人 | `oldPassword,newPassword` | `{}`(撤销全部会话) | 400/401 ✗待测 | AuthService | ✗待测 | ❌(R0-E-18) |
-| PAT | `GET/POST/DELETE /users/me/tokens` | JWT | 本人 | POST:`name` | `token`(明文仅创建响应一次),`id` | 400/401 ✗待测 | PAT svc | ✗待测 | ✅ |
-| 会话 | `GET /auth/sessions` | JWT | 本人 | — | `[{jti,device,createdAt,current}]` | 401 ✗待测 | SessionService | WBS5.10 ✗逐用例 | ❌(R0-E-14) |
-| 会话 | `DELETE /auth/sessions` `[:jti]` | JWT | 本人 | jti(可选) | `{}` | 401 ✗待测 | SessionService | WBS5.10 ✗逐用例 | ❌ |
-| OCR | `POST /ocr/{recognize,parse,llm-parse}` | JWT | 任意 | 图片/文本/`consent` | 解析结果 | 400/413 ✗待测 | OCR svc | ✗待测 | ❌(Web 不做,R0-E-08) |
-| 账本列表 | `GET /books` | JWT | 任意(返回所属) | — | `[book]` | 401 ✗待测 | BookService | CI 绿 | ✅ |
-| 建账本 | `POST /books` | JWT | 任意 | `name,bookType`(int8) | `book` | 400 ✗待测 | BookService | CI 绿 | ✅ |
-| 账本详情 | `GET /books/:id` | JWT | 成员 | — | `book{name,bookType,createdAt,membersCanViewOthers,...}` | 403/404 ✗待测 | BookService | CI 绿 | ✅ |
-| 改/删账本 | `PUT/DELETE /books/:id` | JWT | **owner/admin** | PUT:`name` | `book` | 403/404 ✗待测 | BookService | ✗待测 | ✅(GET 接,改/删前端未接→R0-E-32) |
-| 可见性 | `PUT /books/:id/visibility` | JWT | **owner/admin** | `membersCanViewOthers`(bool) | `book` | 403 ✗待测 | BookService | ✗待测 | ❌(R0-E-19/27) |
-| 成员列表 | `GET /books/:id/members` | JWT | 成员 | — | `[{uid,username,role,canViewOthers}]` | 403 ✗待测 | MemberService | CI 绿 | ✅ |
-| 邀请 | `POST /books/:id/members/invite` | JWT | **owner/admin** | `role,boundUsername?,boundEmail?` | `{code,role,expiresAt}`(**无 inviteId**→R0-E-26) | 403/400 ✗待测 | MemberService | ✗待测 | ✅(生成) |
-| 撤邀请 | `POST /books/:id/members/invite/:inviteId/revoke` | JWT | **owner/admin** | inviteId | `{}` | 403/404 ✗待测 | MemberService | ✗待测 | ❌(R0-E-26) |
-| 改/删成员 | `PUT/DELETE /books/:id/members/:uid` | JWT | **owner/admin** | PUT:`role` | `{}` | 403/404 ✗待测 | MemberService | ✗待测 | ✅(生成邀请) |
-| 账户列表/详情 | `GET /books/:id/accounts[/:aid]` | JWT | 成员(受可见性) | — | `[account]{id,name,category,balance,currency,...}` | 403 ✗待测 | AccountService | CI 绿 | ✅ |
-| 账户增改删 | `POST/PUT/DELETE /books/:id/accounts[/:aid]` | JWT | 成员(受可见性;删可能 owner) | 增:`name,category,currency,parentId`(Balance 忽略→0) | `account` | 400/409(引用) ✗待测 | AccountService | CI 绿 | ✅(Balance 强制0→R0-E-06/30) |
-| 分类列表 | `GET /books/:id/categories?tree=1` | JWT | 成员 | `tree` | `[{Category 提升字段,children:[Category]}]`(R0 误判已纠) | 403 ✗待测 | CategoryService | CI 绿 | ✅ |
-| 分类增改删 | `POST/PUT/DELETE /books/:id/categories[/:cid]` | JWT | 成员 | 增:`name,parentId,catType` | `category` | 400/409(引用) ✗待测 | CategoryService | CI 绿 | ✅ |
-| 交易列表 | `GET /books/:id/transactions` | JWT | 成员(受可见性) | `minTime,maxTime,txType,accountId,categoryId,keyword,page,count` | `{items:[tx],total,page,count}` | 403 ✗待测 | TxService | CI 绿 | ✅ |
-| 交易详情 | `GET /books/:id/transactions/:txId` | JWT | 成员 | — | `tx{id,accountId,categoryId,amount,txType,note,merchant,paymentChannel,...}` | 403/404 ✗待测 | TxService | CI 绿 | ✅ |
-| 交易创建 | `POST /books/:id/transactions` | JWT | 成员 | `clientUuid,txType,accountId,toAccountId,amount,categoryId,paymentChannel,txTime,timezoneOffset,comment,source`(**无 merchant 字段→R0-E-37**) | `{resultType,transactionIds,version,replayed}` | 400/409(幂等) ✗待测 | TxService | CI 绿 | ✅ |
-| 交易更新 | `PUT /books/:id/transactions/:txId` | JWT | 成员 | 同创建 + `baseVersion`(**全量替换,类型不可改**→建+删重建) | `{version,replayed,transactionIds}` | 409(版本冲突) ✗待测 | TxService | `TestQATransactionRoutesContract`(守卫:禁 PUT /transfer /batch) | ✅ |
-| 交易删除/恢复 | `DELETE /books/:id/transactions/:txId` `POST .../restore` | JWT | 成员 | — | `{}` | 403/404 ✗待测 | TxService | CI 绿(软删+回收站) | ✅(删除;恢复在回收站) |
-| 回收站 | `GET /books/:id/recycle` | JWT | 成员 | — | `[tx]` | 403 ✗待测 | TxService | CI 绿 | ✅ |
-| 月报/分类占比 | `GET /books/:id/reports/monthly\|categories` | JWT | 成员(受可见性) | `months` | `monthly:{items:[{month,income,expense}]}`;`categories:{items:[{categoryId,amount,ratio}]}` | 403 ✗待测 | ReportService | CI 绿 | ✅ |
-| 导出 | `GET /books/:id/export` | JWT | 成员 | `minTime,maxTime,type,format,fields` | 文件流 + 头 `X-Export-Count/X-Export-Truncated` | 403/400 ✗待测 | ReportService | ✗待测 | ✅ |
-| 预算增改删 | `POST/PUT/DELETE /books/:id/budgets[/:budgetId]` | JWT | **owner/admin(写)** | `name,budgetType,categoryId,periodType,amount,rollover,enabled` | `budget` | 400/403 ✗待测 | BudgetService | ✗待测 | ✅(CRUD 接) |
-| 投资-标的 | `GET/POST/PUT/DELETE /books/:id/instruments[/:instrumentId]` | JWT | 成员 | `name,type,market,code` | `instrument` | 400/403 ✗待测 | InvestService | ✗待测 | ✅ |
-| 投资-持仓 | `GET/POST/PUT/DELETE /books/:id/holdings[/:holdingId]` | JWT | 成员 | `instrumentId,quantity,cost,currentPrice?` | `holding` | 400/403 ✗待测 | InvestService | ✗待测 | ✅ |
-| 投资-行情 | `POST /books/:id/instruments/:instrumentId/price` | JWT | 成员 | `price,asOf?` | `{}` | 400 ✗待测 | InvestService | ✗待测 | ✅ |
-| 净资产 | `GET /books/:id/net-worth` | JWT | 成员 | — | `{totalAssets,totalLiabilities,holdingMarketValue,netWorth}`(公式:资产+持仓市值−负债) | 403 ✗待测 | InvestService | CI 绿 | ✅(投资页) |
-| 同步拉 | `GET /books/:id/sync/pull` | JWT | 成员 | `since`(版本/时间戳) | 增量实体 | 403 ✗待测 | SyncService | ✗待测 | ❌(R0-E-15/25) |
-| 同步推 | `POST /books/:id/sync/push` | JWT | 成员 | 增量实体 | `{ok}` | 403/409 ✗待测 | SyncService | ✗待测 | ❌ |
+| 健康 | `GET /healthz` (109) | 公开（无 v1 前缀） | 无鉴权、无角色判定（匿名 handler 只读 `d.SchemaVersion`/`d.Instance`） | — | — | `{status:"up",schemaVersion,instanceId?,restoreEpoch?}`；`c.JSON` 直写同形信封(router.go:119-120) | — | 未覆盖：未找到独立命名测试 | 未接入（非 UI 端点，不计入 UI 控件分母） |
+| 鉴权-注册 | `POST /api/v1/auth/register` (124) | 公开 v1；**注册开关** `enableRegister`(74)，关闭→403(auth_handler.go:51-54) | 仅公开入口，**无账本角色判定**；`AuthService.Register`(auth.go) | 任意（受开关） | `{username,password}`(auth_handler.go:55-58) | **`currentUserDTO`**=`{id,username,email,isInstanceAdmin}`(middleware.go:197-204)；**不返回 accessToken** | `M`: ErrUserExists→409『用户名已存在』(common.go:109-110)；ErrWeakPassword→400『密码至少 8 位』(120-121)；ErrPasswordTooLong→400『密码过长：最多 72 字节…』(122-125)；ErrUsernameTooLong→400(126-128)；ErrAuthUnavailable→503(129-131)；default→500『服务内部错误』(132-134)。开关关闭→403 | `TestR45RegisterInputErrorsReturn400` api/auth_handler_r45_test.go:137（DTO 校验 400）；`TestR45RegisterPassesRawInputToService`:190（透传）；`TestR45RegisterDisabledReturns403`:219（开关 403）；`TestR45RegisterInternalErrorStays500ButLeaksNothing`:205（500 不泄露） | ✓ app.js:192 |
+| 鉴权-登录 | `POST /api/v1/auth/login` (125) | 公开 v1 | 仅公开入口，**无账本角色判定**；`AuthService.LoginFromIP`(auth.go) | 任意 | `{username,password}`(auth_handler.go:73-76) | **仅 `{accessToken}`**(auth_handler.go:88)；不含 user/currentUserDTO | `L`(auth_handler.go:103-122): ErrBadCredentials/ErrAccountDisabled→401『用户名或密码错误』(105-107)；ErrRateLimited→429『登录尝试过于频繁，请稍后再试』(108-114)；ErrAuthUnavailable→503『服务暂时不可用，请稍后重试』(115-117)；default→500『服务内部错误，请稍后重试』(118-120) | `TestR46CredentialErrorsAreUniform401` api/auth_handler_r46_test.go:26（401 统一防枚举）；`TestA6RateLimitedIs429` api/auth_handler_a6_test.go:23（429）；`TestR46LoginSuccessUnchanged`:134（正常）；`TestR46BadJSONStill400`:147（DTO 校验 400） | ✓ app.js:193,209 |
+| 邀请入户 | `POST /api/v1/books/:id/members/join` (128) | 公开 v1（注释 127：不受 EBK_ENABLE_REGISTER 限制） | **未认证入口，无成员资格/角色判定**；`MemberService.JoinViaInvite`(member.go:774)，IP 限流 10 次/小时(782-784) | 持邀请码的任意访客 | **`{code,username,email,password}`**(book_handler.go:186-191，JSON body；旧表误写 `code` 在 query) | **`currentUserDTO`**(book_handler.go:202)；**不返回 accessToken / 不签发 token** | `M`: ErrInviteInvalid→400『邀请码无效或已过期』(common.go:111-112)；ErrInviteBoundMismatch→400『邀请码已绑定指定用户，信息不匹配』(113-114)；ErrBookFull→409『该账本成员已达上限（20）』(115-117)；ErrRateLimited→429(118-119)；ErrUserExists→409(109-110) | `TestJoinViaInviteSignatureRequiresBookAndIP` service/member_test.go:92（签名/账本存活）；`TestInviteJoinRateLimitIsPerIP`:49（限流分桶）；`TestR41JoinAcceptsEmail` api/book_handler_r41_test.go:75（DTO 新字段）；`TestR43JoinChecksBookInsideTransaction` service/remediation_invite_unit_test.go:559（账本存活） | 未接入（后端已交付 join 路由，Web 无兑换入口；app.js `join` 仅 L1055 `fields.join(",")`，renderLogin 仅 login/register 两模式 L227，L1667 仅说明文字） |
+| WS | `GET /api/v1/ws` (133) | **独立 `wsAuth`**(router.go:133；Header→`?token=` 回退 middleware.go:112-164)，不在 JWTAuth 组 | 仅握手鉴权，**无账本角色判定**；订阅阶段由 hub checker `CanViewDetail` 把关 | 任意已认证用户 | `Authorization: Bearer` 或 `?token=`(middleware.go:119) | WS 帧协议（`ws.ServeWS`） | `A`/JWTAuth: 无 token→401『缺少登录凭证』(middleware.go:119)；缺 Authorization→401『缺少登录凭证』(56)；格式错→401『凭证格式错误』(62)；ErrTokenRevoked→401『会话已撤销或已失效，请重新登录』(middleware.go:35-38) | `TestQAS3WSAuthNeverBypasses` api/qa_stage3_test.go:74（wsAuth 不可绕过）；`TestWSAuthQueryTokenFallback` api/stage3_test.go:60（?token= 回退）；`TestSubscribeRejectsNonMember` ws/hub_test.go:84（越权）；`TestQAS3ServeWSSubscribeAndBroadcast` ws/qa_servews_test.go:58（正常） | 未接入（app.js 全文无 WebSocket / `/ws` 客户端；R0-E-15/25 关联） |
+| 当前用户 | `GET /api/v1/users/me` (136) | JWTAuth | **仅 JWTAuth，无账本角色判定**；`AuthService.GetByID`(auth.go) | 本人 | — | `currentUserDTO`=`{id,username,email,isInstanceAdmin}`(auth_handler.go:193；middleware.go:197-204) | `A`: 其余→401『登录已失效，请重新登录』(middleware.go:39)；ErrTokenRevoked→401『会话已撤销或已失效，请重新登录』(35-38) | 未覆盖：未找到独立命名测试（仅 `TestPATLifecycleAPI` api/token_handler_test.go:123 以 PAT 间接断言 200+username） | ✓ app.js:1684,2157 |
+| 当前用户 | `PUT /api/v1/users/me` (138) | JWTAuth | **仅 JWTAuth，无账本角色判定**；`AuthService.UpdateEmail`(profile.go)；用户名不可改(auth_handler.go:196-199) | 本人 | `{email}`(auth_handler.go:201-203) | `currentUserDTO`(auth_handler.go:212) | `M`: ErrEmailTaken→409『该邮箱已被其他账号使用』(common.go:90-91)；ErrInvalidArgument→400『请求参数非法』(92-96) | 未覆盖：未找到独立命名测试（仅 service `TestUpdateEmail` service/profile_test.go:13） | ✓ app.js:2172 |
+| 改密 | `POST /api/v1/users/me/password` (139) | JWTAuth | **仅 JWTAuth，无账本角色判定**；`AuthService.ChangePassword`(profile.go) 撤销全部会话 | 本人 | `{oldPassword,newPassword}`(auth_handler.go:220-223) | **`{revokedSessions:int, message:"密码已修改，所有设备已下线，请重新登录"}`**(auth_handler.go:232) | `M`: ErrWeakPassword→400『密码至少 8 位』(common.go:120-121)；ErrPasswordTooLong→400(122-125)；ErrInvalidArgument→400(92-96)；ErrBadCredentials→401(经 mapSvcErr 无此分支，实际由 service 返回) | 未覆盖：未找到独立命名测试（仅 service `TestChangePassword` service/profile_test.go:57；`{revokedSessions,message}` 响应体无专门断言） | 未接入（R0-E-18；`password` 仅命中登录注册表单 L179/184/192/193/209） |
+| PAT | `GET /api/v1/users/me/tokens` (142) | JWTAuth；**条件** `if ph != nil`(141) | **仅 JWTAuth，无账本角色判定**；`PATService.List`(token.go) | 本人 | — | 裸 `[]PATItem`=`{id,name,createdAt,expiresAt,revokedAt,lastUsedAt}`(token_handler.go:36；token.go:55-63，**不含哈希/明文**) | `A`: 401(middleware.go:39) | `TestPATLifecycleAPI` api/token_handler_test.go:95（端到端：列表无哈希明文） | ✓ app.js:1574 |
+| PAT | `POST /api/v1/users/me/tokens` (143) | JWTAuth；条件 `ph != nil` | **仅 JWTAuth，无账本角色判定**；`PATService.Create` | 本人 | `{name}`(token_handler.go:40-56) | **`{token:明文, item:PATItem}`**(token_handler.go:52-55，明文仅此一次) | `M`: ErrInvalidArgument→400『请求参数非法』(common.go:92-96)；ErrPATNotFound→404『Token 不存在』(87-89) | `TestPATLifecycleAPI` api/token_handler_test.go:95（`{token,item}`）；`TestPATCreateAndVerify` service/token_test.go:16（正常） | ✓ app.js:1543 |
+| PAT | `DELETE /api/v1/users/me/tokens/:tokenId` (144) | JWTAuth；条件 `ph != nil` | **仅 JWTAuth，无账本角色判定**；`PATService.Revoke` | 本人 | `c.Param("tokenId")`→`pathID`(token_handler.go:60) | `{revoked:true}`(token_handler.go:68) | `M`: ErrPATNotFound→404『Token 不存在』(common.go:87-89，跨用户/不存在/已撤销统一 404) | `TestPATLifecycleAPI` api/token_handler_test.go:95（撤销后 401、跨用户 404） | ✓ app.js:1605 |
+| OCR | `POST /api/v1/ocr/recognize` (146) | JWTAuth | **仅 JWTAuth，无账本角色判定**；`OCRService.Recognize` | 任意已认证 | multipart `FormFile("image")`(ocr_handler.go:40)，限 maxBytes+64KB(23) | `*OCRRecognizeResult`=`{engine,lines:[{text,confidence}]}`(ocr.go:32-35) | `O`(ocr_handler.go:112-123): ErrOCRRateLimited→429『OCR 请求过于频繁，请稍后再试』；ErrOCRImageTooLarge→413『图片超过大小限制』；ErrOCRInvalid→400『请求参数非法』；default→503『OCR 服务暂时不可用，请稍后重试』；内联 24-30/51-53 另有 413/400 | `TestOCRE2EWithValidJWT` api/ocr_handler_test.go:130（正常）；`TestOCRRoutesRegisteredBehindAuth`:21（401）；`TestRecognizeDownstreamContract` service/ocr_test.go:85（DTO 字段） | 未接入（PRD §5.2 明确 Web 不做 OCR；R0-E-08） |
+| OCR | `POST /api/v1/ocr/parse` (147) | JWTAuth | **仅 JWTAuth，无账本角色判定**；`OCRService.Parse` | 任意已认证 | `parseOCRRequest{text}`(ocr_handler.go:16-18) | `*OCRParseResult`=`{candidates:[{amountCents,direction,occurredDate,description,confidence}]}`(ocr.go:36-45) | `O`: ErrOCRInvalid→400『请求参数非法』(ocr_handler.go:112-123)；default→503 | `TestParseOCRTextRules` service/ocr_test.go:15（规则）；`TestParseResponseShape`:187（DTO 字段） | 未接入（R0-E-08） |
+| OCR | `POST /api/v1/ocr/llm-parse` (149) | JWTAuth（默认关闭，需 `consent=true`，注释 148） | **仅 JWTAuth，无账本角色判定**；`OCRService.LLMParse` | 任意已认证 | `llmParseRequest{text,consent:bool}`(ocr_handler.go:80-83)，consent 必须 true(97-98) | `*OCRParseResult`(ocr_handler.go:110) | `O`(ocr_handler.go:96-107): ErrLLMConsentRequired→400（明示同意文案）；ErrLLMDisabled→503『云端文本兜底未启用（服务端未配置）』；ErrOCRRateLimited→429；ErrOCRInvalid→400；default→503 | `TestLLMParseRouteBehindAuth`/`ConsentAndDisabled`/`UpstreamOK` api/ocr_llm_handler_test.go:14,35,70（401 / consent 400+未启用 503 / 正常）；`TestLLMParseHappyPath` service/ocr_llm_test.go:70 | 未接入（R0-E-08） |
+| 会话 | `GET /api/v1/auth/sessions` (154) | JWTAuth | **仅 JWTAuth，无账本角色判定**；`SessionService.List` | 本人 | query `includeRevoked=="1"`(session_handler.go:75) | **`{sessions:[{id,jti,createdAt,expiresAt,revokedAt,lastSeenAt,userAgent,current}]}`**(session_handler.go:85；sessionDTO 48-57)；**非裸数组** | `A`: 401(middleware.go:39) | `TestSessionListMarksCurrent` api/session_api_test.go:209（正常 current 标记） | 未接入（R0-E-14；`sessions` 全无命中） |
+| 会话 | `DELETE /api/v1/auth/sessions` (155) | JWTAuth | **仅 JWTAuth，无账本角色判定**；`SessionService.RevokeOthers` | 本人 | — | **`{revoked:int, jtiList:[]}`**(session_handler.go:133) | `A`: 401(middleware.go:39) | `TestRevokeOthersKeepsCurrent` api/session_api_test.go:324（正常）；`TestRevokeOtherSessionsKeepsCurrent` service/session_test.go:227 | 未接入（R0-E-14） |
+| 会话 | `DELETE /api/v1/auth/sessions/:jti` (156) | JWTAuth | **仅 JWTAuth，无账本角色判定**；`SessionService.RevokeOne` | 本人 | `c.Param("jti")` | **`{revoked:true,jti,revokedAt,current}`**(session_handler.go:110-115)；跨用户/不存在 404(101-104) | `ErrSessionNotFound`→404『会话不存在』(session_handler.go:101-104，**不经 mapSvcErr**)；`A`: 401 | `TestRevokeSessionThenHTTP401` api/session_api_test.go:237（撤销后 401）；`TestRevokeSessionCrossUserIs404`:305（越权 404）；`TestRevokeSessionCrossUserIsNotFound` service/session_test.go:170 | 未接入（R0-E-14） |
+| 账本-列表 | `GET /api/v1/books` (158) | JWTAuth | `BookService.List`(book.go:107)：SQL `INNER JOIN book_members m ... WHERE m.uid=?`(112-114) 隐式成员过滤，**无 guard 函数调用** | 全体成员（仅返回所属） | — | `[]model.Book`(book_handler.go:50；`make(...,0,8)` 保证空数组非 null book.go:108-110)；字段 `{id,name,ownerUid,bookType,defaultCurrency,membersCanViewOthers,deleted,createdAt,updatedAt}`(model.go:43-53) | `A`: 401(middleware.go:39) | 未覆盖：未找到独立命名测试（`TestRouterRegistersLedgerRoutes` api/router_test.go:13 仅覆盖路由注册） | ✓ app.js:241 等多处 |
+| 账本-创建 | `POST /api/v1/books` (159) | JWTAuth | `BookService.Create`(book.go:40)：**无成员资格判定**（任何登录用户）；创建者写 `RoleOwner`(74-76) | 任意登录用户 | `{name,bookType}`(book_handler.go:29-32)；bookType 非 personal/family 默认 family(46-48)、默认 CNY(61)、`MembersCanViewOthers:true`(62) | `*model.Book`(book_handler.go:41) | `M`: ErrInvalidArgument→400『请求参数非法』(common.go:92-96)；ErrUserExists 不适用 | `TestAuthzBookCreateMustLeaveAudit` authzreview/authz_review_test.go:191（创建留审计）；`TestEventEnvelope*` api/stage3_rework_test.go:122（WS 事件契约） | ✓ app.js:295 |
+| 账本-详情 | `GET /api/v1/books/:id` (160) | JWTAuth | `bh.get` 先 `MemberService.RoleOf`(book_handler.go:59-62，member.go:112-122) 成员资格复核，再 `BookService.Get`(book.go:119，仅 `deleted=0` 查库，**无角色判定**) | 全体成员 | `c.Param("id")`→`bookID` | `*model.Book`(book_handler.go:68) | `M`: ErrBookNotFound→404『账本不存在』(common.go:66-67)；ErrNotMember→403『无权限』(43-46) | 未覆盖：未找到独立命名测试（单资源 GET；见 §5.3.1 主表对应行） | **间接**（前端无单独 `GET /books/{id}`；以 `GET /books` 列表 + `books.find((b)=>b.id===bookId)` app.js:342 本地取 book，并调 `/books/:id/...` 子资源） |
+| 账本-改名 | `PUT /api/v1/books/:id` (161) | JWTAuth | `BookService.Update`(book.go:174)：`loadBookTx`(184，先 404) → **`roleOfTx` guard.go:35-48**(188) → `if role!=RoleOwner && role!=RoleAdmin → ErrForbidden`(192-194)；可见性字段委托 `SetVisibility(...,sess)`(231) 同事务单写 | **owner/admin** | `{name, membersCanViewOthers:*bool}`(book_handler.go:82-85，指针区分未传/显式 false) | **`{id}`**(book_handler.go:97)；仅 `res.VisibilityChanged` 时广播(94-96) | `M`: ErrForbidden→403『无权限』(common.go:43-46)；ErrBookNotFound→404『账本不存在』(66-67)；ErrEntityDeleted→409『目标已被删除，无法对该数据进行操作』(51-53) | `TestR33BookUpdateNameAndVisibilityAtomic` service/remediation_integration_test.go:735（原子性）；`TestR33VisibilityBroadcastOnlyAfterCommit` api/remediation_r33_test.go:20（广播时机）；`TestR33UpdateUsesSingleServiceCall`:57（单写实现） | 未接入（R0-E-32；前端无 `PUT /books/:id`） |
+| 账本-删除 | `DELETE /api/v1/books/:id` (162) | JWTAuth | `BookService.Delete`(book.go:355)：**`roleOfTx` guard.go:35-48**(363) → `if role != model.RoleOwner → ErrForbidden`(367-369)；注释 342 明确「admin 不可删除账本」 | **仅 owner**（不是 owner/admin） | `c.Param("id")` | **`{id}`**(book_handler.go:112) | `M`: ErrForbidden→403『无权限』(common.go:43-46)；ErrBookNotFound→404(66-67) | `TestAuthzBookDeleteMustLeaveAudit` authzreview/authz_review_test.go:150（审计）；`TestAuthzCanViewDetailDeletedBookMustFail`:230（已删账本失败关闭） | ✓ app.js:271 |
+| 账本-可见性 | `PUT /api/v1/books/:id/visibility` (165) | JWTAuth | `BookService.SetVisibility`(book.go:278)：`loadBookTx`(299) → **`roleOfTx` guard.go:35-48**(303) → `if role!=RoleOwner && role!=RoleAdmin → ErrForbidden`(307-309)；不递增 sync_version(265-267)、幂等(310-313)、审计 config_change(329) | **owner/admin** | `visibilityRequest{membersCanViewOthers:*bool}`(visibility_handler.go:18-20)；缺字段 400(31-35) | **`{id, membersCanViewOthers, changed}`**(visibility_handler.go:47) | `M`: ErrForbidden→403『无权限』(common.go:43-46)；ErrBookNotFound→404(66-67) | `TestVisibilityRequiresField` api/stage3_test.go:200（DTO 校验 400 缺 membersCanViewOthers）；`TestR28BookVisibilityRejectsStaleRole` service/remediation_integration_test.go:414（事务内重读角色/TOCTOU）；`TestSetVisibilityDoesNotBumpVersion` service/visibility_test.go:21；`TestCanViewDetailFailsClosed`:79 | 未接入（R0-E-19/27；`canViewOthers` 仅 L1719-1720 只读徽标） |
+| 成员-列表 | `GET /api/v1/books/:id/members` (167) | JWTAuth | `MemberService.List`(member.go:197)：`requireActiveBookTx`(200，账本存活)；**handler 侧另加 `RoleOf` 成员复核**(book_handler.go:120) | 全体成员 | `c.Param("id")` | `[]MemberDTO`=`{uid,username,role,canViewOthers,isInstanceAdmin}`(member.go:140-146；book_handler.go:129) | `M`: ErrNotMember→403『无权限』(common.go:43-46)；ErrEntityDeleted→409(51-53) | 未覆盖：未找到独立命名测试 | ✓ app.js:1683 |
+| 成员-邀请 | `POST /api/v1/books/:id/members/invite` (168) | JWTAuth | `MemberService.CreateInvite`(member.go:353)：`requireActiveBookTx`(377，**先 404 后 403**) → **`roleOfTx` guard.go:35-48**(380) → `CanManageMembers` member.go:130-132(384)；role 非 admin/member 默认 member(354-356)、邮箱/用户名二选一(1041-1051)、限流 5 次/分钟(361-363) | **owner/admin** | `{role:int8,boundUsername,boundEmail}`(book_handler.go:139-143) | **`{code,role,expiresAt}`**(book_handler.go:152-156)；**无 inviteId**（前端只消费 `data.code` app.js:1665 → R0-E-26） | `M`: ErrForbidden→403『无权限』(common.go:43-46)；ErrInviteBoundMismatch→400(113-114)；ErrRateLimited→429(118-119)；ErrBookFull→409(115-117) | `TestR41CreateInviteAcceptsBoundEmail` api/book_handler_r41_test.go:53（DTO 新字段）；`TestR41EmailBindingNormalizedAndMatched` service/remediation_invite_integration_test.go:140（正常）；`TestR28CreateInviteRejectsStaleRole` service/remediation_integration_test.go:451（TOCTOU）；`TestMapSvcErrInviteFailuresDoNotLeak` api/invite_lifecycle_api_test.go:90（错误码不泄露） | ✓ app.js:1658 |
+| 成员-撤邀请 | `POST /api/v1/books/:id/members/invite/:inviteId/revoke` (175) | JWTAuth（动作段风格，避开与 `DELETE .../:uid` 路由树冲突，注释 169-175） | `MemberService.RevokeInvite`(member.go:441)：**`roleOfTx` guard.go:35-48**(449)；**跨账本伪装 404**(451-463，注释「统一表现为邀请不存在，防枚举」)；本账本权限不足**保留 403**(466-470)；`CanManageMembers`(466)；条件 UPDATE + RowsAffected(483-495) | **owner/admin**（跨账本→404、本账本 member→403） | `c.Param("inviteId")`→`pathID` | **`{inviteId:int64, revoked:true}`**(book_handler.go:176) | `M`: ErrForbidden→403『无权限』(common.go:43-46)；ErrInviteInvalid→400『邀请码无效或已过期』(111-112)；ErrInviteNotFound 包装 ErrInviteInvalid→400(member.go:99-109) | `TestR40RevokeInviteRouteRegistered`/`RejectsInvalidID`/`RejectsInvalidBookID` api/invite_lifecycle_api_test.go:29,53,73（路由/400）；`TestR40RevokeRequiresManagerRole` service/remediation_invite_integration_test.go:364（越权 403）；`TestR40CrossBookRevokeRejected`:433（跨账本 404）；`TestR40RevokeAndRedeemRaceExactlyOneWins`:455（并发互斥） | 未接入（R0-E-26；`revoke` 仅 token 撤销 L1605、`URL.revokeObjectURL` L1085；`inviteId` 全无命中） |
+| 成员-改角色 | `PUT /api/v1/books/:id/members/:uid` (176) | JWTAuth | `MemberService.ChangeRole`(member.go:240)：**`roleOfTx` guard.go:35-48**(257) + `CanManageMembers` member.go:130-132(261)；newRole 只允许 admin/member(241-244)；`targetRole==RoleOwner→ErrCannotOperateOwner`(268-270)；admin 不能动 owner(271-273)；`n!=1→ErrConcurrentConflict`(281-285) | **owner/admin，且不能操作/提为 owner** | `c.Param("uid")` + `{role:int8}`(book_handler.go:215-217) | **`{uid,role}`**(book_handler.go:227) | `M`: ErrCannotOperateOwner→403『不能对账本所有者执行该操作』(common.go:47-48)；ErrForbidden→403(43-46)；ErrConcurrentConflict→409『数据已被并发修改，请重试』(64-65) | `TestChangeRoleWritesAudit` service/audit_integration_test.go:87（审计）；`TestR28MemberChangeRoleRejectsStaleRole` service/remediation_integration_test.go:356（事务内重读角色） | ✓ app.js:1727,1737 |
+| 成员-移除 | `DELETE /api/v1/books/:id/members/:uid` (177) | JWTAuth | `MemberService.Remove`(member.go:299)：**`roleOfTx` guard.go:35-48**(308) + `CanManageMembers`(312)；`targetRole==RoleOwner→ErrCannotOperateOwner`(319-321)；`n!=1→409`(330-333) | **owner/admin，不能移除 owner** | `c.Param("uid")` | **`{uid}`**(book_handler.go:246) | `M`: ErrCannotOperateOwner→403『不能对账本所有者执行该操作』(common.go:47-48)；ErrConcurrentConflict→409(64-65) | `TestRemoveMemberWritesAudit` service/audit_integration_test.go:108（审计）；`TestR28MemberRemoveRejectsStaleRole` service/remediation_integration_test.go:388（TOCTOU） | ✓ app.js:1752 |
+| 账户-列表 | `GET /api/v1/books/:id/accounts` (180) | JWTAuth | `AccountService.List`(account.go:75)：**`requireMember` guard.go:51-55**(76)（只读路径）；**不叠加交易可见性过滤** | 全体成员 | `c.Param("id")` | `[]model.Account`=`{id,bookId,name,category,currency,balance,parentId,syncVersion,deleted,createdAt,updatedAt}`(model/ledger.go:111-122) | `M`: ErrNotMember→403『无权限』(common.go:43-46)；ErrBookNotFound→404(66-67) | `TestWA8AccountAudit` service/audit_r2_test.go:228（审计）；`TestAuthzAccountAndCategoryWritesMustLeaveAudit` authzreview/authz_review_test.go:551 | ✓ app.js:308 |
+| 账户-创建 | `POST /api/v1/books/:id/accounts` (181) | JWTAuth | `AccountService.Create`(account.go:103)：**`requireManagerTx` guard.go:59-76**(123)；附 `assertNoAccountCycle`(132) | **owner/admin** | `accountCreateReq{name,category,currency,parentId}`(ledger_handler.go:73-78)；前端仅 `{name,category,currency}`、**无 Balance/期初余额**(app.js:737 → R0-E-06/30，服务固定 Balance:0) | `*model.Account`(ledger_handler.go) | `M`: ErrForbidden→403『无权限』(common.go:43-46)；ErrAccountCycle→400『账户层级不能成环：上级不能是自己的下级』(97-99)；ErrAccountInvalid→400(92-96) | `TestR47AccountCycleDetected` service/account_r47_test.go:61（400 成环）；`TestR47ConcurrentOppositeMovesCannotFormCycle`:201（并发） | ✓ app.js:742 |
+| 账户-详情 | `GET /api/v1/books/:id/accounts/:aid` (182) | JWTAuth | `AccountService.Get`(account.go:87)：**`requireMember` guard.go:51-55**(88) | 全体成员 | `c.Param("aid")`→`pathID` | `*model.Account` | `M`: ErrAccountNotFound→404『账户不存在』(common.go:68-69)；ErrNotMember→403(43-46) | 未覆盖：未找到独立命名测试（单资源 GET；见 §5.3.1 主表对应行） | ✓ app.js:1779 |
+| 账户-更新 | `PUT /api/v1/books/:id/accounts/:aid` (183) | JWTAuth | `AccountService.Update`(account.go:179)：**`requireManagerTx` guard.go:59-76**(187) | **owner/admin** | `accountUpdateReq{name:*string,parentId:*int64}`(ledger_handler.go:80-83) | `*model.Account` | `M`: ErrAccountCycle→400(common.go:97-99)；ErrAccountNotFound→404(68-69)；ErrForbidden→403(43-46) | `TestR47ConcurrentOppositeMovesCannotFormCycle` service/account_r47_test.go:201（并发）；`TestWA8AccountAudit` service/audit_r2_test.go:228 | ✓ app.js:741 |
+| 账户-删除 | `DELETE /api/v1/books/:id/accounts/:aid` (184) | JWTAuth | `AccountService.Delete`(account.go:260)：**`requireManagerTx` guard.go:59-76**(268) | **owner/admin**（不是 owner-only，也不是「成员」） | `c.Param("aid")` | **`{id:accountID}`**(ledger_handler.go:181) | `M`: ErrAccountInUse→409『账户仍存在交易记录，无法删除』(common.go:100-101)；ErrAccountHasChildren→409『该账户下仍有子账户，无法删除』(102-104)；ErrAccountNotFound→404(68-69) | 未覆盖：未找到独立命名测试（HTTP 层；service `TestR31AccountDeleteBlockedBySoftDeletedTx` service/remediation_integration_test.go:594 覆盖 409 引用约束、`TestR53AccountDeleteRejectsActiveChildren` service/remediation_unit_test.go:501 覆盖 409 子账户） | ✓ app.js:687 |
+| 分类-列表 | `GET /api/v1/books/:id/categories` (187；`?tree=1|"true"` 走 Tree) | JWTAuth | `CategoryService.List`(category.go:63)：**`requireMember` guard.go:51-55**(64)；`Tree`(75) 委托 `List`(76) | 全体成员 | query `tree=1|true`(category_handler.go:27) | 默认 `[]model.Category`=`{id,bookId,name,parentId,catType,syncVersion,deleted,createdAt,updatedAt}`(model/ledger.go:129-138)；`?tree=1` → `[]CategoryTreeNode`=嵌入 `model.Category` + `{children:[]model.Category}`(category.go:57-60) | `M`: ErrNotMember→403『无权限』(common.go:43-46)；ErrBookNotFound→404(66-67) | 未覆盖：未找到独立命名测试（`?tree=1` 树形分支无专门测试，`CategoryTreeNode` 无专门断言；见 §5.3.1 主表对应行） | ✓ app.js:309；`?tree=1` app.js:2089 |
+| 分类-创建 | `POST /api/v1/books/:id/categories` (188) | JWTAuth | `CategoryService.Create`(category.go:110)：**`requireManagerTx` guard.go:59-76**(126) | **owner/admin** | `categoryCreateReq{name,parentId,catType}`(category_handler.go:10-14) | `*model.Category` | `M`: ErrCategoryInvalid→400『请求参数非法』(common.go:92-96)；ErrForbidden→403(43-46) | `TestWA8CategoryAudit` service/audit_r2_test.go:288（审计）；`TestWA8RejectedWritesLeaveNoAudit`:345（拒绝写） | ✓ app.js:2049 |
+| 分类-更新 | `PUT /api/v1/books/:id/categories/:cid` (189) | JWTAuth | `CategoryService.Update`(category.go:168)：**`requireManagerTx` guard.go:59-76**(176) | **owner/admin** | `categoryUpdateReq{name:*string,parentId:*int64,catType:*int8}`(category_handler.go:16-20) | `*model.Category` | `M`: ErrCategoryNotFound→404『分类不存在』(common.go:70-71)；ErrForbidden→403(43-46) | `TestWA8CategoryAudit` service/audit_r2_test.go:288（审计） | ✓ app.js:2048 |
+| 分类-删除 | `DELETE /api/v1/books/:id/categories/:cid` (190) | JWTAuth | `CategoryService.Delete`(category.go:255)：**`requireManagerTx` guard.go:59-76**(263) | **owner/admin** | `c.Param("cid")` | **`{id:categoryID}`**(category_handler.go:110) | `M`: ErrCategoryInUse→409『分类仍存在交易记录，无法删除』(common.go:105-106)；ErrCategoryHasChildren→409『该分类下仍有子分类，无法删除』(107-108)；ErrCategoryNotFound→404(70-71) | 未覆盖：未找到独立命名测试（HTTP 层；service `TestR31CategoryDeleteBlockedBySoftDeletedTx` service/remediation_integration_test.go:657 覆盖 409 引用约束） | ✓ app.js:2066 |
+| 交易-列表 | `GET /api/v1/books/:id/transactions` (193) | JWTAuth | `TxService.List`(tx.go:504)：`canViewAllForTx` visibility.go:87-92(505，内含 `requireMember`) + `txVisibilityCond` visibility.go:103-108(512) | 全体成员 + 可见性过滤（owner/admin 全看；member 关互看时只看本人 `creator_uid=? AND creator_uid<>0`） | query `maxTime,minTime,type,accountId,categoryId,keyword,page,count`(tx_handler.go:43-98；**参数名是 `type` 不是 `txType`**)；`type` 越界 400(60-63) | **`{items:[]model.Transaction,total,page,count}`**(tx_handler.go:97)；`model.Transaction`(model/ledger.go:152-173) 含 `creatorUid,txType,amount,direction,clientUuid,syncVersion,deleted` | `M`: ErrNotMember→403『无权限』(common.go:43-46)；ErrInvalidArgument→400(92-96)；`A`: 401 | `TestQATransactionRoutesContract` api/qa_api_test.go:263（路由契约）；`TestListFilterByTypeQuotedColumn` service/tx_integration_test.go:317（列表过滤）；`TestProbeCore2VisibilityAppliesToRecycleBin` service/core_consistency_probe2_test.go:363（可见性）；`TestQAS3VisibilityCondMatrix` service/qa_stage3_test.go:37（源码守卫） | ✓ app.js:399,1033,1878,2058 |
+| 交易-详情 | `GET /api/v1/books/:id/transactions/:txId` (194) | JWTAuth | `TxService.Get`(tx.go:569)：`canViewAllForTx` visibility.go:87-92(570) + `txVisibilityCond` visibility.go:103-108(576)；不可见→`ErrTransactionNotFound`→404(585-587，刻意不泄露存在性) | 全体成员 + 可见性过滤 | `c.Param("txId")` | `*model.Transaction`(tx_handler.go:114)；**无 merchant 字段 → R0-E-37** | `M`: ErrTransactionNotFound→404『交易不存在』(common.go:72-73)；ErrNotMember→403(43-46) | 未覆盖：未找到独立命名测试（单资源 GET；见 §5.3.1 主表对应行，CRUD flow 间接覆盖） | ✓ app.js:1982（**口径对齐**：前端已单列详情 GET，与列表分列；本表补后端锚点 router.go:194 形成双向锚点） |
+| 交易-创建 | `POST /api/v1/books/:id/transactions` (195) | JWTAuth | `TxService.Create`(tx.go:147)：**`requireMemberTx` guard.go:14-27**(170)，ErrNotMember 转 `ErrCreateForbidden`(171-173) | **全体成员**（不区分角色） | `service.CreateRequest`(tx.go:99-111)=`{clientUuid(binding:"required"),txType,accountId,toAccountId,amount,categoryId,paymentChannel,txTime,timezoneOffset,comment,source}`；**无 merchant 字段(R0-E-37)** | `*CreateResult`(tx.go:114-119)=`{resultType,transactionIds,version,replayed}` | `M`: ErrCreateConflict→409『同一 clientUuid 已用于不同内容，请检查请求或更换 clientUuid』(common.go:49-50)；ErrInvalidCreate→400『请求参数非法』(92-96)；ErrAccountCycle 不适用；ErrCreateForbidden→403(43-46) | `TestQACreateTransactionRejectsBadBody` api/qa_api_test.go:204（DTO 校验 400，实读 205-231 断言 `w.Code==400`）；`TestValidateCreateRequiresClientUuid` service/tx_test.go:36（DTO 校验 400）；`TestIdempotencySameClientUUIDNoDoubleCharge` service/tx_integration_test.go:222（幂等）；`TestConcurrentDistinctClientUUIDConsistentBalance`:285（并发） | ✓ app.js:572 |
+| 交易-更新 | `PUT /api/v1/books/:id/transactions/:txId` (197) | JWTAuth | `TxService.UpdateReceipt`(tx_update.go:59)：**`roleOfTx` guard.go:35-48**(80) + `canEditOthers := CanEditOthersTx(role)` member.go:135-137(87) | **owner/admin 可改他人；member 仅本人** | `service.UpdateRequest`(tx_update.go:37-49)=CreateRequest 11 字段 + `{clientUuid(binding:"required"),...,baseVersion:int64}`；全量替换、类型不可改 | `*UpdateResult`(tx_update.go:52-56)=`{version,replayed,transactionIds}` | `M`: ErrConcurrentConflict→409『数据已被并发修改，请重试』(common.go:64-65，baseVersion 乐观锁)；ErrForbidden→403(43-46)；ErrCreateConflict→409(49-50)；ErrTransactionNotFound→404(72-73) | `TestUpdateSingleAmountNetBalance` service/tx_update_test.go:77（正常）；`TestUpdateReplayIdempotent`:266（幂等）；`TestUpdatePermission`:306（越权）；`TestUpdateDeletedTx404`:338（404）；`TestUpdateBaseVersionOptimisticLock`:353（409 乐观锁）；`TestUpdateValidation`:377（DTO 校验） | ✓ app.js:633 |
+| 交易-删除 | `DELETE /api/v1/books/:id/transactions/:txId` (199) | JWTAuth | `DeleteReceipt`(tx.go:755) → `mutateVisibility`(tx.go:780)：**`roleOfTx` guard.go:35-48**(805) + `CanEditOthersTx` member.go:135-137(813)；`for _, r := range group { if !canEditOthers && r.CreatorUid != uid → ErrForbidden }`(848-852) | **owner/admin 可删他人；member 仅本人** | **`?clientUuid=` 走 `c.Query`**(DELETE 不带 body，tx_handler.go:149-150 注释)；前端 `uuid()` 生成(app.js:506,2020) | **`{version:int64}`**(tx_handler.go:173) | `M`: ErrForbidden→403『无权限』(common.go:43-46)；ErrTransactionNotFound→404(72-73)；ErrTxDirectionMissing→409『该交易记录的方向标记异常，无法删除或恢复…』(54-58)；ErrTransferGroupIncomplete→409(59-61) | `TestDeletePermissionMemberCannotDeleteOthers` service/tx_delete_integration_test.go:212（**越权 403**，member 删他人 ErrForbidden、admin 可删，实读 219-238）；`TestDeleteIdempotentSameClientUUID`:81（幂等）；`TestR28TxDeleteRestoreRejectStaleRole` service/remediation_integration_test.go:292（TOCTOU） | ✓ app.js:506,2020 |
+| 交易-恢复 | `POST /api/v1/books/:id/transactions/:txId/restore` (200) | JWTAuth | `RestoreReceipt`(tx.go:769) → `mutateVisibility`(tx.go:780)：同删除，`roleOfTx`(805) + `CanEditOthersTx`(813) + 逐行判定(848-852) | **owner/admin 可恢复他人；member 仅本人** | **`?clientUuid=` 走 `c.Query`**(tx_handler.go:179-197)；前端 `uuid()`(app.js:782) | **`{version:int64}`**(tx_handler.go:196) | `M`: ErrForbidden→403(43-46)；ErrTransferGroupIncomplete→409(59-61)；ErrIncompleteReceipt→409(62-63) | `TestRestoreReversesDelete` service/tx_delete_integration_test.go:185（正常）；`TestR26RestoreRejectsBrokenPairNoPartialRestore` service/remediation_integration_test.go:181（409 配对损坏）；`TestR32RestoreClearsDeletedAt`:477（墓碑） | ✓ app.js:782 |
+| 回收站 | `GET /api/v1/books/:id/recycle` (202) | JWTAuth | `TxService.ListDeleted`(recycle.go:23)：`canViewAllForTx` visibility.go:87-92(24) + `txVisibilityCond` visibility.go:103-108(30) | 全体成员 + 可见性过滤 | query `page,count`(前端 `?page=1&count=100` app.js:766) | **`{items:[]model.Transaction,total,page,count}`**(tx_handler.go:222)；**分页对象，非裸 `[tx]` 数组** | `M`: ErrNotMember→403『无权限』(common.go:43-46)；ErrInvalidArgument→400(92-96) | `TestRecycleBinListsDeleted` service/tx_delete_integration_test.go:242（正常）；`TestProbeCore2VisibilityAppliesToRecycleBin` service/core_consistency_probe2_test.go:363（可见性）；`TestQAS3VisibilityCondWiredIntoAllReadPaths` service/qa_stage3_test.go:407（源码守卫） | ✓ app.js:766（消费 `data.items`） |
+| 报表-月报 | `GET /api/v1/books/:id/reports/monthly` (206) | JWTAuth；条件 `if rh != nil`(205) | `ReportService.Monthly`(report.go:71)：`canViewAllForTx` visibility.go:87-92(72) + `txVisibilityCond` visibility.go:103-108(90) | 全体成员 + 可见性过滤 | query `months`（service 归一化 1~24、默认 6，report.go:76-81） | **`{items:[]MonthPoint}`**，MonthPoint=`{month:"2006-01",income:int64,expense:int64}`(report.go:53-57；report_handler.go:33) | `M`: ErrNotMember→403『无权限』(common.go:43-46)；ErrInvalidArgument→400(92-96) | `TestReportRoutesBehindAuth` api/report_handler_test.go:151（401）；`TestReportMonthlyAndCategoriesAPI`:180（正常 DTO）；`TestReportMonthlyAggregates` service/report_test.go:46（聚合）；`TestReportMonthlyVisibility`:77（可见性） | ✓ app.js:831,1949 |
+| 报表-分类占比 | `GET /api/v1/books/:id/reports/categories` (207) | JWTAuth；条件 `rh != nil` | `ReportService.CategoryShare`(report.go:116)：`canViewAllForTx`(124) + `txVisibilityCond`(130)；txType 只允许收入/支出(117-119) | 全体成员 + 可见性过滤 | query `month`（缺省=当月 CST，report_handler.go:41-45）、`type` | **`{month,items:[]CategorySlice}`**，CategorySlice=`{categoryId,name,total,count}`(report.go:60-65；report_handler.go:55)；**旧表误写 `{categoryId,amount,ratio}`** | `M`: ErrNotMember→403(43-46)；ErrInvalidArgument→400(92-96) | `TestReportMonthlyAndCategoriesAPI` api/report_handler_test.go:180（正常 DTO）；`TestReportCategoryShare` service/report_test.go:126（占比） | ✓ app.js:871 |
+| 导出 | `GET /api/v1/books/:id/export` (208) | JWTAuth；条件 `rh != nil` | `ReportService.ExportRows`(report.go:186)：`canViewAllForTx`(187) + `txVisibilityCond`(193) | 全体成员 + 可见性过滤 | query `format=csv|json`(report_handler.go:66-70)、`type,accountId,categoryId,minTime,maxTime,fields`（`fields` 经 `service.ParseFields` 校验 95-99） | **直接文件流 `c.Data(200,ctype,body)`**(report_handler.go:138)，**不走 `ok()` 信封**；头 `X-Export-Truncated:"1"`(113)、`X-Export-Count`(116)、`Content-Disposition: attachment; filename=...`(136-137)、`Content-Type: text/csv; charset=utf-8` 或 `application/json; charset=utf-8`(124/127)；错误仍走 `fail()` 信封。`ExportRow`(report.go:177-182) | `M`: ErrNotMember→403(43-46)；ErrInvalidArgument→400(92-96)；format/fields 非法→400(report_handler.go:66-70,95-99) | `TestExportAPICsvAndJson` api/report_handler_test.go:234（文件流 + 响应头：Content-Type text/csv、CSV BOM、Content-Disposition、fields 白名单、format/fields 非法 400、导出零副作用，实读 239-291）；`TestExportRowsAndTruncation` service/report_test.go:171（截断）；`TestBuildCSVAndSanitize`:227（CSV 转义） | ✓ app.js:1062（**原生 fetch**，因取文件流不走 `api()` 的 JSON 解包） |
+| 预算-列表 | `GET /api/v1/books/:id/budgets` (213) | JWTAuth；条件 `if bh2 != nil`(212) | `BudgetService.List`(budget.go:240)：**`requireMember` guard.go:51-55**(241) + `canViewAllForTx` visibility.go:87-92(251) + `spent()` 内 `txVisibilityCond`(309) | 全体成员 + 已用按可见性过滤 | `c.Param("id")` | **`{items:[]BudgetView}`**，BudgetView=嵌入 `model.Budget` + `{categoryName,spent:int64,percent:int,status:"normal|near|over"}`(budget.go:60-66；budget_handler.go:25) | `M`: ErrNotMember→403(43-46)；ErrInvalidArgument→400(92-96) | `TestBudgetRoutesBehindAuth` api/budget_handler_test.go:111（401，4 个路由，实读 113-124）；`TestBudgetCRUDFlow`:127（列表 `{items}`、删除后 `items:[]`）；`TestBudgetProgressVisibility` service/budget_test.go:199（可见性） | ✓ app.js:1129 |
+| 预算-创建 | `POST /api/v1/books/:id/budgets` (214) | JWTAuth；条件 `bh2 != nil` | `BudgetService.Create`(budget.go:92)：**`requireManagerTx` guard.go:59-76**(103) | **owner/admin** | `budgetReq{name,budgetType,categoryId,periodType,amount,rollover,enabled:*bool}`(budget_handler.go:28-36) | `*model.Budget`(model/budget.go:25-37；budget_handler.go:60) | `M`: ErrBudgetConflict→409『该分类已存在生效预算（或总预算已设置）』(common.go:85-86)；ErrForbidden→403(43-46)；ErrInvalidArgument→400(92-96) | `TestBudgetCRUDFlow` api/budget_handler_test.go:127（正常 / **409 重复** / `periodType=2`→400）；`TestBudgetPermissionsAndValidation` service/budget_test.go:74（**越权 403 + DTO 校验 400**） | ✓ app.js:1226 |
+| 预算-更新 | `PUT /api/v1/books/:id/budgets/:budgetId` (215) | JWTAuth；条件 `bh2 != nil` | `BudgetService.Update`(budget.go:150)：**`requireManagerTx` guard.go:59-76**(164) | **owner/admin** | 仅 `name/amount/rollover/enabled`(budget_handler.go:76-81)，**不接受 budgetType/categoryId/periodType** | `*model.Budget`(budget_handler.go:86) | `M`: ErrBudgetNotFound→404『预算不存在』(common.go:74-75)；ErrForbidden→403(43-46) | `TestBudgetCRUDFlow` api/budget_handler_test.go:127；`TestBudgetPermissionsAndValidation` service/budget_test.go:74 | ✓ app.js:1220 |
+| 预算-删除 | `DELETE /api/v1/books/:id/budgets/:budgetId` (216) | JWTAuth；条件 `bh2 != nil` | `BudgetService.Delete`(budget.go:203)：**`requireManagerTx` guard.go:59-76**(211) | **owner/admin** | `c.Param("budgetId")` | **`{deleted:true}`**(budget_handler.go:102) | `M`: ErrBudgetNotFound→404(74-75)；ErrForbidden→403(43-46) | `TestBudgetCRUDFlow` api/budget_handler_test.go:127（删除后 `items:[]`）；`TestBudgetPermissionsAndValidation` service/budget_test.go:74 | ✓ app.js:1169 |
+| 投资-标的列表 | `GET /api/v1/books/:id/instruments` (221) | JWTAuth；条件 `if ih != nil`(220) | `InvestService.ListInstruments`(invest.go:213)：**`requireMember` guard.go:51-55**(214) | 全体成员 | `c.Param("id")` | **`{items:[]model.Instrument}`**(invest_handler.go:27；model/invest.go:36-46) | `M`: ErrNotMember→403(43-46)；ErrBookNotFound→404(66-67) | `TestInvestRoutesBehindAuth` api/invest_handler_test.go:109（401）；`TestInvestCRUDAndNetWorthFlow`:128（端到端）；`TestInstrumentCrudAndReferenceProtection` service/invest_test.go:18（引用保护） | ✓ app.js:1344,1469 |
+| 投资-标的创建 | `POST /api/v1/books/:id/instruments` (222) | JWTAuth；条件 `ih != nil` | `InvestService.CreateInstrument`(invest.go:77)：**`requireManagerTx` guard.go:59-76**(90) | **owner/admin**（旧表误写「成员」） | `instrumentReq{name,type,market,code}`(invest_handler.go:30-35) | `*model.Instrument` | `M`: ErrForbidden→403(43-46)；ErrInvalidArgument→400(92-96) | `TestInvestCRUDAndNetWorthFlow` api/invest_handler_test.go:128；`TestInstrumentCrudAndReferenceProtection` service/invest_test.go:18 | ✓ app.js:1452 |
+| 投资-标的更新 | `PUT /api/v1/books/:id/instruments/:instrumentId` (223) | JWTAuth；条件 `ih != nil` | `InvestService.UpdateInstrument`(invest.go:119)：**`requireManagerTx` guard.go:59-76**(132) | **owner/admin** | `instrumentReq`(invest_handler.go:30-35) | `*model.Instrument` | `M`: ErrInstrumentNotFound→404『标的不存在』(common.go:76-77)；ErrForbidden→403(43-46) | `TestInvestCRUDAndNetWorthFlow` api/invest_handler_test.go:128 | ✓ app.js:1449 |
+| 投资-标的删除 | `DELETE /api/v1/books/:id/instruments/:instrumentId` (224) | JWTAuth；条件 `ih != nil` | `InvestService.DeleteInstrument`(invest.go:169)：**`requireManagerTx` guard.go:59-76**(176) | **owner/admin** | `c.Param("instrumentId")` | **`{deleted:true}`**(invest_handler.go:92) | `M`: ErrInstrumentInUse→409『该标的下仍有持仓记录，无法删除』(common.go:80-81)；ErrInstrumentNotFound→404(76-77) | `TestInvestCRUDAndNetWorthFlow` api/invest_handler_test.go:128（重复删→404）；`TestInstrumentCrudAndReferenceProtection` service/invest_test.go:18 | ✓ app.js:1381 |
+| 投资-行情 | `POST /api/v1/books/:id/instruments/:instrumentId/price` (225) | JWTAuth；条件 `ih != nil` | `InvestService.SetPrice`(invest.go:475)：**`requireManagerTx` guard.go:59-76**(492) | **owner/admin**（旧表误写「成员」） | **`{price:string, priceTime:int64}`**(invest_handler.go:105-108；旧表误写 `price,asOf?`) | **`{updated:true}`**(invest_handler.go:116；旧表误写 `{}`) | `M`: ErrInvalidPrice→400『数量或价格非法（十进制字符串，数量>0、价格≥0）』(common.go:82-84)；ErrInstrumentNotFound→404(76-77)；ErrForbidden→403(43-46) | 未覆盖：未找到独立命名测试（HTTP 层；service `TestSetPriceRefreshesHoldings` service/invest_test.go:103、api `TestInvestCRUDAndNetWorthFlow` api/invest_handler_test.go:167 间接覆盖） | ✓ app.js:1509 |
+| 投资-持仓列表 | `GET /api/v1/books/:id/holdings` (226) | JWTAuth；条件 `ih != nil` | `InvestService.ListHoldings`(invest.go:422)：**`requireMember` guard.go:51-55**(423) | 全体成员 | `c.Param("id")` | **`{items:[]HoldingView}`**，HoldingView=嵌入 `model.Holding` + `{instrumentName,instrumentType,marketValue:int64,profitLoss:int64}`(invest.go:413-419；invest_handler.go:131)；**单条市值字段名是 `marketValue`，不是 `holdingMarketValue`** | `M`: ErrNotMember→403(43-46)；ErrBookNotFound→404(66-67) | `TestInvestCRUDAndNetWorthFlow` api/invest_handler_test.go:128（市值 135000）；`TestHoldingDecimalAndValidation` service/invest_test.go:52（DTO 校验） | ✓ app.js:1283,1797 |
+| 投资-持仓创建 | `POST /api/v1/books/:id/holdings` (227) | JWTAuth；条件 `ih != nil` | `InvestService.AddHolding`(invest.go:235)：**`requireManagerTx` guard.go:59-76**(262) | **owner/admin**（旧表误写「成员」） | `holdingReq{accountId,instrumentId,quantity:string,costAmount:int64,currentPrice:string}`(invest_handler.go:134-140；旧表误写 `cost`) | `*model.Holding`(model/holding.go:11-22) | `M`: ErrInvalidQuantity→400『数量或价格非法…』(common.go:82-84)；ErrInstrumentNotFound→404(76-77)；ErrForbidden→403(43-46) | `TestInvestCRUDAndNetWorthFlow` api/invest_handler_test.go:128（`quantity:"abc"`→400）；`TestHoldingDecimalAndValidation` service/invest_test.go:52 | ✓ app.js:1497 |
+| 投资-持仓更新 | `PUT /api/v1/books/:id/holdings/:holdingId` (228) | JWTAuth；条件 `ih != nil` | `InvestService.UpdateHolding`(invest.go:318)：**`requireManagerTx` guard.go:59-76**(342) | **owner/admin** | `holdingReq`(invest_handler.go:134-140) | `*model.Holding` | `M`: ErrHoldingNotFound→404『持仓不存在』(common.go:78-79)；ErrInvalidQuantity→400(82-84) | `TestInvestCRUDAndNetWorthFlow` api/invest_handler_test.go:128 | ✓ app.js:1492 |
+| 投资-持仓删除 | `DELETE /api/v1/books/:id/holdings/:holdingId` (229) | JWTAuth；条件 `ih != nil` | `InvestService.DeleteHolding`(invest.go:376)：**`requireManagerTx` guard.go:59-76**(383) | **owner/admin** | `c.Param("holdingId")` | **`{deleted:true}`**(invest_handler.go:198) | `M`: ErrHoldingNotFound→404(78-79)；ErrForbidden→403(43-46) | `TestInvestCRUDAndNetWorthFlow` api/invest_handler_test.go:128（重复删→404） | ✓ app.js:1330 |
+| 投资-净资产 | `GET /api/v1/books/:id/net-worth` (230) | JWTAuth；条件 `ih != nil` | `InvestService.NetWorth`(invest.go:546)：**`requireMember` guard.go:51-55**(547)；只读 holdings/accounts，不过滤可见性 | 全体成员 | `c.Param("id")` | **`*NetWorthSummary`**=`{assets:[]NetWorthEntry,liabilities:[]NetWorthEntry,holdingsValue:int64,totalAssets:int64,totalLiabilities:int64,netWorth:int64}`(invest.go:535-542；invest_handler.go:213)；NetWorthEntry=`{category,total,count}`(528-532)；**字段是 `holdingsValue`，无 `holdingMarketValue`** | `M`: ErrNotMember→403(43-46)；ErrBookNotFound→404(66-67) | `TestInvestCRUDAndNetWorthFlow` api/invest_handler_test.go:128（**net-worth `holdingsValue`**，实读 196-209 断言 `json:"holdingsValue"`）；`TestNetWorthFormula` service/invest_test.go:141（净资产公式） | ✓ app.js:1255（消费 `nw.holdingsValue` L1273） |
+| 同步-拉 | `GET /api/v1/books/:id/sync/pull` (234) | JWTAuth | `SyncService.Pull`(sync.go:303)：**`requireMemberTx` guard.go:14-27**(345，非成员 403) + `canViewDetailTx` visibility.go:51-81(349，同快照可见性) + `txVisibilityCond` visibility.go:103-108(399，仅交易叠加)；先限流(309) | 全体成员 + 可见性过滤 | query **`afterVersion,limit`**(sync_handler.go:24-43；旧表误写 `since`) | `*SyncBatch`(sync.go:91-106)=`{highVersion,transactions:[]model.Transaction,accounts:[]model.Account,categories:[]model.Category,holdings:[]model.Holding,restoreEpoch,instanceId}`；**旧表误写「增量实体」** | `M`: ErrNotMember→403『无权限』(common.go:43-46)；ErrInvalidArgument→400(92-96)；ErrRateLimited→429『操作过于频繁，请稍后再试』(118-119) | `TestPullRejectsBadLimit` api/stage3_test.go:189（整批 DTO 校验 400）；`TestQAS3PullUninitializedServiceIs400` api/qa_stage3_test.go:105（400）；`TestSyncBatchJSONContract` service/sync_test.go:218（DTO 契约）；`TestR48MergeSafeVersion*` service/sync_r48_test.go:28,101,157,233（批次边界/版本） | 未接入（R0-E-15/25；`/sync` 全无命中） |
+| 同步-推 | `POST /api/v1/books/:id/sync/push` (235) | JWTAuth | `SyncService.Push`(sync.go:430)：**无独立权限函数**，逐条委托 `s.txs.Create(...)`(458) → 继承 `TxService.Create` 的 `requireMemberTx` guard.go:14-27（全体成员）；整批非法 items 空/超长/未初始化→ErrInvalidArgument 400(440-448) | 全体成员 | **`pushRequest{items:[]service.PushItem}`**(sync_handler.go:50-52)；PushItem(sync.go:114-126)=与 CreateRequest 同 12 字段但**不带 binding 标签**（避免单条缺 clientUuid 升级整批 400） | **`{results:[]PushResult}`**(sync_handler.go:84)；PushResult(sync.go:146-161)=`{clientUuid,status,id,transactionIds?,version,errorCode?,message?}`，status 枚举 `created/replayed/conflict/invalid/forbidden/error`(149)；**旧表误写 `{ok}`** | `M`: ErrInvalidArgument→400『请求参数非法』(common.go:92-96)；ErrRateLimited→429(118-119)；逐条 status 内 `invalid/forbidden/error` 不升级整批 HTTP | `TestPushRejectsEmptyItems`/`TooManyItems`/`BadJSONBody` api/stage3_test.go:146,157,178（整批 DTO 校验 400）；`TestPushRejectsWholeBatchInvalid` service/sync_test.go:165（400）；`TestPushPerItemIsolation` service/qa_stage3_test.go:407（逐条隔离）；`TestZZ6PushThrottleCountsPerCall` authzreview/zz_authz_adversarial_test.go:297（限流按调用计） | 未接入（R0-E-15/25；`/sync` 全无命中） |
 
-**矩阵结论**：
-- 路由/服务函数映射完整；**逐路由权限断言、DTO 校验错误码、回归测试名三类证据仍标注 ✗待测**，需后续补 `mapSvcErr` 错误码表 + 各域 `*_test.go` 用例索引（建议作为 R0→R1 过渡的最小契约补全项，不修改业务行为）。
-- 前端未接项（Web 列 ❌）已与 R0-E 编号一一对应：**改密(R0-E-18)、会话(R0-E-14)、可见性(R0-E-19/27)、邀请撤销(R0-E-26)、同步 pull/push(R0-E-15/25)、OCR(Web 不做,R0-E-08)**；邀请生成已接但**响应无 inviteId 导致无法撤销**(R0-E-26)。
+
+#### 5.3.2 错误映射全表（主表「错误码」列的展开依据）
+
+**`M` = `mapSvcErr`(common.go:39-136) 完整映射**（逐条为源码实读，非「✗待测」）：
+
+| 错误常量（`service.*`） | HTTP | msg 文案 | common.go:行 |
+|---|---|---|---|
+| ErrForbidden / ErrNotMember / ErrCreateForbidden | 403 | 无权限 | 43-46 |
+| ErrCannotOperateOwner | 403 | 不能对账本所有者执行该操作 | 47-48 |
+| ErrCreateConflict | 409 | 同一 clientUuid 已用于不同内容，请检查请求或更换 clientUuid | 49-50 |
+| ErrEntityDeleted | 409 | 目标已被删除，无法对该数据进行操作 | 51-53 |
+| ErrTxDirectionMissing | 409 | 该交易记录的方向标记异常，无法删除或恢复，请联系实例管理员修复数据 | 54-58 |
+| ErrTransferGroupIncomplete | 409 | 该转账记录配对不完整，无法整笔删除或恢复，请联系实例管理员修复数据 | 59-61 |
+| ErrIncompleteReceipt | 409 | 该 clientUuid 已有不完整回执，请更换 clientUuid 或联系实例管理员处理 | 62-63 |
+| ErrConcurrentConflict | 409 | 数据已被并发修改，请重试 | 64-65 |
+| ErrBookNotFound | 404 | 账本不存在 | 66-67 |
+| ErrAccountNotFound | 404 | 账户不存在 | 68-69 |
+| ErrCategoryNotFound | 404 | 分类不存在 | 70-71 |
+| ErrTransactionNotFound | 404 | 交易不存在 | 72-73 |
+| ErrBudgetNotFound | 404 | 预算不存在 | 74-75 |
+| ErrInstrumentNotFound | 404 | 标的不存在 | 76-77 |
+| ErrHoldingNotFound | 404 | 持仓不存在 | 78-79 |
+| ErrInstrumentInUse | 409 | 该标的下仍有持仓记录，无法删除 | 80-81 |
+| ErrInvalidQuantity / ErrInvalidPrice | 400 | 数量或价格非法（十进制字符串，数量>0、价格≥0） | 82-84 |
+| ErrBudgetConflict | 409 | 该分类已存在生效预算（或总预算已设置） | 85-86 |
+| ErrPATNotFound | 404 | Token 不存在 | 87-89 |
+| ErrEmailTaken | 409 | 该邮箱已被其他账号使用 | 90-91 |
+| ErrInvalidCreate / ErrInvalidArgument / ErrAccountInvalid / ErrCategoryInvalid | 400 | 请求参数非法 | 92-96 |
+| ErrAccountCycle | 400 | 账户层级不能成环：上级不能是自己的下级 | 97-99 |
+| ErrAccountInUse | 409 | 账户仍存在交易记录，无法删除 | 100-101 |
+| ErrAccountHasChildren | 409 | 该账户下仍有子账户，无法删除 | 102-104 |
+| ErrCategoryInUse | 409 | 分类仍存在交易记录，无法删除 | 105-106 |
+| ErrCategoryHasChildren | 409 | 该分类下仍有子分类，无法删除 | 107-108 |
+| ErrUserExists | 409 | 用户名已存在 | 109-110 |
+| ErrInviteInvalid | 400 | 邀请码无效或已过期 | 111-112 |
+| ErrInviteBoundMismatch | 400 | 邀请码已绑定指定用户，信息不匹配 | 113-114 |
+| ErrBookFull | 409 | 该账本成员已达上限（20） | 115-117 |
+| ErrRateLimited | 429 | 操作过于频繁，请稍后再试 | 118-119 |
+| ErrWeakPassword | 400 | 密码至少 8 位 | 120-121 |
+| ErrPasswordTooLong | 400 | 密码过长：最多 72 字节（超出部分 bcrypt 会丢弃） | 122-125 |
+| ErrUsernameTooLong | 400 | 用户名长度超限：1~64 个字符 | 126-128 |
+| ErrAuthUnavailable | 503 | 服务暂时不可用，请稍后重试 | 129-131 |
+| default | 500 | 服务内部错误（不回显内部错误） | 132-134 |
+
+**`L` = `mapLoginErr`（`auth_handler.go:103-122`，**不在 common.go**）**：`ErrBadCredentials`/`ErrAccountDisabled`→401『用户名或密码错误』(105-107，不区分账号存在性)；`ErrRateLimited`→429『登录尝试过于频繁，请稍后再试』(108-114，含节流日志 `logRateLimited`)；`ErrAuthUnavailable`→503『服务暂时不可用，请稍后重试』(115-117)；default→500『服务内部错误，请稍后重试』(118-120)。3/4 先记安全日志 `logLoginInternalError`(175-185，不记用户名/口令/令牌)。
+
+**`A` = `mapAuthErr`（`middleware.go:34-40`，鉴权中间件统一 401）**：`ErrTokenRevoked`→401『会话已撤销或已失效，请重新登录』(35-38)；其余→401『登录已失效，请重新登录』(39)。`JWTAuth` 自身分支：缺 Authorization→401『缺少登录凭证』(56)、格式错→401『凭证格式错误』(62)、PAT 但 `patSvc==nil`→401(69)；`wsAuth` 无 token→401『缺少登录凭证』(middleware.go:119)。
+
+**`O` = OCR 独立错误映射（不经 mapSvcErr）**：`ocr.writeError`(ocr_handler.go:112-123)：`ErrOCRRateLimited`→429『OCR 请求过于频繁，请稍后再试』；`ErrOCRImageTooLarge`→413『图片超过大小限制』；`ErrOCRInvalid`→400『请求参数非法』；default→503『OCR 服务暂时不可用，请稍后重试』。`llmParse` 内联(96-107)：`ErrLLMConsentRequired`→400（明示同意文案）；`ErrLLMDisabled`→503『云端文本兜底未启用（服务端未配置）』；`ErrOCRRateLimited`→429；`ErrOCRInvalid`→400；default→503。`recognize` 内联(24-30/51-53)：multipart 过大→413『图片请求过大』、格式错→400、超 maxBytes→413『图片超过大小限制』。
+
+**补充**：`ErrSessionNotFound` 在 `session_handler.go:101-104` 单独映射 404『会话不存在』（不经 mapSvcErr）；`ErrInviteAlreadyUsed/AlreadyRevoked/Expired/NotFound/BookUnavailable` 均以 `%w` 包装 `ErrInviteInvalid`(member.go:99-109)，故统一落 400。
+
+#### 5.3.3 22 条易错点逐条纠正（旧 §5.3 → 源码正确值）
+
+| # | 文档 §5.3 错值 | 源码正确值 | 证据 `file:line` |
+|---|---|---|---|
+| 1 | WS 路径 `/ws` | **`/api/v1/ws`**（挂 `v1` 组下，独立 `wsAuth`，不在 JWTAuth 组） | router.go:122,133；middleware.go:112 |
+| 2 | 持仓市值 `holdingMarketValue` | 持仓列表项 = **`marketValue`**(`HoldingView.MarketValue`)；净资产汇总持仓总市值 = **`holdingsValue`**(`NetWorthSummary.HoldingsValue`)；两处都无 `holdingMarketValue` | invest.go:417,538；测试 api/invest_handler_test.go:178(`json:"marketValue"`)、:201(`json:"holdingsValue"`) |
+| 3 | 回收站返回 `[tx]` 裸数组 | **分页对象 `{items:[...],total,page,count}`** | tx_handler.go:222；recycle.go:23 |
+| 4 | 删除/恢复返回 `{}` | **`{"version": ver}`** | tx_handler.go:173,196 |
+| 5 | `sessions` 返回裸数组 / 字段名不符 | **`{sessions:[{id,jti,createdAt,expiresAt,revokedAt,lastSeenAt,userAgent,current}]}`**；`revokeOthers`=`{revoked:int,jtiList:[]}`；`revokeOne`=`{revoked,jti,revokedAt,current}` | session_handler.go:85,110-115,133；sessionDTO 48-57 |
+| 6 | `register` 返回 `accessToken` | **返回 `currentUserDTO`**=`{id,username,email,isInstanceAdmin}`；**只有 `login` 返回 `{accessToken}`** | auth_handler.go:69,88；middleware.go:197-204 |
+| 7 | `join` 返回 accessToken | **返回 `currentUserDTO`**（与 register 同）；join 是未认证入口，不签发 token | book_handler.go:202；router.go:128 |
+| 8 | 改密响应 `{}` | **`{revokedSessions:int, message:"密码已修改，所有设备已下线，请重新登录"}`** | auth_handler.go:232 |
+| 9 | 撤邀请响应 `{}` | **`{inviteId:int64, revoked:true}`** | book_handler.go:176 |
+| 10 | net-worth 字段 `holdingMarketValue` | **`{assets,liabilities,holdingsValue,totalAssets,totalLiabilities,netWorth}`**，`holdingsValue` 为持仓总市值（分） | invest.go:535-542 |
+| 11 | export 返回 `{code,msg,data}` 信封 | **直接文件流**（`c.Data`）+ 头 `Content-Disposition`/`Content-Type`/`X-Export-Count`/可选 `X-Export-Truncated`；错误仍走 `fail()` 信封 | report_handler.go:113-138 |
+| 12 | `PUT /books/:id`、`PUT /books/:id/visibility` 响应 `book` | `update`→**`{id}`**；`setVisibility`→**`{id,membersCanViewOthers,changed}`**；`remove`→**`{id}`** | book_handler.go:97,112；visibility_handler.go:47 |
+| 13 | `DELETE /books/:id` 角色 = owner/admin | **仅 owner**（`role != RoleOwner` → ErrForbidden）；`Update`/`SetVisibility` 才是 owner/admin | book.go:367-369；book.go:192-194,307-309 |
+| 14 | 成员管理角色笼统 owner/admin | `changeRole`/`remove`/`createInvite`/`revokeInvite` = owner/admin(`CanManageMembers`)，且不能操作/提为 owner；`revokeInvite` 跨账本伪装 404、本账本 member 保留 403 | member.go:130-132,261,268-273,312,319-321,384,449-470 |
+| 15 | 交易改/删/恢复权限笼统「成员」 | **owner/admin 可改删他人(`CanEditOthersTx`)；member 仅本人**；`Create` 则全体成员(`requireMemberTx`) | member.go:135-137；tx.go:170,805-813,848-852；tx_update.go:80-87 |
+| 16 | 写共享配置（accounts/categories/budgets/invest）权限笼统「成员」 | 写 = **owner/admin**(`requireManagerTx`)；读 = **全体成员**(`requireMember`)；可见性读路径另叠加 `canViewAllForTx`+`txVisibilityCond` | guard.go:59-76；account.go:76/123；category.go:64/126；budget.go:241/103；invest.go:90/214 |
+| 17 | 报表/导出/回收站/预算已用/sync pull 权限笼统「成员」 | 全部**读路径**：`canViewAllForTx`（内含 requireMember）或 Pull 的 `requireMemberTx`+`canViewDetailTx`，再叠加 `txVisibilityCond`；owner/admin 全看，member 关互看时只看本人 | visibility.go:87-92,103-108；report.go:72/124/187；recycle.go:24；budget.go:251/309；sync.go:345/349/399 |
+| 18 | `currentUserDTO` 字段 `id,username,email` | **`{id:int64,username,email,isInstanceAdmin:bool}`**（不含 disabled/deleted/role） | middleware.go:197-204 |
+| 19 | `login` 错误一律 401 | 分四类：凭证 401 / 限流 **429** / `ErrAuthUnavailable` **503** / 其余 **500**，且不泄露内部细节 | auth_handler.go:103-122 |
+| 20 | 失败响应带 data | `fail()` 只有 `{code:status,msg}`，**无 data** | common.go:22-24 |
+| 21 | request 用 `binding:"required"` 全面校验 | 仅 `CreateRequest.clientUuid`(tx.go:100) 与 `UpdateRequest.clientUuid`(tx_update.go:38) 带；`PushItem` 刻意**不带**(sync.go:110-113)；其余在 service 层（bookType 默认 family book.go:46-48、months 1~24 默认 6 report.go:76-81、CreateInvite role 默认 member member.go:354-356） | tx.go:100；tx_update.go:38；sync.go:110-113 |
+| 22 | `mapLoginErr` 在 common.go | **在 auth_handler.go:103-122**（common.go 只有 mapSvcErr） | auth_handler.go:103；common.go:39 |
+
+#### 5.3.4 矩阵结论
+
+1. **本表完成的是源码级契约盘点，不等于 R0 通过、不等于运行时验收**。所有权限判定、DTO 字段、错误码映射、测试函数名与断言类型均来自 HEAD `bff6a2b` 源码实读；**本表未做逐路由集成测试运行确认**；本轮 `go test ./...` 全量绿见 §7.6，按任务单口径不构成逐路由覆盖证据。「测试证据」列只说明源码中存在该命名用例及其断言类型，逐项已在 §5.3.0 声明口径。
+2. **已有逐用例测试证据的域**（主表「测试证据」列列出具体 `测试名 file:line（断言类型）`）：auth(register/login，`TestR45*`/`TestR46*`/`TestA6*`，含 DTO 校验 400、开关 403、401 统一、429、500 不泄露)、sessions(`TestSession*`/`TestRevoke*`，正常/越权 404/撤销后 401)、PAT(`TestPATLifecycleAPI` 端到端)、OCR(`TestOCR*`/`TestLLMParse*`/`TestParse*`，401/400/413/429/503/DTO)、books/visibility(`TestVisibilityRequiresField`/`TestR28*`/`TestR33*`/`TestSetVisibility*`/`TestRouterRegisters*`，DTO 校验/TOCTOU/原子性/版本不递增)、members/invites(`TestR40Revoke*`/`TestR41*`/`TestR42*`/`TestR43*`，越权 403/跨账本 404/并发互斥/DTO 校验/审计脱敏)、accounts/categories(`TestR47*`/`TestR31*`/`TestWA8*`，400 成环/并发/409 引用)、transactions/recycle(`TestQACreateTransactionRejectsBadBody`/`TestValidateCreateRequiresClientUuid`/`TestIdempotency*`/`TestConcurrent*`/`TestDeletePermissionMemberCannotDeleteOthers`/`TestUpdate*`/`TestRecycleBinListsDeleted`，DTO 校验 400/幂等/并发/越权 403/409 乐观锁)、reports/export(`TestExportAPICsvAndJson`/`TestReport*`，文件流+响应头/聚合/CSV 转义)、budgets(`TestBudgetCRUDFlow`/`TestBudgetPermissionsAndValidation`，409 重复/越权 403/DTO 校验 400)、invest(`TestInvestCRUDAndNetWorthFlow`/`TestNetWorthFormula`，`holdingsValue` 字段/净资产公式)、sync(`TestPushRejects*`/`TestSyncBatchJSONContract`/`TestR48*`，整批 400/DTO 契约/版本边界)、ws(`TestSubscribeRejectsNonMember`/`TestQAS3WSAuthNeverBypasses`，越权/wsAuth 不可绕过)。
+3. **明确「未覆盖：未找到独立命名测试」的接口**（主表逐行标注，非「CI 绿」替代）：`GET /healthz`；`GET /users/me`、`PUT /users/me`、`POST /users/me/password` 的 HTTP handler 层（仅 service `TestUpdateEmail`/`TestChangePassword` 间接覆盖，`{revokedSessions,message}` 无专门断言）；单资源 GET `GET /books/:id`、`GET /books/:id/accounts/:aid`、`GET /books/:id/transactions/:txId`（CRUD flow 间接覆盖）；`GET /books/:id/categories?tree=1` 树形分支（`CategoryTreeNode` 无专门测试）；`DELETE /books/:id/accounts/:aid`、`DELETE /books/:id/categories/:cid` 的 HTTP 层（service 层删除约束有覆盖）；`POST /books/:id/instruments/:instrumentId/price` 的 HTTP 层（service/api 间接覆盖）；`GET /books`、`GET /books/:id/members` 无独立 DTO 断言测试。「未找到独立命名测试」不代表运行时无覆盖，仅表示源码中未找到该接口独立命名的用例。
+4. **Web 未接入并关联 R0-E 编号**（按路由逐条，三类统计见 §5.3.0）：改密 `POST /users/me/password`(R0-E-18)；会话 3 条 `GET/DELETE /auth/sessions`、`DELETE /auth/sessions/:jti`(R0-E-14)；可见性 `PUT /books/:id/visibility`(R0-E-19/27)；撤邀请 `POST .../invite/:inviteId/revoke`(R0-E-26，且邀请生成响应无 inviteId 导致 Web 端无法撤销)；同步 `GET /books/:id/sync/pull` 与 `POST /books/:id/sync/push`(R0-E-15/25)；OCR 3 条 `recognize/parse/llm-parse`(Web 不做，R0-E-08)；`PUT /books/:id` 改名(R0-E-32)；WS `GET /api/v1/ws`(R0-E-15/25 关联)；邀请入户 `POST /books/:id/members/join`（后端 `router.go:128` 已交付、Web 完全无兑换入口，与 R0-E-26 分列验收：一个「兑不了」、一个「撤不了」）。`GET /healthz` 为非 UI 端点，计入 63 条路由但不纳入 UI 控件验收分母（R0-E-17 证据链备注）。`GET /books/:id` 判「间接」（前端以 `GET /books` 列表 + `books.find()` 本地取 book，未单独调详情）。
+5. **统计口径（本次实读重算，不引用二手数字）**：63 条注册路由（含 `/healthz`）→ `✓` 47 / `间接` 1 / `未接入` 15；不含 `/healthz` 的 62 条业务路由 → `✓` 47 / `间接` 1 / `未接入` 14。§3.1 按「控件」计、分母不同，**禁止与本表未接入条数直接对齐**。
+6. **权限口径**：写共享配置（accounts/categories/budgets/invest）为 owner/admin(`requireManagerTx`)，读为全体成员(`requireMember`/`canViewAllForTx`+`txVisibilityCond`)；`DELETE /books/:id` 仅 owner，`Update`/`SetVisibility` owner/admin；交易创建全体成员(`requireMemberTx`)，改/删/恢复 owner/admin 可跨人、member 仅本人(`CanEditOthersTx`)；`POST /books` 无成员资格判定（任何登录用户，创建者写 RoleOwner）。以上均为源码实读的函数级判定，非「按路由语义推定」。
+
+---
+
+#### 附：旧表纠错对照（[1.62] 初稿旧 §5.3 → 新值 → 证据 `file:line`）
+
+> 下表「旧行」列的 L233–L278 等行号指**基准提交 `bff6a2b`（[1.62] 初稿）当时**的文档行号，不是当前文档行号；旧 §5.3 已被本重做版整体替换，此处仅为逐条纠错回溯。表中「✗待测」「CI 绿」等字样均为**旧表错值原文引用**，不作为本轮证据或结论。
+
+> 旧表 L233 表头说明「角色权限列基于路由语义与已知 PRD/服务注释推定」「具体 code↔错误映射待测试补全（标 ✗待测）」「运行时权限边界需集成测试确认」——新表已全部改为**真实 service 函数名 + guard 函数 + `file:line`** 与**具体常量→HTTP→文案**，并删除全部「✗待测」「CI 绿」。旧表 L278 矩阵结论「三类证据仍标注 ✗待测」不再成立。
+
+| 旧行 | 旧表错值 | 新值（本重做版） | 证据 `file:line` |
+|---|---|---|---|
+| L237 | `/healthz` 未标「非 UI、不计入控件分母」 | 非 UI 公开健康检查，计入 63 条路由但**不纳入 UI 控件验收分母**；Web 判「未接入」 | router.go:109；本表 §5.3.0 口径 |
+| L238 | register 响应 `accessToken,user`；错误 `400/409 ✗待测`；测试「CI 绿 ✗逐用例」 | 响应 **`currentUserDTO`**（不返回 accessToken）；错误 `ErrUserExists→409`/`ErrWeakPassword→400`/`ErrPasswordTooLong→400`/开关 403；测试 `TestR45RegisterInputErrorsReturn400` 等 4 个 | auth_handler.go:69；middleware.go:197-204；common.go:109-128；api/auth_handler_r45_test.go:137,190,205,219 |
+| L239 | login 响应 `accessToken,user`；错误 `401 ✗待测` | 响应**仅 `{accessToken}`**；错误四类 401/429/503/500；测试 `TestR46*`/`TestA6*` | auth_handler.go:88,103-122；api/auth_handler_r46_test.go:26,65,134,147 |
+| L240 | join 请求 `code`(query/body)、响应 `book,member`、错误 `400/403 ✗待测` | 请求 **`{code,username,email,password}`**(JSON body)、响应 **`currentUserDTO`**、错误 `ErrInviteInvalid→400`/`ErrBookFull→409`/`ErrRateLimited→429` | book_handler.go:186-191,202；common.go:111-119；member.go:774 |
+| L241 | WS 路径 **`GET /ws`** | **`GET /api/v1/ws`**（`v1` 组 + 独立 `wsAuth`）；补 `TestQAS3WSAuthNeverBypasses` 等 | router.go:122,133；middleware.go:112；api/qa_stage3_test.go:74 |
+| L242 | `GET/PUT /users/me` 响应 `id,username,email`（缺 isInstanceAdmin）；测试「CI 绿」 | 响应补 **`isInstanceAdmin`**；测试改为「未覆盖：未找到独立命名测试」 | middleware.go:197-204；auth_handler.go:193,212 |
+| L243 | 改密响应 `{}`（撤销全部会话）；测试「✗待测」 | 响应 **`{revokedSessions,message}`**；测试「未覆盖：未找到独立命名测试」 | auth_handler.go:232；service/profile_test.go:57 |
+| L244 | PAT 响应 `token,id` | `list` 裸 `[]PATItem`；`create` **`{token,item}`**；`revoke` `{revoked:true}` | token_handler.go:36,52-55,68；token.go:55-63 |
+| L245 | 会话 GET 响应 `[{jti,device,createdAt,current}]` | **`{sessions:[{id,jti,createdAt,expiresAt,revokedAt,lastSeenAt,userAgent,current}]}`**（包装对象，非裸数组） | session_handler.go:85；sessionDTO 48-57 |
+| L246 | 会话 DELETE 响应 `{}` | `revokeOthers` **`{revoked,jtiList}`**；`revokeOne` **`{revoked,jti,revokedAt,current}`** | session_handler.go:110-115,133 |
+| L247 | OCR 错误 `400/413 ✗待测`、测试「✗待测」 | 错误补 **429/503**（`ErrOCRRateLimited`/default）；测试 `TestOCRE2EWithValidJWT` 等 | ocr_handler.go:112-123；api/ocr_handler_test.go:21,130,230 |
+| L248 | 账本列表测试「CI 绿」 | 「未覆盖：未找到独立命名测试」（仅路由注册测试间接确认） | api/router_test.go:13 |
+| L249 | 建账本错误 `400 ✗待测`、测试「CI 绿」 | `ErrInvalidArgument→400`；测试 `TestAuthzBookCreateMustLeaveAudit` | common.go:92-96；authzreview/authz_review_test.go:191 |
+| L250 | 账本详情 Web **`✅`** | **「间接」**（前端无单独 `GET /books/{id}`，以 `GET /books` 列表 + `books.find()` 本地取）；测试「未覆盖」 | app.js:342 等；book_handler.go:59-68 |
+| L251 | 改/删账本角色 **`owner/admin`**（合并）、响应 `book`、Web「✅(GET 接…)」 | **Delete 仅 owner**、Update owner/admin；响应 `update`/`remove` 均 **`{id}`**；Web 改/删均**未接入**(R0-E-32) | book.go:192-194,367-369；book_handler.go:97,112 |
+| L252 | 可见性请求 `membersCanViewOthers`(bool)、响应 `book` | 请求 **`*bool` 指针**（缺字段 400）、响应 **`{id,membersCanViewOthers,changed}`** | visibility_handler.go:18-20,31-35,47 |
+| L253 | 成员列表响应 `[{uid,username,role,canViewOthers}]` | `MemberDTO` 补 **`isInstanceAdmin`** | member.go:140-146 |
+| L254 | 邀请测试「✗待测」 | 补 `TestR41CreateInviteAcceptsBoundEmail`/`TestR41EmailBindingNormalizedAndMatched`/`TestR28CreateInviteRejectsStaleRole` | api/book_handler_r41_test.go:53；service/remediation_invite_integration_test.go:140；service/remediation_integration_test.go:451 |
+| L255 | 撤邀请响应 `{}` | **`{inviteId,revoked}`**；权限含跨账本 404/本账本 member 403；补 `TestR40*` 系列 | book_handler.go:176；member.go:441-470；service/remediation_invite_integration_test.go:341,364,386,433,455 |
+| L256 | 改/删成员响应 `{}`、Web「✅(生成邀请)」 | 响应 `changeRole` **`{uid,role}`**、`removeMember` **`{uid}`**；Web 判定 ✓（改角色/移除成员，非「生成邀请」） | book_handler.go:227,246；app.js:1727,1737,1752 |
+| L257 | 账户读权限「成员(受可见性)」 | 读 = **`requireMember` 全体成员，不叠加交易可见性过滤** | account.go:75-76；guard.go:51-55 |
+| L258 | 账户写权限「成员(受可见性;删可能 owner)」 | 写（含删）= **owner/admin** `requireManagerTx`，与可见性无关、非 owner-only | account.go:123,187,268；guard.go:59-76 |
+| L259 | 分类列表仅列 `?tree=1` 分支、错误 `403 ✗待测` | 补无参数分支 `[]model.Category` 与 `?tree=1` → `[]CategoryTreeNode`；错误 `ErrNotMember→403`/`ErrBookNotFound→404` | category_handler.go:27；category.go:57-60；common.go:43-46,66-67 |
+| L260 | 分类写权限「成员」、测试「CI 绿」 | 写 = **owner/admin** `requireManagerTx`；测试 `TestWA8CategoryAudit` | category.go:126,176,263；service/audit_r2_test.go:288 |
+| L261 | 交易列表 query 写 `txType` | 实际参数名 **`type`**（`maxTime,minTime,type,accountId,categoryId,keyword,page,count`） | tx_handler.go:43-98 |
+| L262 | 交易详情响应含 **`merchant`** | **`model.Transaction` 无 merchant 字段**（R0-E-37）；测试「未覆盖：未找到独立命名测试」 | model/ledger.go:152-173 |
+| L263 | 交易创建错误 `400/409 ✗待测`、测试「CI 绿」 | 错误 `ErrCreateConflict→409`/`ErrInvalidCreate→400`；测试 `TestQACreateTransactionRejectsBadBody`/`TestIdempotency*`/`TestConcurrent*` | common.go:49-50,92-96；api/qa_api_test.go:204；service/tx_integration_test.go:222,285 |
+| L264 | 交易更新测试仅列 `TestQATransactionRoutesContract` | 补 `TestUpdate*`（正常/幂等/越权/404/409 乐观锁/DTO 校验 400） | service/tx_update_test.go:77,115,145,164,185,242,266,290,306,338,353,377,406 |
+| L265 | 删除/恢复请求「—」、响应 **`{}`**、测试「CI 绿」 | 请求 **`?clientUuid=` 走 c.Query**；响应 **`{version}`**；测试 `TestDeletePermissionMemberCannotDeleteOthers`(越权 403)/`TestRestoreReversesDelete` | tx_handler.go:149-150,173,196；service/tx_delete_integration_test.go:212,185 |
+| L266 | 回收站响应 **`[tx]`** | **`{items,total,page,count}`** 分页对象 | tx_handler.go:222 |
+| L267 | 分类占比响应 `{items:[{categoryId,amount,ratio}]}` | **`{month,items:[{categoryId,name,total,count}]}`** | report.go:60-65；report_handler.go:55 |
+| L268 | 导出错误 `403/400 ✗待测`、测试「✗待测」 | 错误 `ErrNotMember→403`/`ErrInvalidArgument→400`；测试 `TestExportAPICsvAndJson`（文件流+响应头） | common.go:43-46,92-96；api/report_handler_test.go:234 |
+| L269 | 预算错误 `400/403 ✗待测`、测试「✗待测」 | 错误 `ErrBudgetConflict→409`/`ErrBudgetNotFound→404`；测试 `TestBudgetCRUDFlow`/`TestBudgetPermissionsAndValidation` | common.go:74-75,85-86；api/budget_handler_test.go:111,127；service/budget_test.go:74 |
+| L270 | 投资-标的权限「成员」 | 读 = 全体成员 `requireMember`；**写 = owner/admin `requireManagerTx`**（读写分离） | invest.go:90,132,176,214；guard.go:59-76 |
+| L271 | 投资-持仓权限「成员」、请求 `instrumentId,quantity,cost,currentPrice?`、响应 `holding` | 写 = owner/admin；请求 **`{accountId,instrumentId,quantity,costAmount,currentPrice}`**；列表响应 **`{items:[]HoldingView}`**（含 `marketValue`） | invest_handler.go:134-140,131；invest.go:413-419；invest.go:262,342,383 |
+| L272 | 行情请求 `price,asOf?`、响应 `{}`、权限「成员」 | 请求 **`{price:string,priceTime:int64}`**；响应 **`{updated:true}`**；权限 **owner/admin** | invest_handler.go:105-108,116；invest.go:492 |
+| L273 | 净资产 `{totalAssets,totalLiabilities,holdingMarketValue,netWorth}` | **`{assets,liabilities,holdingsValue,totalAssets,totalLiabilities,netWorth}`**（`holdingsValue`，无 `holdingMarketValue`） | invest.go:535-542；api/invest_handler_test.go:196-209 |
+| L274 | 同步拉请求 `since`、响应「增量实体」、错误 `403 ✗待测` | 请求 **`afterVersion,limit`**；响应 **`SyncBatch`** 具体字段；错误 `ErrNotMember→403`/`ErrInvalidArgument→400`/`ErrRateLimited→429` | sync_handler.go:24-43；sync.go:91-106；common.go:43-46,92-96,118-119 |
+| L275 | 同步推请求「增量实体」、响应 **`{ok}`** | 请求 **`{items:[]PushItem}`**；响应 **`{results:[]PushResult}`**（status 六枚举） | sync_handler.go:50-52,84；sync.go:114-126,146-161 |
+| L233/278 | 表头「角色权限列基于路由语义推定」「错误码 ✗待测」「CI 绿」「三类证据仍标注 ✗待测」 | 全部改为真实 service/guard 函数 + `file:line`、具体常量→HTTP→文案、具体测试函数名 + 断言类型；「未覆盖：未找到独立命名测试」逐行标注，**无「CI 绿」「待测」** | 本重做版 §5.3.0–§5.3.4 全文 |
 
 ---
 
@@ -324,7 +813,7 @@
 3. 同一数据、同一状态、同一视口分别截图：原型 vs 实现，命名 `r0/<page>/<viewport>/<state>.png`。
 4. 关键动作录屏或可重复步骤（点击前置条件 → 结果可观察）。
 5. 首屏/加载/空/错误/权限/离线状态各至少一张。
-6. **截图执行状态**：本 R0 为静态盘点，**尚未采集实际截图**（需浏览器环境）；截图采集作为 R0→R1 过渡的执行项，不得以文字代替。
+6. **截图执行状态（二次整改实测）**：本轮已用 Microsoft Edge `156.0.4314.58` headless + CDP 采集 **43 张真实 PNG**，覆盖 4 个视口 × 16 个页面/弹层，落盘于 `docs/r0-screenshots/`，逐张索引、采集环境与可复现步骤见 `docs/r0-screenshots/README.md`。但**仅覆盖 normal / empty / error 首屏**；成功/失败交互路径、加载态、权限不足态、离线态、同步/冲突态、以及**原型侧对照截图**均未采集。按总方案 §5 验收基线，**截图基线未完成 / 阻塞，R0 不因此通过**；不得用原型截图、HTML/SVG 或伪造截图替代，不得把该门槛挪到 R1，也不得以文字代替截图。
 
 ### 7.3 覆盖率计算（严禁主观百分比）
 
@@ -344,6 +833,40 @@
 - 隔离数据：`EBK_DB_PATH=.../server/.localdata/fastledger.db`（本地 schema v8）。
 - 服务端测试：`go test ./...`（本机 CGO 可用）。
 
+### 7.5 截图基线执行结果、空缺与阻塞（2026-11-04 二次整改）
+
+| 项目 | 状态 | 证据 / 说明 |
+|---|---|---|
+| 真实截图文件 | 已交付 43 张 PNG | `docs/r0-screenshots/`，逐张索引见该目录 `README.md` |
+| 浏览器与视口 | 已记录 | Edge `156.0.4314.58`；360×800 / 390×844 / 430×932 / 1280×800 |
+| 账号与数据样例 | 已记录 | `admin`（owner 角色），账本「我的家庭账本」id=1，本地 schema v8；`transactions total=0` |
+| 页面 / 弹层 | 部分 | 16 个页面/弹层首屏 |
+| 状态覆盖 | **不足** | 仅 normal / empty / error 首屏 |
+| 成功 / 失败交互路径 | **未采集** | 需构造测试数据与逐控件操作脚本 |
+| 加载 / 骨架屏 / pending | **未采集** | 需 CDP 慢速网络或请求拦截 |
+| 权限不足（owner/admin/member） | **未采集** | 需多角色账号与多成员账本 |
+| 离线 / 同步 / 冲突 | **未采集** | 需离线与冲突构造环境 |
+| 原型侧对照截图 | **未采集** | 需启动 `prototype/` 静态服务（8765）同视口对照 |
+| 逐控件可重复操作脚本 | **未交付** | 需操作步骤 + 结果断言 |
+
+**阻塞与执行要求**：以上空缺**不降低 R0 门槛、不挪至 R1**，须由 Owner 在浏览器或 CI 中按 §7.2 协议补齐；执行人、所需环境与可复现步骤见 `docs/r0-screenshots/README.md` 的「未覆盖/阻塞清单」。
+
+**复验项 R0-E-35**：「骨架屏残留」在本轮 CDP 拦截 `/api/v1/*` 的实测中表现为「页面主体空白 + 红色 `Failed to fetch` toast」，与原描述不完全一致；需 Owner/CI 用慢速网络复验，**不得据此判定已修复或已证伪**。
+
+**证据边界（诚实声明）**：服务端 `server/fastledger.exe` 构建于 `2026-11-04 01:13:59 +0800`，早于 `bff6a2b` 提交时间 `2026-11-04 13:45:36 +0800`（该提交本身仅文档改动）；截图采集时已实测 HTTP 提供的 `/app.js` 与仓库 HEAD 完全一致、`/style.css` 仅 CRLF 差异，故截图中前端资源与 `bff6a2b` 一致。后端权限 / DTO / 错误码契约**全部来自 `bff6a2b` 源码静态实读**（§5.3），不以运行时二进制为依据。当前本地服务已停止（`/healthz` 无响应），**运行时未复验**；既不得据此宣称已验证，也不得据此宣称截图无效。
+
+### 7.6 测试执行结果（2026-11-04 二次整改实测）
+
+| 项 | 值 |
+|---|---|
+| 命令 | `source .tools/genv.sh && go test ./...`（在 `repo_tmp/server` 下） |
+| 环境 | Go `1.22.5 windows/amd64`、`CGO_ENABLED=1`、w64devkit GCC 12.2.0 |
+| 结果 | **10 个包 `ok`**、**2 个包 `[no test files]`**（`internal/version`、`web`）、`FAIL` 行数 **0**、`EXIT_CODE=0` |
+| 逐包耗时 | `cmd/server` 12.887s / `internal/api` 16.128s / `internal/authzreview` 19.770s / `internal/config` 1.892s / `internal/database` 12.274s / `internal/instance` 12.510s / `internal/migrate` 13.192s / `internal/model` 1.010s / `internal/service` 34.722s / `internal/ws` 18.434s |
+| 日志 | 工作区 `.tmp_shot/gotest_full.log`（临时文件，不入库） |
+
+**口径（任务单要求）**：全量绿**不等于**逐路由测试覆盖证据，不得用「CI 绿 / 某个测试包通过 / 文档写待测」代替逐用例断言。§5.3 仍逐接口列具体测试函数 + `file:line` + 断言类型，并对未找到独立命名测试的接口明确写「未覆盖」。`go test -race` 全量与 CI 侧结果仍由 Owner/CI 提供（本轮**未执行** `-race`）。
+
 ---
 
 ## 8. R0-G：Owner 裁决清单（阻塞项，未裁决不开发）
@@ -359,11 +882,12 @@
 | **D-7** | 多端会话管理是否属于产品需求？ | PRD §4.1/§4.12 已要求可查看与撤销会话；后端 `/auth/sessions` 已有路由，Web UI 未接（R0-E-14） | 需求已确定；Owner 只需决定排期/入口，不得裁决为“不需要”而不修订 PRD | 已确认需求，排期待定 |
 | **D-8** | Web 设置页的服务器/备份区块展示到什么程度、数据从何处安全读取？ | PRD §4.12 与设计规范 §8.1–8.2 已要求服务器信息/备份入口；当前 Web 无状态 API 证据，运维备份另有部署机制 | 需求入口已确定；待 Owner 裁决 Web 只读状态范围、权限与是否提供受控备份/恢复操作。未设计安全边界前不得暴露恢复按钮 | 展示/操作边界待确认 |
 
-> **R0 通过条件（2026-11-04 复核后修订）**：
-> - **已完成（本轮补全）**：逐控件交互清单（§3.1，覆盖核心页面每个交互控件并绑定 R0-E 缺口编号）；API 权限/DTO/测试矩阵（§5.3，逐路由列鉴权/角色权限/请求响应字段/错误码/服务函数/测试证据/Web 调用）。
-> - **仍待完成**：① §7 截图基线——本工作环境无浏览器/截图工具（Visualizer 仅产出 SVG/HTML，不能截取真实运行页面），`localhost:8080` 服务虽常驻但无法在此自动截图；该基线与"逐控件验证截图"须由 Owner 在浏览器或 CI 中按 §7.2 协议采集，属 R0→R1 过渡的执行项。② Owner 对 D-1、D-3、D-5、D-6（仅交易总表入口）、D-8 的范围结论，D-2 的 PWA 本地 OCR 裁决，D-4 期初余额技术实现方案；D-7 会话管理已确属需求仅排期待定。
-> - **裁决前口径**：D-2 的 Web OCR 已由 PRD §5.2 决定为不做；D-4 需求已确定仅实现方案待确认；D-7 需求确定仅排期待定；这三者不再作为"是否做"的开放问题。
-> - 满足上述①（截图基线落地）与②（Owner 对未决范围给出结论或明确阻塞）后，R0 方可通过并进入 R1 最小批次拆分。
+> **R0 通过条件（2026-11-04 二次整改后修订 · 当前状态：未通过 / 阻塞）**：
+> - **本轮已完成（文档与证据层面，不等于验收通过）**：① §3.1 逐控件交互清单重做（16 个分组、228 条独立控件/动作、13 字段，修正合并行与 `#loginForm` 误引，新增 R0-E-38 / R0-E-39）；② §5.3 API 权限 / DTO / 测试矩阵重做（逐路由源码实读：权限来自 service guard 函数、DTO 来自 handler / struct、错误码追溯 `mapSvcErr` 等、测试证据列具体测试函数或明确「未覆盖」）；③ 43 张真实浏览器截图与索引落盘。
+> - **仍未完成（阻塞项，不得挪至 R1、不得降低门槛）**：① §7 截图基线——当前仅首屏 normal/empty/error，成功/失败交互、加载、权限、离线、同步/冲突与原型侧对照截图均缺；按总方案 §5，截图基线未完成 R0 不得通过。② 逐控件交互的**运行时验收**（校验红字、pending、三态色、空态、骨架屏视觉、成功/失败反馈、返回路径）尚无逐项截图或测试输出为证。③ `go test ./...` 已实测全绿（10 包 ok / 2 包无测试 / 0 FAIL / EXIT_CODE=0，见 §7.6），但**全量绿不等于逐路由测试覆盖证据**；§5.3 逐接口列具体测试函数并标注「未覆盖」的接口仍需 Owner/CI 补齐逐用例断言与 `-race` 结果。
+> - **Owner 裁决未关闭**：D-1（两套原型最终基准）、D-3（导航结构）、D-5（投资资产是否独立页）、D-6（仅交易总表独立入口）、D-8（服务器/备份展示与权限边界）待结论；D-2 的 PWA 本地 OCR 待裁决；D-4 期初余额技术实现模型待确认。
+> - **裁决前既定口径（不得重开）**：D-2 的 Web OCR 已由 PRD §5.2 决定为不做；D-4 期初余额需求已确定；D-7 会话管理需求已确定仅排期待定；多账本与回收站按既定需求保留。
+> - **结论**：**R0 未通过 / 阻塞**。满足上述截图基线落地、逐控件运行时验收证据、测试执行输出与 Owner 对未决范围给出结论后，R0 方可通过并进入 R1 最小批次拆分。**本次整改不代表 R1–R7 已获授权。**
 
 ---
 
@@ -381,14 +905,31 @@
 | 交易更新语义 | `docs/FastLedger-交易更新语义设计.md`（[1.44] 依据） |
 | 已定决策 | `workbuddy/第三方审阅者导读.md` §5 |
 | 阶段编排 | `docs/FastLedger-原型还原与PWA分阶段实施总方案.md` §4–§5 |
+| 真实截图基线与索引 | `docs/r0-screenshots/`（43 张 PNG）、`docs/r0-screenshots/README.md` |
+| §5.3 权限 / DTO / 错误码源码取证 | `server/internal/api/router.go` L109–L235、`common.go` L17–L136、`auth_handler.go` L103–L122、`middleware.go` L34–L40、`service/guard.go`、`service/visibility.go`、各 `*_handler.go` / `service/*.go` |
+| 逐路由测试函数索引 | `server/**/*_test.go`（§5.3 逐行列出 file:line 与断言类型） |
+| R0 二次整改复核 | `docs/FastLedger-R0-独立补漏与复核记录.md` §9、`CHANGELOG.md` [1.63] |
 
 ---
 
-*本文件为 R0 盘点交付，不含代码改动。待 Owner 对 §8 裁决清单给出结论后，再由 Owner 指定 R1 首个小批次。*
+*本文件为 R0 盘点交付，不含代码改动。**R0 当前未通过 / 阻塞**；待 Owner 对 §8 裁决清单给出结论、并按 §7 补齐截图基线与逐控件运行时验收证据后，再由 Owner 指定 R1 首个小批次。*
 
 
-## 10. 独立复核补漏（2026-11-04）
+## 10. 独立复核补漏与二次整改（2026-11-04）
+
+### 10.1 独立复核补漏（[1.61]）
 
 详细证据、根因、验收及页面交互补充见 [`docs/FastLedger-R0-独立补漏与复核记录.md`](FastLedger-R0-独立补漏与复核记录.md)。补充 R0-E-20 至 R0-E-37；其中 E-25/E-27/E-29/E-30/E-31 分别并入 E-15/E-19/E-05/E-06/E-14，不单独计数。新增独立差异覆盖首页财务口径、账单字段/筛选、交易详情/表单、商户字段端到端缺失、删除文案、邀请码撤销、净资产页面归属、账本重命名、README 状态漂移、日小计分页边界、加载错误态和 API 矩阵粒度。
 
-**复核结论（2026-11-04 更新）**：原独立复核为静态审查，指出逐控件交互清单、完整 API 权限/DTO/测试矩阵、截图基线三项未完成。本轮已在 R0 主文档内补全前两项——§3.1 逐控件交互清单（绑定 R0-E 缺口编号）、§5.3 后端 API 权限/DTO/测试矩阵（逐路由列鉴权/角色权限/请求响应/错误码/服务函数/测试证据/Web 调用）。**唯一剩余缺口为 §7 截图基线**：本工作环境无浏览器/截图工具，无法自动截取真实运行页面；该项连同"逐控件验证截图"须由 Owner 在浏览器或 CI 中按 §7.2 协议采集，属 R0→R1 过渡执行项。Owner 对 D-1/D-3/D-5/D-6(入口)/D-8 范围结论、D-2 PWA OCR 裁决、D-4 期初余额技术实现方案给出后，R0 即通过。
+### 10.2 二次整改：针对 [1.62] 的独立复核（[1.63]）
+
+[1.62] 曾把 §3.1 / §5.3 初稿声明为「R0 完成」并称「唯一剩余缺口为截图」，该声明**不成立**：§3.1 把多个独立控件合并成一行、§5.3 的角色权限由路由语义推定且 DTO 多处与源码不符、测试列用「CI 绿 / 待测」代替逐用例证据、且当时无任何真实截图。本轮按独立复核意见重做：
+
+- **§3.1**：改为逐独立控件/动作 16 个分组 228 条、13 字段；更正不存在的 `#loginForm` 引用；新增 R0-E-38（登录页无「加入账本」/邀请码兑换，邀请链路断口）、R0-E-39（密码明文切换缺失）、I-BOOKS-11（账本详情/设置页入口缺失）。
+- **§5.3**：权限改由真实 service guard 函数实读（不再按路由名推定）；DTO 改由 handler / struct 实读（纠正 login / register / join、sessions、改密、撤邀请、net-worth、回收站、删除恢复、WS 路径等字段与包装形式）；错误码追溯 `mapSvcErr` / `mapLoginErr` / `mapAuthErr` / OCR 独立映射；测试证据改为具体测试函数 + `file:line`，无独立测试的接口明确写「未覆盖」。
+- **§7**：补交 43 张真实 Edge 截图与索引，并如实登记空缺与阻塞；**未降低截图门槛、未挪至 R1**。
+- **状态声明**：§8 通过条件与 `CHANGELOG.md` [1.62] 标题/正文改为「R0 文档补充：交互清单与 API 矩阵初稿（R0 尚未通过）」；新增 [1.63] 记录本次整改。
+- **E-1~E-5 与 D-1~D-8 复核**：E-1（首页第三卡账户余额求和冒充结余/净资产）、E-2（paymentChannel UI 缺失 + merchant 端到端创建链路缺失）、E-3（账本级 `books.members_can_view_others` 权威字段，成员级只读徽标不能代替）、E-4（期初余额是 PRD 已明确需求，待裁决的是不污染收支统计的技术实现模型）、E-5（R0-E-20~37 去重）均保持原判定，未误删、未降级；D-1~D-8 状态见 §8，未擅自关闭。
+- **范围**：仅修订审计/交付文档、`CHANGELOG.md` 与 README 状态快照；**未改业务代码、PRD、落地方案、WBS、数据库或 API**；未启动 R1–R7。
+- **测试执行**：`go test ./...` 实测 10 包 ok / 2 包无测试 / 0 FAIL / EXIT_CODE=0（见 §7.6）；全量绿**不等于**逐路由覆盖证据，逐用例断言与 `-race` 仍待 Owner/CI。
+- **当前状态**：**R0 未通过 / 阻塞**——截图基线未完成、逐控件运行时验收缺证据、逐路由逐用例断言与 `-race` 结果未产出、Owner 裁决未关闭。

@@ -318,5 +318,77 @@
 4. 再由 Owner 裁决 D-1~D-8 的修订版清单。
 5. R0 通过后才拆分 R1 最小实施任务。
 
+## 9. 二次整改复核记录（2026-11-04，针对 [1.62] / [1.63]）
+
+> 基准：执行时 `origin/main` 最新 HEAD = `bff6a2b351bf5a039cdf7c762ec2693fb330cd00`（`git fetch` 复核 0 ahead / 0 behind）。本节为**二次整改后的复核结论**；§1–§8 保留 [1.61] 当时时点的静态复核原貌，不回改历史结论。
+
+### 9.1 本轮新增差异（独立于 R0-E-20~37 编号）
+
+| 编号 | 差异 | 证据 | 目标 | 状态 |
+|---|---|---|---|---|
+| **R0-E-38** | 登录/注册页**没有「加入账本」入口，也没有邀请码兑换控件**；但 `renderMembers`（app.js L1667）文案明确引导「对方在登录页选择「加入账本」并输入邀请码即可」——邀请链路在 Web 端实际断开。后端 `POST /api/v1/books/:id/members/join` 是**公开**路由（router.go L128）且不受 `EBK_ENABLE_REGISTER` 限制，前端无任何 `/members/join` 调用。 | C:app.js L161–231（renderLogin 仅 login/register 两模式）、L1667；C:router.go L128 | 补登录页第三入口 + 邀请码输入/提交/失效反馈，形成「邀请→兑换→入账本」闭环。与 R0-E-26（邀请**撤销** UI 缺失）分别验收：一个「兑不了」、一个「撤不了」 | 待 R1 实施（本轮只登记证据） |
+| **R0-E-39** | 登录/注册密码框恒为 `type="password"`，**无密码明文显隐切换**；`app.js` 全文 `showPassword` / 明文 / `type="text"` 切回均无命中。 | C:app.js L179–181、L184–185 | 按设计规范补显隐切换控件 | 待 R1 实施 |
+| **I-BOOKS-11** | 无「账本详情 / 账本设置页」独立入口承载账本重命名与账本级可见性开关；`route()`（app.js L2200–2239）无对应 hash 分支。 | C:app.js L2200–2239；R0-E-32、R0-E-19 | 与 D-1 / D-3 的 IA 裁决一并处理 | 待 R1 / 待裁决 |
+
+### 9.2 截图基线实测结果（任务 C）
+
+- **已交付**：43 张真实 PNG，`docs/r0-screenshots/`；索引、环境、逐张清单、阻塞清单见 `docs/r0-screenshots/README.md`。
+- **采集环境**：Microsoft Edge `156.0.4314.58` headless + CDP（Node 内置 WebSocket，无第三方依赖），`Page.addScriptToEvaluateOnNewDocument` 注入 `fl_token`/`fl_whoami`，`Emulation.setDeviceMetricsOverride` 设 360×800 / 390×844 / 430×932 / 1280×800，`Page.captureScreenshot` 出图；服务为本地 `localhost:8080` 的 `fastledger.exe`（`go:embed dist` 同源托管前端）；账号 `admin`（owner），账本 id=1，本地 schema v8，`transactions total=0`。
+- **覆盖**：16 个页面/弹层 × 4 视口的 normal / empty / error **首屏**。
+- **未覆盖（阻塞）**：成功/失败交互路径、加载/骨架屏/pending、权限不足（owner/admin/member）、离线/同步/冲突、**原型侧对照截图**、逐控件可重复操作脚本。
+- **R0-E-35 复验项**：本轮 CDP 拦截 `/api/v1/*` 后，`home/390x844/error.png` 实测为「页面主体空白 + 红色 `Failed to fetch` toast」，未观察到明显骨架屏残留，与原描述**不完全一致**；需 Owner/CI 用慢速网络复验，**不得据此判定已修复或已证伪**。
+- **证据边界**：服务端 `server/fastledger.exe` 构建于 `2026-11-04 01:13:59 +0800`，早于 `bff6a2b` 提交 `2026-11-04 13:45:36 +0800`（该提交仅文档改动）；截图采集时已实测 HTTP 提供的 `/app.js` 与仓库 HEAD 完全一致、`/style.css` 仅 CRLF 差异，故截图中前端资源与基准一致；后端契约全部来自源码静态实读，不以运行时二进制为依据。当前本地服务已停止，**运行时未复验**。
+- **结论**：**截图基线未完成 / 阻塞，R0 不因此通过**。不得用原型截图、HTML/SVG、伪造截图替代，不得挪至 R1。
+
+### 9.3 §5.3 权限 / DTO 纠错摘要（逐条见主报告「附：旧表纠错对照」）
+
+| 类别 | [1.62] 旧表 | 源码正确值 | 关键证据 |
+|---|---|---|---|
+| 权限来源 | 「基于路由语义与已知 PRD/服务注释推定」 | 逐 service 函数实读：写共享配置用 `requireManagerTx`(guard.go:59-76) → owner/admin；读用 `requireMember`(guard.go:51-55) → 全体成员 | `service/guard.go`、`account.go`、`category.go`、`budget.go`、`invest.go` |
+| 账本删除 | owner/admin | **仅 owner**（`role != RoleOwner` → ErrForbidden）；`Update` / `SetVisibility` 才是 owner/admin | `service/book.go:367-369`、`:192-194`、`:307-309` |
+| 交易改/删/恢复 | 「成员」 | **owner/admin 可改删他人，member 仅本人**（`CanEditOthersTx`） | `service/member.go:135-137`、`tx.go:805-813,848-852`、`tx_update.go:80-87` |
+| 登录 / 注册 / join 响应 | `accessToken,user` | 仅 **login** 返回 `{accessToken}`；**register / join / me / updateMe** 返回 `currentUserDTO`=`{id,username,email,isInstanceAdmin}` | `auth_handler.go:69,88`、`book_handler.go:202`、`middleware.go:197-204` |
+| 会话列表 | 裸数组 `[{jti,device,createdAt,current}]` | `{sessions:[{id,jti,createdAt,expiresAt,revokedAt,lastSeenAt,userAgent,current}]}`；`revokeOthers`=`{revoked,jtiList}`；`revokeOne`=`{revoked,jti,revokedAt,current}` | `session_handler.go:85,110-115,133` |
+| 改密 / 撤邀请 | `{}` | 改密 `{revokedSessions,message}`；撤邀请 `{inviteId,revoked}` | `auth_handler.go:232`、`book_handler.go:176` |
+| 净资产 / 持仓 | `holdingMarketValue` | 持仓列表项 `marketValue`；净资产汇总 `holdingsValue`；汇总字段 `{assets,liabilities,holdingsValue,totalAssets,totalLiabilities,netWorth}` | `invest.go:417,535-542`；`invest_handler_test.go:178,201` |
+| 回收站 / 删除恢复 | `[tx]` / `{}` | 回收站分页对象 `{items,total,page,count}`；删除/恢复 `{version}` | `tx_handler.go:222,173,196` |
+| WS 路径 | `/ws` | **`/api/v1/ws`**（挂在 `v1` 组，独立 `wsAuth`，不在 JWTAuth 组） | `router.go:122,133`、`middleware.go:112` |
+| 可见性 / 账本更新响应 | `book` | `PUT /books/:id`→`{id}`；`PUT /visibility`→`{id,membersCanViewOthers,changed}`；`DELETE /books/:id`→`{id}` | `book_handler.go:97,112`、`visibility_handler.go:47` |
+| 导出 | `ok()` 信封 | **直接 `c.Data` 文件流** + `Content-Disposition` / `Content-Type` / `X-Export-Count` / 可选 `X-Export-Truncated`；错误仍走 `fail()` 信封 | `report_handler.go:113-138` |
+| 错误码 | 「✗待测」 | `mapSvcErr`(common.go:39-136) 全表 + `mapLoginErr`(auth_handler.go:103-122，凭证 401 / 限流 429 / 503 / 500 四类) + `mapAuthErr`(middleware.go:34-40) + OCR 独立映射；`fail()` 只有 `{code,msg}`，**无 data** | 见各处 |
+| 测试证据 | 「CI 绿 ✗逐用例」 | 逐接口列具体测试函数 + `file:line` + 断言类型；未找到独立命名测试的接口**明确写「未覆盖」**（如 `PUT /users/me`、`POST /users/me/password` 的 HTTP handler 层、单资源 GET、分类树分支等） | 主报告 §5.3（§5.3.1 主表 + §5.3.2 错误映射 + §5.3.4 矩阵结论） |
+
+### 9.4 关键差异 E-1~E-5 复核（未误删、未降级）
+
+| 编号 | 复核结论 | 依据 |
+|---|---|---|
+| E-1 | **保持**：首页第三卡把账户余额求和标为「结余/净资产」，财务口径错误；净资产正确公式在 `NetWorthSummary`（Σ资产账户 + 持仓市值 − Σ负债账户）。 | `app.js` `renderHome`；`service/invest.go:535-542` |
+| E-2 | **保持**：新建交易表单无 `paymentChannel` / `merchant` 输入；`service.CreateRequest` 根本**无 merchant 字段**，属端到端创建能力缺失，不是纯 UI 缺口。 | `index.html` `#formDlg`；`service/tx.go:99-111` |
+| E-3 | **保持**：权威字段是账本级 `books.members_can_view_others`；成员级 `canViewOthers` 只读徽标为 MVP 预留字段，不参与判定（`canViewDetailTx` 注释明确），不能代替账本级开关。 | `service/visibility.go:8,51-81,87-92`；`service/member.go:140-146` |
+| E-4 | **保持**：期初余额是 PRD §4.5 **已明确需求**，不是「是否做」的裁决项；待裁决的是不污染收支统计的技术实现模型（D-4）。`AccountService.Create` 固定 `Balance:0`，注释建议用普通收入交易初始化会污染收入统计。 | PRD §4.5；`service/account.go` Create；主报告 D-4 |
+| E-5 | **保持**：R0-E-20~37 去重口径不变（E-25→E-15、E-27→E-19、E-29→E-05、E-30→E-06、E-31→E-14），本轮新增 R0-E-38/39 与 I-BOOKS-11 独立计数。 | 本报告 §4 |
+
+### 9.5 Owner 裁决状态核对（D-1~D-8）
+
+| 编号 | 状态 | 本轮核对 |
+|---|---|---|
+| D-1 | **待确认** | 两套原型最终基准未关闭 |
+| D-2 | Web 已定不做；仅 PWA 本地 OCR 待确认 | 不得重开「Web 是否做 OCR」 |
+| D-3 | **待确认** | 导航结构（桌面 5 项 / 移动 4 Tab + 「我的」中枢）未关闭 |
+| D-4 | 需求已确定；技术实现模型**待确认** | 不得把「是否支持期初余额」重新列成开放问题 |
+| D-5 | **待确认** | 投资资产是否独立成页 |
+| D-6 | **待确认（仅交易总表独立入口）** | 多账本与回收站按既定需求保留，不得列为可删扩展 |
+| D-7 | 需求已确定；排期待定 | 不得裁决为「不需要」而不修订 PRD |
+| D-8 | **待确认** | 服务器/备份状态展示范围、权限与受控操作边界 |
+
+**核对结论**：D-1~D-8 **均未关闭**；[1.62] 曾写「锁定 Owner 裁决口径」仅锁定了 D-2/D-4/D-7 的「不再作为是否做开放问题」这一层，不等于裁决关闭，主报告 §8 已按此修正。
+
+### 9.6 测试与状态声明
+
+- **已运行 `go test ./...`（真实输出，非逐路由覆盖证据）**：10 个包 `ok`、2 个包 `[no test files]`、`FAIL` 行数 0、`EXIT_CODE=0`（Go 1.22.5 + w64devkit CGO，日志 `.tmp_shot/gotest_full.log` 不入库）。**全量绿不等于逐路由测试覆盖证据**；§5.3 测试列为逐接口函数索引 + 「未覆盖」标注，`-race` 全量与 CI 侧结果仍由 Owner/CI 提供（本轮未执行 `-race`）。
+- **未修改业务代码**：未改 Go/JS/CSS/HTML、PRD、落地方案、WBS、数据库或 API；未启动 R1–R7。
+- **状态声明纠偏**：`CHANGELOG.md` [1.62] 标题改为「R0 文档补充：交互清单与 API 矩阵初稿（R0 尚未通过）」；主报告 §8 / §10 删除「唯一剩余缺口为截图」。
+- **R0 当前状态**：**未通过 / 阻塞**——截图基线未完成、逐控件运行时验收缺证据、逐路由逐用例断言与 `-race` 结果未产出、Owner 裁决未关闭。
+
 ---
-*本文件是静态独立复核记录，不代表任何代码缺陷已修复或任何测试已通过。*
+*本文件是静态独立复核记录，不代表任何代码缺陷已修复或任何测试已通过；§9 为二次整改后的复核结论，§1–§8 保留 [1.61] 时点原貌。*

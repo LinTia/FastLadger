@@ -4,15 +4,17 @@
 
 > 数据在自己手里 · 识别优先在端侧完成 · 多端协同 · 家庭共享 · 资产全景
 
-## 当前状态（2026-10-31）
+## 当前状态（2026-10-31 历史快照，部分已过时）
+
+> 下表是 2026-10-31 的历史快照。schema 版本、测试基线、阶段进度以 `docs/` 最新交付文档、`CHANGELOG.md` 与服务器实测为准；**R0（基准冻结与差异盘点）当前未通过 / 阻塞**，见 [R0 报告](docs/FastLedger-R0-基准冻结与差异盘点.md)。本表不作为 R0 验收依据。
 
 | 项 | 状态 |
 |---|---|
 | 后端实现 | **阶段 0–4 已交付**：认证/账本多成员、记账核心、离线同步 + WebSocket、删除/恢复 + 回收站 + 审计 |
-| 阶段 5 | **进行中**：Flutter 客户端与 OCR 尚未开始；多端会话撤销（WBS 5.10）开发中 |
-| 数据库 schema | **v6**（6 个迁移脚本，受 CI 指纹守卫保护：已发布迁移禁止修改） |
-| 测试基线 | 9 个包全绿、645 PASS / 0 FAIL / 5 SKIP（Windows 权限位用例）、`DATA RACE=0`（CI 侧 `-race`） |
-| API 路由 | 交易路由白/黑名单、单一创建入口、可见性条件已由架构守卫用例固化 |
+| 阶段 5 | 多端会话撤销（WBS 5.10）**已交付生产**；Flutter / Web 原型还原与 PWA 按 R0–R7 分阶段推进，**R0 未通过，R1–R7 未授权实施** |
+| 数据库 schema | **仓库当前 v8**（`server/internal/migrate/migrations/` 0001–0008，受 CI 指纹守卫保护：已发布迁移禁止修改）；生产实例部署状态以部署交接文档为准 |
+| 测试基线 | 历史快照：9 个包全绿、645 PASS / 0 FAIL / 5 SKIP、`DATA RACE=0`（CI 侧 `-race`）；**本轮 R0 二次整改实测 `go test ./...`：10 包 ok / 2 包无测试 / 0 FAIL / EXIT_CODE=0（详见 R0 报告 §7.6）；`go test -race` 与 CI 侧结果仍以 CI 为准** |
+| API 路由 | 交易路由白/黑名单、单一创建入口、可见性条件已由架构守卫用例固化；逐路由权限 / DTO / 错误码 / 测试证据见 [R0 报告 §5.3](docs/FastLedger-R0-基准冻结与差异盘点.md) |
 
 > **部署交接入口（给运维/云厂商专家）**：
 > [`docs/FastLedger-部署交接-腾讯云轻量应用服务器.md`](docs/FastLedger-部署交接-腾讯云轻量应用服务器.md)
@@ -38,8 +40,9 @@
 | [`docs/FastLedger-落地方案.md`](docs/FastLedger-落地方案.md) | 软件开发 8 环节落地方案 | 整体技术方案、数据模型、API、版本规划 |
 | [`docs/FastLedger-手机PWA实施指导书.md`](docs/FastLedger-手机PWA实施指导书.md) | 手机 PWA 实施指导书 | 完整移动端、完整离线、IndexedDB、同步、离线分析与本地备份恢复；指导后续 PRD / 落地方案 / WBS 修订 |
 | [`docs/FastLedger-原型还原与PWA分阶段实施总方案.md`](docs/FastLedger-原型还原与PWA分阶段实施总方案.md) | **原型还原与 PWA 分阶段实施总方案** | R0–R7 总路线、原型差异盘点、AI 分批实施纪律、移动端/PWA/离线/备份验收门禁 |
-| [`docs/FastLedger-R0-基准冻结与差异盘点.md`](docs/FastLedger-R0-基准冻结与差异盘点.md) | **R0 基准冻结与差异盘点（交付）** | 13 页/交互矩阵、两版原型差异、当前实现与后端 API 映射、差异根因、截图与覆盖率方法、Owner 裁决清单 |
-| [`docs/FastLedger-R0-独立补漏与复核记录.md`](docs/FastLedger-R0-独立补漏与复核记录.md) | **R0 独立补漏与复核记录** | 修正误判、补充 R0-E-20~37、复核 R0 退出条件；静态复核，R0 尚未通过 |
+| [`docs/FastLedger-R0-基准冻结与差异盘点.md`](docs/FastLedger-R0-基准冻结与差异盘点.md) | **R0 基准冻结与差异盘点（二次整改后）** | 13 页/逐控件交互矩阵（228 条）、两版原型差异、当前实现与后端 API 权限/DTO/错误码/测试映射、差异根因、截图基线执行结果与阻塞清单、Owner 裁决清单；**R0 未通过 / 阻塞** |
+| [`docs/FastLedger-R0-独立补漏与复核记录.md`](docs/FastLedger-R0-独立补漏与复核记录.md) | **R0 独立补漏与复核记录** | 修正误判、补充 R0-E-20~39、复核 R0 退出条件与 D-1~D-8；静态复核 + 二次整改复核，R0 尚未通过 |
+| [`docs/r0-screenshots/`](docs/r0-screenshots/) | **R0 真实截图基线（43 张 PNG）+ 索引 / 阻塞清单** | Edge headless 采集的 normal / empty / error 首屏；见目录内 `README.md`。**截图基线未完成，R0 未通过** |
 | [`docs/FastLedger-新手开发完整指南.md`](docs/FastLedger-新手开发完整指南.md) | 新手开发完整指南（含可照敲代码骨架） | 应届生照着做即可开发 |
 | [`docs/FastLedger-枚举字典.md`](docs/FastLedger-枚举字典.md) | 统一枚举字典（唯一权威来源） | 各端枚举值对齐 |
 | [`docs/ezbookkeeping-代码导读.md`](docs/ezbookkeeping-代码导读.md) | 开源参考项目 ezbookkeeping 代码导读 | 可借鉴的设计与实现 |
@@ -84,8 +87,8 @@ python3 -m http.server 8765
   - 数据库策略：WAL + `synchronous=FULL` + `foreign_keys=on` + `MaxOpenConns=1`（单写者）。
   - 鉴权：JWT（HS256，24h，bcrypt 存口令）；登录失败限流 + 失败审计。
   - 实时：WebSocket（REST 与 WS 共用端口）。
-- **客户端（阶段 5，未开始）**：Flutter（Windows / Android / iOS）。
-- **Web 端（阶段 5，未开始）**：计划由后端 `go:embed` 托管；**当前后端未嵌入任何前端资源**。
+- **客户端**：Flutter（Windows / Android / iOS），按 R0–R7 阶段推进；Windows 桌面 debug 构建已打通（见 `CHANGELOG.md` [1.57]）。
+- **Web 端（已由后端单二进制托管）**：`server/web/embed.go` 用 `//go:embed dist` 把 `server/web/dist/`（`index.html` / `app.js` / `style.css`，手写原生 HTML/JS/CSS、无构建工具链）编入 Go 二进制，与 API / WebSocket **同端口同源**提供；启动后端即同时提供前端，**不存在可独立启动的生产前端进程**。原型还原与 PWA 演进以 [R0 报告](docs/FastLedger-R0-基准冻结与差异盘点.md) 与 [总方案](docs/FastLedger-原型还原与PWA分阶段实施总方案.md) 为准（R0 未通过，PWA 未实施）。
 - **部署（当前实际形态）**：**裸机/云主机 + systemd + Caddy 反代**（应用自身只监听 HTTP `:8080`，无内置 TLS）。
   > 设计文档中的 Docker / docker-compose 方案**尚未落地**（仓库无 Dockerfile），部署请以部署交接文档为准。
 
