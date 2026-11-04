@@ -2,6 +2,18 @@
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.71] - 2026-11-05
+
+### R0 裁决定稿：D-4 / D-8 技术方案收敛（文档裁决，非代码；功能未实现）
+
+- 按 Owner 定稿要求收敛，不再提供平行方案。D-4 / D-8 由「已裁决」细化为 **技术方案已确定、功能未实现、无运行时验收**。
+- **D-4（期初余额）定稿**：`opening_balance`(分) + `opening_balance_at`(BIGINT NULL, Unix 秒) + 当前余额物化值 `balance` 模型。新账户必须设 `opening_balance_at`（即使 0）；创建事务内原子 `balance=opening`；历史交易（`txTime < opening_balance_at`）仅记录/参与报表不改 `balance`，`≥` 正常影响，创建/编辑/删除/恢复统一基线判断；转账不得早于两账户较晚基线；余额变更统一经 `createChangeBalance`，创建 INSERT 为唯一受控例外，禁止散落余额 SQL；旧账户 `opening_balance=0` / `opening_balance_at=NULL`、不改写 `balance`、禁止回填；迁移 0009 须登记 golden / version assertions。
+- **D-4 同步修正**：纠正「Pull/Push 自动支持」错误表述——Pull 可随 `Account` 模型下发（须 DTO/序列化测试确认）；**当前 Push 只支持交易、不支持账户创建**；单独定义离线账户创建同步命令（clientUuid 幂等/重放/冲突/权限/恢复），不得只做在线。
+- **D-8（服务器/备份）定稿**：服务器信息首期仅 服务可用性 / 服务版本 / 结构版本，不展示 instanceId / restoreEpoch / dataSize / 路径 / 日志；备份状态仅 `is_instance_admin`、服务端强制校验且不泄露；须来自真实 manifest（Online Backup / `.backup` + integrity_check + SHA-256 / 大小 / schemaVersion + 临时文件原子发布）；失败只记 failed、不动 `last_success_at`；数量仅数成功；integrity_check 与恢复演练分开；首期不开放 Web 恢复 / 删备 / 改目录 / 整库下载 / 手动触发。
+- **同步更新**：`docs/FastLedger-R0-D4-期初余额技术模型裁决草案.md`、`docs/FastLedger-R0-D8-服务器备份区块裁决草案.md` 全文改写为定稿版；R0 主报告 §8 D-4/D-8 行与页脚同步（状态 = 已裁决（技术方案已确定；功能未实现，无运行时验收））。
+- **范围**：仅文档修订；**未改业务代码、数据库、API、PRD 核心需求或 WBS**；未启动 R1–R7，PWA 未实施；**无运行时验收**。
+- **状态**：**R0 未通过 / BLOCK，不授权 R1**（D-4/D-8 技术方案确定不改变阻塞）。
+
 ## [1.70] - 2026-11-04
 
 ### R0 裁决：D-4 期初余额技术模型裁决草案（文档裁决，非代码）
