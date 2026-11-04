@@ -2,6 +2,33 @@
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.68] - 2026-11-04
+
+### R0 第三次最小整改：RV-05 凭证安全 / RV-02 SHA 基准 / RV-06 独立复现 / RV-01 状态口径
+
+> 依据 `docs/FastLedger-R0-第三次最小整改任务单-RV-02-RV-05-RV-06.md`；开工前 `git fetch` 得到的执行基准 `273cf0869917565b60f7da1dd2b562764de8d405`（`273cf08`）。本条记录**实际执行的检查、脚本与测试**，逐项回执见 `docs/FastLedger-R0-第三次整改交付回执.md`。
+
+- **RV-05（P0，安全优先，实际处置而非文字声明）**：
+  - 新增全仓扫描器 `tools/r0/scan-credentials.js`，报告 `docs/r0-screenshots/security-scan.md` 只含路径 / 类型 / 数量 / 脱敏上下文。清理前 `--strict` 命中 **2 处可复制固定口令**（`docs/r0-screenshots/runtime/README.md`、`docs/FastLedger-新手开发完整指南.md` 的 API 示例），`EXIT_CODE=2`；清理后 `--strict` 命中 **0**、`EXIT_CODE=0`，报告生成幂等（两次统计一致）。
+  - 两处固定口令改为环境变量 / 占位符；[1.65] 历史命令加「不得复制复用」安全注记。当前树 `Authorization` / `Bearer` / JWT / `Cookie` / `Set-Cookie` / 常见口令字段 / `*.env` / token-secret 文件名 / 个人绝对路径全量扫描，格式与判定口径见核验记录 §2。
+  - `tools/r0/redaction.js` 统一脱敏：请求头、响应头、`headersText`、Cookie、`Set-Cookie`、`Authorization`、`Proxy-Authorization`、URL 查询参数、JSON 请求体 / `postData`、JWT 三段式与任意 `Bearer` 令牌；只替换值，保留事件结构。`tools/r0/test-redaction.js` 用**合成假凭证**做自动化断言（6 用例全通过，`EXIT_CODE=0`）；`rv01-isolation.js` 另有「原始令牌不得出现在序列化输出」自检（退出码 4）。
+  - 受控失效复验（[1.68] 新增）：一次性启动本地隔离实例（`/healthz` `up`、schema v8、一次性随机密钥，验证后立即终止），从仍可读取的远端旧对象取回泄露令牌**仅在内存**使用，请求 `GET /api/v1/users/me` → **HTTP 401「登录已失效，请重新登录」**。未记录、未打印、未落盘令牌值；未用真实令牌做回归测试样例。
+  - [1.66] 状态已按「当前树脱敏 / 凭证失效 / 旧 SHA 仍可读 / 远端清理待 Owner 决策」四项拆分。**本轮未** force-push、未重写公开历史、未删除 refs、未改仓库可见性、未联系 GitHub Support。
+- **RV-02（P2）**：主报告 §0.2 拆为五类基准——本轮整改执行基准 `273cf08`、业务代码证据基准 `bff6a2b351bf5a039cdf7c762ec2693fb330cd00`、运行时采集时历史文档 HEAD `557e4d2`、截图 / 运行时对应后端二进制代码 SHA「**未独立验证**」、历史快照 `1cd56ab`；§0 / §5.3 / §5.3.0 / §7.5 / §10.3 逐处按语义校正，未机械替换历史条目；命中清单见核验记录 §6。审计文档变更**不代表**业务代码基准变化。
+- **RV-06（P2）**：`tools/r0/rv01-isolation.js` 入库（Node ≥22 内置 WebSocket，无第三方依赖），路径由脚本位置 / 仓库根 / 环境变量推导，凭证只从 `R0_TOKEN` 读取且缺失即安全失败（退出码 2），默认输出在仓库外临时目录，写正式证据目录须 `R0_WRITE_EVIDENCE=1` + `R0_WRITE_EVIDENCE_CONFIRM=YES` 双重确认（否则退出码 3）。`tools/r0/README.md` 给出依赖、环境变量、服务与测试账号准备、执行步骤、退出码表、清理方式与**平台限制（仅 Windows 11 + Git Bash + Node v22.22.2 + Edge 156.0.4314.58 实测，不声称跨平台）**。干净 clone 复现、输出清单与 SHA256 见 `docs/FastLedger-R0-凭证安全核验记录.md` §5 与交付回执 §3。
+- **RV-01**：R0-E-35 在主报告、runtime README、README 导航、CHANGELOG 统一为「**' + STATUS + '**」；不再使用该状态旧称，也未写成已修复 / 已关闭；单次本机实测的证据边界保留。
+- **RV-05 / RV-06 finding 归档**：新增 `docs/FastLedger-R0-独立复核补充-RV-05至06.md`，按 `workbuddy/多AI对齐规范.md` §2 的 13 字段记录，未改写 RV-01～04 的历史结论。
+- **真实测试证据（命令 / 输出 / 退出码）**：
+  - `node --test tools/r0/test-redaction.js` → 6 tests / 6 pass / 0 fail / `EXIT_CODE=0`。
+  - `node tools/r0/scan-credentials.js --strict --out docs/r0-screenshots/security-scan.md` → 449 文本文件、`真实凭证候选命中：0`、合成/占位 48、人工复核 14、测试夹具 27、可移植性 18、`EXIT_CODE=0`。
+  - 清理前同命令 → 真实凭证候选 2、`EXIT_CODE=2`（基线留档 `.tmp_shot/scan_before.json`，不入库）。
+  - 受控失效复验 → `GET /api/v1/users/me` HTTP 401；远端 commit API / raw 均 HTTP 200。
+  - 干净 clone：`node --test` 与 `--strict` 通过；采集脚本在缺少 `R0_TOKEN` 时以 `EXIT_CODE=2` 明确安全失败（详见核验记录 §5）。
+  - `git diff --check` 干净；`go test ./...` 本轮未执行（无业务代码改动；上一轮 [1.63]/[1.65] 的 10 包 ok / 2 包无测试 / 0 FAIL 仍为历史记录，不作为本轮证据）。
+- **未完成 / Owner 待决策**：远端历史对象清理（需 Owner 明确批准，附影响面与回滚方案）、仓库是否改回 Private、是否联系 GitHub Support、Owner/CI 对 R0-E-35 的独立复跑与慢速网络 / 有数据态 / 权限 / 离线 / 多角色场景、截图基线整体补齐、逐控件运行时验收、逐路由逐用例断言与 `-race`、D-1~D-8 裁决、RV-04 的 Owner 决策记录、历史文档 / 外部审阅产物中遗留的个人绝对路径是否统一清理。
+- **范围**：仅新增 / 修订审计文档、CHANGELOG、README、`tools/r0/` 与脱敏扫描报告；**未改业务代码、PRD、落地方案、WBS、数据库或 API**；未删除或覆盖既有 5 PNG + 3 JSON；未启动 R1–R7，PWA 未实施。
+- **状态**：**R0 未通过 / 阻塞；不授权启动 R1。**
+
 ## [1.67] - 2026-11-04
 
 ### R0 第三次最小整改任务单（审计任务拆解，非整改完成）
@@ -22,8 +49,12 @@
 - **事件**：[1.65] 新增的 `docs/r0-screenshots/runtime/network-log.json` 在 CDP `Network.requestWillBeSent` 等事件的请求头里记录了完整的 `Authorization: Bearer <JWT>`（本地测试会话令牌，29 处重复）。仓库为 Public，该令牌曾随提交 `259bd11` 推送到 `origin/main`，按「已泄露」处置。**本条不记录、不引用令牌值。**
 - **处置 1 · 撤销会话（已完成并验证）**：在本地 `token_sessions` 表中定位该 jti 的活跃会话并置 `revoked_at`；随后用泄露令牌请求 `GET /api/v1/users/me` 实测返回 **401「登录已失效，请重新登录」**。
 - **处置 2 · 轮换密钥（已完成）**：删除工作区持久化的 `.tmp_shot/token.txt` 与 `.tmp_shot/jwt_secret.txt`，停止持有旧密钥的本地服务进程；后续按 `docs/r0-screenshots/runtime/README.md` 配方每次重新生成 `EBK_JWT_SECRET`，旧签名令牌全部失效。该令牌由**本地隔离测试实例**（`server/.localdata/fastledger.db`，schema v8）的一次性随机密钥签发，与生产实例 `/opt/fastledger/env` 的密钥无关，生产不受影响。
-- **处置 3 · 清除历史中的明文（已完成）**：对 `network-log.json` 彻底脱敏——所有 `Authorization` / `Cookie` / `Set-Cookie` 键值及 JWT 字面量替换为 `[REDACTED]`（29 处），保留 145 条记录与全部 Network 事件结构（事件类型、URL、时间戳、状态不变）；重写含明文的提交 `259bd11` 并以 `--force-with-lease` 推送，使 `origin/main` 不再包含明文版本；本地执行 `reflog expire` + `gc --prune=now` 清除悬空对象。同时修复采集脚本：在写入日志前对 CDP 事件 `params` 统一脱敏，避免复现时再次泄露。
-- **残留风险（如实声明）**：`259bd11` 曾被推送到 Public 仓库，GitHub 端仍可能通过 commit SHA 访问到旧的悬空对象，force-push 不能保证远端对象被 GC。**根本措施是令牌已撤销且密钥已轮换**：旧令牌即使被取得也无法通过鉴权。建议 Owner 视情况联系 GitHub Support 请求清除缓存对象，并评估把仓库改回 Private。
+- **处置 3 · 当前 `main` 文件脱敏与本地历史重写（已完成，[1.68] 更正：仅限当前树与本地，不等于远端历史清除）**：对 `network-log.json` 彻底脱敏——所有 `Authorization` / `Cookie` / `Set-Cookie` 键值及 JWT 字面量替换为 `[REDACTED]`（29 处），保留 145 条记录与全部 Network 事件结构（事件类型、URL、时间戳、状态不变）；重写含明文的提交 `259bd11` 并以 `--force-with-lease` 推送，使 `origin/main` 不再包含明文版本；本地执行 `reflog expire` + `gc --prune=now` 清除悬空对象。同时修复采集脚本：在写入日志前对 CDP 事件 `params` 统一脱敏，避免复现时再次泄露。
+- **状态拆分（[1.68] 更正，不再笼统宣称历史明文已清除）**：
+  1. **当前 `main` 文件已脱敏** ✅：`network-log.json` 29 处凭证值替换为 `[REDACTED]`，145 条记录与全部 Network 事件结构保留；[1.68] 全仓 `--strict` 扫描真实凭证候选 **0** 命中。
+  2. **泄露凭证已失效** ✅：会话已撤销、本地一次性测试密钥已轮换；[1.68] 受控复验用该令牌请求 `GET /api/v1/users/me` → **401「登录已失效，请重新登录」**（仅内存使用，不记录值）。该令牌与生产实例密钥无关，生产是否受影响仅按可验证证据表述。
+  3. **旧 SHA 仍可公开读取** ⚠️：[1.68] 实测 `api.github.com/.../commits/259bd11` → HTTP 200；`raw.githubusercontent.com/.../259bd11/.../network-log.json` → HTTP 200，旧日志仍含 **29 处**凭证字面量。远端 refs 仅有 `main` 与 `fix/windows-first-build`，无活动分支指向该对象，但**悬空对象未被远端 GC**；本地 `reflog expire` / `gc` 不等于远端清除。
+  4. **远端历史对象清理待 Owner 决策** ⛔：未获 Owner 明确批准，不再次 force-push、不重写公开历史、不删除 refs、不切换仓库可见性、不代 Owner 联系 GitHub Support。影响面、将被改写的 refs / 提交范围、协作者同步风险、回滚方案与验证办法见 [1.68] 与 `docs/FastLedger-R0-第三次整改交付回执.md`。
 - **证据影响**：脱敏只移除凭证值，不改变 144 条真实 CDP 事件的结构与结论；`Fetch.requestPaused` 隔离拦截证据、5 张 PNG、`console-log.json`、`dom-snapshots.json` 均未受影响。后续重新采集日志须继续使用已修复的脱敏脚本。
 - **状态**：**R0 未通过 / 阻塞；不授权启动 R1；PWA 未实施。** 本次为安全处置，未改业务代码、PRD、落地方案、WBS、数据库结构或 API。
 
@@ -31,9 +62,9 @@
 
 ### RV-01~04 修正：隔离运行时证据 + 最小口径修正（审计文档 / 证据，非业务代码修复）
 
-- **RV-01（P1）· 真实运行时证据落盘**：重启本地后端（`/healthz` 实测 `status:"up"`）、`admin` 登录取 `data.accessToken`，用 Edge `156.0.4314.58` headless + 原生 CDP（Node v22 内置 WebSocket）**仅拦截 `GET /api/v1/books/1/transactions?page=1&count=60`**，放行 `/books`、`/accounts`、`/categories`、`/reports/monthly` 等全部依赖请求；产出 pending / 网络失败 / HTTP 503 / 桌面 pending / 解除拦截后恢复共 **5 张 PNG**，及 `network-log.json`（144 条真实 CDP 事件 + 1 条脚本生成 `__META__` 记录；**请求头已脱敏，见 [1.66]**）、`console-log.json`、`dom-snapshots.json`、`README.md`（复现说明与证据边界），落盘 `docs/r0-screenshots/runtime/`；复现脚本在工作区 `.tmp_shot/rv01-isolation.js`（不入库）。
+- **RV-01（P1）· 真实运行时证据落盘**：重启本地后端（`/healthz` 实测 `status:"up"`）、**历史本地测试账号**登录取 `data.accessToken`（[1.68] 安全注记：该命令属 [1.65] 当时的历史记录，账号与口令仅属当时的一次性本地隔离实例、现已失效，**不得复制复用**；现行配方只经环境变量读取凭证，见 `tools/r0/README.md`），用 Edge `156.0.4314.58` headless + 原生 CDP（Node v22 内置 WebSocket）**仅拦截 `GET /api/v1/books/1/transactions?page=1&count=60`**，放行 `/books`、`/accounts`、`/categories`、`/reports/monthly` 等全部依赖请求；产出 pending / 网络失败 / HTTP 503 / 桌面 pending / 解除拦截后恢复共 **5 张 PNG**，及 `network-log.json`（144 条真实 CDP 事件 + 1 条脚本生成 `__META__` 记录；**请求头已脱敏，见 [1.66]**）、`console-log.json`、`dom-snapshots.json`、`README.md`（复现说明与证据边界），落盘 `docs/r0-screenshots/runtime/`；复现脚本在工作区 `.tmp_shot/rv01-isolation.js`（不入库）。
   - 本次实测：失败态 `.skel` 恒为 4 条、`aria-busy=true` 未清除、仅红色 toast、DOM 中无「重试/刷新」控件；解除拦截重新导航后骨架清零并显示空态。旧轮「页面主体空白」系泛化拦截 `/api/v1/*` 同时打断 `loadBookMeta` 所致，差异已解释。
-  - **R0-E-35 状态仍为「待运行时复验 / 阻塞」，不关闭缺陷**：单次本机实测、无 Owner/CI 独立复跑，未覆盖慢速网络 / 有数据态 / 多角色。§3 / §7.5 / §8 / §10.3 已按此口径统一。
+  - **[1.68] 回填更正（原 [1.65] 本行使用的是「尚未进行运行时复验」旧称，现已废止）**：**本机隔离运行时复验已完成；失败态观察到骨架屏未清理（`.skel`=4、`aria-busy=true`）；待 Owner/CI 独立复跑及慢速网络、有数据态、多角色等场景验证；缺陷尚未关闭。** 单次本机实测、无 Owner/CI 独立复跑，未覆盖慢速网络 / 有数据态 / 权限不足 / 离线与同步冲突 / 多角色。现行统一口径见 [1.68] 与主报告 §7.5、§8、§10.4。
 - **RV-02（P2）**：主报告新增 §0.2「证据版本基准」表（≤12 行），分离文档 HEAD `557e4d2`、业务代码证据基准 `bff6a2b`、截图对应代码版本「**未独立验证**」（后端二进制构建于 `2026-11-04 01:13:59 +0800`，其对应代码 SHA 未独立验证，不得推定等于 `bff6a2b`）、历史快照 `1cd56ab`；§0 L14 / §3.1 取证基线 / §5.3 / §5.3.0 / §7.5 口径已对齐。
 - **RV-03（P2）**：§3.1 逐控件表 **621 个裸 `—` 单元格**按明确语义消歧为 `N/A（不适用）` / `见 I-XXX` / `未验证` / `未实现` / `待确认`，新增字段语义词表；**228 行 / 13 字段结构不变**（201 行原位修改、无增删行），13 个交叉引用 ID 已校验均真实存在（含 `I-LOGIN-05` / `I-BOOKS-01` / `I-ACCT-01` / `I-HOME-15` / `I-HOME-17`）。
 - **RV-04（P2 / 待裁决）**：查证 PRD §3.1 / §4.2 / §4.8、Web 设计规范 §8.1 / §8.2、`prototype-v2/index.html` `pHome()`、`prototype/` 构建产物与 `prototype/README.md`，**无「首页必须提供月份切换控件」的明确条款**（月份切换仅属报表页与导出页时间预设）；`I-HOME-02` 改为「待 Owner 裁决的交互建议」，移出已确认缺陷统计，Owner 决策仍需记录。

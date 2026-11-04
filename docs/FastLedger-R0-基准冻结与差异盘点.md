@@ -11,7 +11,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 当前基线 SHA | 见 §0.2「证据版本基准」：文档 HEAD = `557e4d2...`；业务代码证据基准 = `bff6a2b...`；截图对应代码版本**未独立验证**；`1cd56ab...` 为历史快照、不再作为本轮有效代码基准。 |
+| 当前基线 SHA | 见 §0.2「证据版本基准」：**本轮整改执行基准** `273cf08...`（fetch 时 `main` HEAD）；业务代码证据基准 `bff6a2b...`；运行时采集时历史文档 HEAD `557e4d2...`；截图对应后端二进制代码 SHA **未独立验证**；`1cd56ab...` 为历史快照、不再作为本轮有效代码基准。不同证据资产的基准不合并、不互相推定。 |
 | 工作分支 | 本次为 GitHub 默认分支只读复核；本地工作分支/工作区状态未验证。 |
 | 关键决策文档（原编制回执所列） | `workbuddy/多AI对齐规范.md`、`workbuddy/第三方审阅者导读.md`、根 `CHANGELOG.md`、原型还原与 PWA 总方案、手机 PWA 指导书、Web 设计规范、交易更新语义设计、两版原型 README。原回执未列 PRD、落地方案、开发 WBS、枚举字典；不能据此证明原编制者已逐项核对。独立复核已另行对照这些文件，详见补漏记录。 |
 | 本次范围 | R0-A ~ R0-G（页面/交互盘点、两版原型差异、当前实现与后端 API 映射、差异根因、截图与覆盖率方法、Owner 裁决清单） |
@@ -28,16 +28,22 @@
 
 ---
 
-### 0.2 证据版本基准（RV-02 纠偏）
+### 0.2 证据版本基准（RV-02 纠偏，[1.68] 全文复核）
 
-> 不同证据资产的基准**不合并、不互相推定**；本表为 §0 / §3.1 / §5.3 / §7.5 的统一口径。
+> 不同证据资产的基准**不合并、不互相推定**；本表为 §0 / §3.1 / §5.3 / §7.5 / §10.4 的统一口径。
+> **本轮整改执行基准**是执行前 `git fetch` 得到的 `origin/main` HEAD；本提交落地后会产生新 SHA，
+> 该新 SHA 记录于根 `CHANGELOG.md` [1.68] 与 `docs/FastLedger-R0-第三次整改交付回执.md`，
+> **不在本表循环写入尚未生成的自身 SHA**。
 
 | 证据类别 | 基准 / 状态 | 说明 |
 |---|---|---|
-| 文档版本 HEAD | `557e4d223064c149cdf1063429a2fdd79158e609`（`557e4d2`，含 RV-01~04 补充） | 本轮审计文档、CHANGELOG、README 与截图资产所在 HEAD |
-| 业务代码证据基准 | `bff6a2b351bf5a039cdf7c762ec2693fb330cd00` | §3.1 / §5.3 的 `file:line` 源码取证均按此提交实读；`557e4d2` 相对它仅有文档/资产变更，**无业务代码变更** |
-| 截图采集对应代码版本 | **未独立验证** | 服务二进制构建于 `2026-11-04 01:13:59 +0800`；截图时实测 HTTP 提供的 `/app.js` 与仓库 HEAD 一致、`/style.css` 仅 CRLF 差异，但**后端二进制对应的代码 SHA 未独立验证**，不得推定等于 `bff6a2b`；隔离运行时证据见 `docs/r0-screenshots/runtime/` |
+| 本轮整改执行基准（文档） | `273cf0869917565b60f7da1dd2b562764de8d405`（`273cf08`，第三次整改任务单 + [1.67] 落地时 `main` HEAD） | 仅表示本轮开工时的文档版本；**审计文档变更不代表业务代码基准发生变化** |
+| 业务代码证据基准 | `bff6a2b351bf5a039cdf7c762ec2693fb330cd00` | §3.1 / §5.3 的 `file:line` 源码取证均按此提交实读；其后各提交相对它仅有文档 / 资产变更，**无业务代码变更** |
+| 运行时证据采集时历史文档 HEAD | `557e4d223064c149cdf1063429a2fdd79158e609`（`557e4d2`） | 5 张 PNG 与 3 个 JSON 采集当时的文档 HEAD，**仅为历史时点标记，不是当前报告版本，也不是代码基准**；见 `docs/r0-screenshots/runtime/README.md` |
+| 截图 / 运行时对应的后端二进制代码 SHA | **未独立验证** | 服务二进制构建于 `2026-11-04 01:13:59 +0800`；实测 HTTP 提供的 `/app.js`、`/index.html` 与仓库 HEAD 一致、`/style.css` 仅 CRLF 差异，但**后端二进制对应的代码 SHA 未独立验证**，不得推定等于 `bff6a2b` |
 | 历史快照 | `1cd56ab7830d2d3f33faf7fc5372d3824c088ae0` | **历史快照，不再作为本轮有效代码基准**；仅用于解释 [1.61] 当时的回执记录 |
+
+> **全文 SHA 语义复核（[1.68]）**：`557e4d2` 在主报告仅保留于本表（采集时历史 HEAD）、§5.3 引言 / §5.3.0（声明源码取证不按该文档 HEAD）、§10.3（[1.65] 历史记录）与 runtime README（证据时点）；`CHANGELOG.md` [1.65] / [1.67] 中的 `557e4d2`、`ddbd1ae` 均为**历史条目**，不改写；外部审阅产物《独立复核补充 RV-01至04》的 `575eae3` 为其自身复核时点基准，按原文保留。命中清单见 `docs/FastLedger-R0-凭证安全核验记录.md` §6 与交付回执 §4。
 
 ---
 
@@ -114,7 +120,7 @@
 | 页面 | 必备交互（规范 §8.2） | 当前实现证据 | 状态（空/加载/错误/权限/离线） | 结论 |
 |---|---|---|---|---|
 | 登录 | 预填、pending、错误红字、成功进首页 | `renderLogin` L161；`POST /auth/login`/`/auth/register` | 错误红字/pending [待确认] | 基本具备，细节待验 |
-| 首页账单 | 概览三卡联动、按日分组账单、行点击进详情、筛选条、骨架屏 | `renderHome` L1947–1965；`renderBillStream` L1872–1927：**骨架屏与按日小计已实现**；行点击→`#b/:id/tx/:tid` | 首页无筛选；账单行缺账户/渠道；**请求失败时是否正确清理骨架屏待隔离运行时复验（R0-E-35，阻塞，见 §7.5）**；日小计仅基于首批 60 条 | **部分具备**（见 R0-E-02、20、21、34；R0-E-35 待运行时复验 / 阻塞） |
+| 首页账单 | 概览三卡联动、按日分组账单、行点击进详情、筛选条、骨架屏 | `renderHome` L1947–1965；`renderBillStream` L1872–1927：**骨架屏与按日小计已实现**；行点击→`#b/:id/tx/:tid` | 首页无筛选；账单行缺账户/渠道；**请求失败时骨架屏未清理（本机隔离复验已观察到；R0-E-35 缺陷尚未关闭，见 §7.5）**；日小计仅基于首批 60 条 | **部分具备**（见 R0-E-02、20、21、34；R0-E-35 本机隔离复验已完成 / 缺陷尚未关闭（见 §7.5 标准口径）） |
 | 记一笔 | 支出/收入/转账分段、转账双账户、必填校验红字、pending→toast→返回首页顶部插入 | `#formDlg`（`fType` 为普通 select；含金额/账户/对方账户/分类/日期/备注）；`POST /transactions` | 缺支付渠道/商户输入；类型不是分段控件；其余校验/pending 需浏览器验证 | **部分具备**（见 R0-E-23、29） |
 | 截图识别 | 三级漏斗 → 确认弹窗 → 确认入账（绝不自动入账） | Web 无入口/无 OCR 调用 | — | **PRD §5.2 明确 Web 不做 OCR；Flutter 端能力另行审计** |
 | 交易详情 | 全字段、编辑、删除二次确认→toast+余额回滚 | `renderTxDetail` L1974–2015：展示账户/分类/日期/备注；编辑/删除入口存在 | 未展示 paymentChannel；备注非空时 merchant 不显示；删除文案称无法恢复，与回收站/恢复能力矛盾 | **部分具备**（见 R0-E-22、24） |
@@ -127,13 +133,13 @@
 | 设置 | 个人资料、账号安全、API Token、服务器与备份、退出登录 | `renderSettings` L1518–1635：API Token 管理 + 退出；邮箱资料编辑在 `renderMine` L2138–2215 | 资料能力存在但入口在“我的”；设置缺改密 UI、会话管理 UI（R0-E-14）、服务器/备份区块 | **部分具备**（见 R0-E-17、18、14） |
 | 我的 | 菜单中枢 | `renderMine` L2138：头像 + 资料编辑（改邮箱）+ **8 个二级入口**（我的账本/账户/成员/导出/报表/预算/资产/回收站） | — | 具备（8 入口；与平铺顶栏重复，R0-E-01） |
 
-**状态覆盖缺口（R0-E-12）修正**：须区分两个判断：①「首页账单流已实现骨架屏」——已有源码与隔离运行时 pending 截图证据（`docs/r0-screenshots/runtime/01-pending-390x844.png`），不得再列为「骨架屏缺失」；②「特定请求失败时是否正确清理骨架屏」——**R0-E-35 状态为「待运行时复验 / 阻塞」**，本轮隔离实测（§7.5）观察到失败后骨架仍在，但属单次本机实测，**未关闭缺陷**。空态已有局部实现；网络错误、权限不足、离线、同步中、冲突仍未形成逐页证据矩阵，需逐页验证并截图。
+**状态覆盖缺口（R0-E-12）修正**：须区分两个判断：①「首页账单流已实现骨架屏」——已有源码与隔离运行时 pending 截图证据（`docs/r0-screenshots/runtime/01-pending-390x844.png`），不得再列为「骨架屏缺失」；②「特定请求失败时是否正确清理骨架屏」——**R0-E-35 标准口径：本机隔离运行时复验已完成；失败态观察到骨架屏未清理（`.skel`=4、`aria-busy=true`）；待 Owner/CI 独立复跑及慢速网络、有数据态、多角色等场景验证；缺陷尚未关闭。** 本轮隔离实测（§7.5）已观察到失败后骨架仍在，但属单次本机实测，**未关闭缺陷**。空态已有局部实现；网络错误、权限不足、离线、同步中、冲突仍未形成逐页证据矩阵，需逐页验证并截图。
 
 ### 3.1 逐控件交互清单（二次整改重做版）
 
 > **取证基线（业务代码证据基准，见 §0.2）**：`bff6a2b351bf5a039cdf7c762ec2693fb330cd00`（执行时 `git fetch` 已重试成功，本地 0 ahead / 0 behind）；源码行号全部按该提交重新定位：`server/web/dist/index.html`（151 行）、`server/web/dist/app.js`（2241 行）。**该 SHA 不是截图采集对应代码版本的推定依据**（§0.2 / §7.5）。
 > **本轮纠偏**：原 §3.1 把多个独立控件合并成一行（如金额/账户/分类/日期/备注合并、FAB 与 Tab 合并、账户增改删合并、「我的」8 入口合并），且误引不存在的 `#loginForm`。本版**每个独立输入框 / 按钮 / Tab / 菜单 / 弹窗动作单独一行**，统一 13 字段。
-> **字段口径**：`代码位置` = DOM selector 或 JS 函数 + 当前 HEAD 行号；`验证证据` = `C:` 静态源码定位、`S:` 本轮 Edge 真实浏览器截图（路径相对 `docs/r0-screenshots/`）、或明确的「未采集 / grep 无命中」；`当前状态` 区分 `已实现` / `已实现但缺陷` / `缺失` / `待验证` / `不适用`，并关联原 R0-E 编号（不另起重复编号）。**标「运行时未验证」即未验证，不用「—」掩盖。**
+> **字段口径**：`代码位置` = DOM selector 或 JS 函数 + 业务代码证据基准 `bff6a2b` 的行号；`验证证据` = `C:` 静态源码定位、`S:` 本轮 Edge 真实浏览器截图（路径相对 `docs/r0-screenshots/`）、或明确的「未采集 / grep 无命中」；`当前状态` 区分 `已实现` / `已实现但缺陷` / `缺失` / `待验证` / `不适用`，并关联原 R0-E 编号（不另起重复编号）。**标「运行时未验证」即未验证，不用「—」掩盖。**
 > **RV-03 字段语义词表**（本版统一消歧）：`N/A（不适用）` = 该字段对本控件确实不适用；`见 I-XXX` = 行为由该**真实存在**的交互条目覆盖；`未验证` = 无运行时证据；`未实现` = 代码中无对应能力；`待确认` = 需求/产品行为尚未裁决。`代码位置` 列形如 `—（grep 无命中）` 为带注解的「未实现」，不是语义不明的裸 `—`；本版已消除逐控件表中全部裸 `—` 单元格（228 行 / 13 字段不变）。
 > **截图范围**：本轮共采集 43 张真实截图 + 5 张 RV-01 隔离运行时截图（`docs/r0-screenshots/runtime/`，含 pending / rejected / 恢复态与真实 CDP 日志），覆盖 4 个视口 × 16 个页面/弹层；但**仅首屏/空态/错误态**，绝大多数成功/失败交互路径、加载态、权限不足态、离线态、原型侧对照截图仍未采集，见 §7.5 阻塞清单。因此本清单的 `S:` 证据只证明「控件/页面在此状态下可见」，**不证明交互成功路径已验收**。
 
@@ -199,7 +205,7 @@
 | I-HOME-14 | 首页 | 底部 Tab「我的」 | index.html L35 / app.js L1865 | 已选账本 | N/A（不适用） | 点击 | hash=#b/{id}/mine | N/A（不适用） | N/A（不适用） | 我的 | C:index.html L35；S:home/390x844/empty.png | 已实现｜截图已见 |
 | I-HOME-15 | 首页 | 账单加载态（骨架屏） | app.js L1874–1876（sk, aria-busy=true, 4 条） | 进入首页 / 刷新 | N/A（不适用） | N/A（不适用） | 骨架占位 | 见 I-HOME-17 | N/A（不适用） | 本页 | C:app.js L1874–1876；S:runtime/01-pending-390x844.png、04-pending-1280x800.png（隔离拦截目标请求后实测骨架占位，见 §7.5） | 已实现｜pending 态已采集（隔离复验）｜R0-E-02 |
 | I-HOME-16 | 首页 | 账单空态 | app.js L1882–1887 | 无交易 | N/A（不适用） | N/A（不适用） | 「还没有账单——点下方「＋ 记一笔」开始记录。」 | 未验证 | N/A（不适用） | 本页 | C:app.js L1882–1887；S:home/390x844/empty.png（可见空态文案） | 已实现｜截图已见 |
-| I-HOME-17 | 首页 | 账单错误态 | app.js L1878–1879（catch 仅 toast 并 return） | API 失败 | N/A（不适用） | GET /transactions?page=1&count=60 失败 | N/A（不适用） | toast(e.message,"err")；代码未清除骨架屏 | 无 | 本页 | C:app.js L1878–1879；S:home/390x844/error.png（旧轮泛化拦截 `/api/v1/*`：主体空白 + `Failed to fetch` toast，因依赖请求同时被打断）；S:runtime/02-rejected-network-390x844.png、03-rejected-503-390x844.png（本轮仅拦截目标请求：`.skel`=4 仍在 + toast，见 `dom-snapshots.json`） | **待运行时复验 / 阻塞｜R0-E-35**（本轮隔离实测见 §7.5；单次本机实测不关闭缺陷，须 Owner/CI 独立复跑） |
+| I-HOME-17 | 首页 | 账单错误态 | app.js L1878–1879（catch 仅 toast 并 return） | API 失败 | N/A（不适用） | GET /transactions?page=1&count=60 失败 | N/A（不适用） | toast(e.message,"err")；代码未清除骨架屏 | 无 | 本页 | C:app.js L1878–1879；S:home/390x844/error.png（旧轮泛化拦截 `/api/v1/*`：主体空白 + `Failed to fetch` toast，因依赖请求同时被打断）；S:runtime/02-rejected-network-390x844.png、03-rejected-503-390x844.png（本轮仅拦截目标请求：`.skel`=4 仍在 + toast，见 `dom-snapshots.json`） | **本机隔离复验已完成 / 缺陷尚未关闭（见 §7.5 标准口径）｜R0-E-35**（本轮隔离实测见 §7.5；单次本机实测不关闭缺陷，须 Owner/CI 独立复跑） |
 | I-HOME-18 | 首页 | 按日分组标题 + 日小计 | app.js L1897–1905（gt / daySum） | 有交易数据 | 仅基于首批 60 条（L1878 count=60） | 收入加 / 支出减 | 显示「今天/昨天/前天/N 天前」+ 日合计 | 未验证 | N/A（不适用） | 本页 | C:app.js L1897–1905；有数据态未采集 | 已实现｜分页边界缺陷｜R0-E-34 |
 
 #### 3.1.4 记一笔弹窗 `#formDlg`
@@ -553,12 +559,12 @@
 
 ### 5.3 后端 API 权限 / DTO / 测试矩阵（源码取证重做）
 
-> **本矩阵为 R0 二次整改重做版，整体替换 [1.62] 初稿**。全部 `file:line` 均以 §0.2 所列**业务代码证据基准** `bff6a2b`（非文档 HEAD `557e4d2`、非截图运行时二进制）的源码实读为准；权限来自真实 service / guard 函数，DTO 来自 handler 与 struct 定义，错误码追溯 `mapSvcErr` / `mapLoginErr` / `mapAuthErr` / OCR 独立映射，测试证据列具体测试函数 + `file:line` + 断言类型，未找到独立命名测试的接口明确写「未覆盖」。
+> **本矩阵为 R0 二次整改重做版，整体替换 [1.62] 初稿**。全部 `file:line` 均以 §0.2 所列**业务代码证据基准** `bff6a2b`（非运行时采集时历史文档 HEAD `557e4d2`、非当前报告版本、非截图运行时二进制）的源码实读为准；权限来自真实 service / guard 函数，DTO 来自 handler 与 struct 定义，错误码追溯 `mapSvcErr` / `mapLoginErr` / `mapAuthErr` / OCR 独立映射，测试证据列具体测试函数 + `file:line` + 断言类型，未找到独立命名测试的接口明确写「未覆盖」。
 
 #### 5.3.0 取证基线
 
-- **业务代码证据基准 = `bff6a2b351bf5a039cdf7c762ec2693fb330cd00`**（§0.2；执行时 `git rev-parse HEAD` 复核，`fetch` 已复核 0/0；文档 HEAD 为 `557e4d2`，两者不同且不可互相推定）。本矩阵所有 `file:line` 均以该提交为准，路径相对 `C:/Users/47006/WorkBuddy/fastledger/repo_tmp/`。
-- **本矩阵是静态源码取证，不是运行时验证**：权限判定、DTO 字段、错误码映射、测试函数名与断言类型均来自当前 HEAD 的源码实读（`Read` / `Grep`），**本矩阵自身未做逐路由集成测试运行确认**；本轮二次整改已在 §7.6 真实执行 `go test ./...`（10 包 `ok` / 2 包无测试文件 / `FAIL` 0 / `EXIT_CODE=0`），但按任务单口径 **全量绿不等于逐路由测试覆盖证据**，不得用它或「CI 绿」替代逐用例断言。凡「未经集成测试运行确认」的部分逐项标注：测试证据列中「**未覆盖：未找到独立命名测试**」表示该接口在 `server/**/*_test.go` 中未找到独立命名的测试用例；已列出测试名的行仅表示**源码中存在该命名的测试用例及其断言类型**，不代表本次已执行通过。主表「测试证据」列不出现「CI 绿」「待测」等笼统结论（§5.3.3 与附录引用旧表错值属逐条纠错对照，不作本表结论）。
+- **业务代码证据基准 = `bff6a2b351bf5a039cdf7c762ec2693fb330cd00`**（§0.2；执行时 `git rev-parse HEAD` 复核，`fetch` 已复核 0/0；运行时采集时历史文档 HEAD 为 `557e4d2`（非当前报告版本），两者不同且不可互相推定）。本矩阵所有 `file:line` 均以该提交为准，路径相对仓库根 `<repo-root>/`。
+- **本矩阵是静态源码取证，不是运行时验证**：权限判定、DTO 字段、错误码映射、测试函数名与断言类型均来自业务代码证据基准 `bff6a2b` 的源码实读（`Read` / `Grep`），**本矩阵自身未做逐路由集成测试运行确认**；本轮二次整改已在 §7.6 真实执行 `go test ./...`（10 包 `ok` / 2 包无测试文件 / `FAIL` 0 / `EXIT_CODE=0`），但按任务单口径 **全量绿不等于逐路由测试覆盖证据**，不得用它或「CI 绿」替代逐用例断言。凡「未经集成测试运行确认」的部分逐项标注：测试证据列中「**未覆盖：未找到独立命名测试**」表示该接口在 `server/**/*_test.go` 中未找到独立命名的测试用例；已列出测试名的行仅表示**源码中存在该命名的测试用例及其断言类型**，不代表本次已执行通过。主表「测试证据」列不出现「CI 绿」「待测」等笼统结论（§5.3.3 与附录引用旧表错值属逐条纠错对照，不作本表结论）。
 - **路径前缀**：除 `GET /healthz`(router.go:109) 外，全部路由挂在 `v1 := r.Group("/api/v1")`(router.go:122) 下，真实路径 = `/api/v1` + 组内路径。旧表把 WS 写作 `/ws` 属错值（见 §5.3.3 #1）。
 - **鉴权分组**：公开 v1 组 `register/login/join`(router.go:124/125/128)；`GET /api/v1/ws` 用独立 `wsAuth(d.AuthService,d.PATs)`(router.go:133，刻意不挂 JWTAuth 组，注释 130-133，浏览器 WS 无法设 Authorization 头，需 Header→`?token=` 回退)；其余全部 `auth := v1.Group("", JWTAuth(d.AuthService, d.PATs))`(router.go:135)。`JWTAuth` 解析 `Authorization: Bearer`，`flt_` 前缀走 PAT 分支且 `patSvc==nil` fail-closed 401(middleware.go:52-93)。全局 `gin.Recovery()`(55)、`r.SetTrustedProxies(nil)`(52-54)、`NoRoute(newWebHandler())`(105-107)。**注册开关** `enableRegister = d.Config.EnableRegister`(router.go:74)，关闭时 403(auth_handler.go:51-54)；**PAT 开关** `if ph != nil`(141，`d.PATs==nil` 不注册 94-97)。
 - **条件挂载（按「路由已注册」计，生产 Deps 全量注入）**：`if ph != nil`(141)、`if rh != nil`(205，`d.Reports==nil` 不挂载 79-82)、`if bh2 != nil`(212，`d.Budgets==nil` 不挂载 84-87)、`if ih != nil`(220，`d.Invest==nil` 不挂载 89-92)。
@@ -723,7 +729,7 @@
 
 #### 5.3.4 矩阵结论
 
-1. **本表完成的是源码级契约盘点，不等于 R0 通过、不等于运行时验收**。所有权限判定、DTO 字段、错误码映射、测试函数名与断言类型均来自 HEAD `bff6a2b` 源码实读；**本表未做逐路由集成测试运行确认**；本轮 `go test ./...` 全量绿见 §7.6，按任务单口径不构成逐路由覆盖证据。「测试证据」列只说明源码中存在该命名用例及其断言类型，逐项已在 §5.3.0 声明口径。
+1. **本表完成的是源码级契约盘点，不等于 R0 通过、不等于运行时验收**。所有权限判定、DTO 字段、错误码映射、测试函数名与断言类型均来自业务代码证据基准 `bff6a2b` 源码实读；**本表未做逐路由集成测试运行确认**；本轮 `go test ./...` 全量绿见 §7.6，按任务单口径不构成逐路由覆盖证据。「测试证据」列只说明源码中存在该命名用例及其断言类型，逐项已在 §5.3.0 声明口径。
 2. **已有逐用例测试证据的域**（主表「测试证据」列列出具体 `测试名 file:line（断言类型）`）：auth(register/login，`TestR45*`/`TestR46*`/`TestA6*`，含 DTO 校验 400、开关 403、401 统一、429、500 不泄露)、sessions(`TestSession*`/`TestRevoke*`，正常/越权 404/撤销后 401)、PAT(`TestPATLifecycleAPI` 端到端)、OCR(`TestOCR*`/`TestLLMParse*`/`TestParse*`，401/400/413/429/503/DTO)、books/visibility(`TestVisibilityRequiresField`/`TestR28*`/`TestR33*`/`TestSetVisibility*`/`TestRouterRegisters*`，DTO 校验/TOCTOU/原子性/版本不递增)、members/invites(`TestR40Revoke*`/`TestR41*`/`TestR42*`/`TestR43*`，越权 403/跨账本 404/并发互斥/DTO 校验/审计脱敏)、accounts/categories(`TestR47*`/`TestR31*`/`TestWA8*`，400 成环/并发/409 引用)、transactions/recycle(`TestQACreateTransactionRejectsBadBody`/`TestValidateCreateRequiresClientUuid`/`TestIdempotency*`/`TestConcurrent*`/`TestDeletePermissionMemberCannotDeleteOthers`/`TestUpdate*`/`TestRecycleBinListsDeleted`，DTO 校验 400/幂等/并发/越权 403/409 乐观锁)、reports/export(`TestExportAPICsvAndJson`/`TestReport*`，文件流+响应头/聚合/CSV 转义)、budgets(`TestBudgetCRUDFlow`/`TestBudgetPermissionsAndValidation`，409 重复/越权 403/DTO 校验 400)、invest(`TestInvestCRUDAndNetWorthFlow`/`TestNetWorthFormula`，`holdingsValue` 字段/净资产公式)、sync(`TestPushRejects*`/`TestSyncBatchJSONContract`/`TestR48*`，整批 400/DTO 契约/版本边界)、ws(`TestSubscribeRejectsNonMember`/`TestQAS3WSAuthNeverBypasses`，越权/wsAuth 不可绕过)。
 3. **明确「未覆盖：未找到独立命名测试」的接口**（主表逐行标注，非「CI 绿」替代）：`GET /healthz`；`GET /users/me`、`PUT /users/me`、`POST /users/me/password` 的 HTTP handler 层（仅 service `TestUpdateEmail`/`TestChangePassword` 间接覆盖，`{revokedSessions,message}` 无专门断言）；单资源 GET `GET /books/:id`、`GET /books/:id/accounts/:aid`、`GET /books/:id/transactions/:txId`（CRUD flow 间接覆盖）；`GET /books/:id/categories?tree=1` 树形分支（`CategoryTreeNode` 无专门测试）；`DELETE /books/:id/accounts/:aid`、`DELETE /books/:id/categories/:cid` 的 HTTP 层（service 层删除约束有覆盖）；`POST /books/:id/instruments/:instrumentId/price` 的 HTTP 层（service/api 间接覆盖）；`GET /books`、`GET /books/:id/members` 无独立 DTO 断言测试。「未找到独立命名测试」不代表运行时无覆盖，仅表示源码中未找到该接口独立命名的用例。
 4. **Web 未接入并关联 R0-E 编号**（按路由逐条，三类统计见 §5.3.0）：改密 `POST /users/me/password`(R0-E-18)；会话 3 条 `GET/DELETE /auth/sessions`、`DELETE /auth/sessions/:jti`(R0-E-14)；可见性 `PUT /books/:id/visibility`(R0-E-19/27)；撤邀请 `POST .../invite/:inviteId/revoke`(R0-E-26，且邀请生成响应无 inviteId 导致 Web 端无法撤销)；同步 `GET /books/:id/sync/pull` 与 `POST /books/:id/sync/push`(R0-E-15/25)；OCR 3 条 `recognize/parse/llm-parse`(Web 不做，R0-E-08)；`PUT /books/:id` 改名(R0-E-32)；WS `GET /api/v1/ws`(R0-E-15/25 关联)；邀请入户 `POST /books/:id/members/join`（后端 `router.go:128` 已交付、Web 完全无兑换入口，与 R0-E-26 分列验收：一个「兑不了」、一个「撤不了」）。`GET /healthz` 为非 UI 端点，计入 63 条路由但不纳入 UI 控件验收分母（R0-E-17 证据链备注）。`GET /books/:id` 判「间接」（前端以 `GET /books` 列表 + `books.find()` 本地取 book，未单独调详情）。
@@ -852,7 +858,7 @@
 | 项目 | 状态 | 证据 / 说明 |
 |---|---|---|
 | 真实截图文件 | 已交付 43 张 PNG | `docs/r0-screenshots/`，逐张索引见该目录 `README.md` |
-| RV-01 隔离运行时证据 | 已交付 5 张 PNG + 3 个 JSON | `docs/r0-screenshots/runtime/`（pending / rejected / 恢复态；`network-log.json`（请求头已脱敏，见 [1.66]）/ `console-log.json` / `dom-snapshots.json` + README）；**R0-E-35 仍待运行时复验 / 阻塞** |
+| RV-01 隔离运行时证据 | 已交付 5 张 PNG + 3 个 JSON | `docs/r0-screenshots/runtime/`（pending / rejected / 恢复态；`network-log.json`（请求头已脱敏，见 [1.66]）/ `console-log.json` / `dom-snapshots.json` + README）；**R0-E-35 本机隔离复验已完成 / 缺陷尚未关闭（见 §7.5 标准口径）** |
 | 浏览器与视口 | 已记录 | Edge `156.0.4314.58`；360×800 / 390×844 / 430×932 / 1280×800 |
 | 账号与数据样例 | 已记录 | `admin`（owner 角色），账本「我的家庭账本」id=1，本地 schema v8；`transactions total=0` |
 | 页面 / 弹层 | 部分 | 16 个页面/弹层首屏 |
@@ -866,7 +872,9 @@
 
 **阻塞与执行要求**：以上空缺**不降低 R0 门槛、不挪至 R1**，须由 Owner 在浏览器或 CI 中按 §7.2 协议补齐；执行人、所需环境与可复现步骤见 `docs/r0-screenshots/README.md` 的「未覆盖/阻塞清单」。
 
-**复验项 R0-E-35（RV-01 口径）**：状态 **「待运行时复验 / 阻塞」，未关闭**。本轮已补隔离运行时证据：Edge `156.0.4314.58` headless + CDP，仅拦截 `GET /api/v1/books/1/transactions?page=1&count=60`（放行 `/books`、`/accounts`、`/categories`、`/reports/monthly` 等全部依赖请求），分别实测 pending、网络失败、HTTP 503、解除拦截后重新导航恢复；证据落盘 `docs/r0-screenshots/runtime/`（5 张 PNG + `network-log.json` + `console-log.json` + `dom-snapshots.json` + `README.md`）。**本次实测（单次本机）**：pending 与两种失败态下 `.skel` 恒为 4 条、`aria-busy=true` 未清除、仅红色 toast 且 DOM 中无「重试/刷新」控件；解除拦截并重新导航后 `.skel`=0、显示空态，可恢复。旧轮「页面主体空白」系泛化拦截 `/api/v1/*` 同时打断 `loadBookMeta`、使 `renderHome` 未走到 `renderBillStream` 所致，差异已解释。**但不得据此判定已修复、已证伪或已关闭**：仍缺 Owner/CI 独立复跑、慢速网络、有数据态、多角色等验证。
+**复验项 R0-E-35（RV-01 标准口径，[1.68]）**：**' + STATUS + '**
+本轮已补隔离运行时证据：Edge `156.0.4314.58` headless + CDP，仅拦截 `GET /api/v1/books/1/transactions?page=1&count=60`（放行 `/books`、`/accounts`、`/categories`、`/reports/monthly` 等全部依赖请求），分别实测 pending、网络失败、HTTP 503、解除拦截后重新导航恢复；证据落盘 `docs/r0-screenshots/runtime/`（5 张 PNG + `network-log.json`（已脱敏）+ `console-log.json` + `dom-snapshots.json` + `README.md`）。**本次实测（单次本机）**：pending 与两种失败态下 `.skel` 恒为 4 条、`aria-busy=true` 未清除、仅红色 toast 且 DOM 中无「重试/刷新」控件；解除拦截并重新导航后 `.skel`=0、显示空态，可恢复。旧轮「页面主体空白」系泛化拦截 `/api/v1/*` 同时打断 `loadBookMeta`、使 `renderHome` 未走到 `renderBillStream` 所致，差异已解释。
+> **不得据此判定已修复、已证伪或已关闭**：仍缺 Owner/CI 独立复跑、慢速网络、有数据态、权限不足、离线 / 同步冲突、多角色等验证。可移植复现脚本与合成凭证脱敏测试见 `tools/r0/`；第三方按 `tools/r0/README.md` 可在干净 clone 中重跑，但 WorkBuddy 自身的重复运行**不等于** Owner/CI 独立复跑。
 
 **证据边界（诚实声明，与 §0.2 一致）**：服务端 `server/fastledger.exe` 构建于 `2026-11-04 01:13:59 +0800`，早于 `bff6a2b` 提交时间 `2026-11-04 13:45:36 +0800`（该提交本身仅文档改动）；实测 HTTP 提供的 `/index.html`、`/app.js` 与仓库 HEAD 哈希完全一致、`/style.css` 仅 CRLF 差异（见 `docs/r0-screenshots/runtime/network-log.json` 的 `__META__.servedAssetSha256`），但**后端二进制对应的代码 SHA 未独立验证，不得推定等于 `bff6a2b`**。后端权限 / DTO / 错误码契约**全部来自 `bff6a2b` 源码静态实读**（§5.3），不以运行时二进制为依据。本轮为 RV-01 已重新启动本地服务（`/healthz` 实测 `status:"up"`）并完成上述隔离复验；该运行时复验**不替代**对后端二进制代码 SHA 的独立验证，也不使截图基线整体达标。
 
@@ -898,11 +906,11 @@
 | **D-8** | Web 设置页的服务器/备份区块展示到什么程度、数据从何处安全读取？ | PRD §4.12 与设计规范 §8.1–8.2 已要求服务器信息/备份入口；当前 Web 无状态 API 证据，运维备份另有部署机制 | 需求入口已确定；待 Owner 裁决 Web 只读状态范围、权限与是否提供受控备份/恢复操作。未设计安全边界前不得暴露恢复按钮 | 展示/操作边界待确认 |
 
 > **R0 通过条件（2026-11-04 二次整改后修订 · 当前状态：未通过 / 阻塞）**：
-> - **本轮已完成（文档与证据层面，不等于验收通过）**：① §3.1 逐控件交互清单重做（16 个分组、228 条独立控件/动作、13 字段，修正合并行与 `#loginForm` 误引，新增 R0-E-38 / R0-E-39）；② §5.3 API 权限 / DTO / 测试矩阵重做（逐路由源码实读：权限来自 service guard 函数、DTO 来自 handler / struct、错误码追溯 `mapSvcErr` 等、测试证据列具体测试函数或明确「未覆盖」）；③ 43 张真实浏览器截图与索引落盘；④ RV-01 隔离运行时证据（5 PNG + 3 JSON + README，`docs/r0-screenshots/runtime/`），但 **R0-E-35 仍待运行时复验 / 阻塞**。
+> - **本轮已完成（文档与证据层面，不等于验收通过）**：① §3.1 逐控件交互清单重做（16 个分组、228 条独立控件/动作、13 字段，修正合并行与 `#loginForm` 误引，新增 R0-E-38 / R0-E-39）；② §5.3 API 权限 / DTO / 测试矩阵重做（逐路由源码实读：权限来自 service guard 函数、DTO 来自 handler / struct、错误码追溯 `mapSvcErr` 等、测试证据列具体测试函数或明确「未覆盖」）；③ 43 张真实浏览器截图与索引落盘；④ RV-01 隔离运行时证据（5 PNG + 3 JSON + README，`docs/r0-screenshots/runtime/`），但 **R0-E-35 本机隔离复验已完成 / 缺陷尚未关闭（见 §7.5 标准口径）**。
 > - **仍未完成（阻塞项，不得挪至 R1、不得降低门槛）**：① §7 截图基线——当前仅首屏 normal/empty/error（RV-01 隔离证据另补首页 pending/失败/恢复，不改变整体缺口），成功/失败交互、加载、权限、离线、同步/冲突与原型侧对照截图均缺；按总方案 §5，截图基线未完成 R0 不得通过。② 逐控件交互的**运行时验收**（校验红字、pending、三态色、空态、骨架屏视觉、成功/失败反馈、返回路径）尚无逐项截图或测试输出为证。③ `go test ./...` 已实测全绿（10 包 ok / 2 包无测试 / 0 FAIL / EXIT_CODE=0，见 §7.6），但**全量绿不等于逐路由测试覆盖证据**；§5.3 逐接口列具体测试函数并标注「未覆盖」的接口仍需 Owner/CI 补齐逐用例断言与 `-race` 结果。
 > - **Owner 裁决未关闭**：D-1（两套原型最终基准）、D-3（导航结构）、D-5（投资资产是否独立页）、D-6（仅交易总表独立入口）、D-8（服务器/备份展示与权限边界）待结论；D-2 的 PWA 本地 OCR 待裁决；D-4 期初余额技术实现模型待确认。
 > - **裁决前既定口径（不得重开）**：D-2 的 Web OCR 已由 PRD §5.2 决定为不做；D-4 期初余额需求已确定；D-7 会话管理需求已确定仅排期待定；多账本与回收站按既定需求保留。
-> - **R0-E-35 / RV-01**：状态「**待运行时复验 / 阻塞**」，未关闭。隔离运行时证据已登记于 `docs/r0-screenshots/runtime/`（5 张 PNG + `network-log.json`（请求头已脱敏）/ `console-log.json` / `dom-snapshots.json` + README）；单次本机实测不构成缺陷关闭，须 Owner/CI 独立复跑并补齐慢速网络、有数据态、多角色等缺口。**不得声称已关闭。**
+> - **R0-E-35 / RV-01**：**本机隔离运行时复验已完成；失败态观察到骨架屏未清理（`.skel`=4、`aria-busy=true`）；待 Owner/CI 独立复跑及慢速网络、有数据态、多角色等场景验证；缺陷尚未关闭。** 隔离运行时证据已登记于 `docs/r0-screenshots/runtime/`（5 张 PNG + `network-log.json`（请求头已脱敏）/ `console-log.json` / `dom-snapshots.json` + README）；单次本机实测不构成缺陷关闭，须 Owner/CI 独立复跑并补齐慢速网络、有数据态、权限、离线 / 同步冲突、多角色等缺口。**不得声称已关闭，也不得倒退回「尚未进行运行时复验」的旧表述。**
 > - **结论**：**R0 未通过 / 阻塞**。满足上述截图基线落地、逐控件运行时验收证据、测试执行输出与 Owner 对未决范围给出结论后，R0 方可通过并进入 R1 最小批次拆分。**本次整改不代表 R1–R7 已获授权。**
 
 ---
@@ -926,6 +934,10 @@
 | §5.3 权限 / DTO / 错误码源码取证 | `server/internal/api/router.go` L109–L235、`common.go` L17–L136、`auth_handler.go` L103–L122、`middleware.go` L34–L40、`service/guard.go`、`service/visibility.go`、各 `*_handler.go` / `service/*.go` |
 | 逐路由测试函数索引 | `server/**/*_test.go`（§5.3 逐行列出 file:line 与断言类型） |
 | R0 二次整改复核 | `docs/FastLedger-R0-独立补漏与复核记录.md` §9、`CHANGELOG.md` [1.63] |
+| RV-05 凭证安全扫描报告（脱敏） | `docs/r0-screenshots/security-scan.md`（`tools/r0/scan-credentials.js --strict --out` 生成） |
+| RV-05 核验与 RV-06 复现记录 | `docs/FastLedger-R0-凭证安全核验记录.md`、`docs/FastLedger-R0-第三次整改交付回执.md` |
+| RV-05 / RV-06 finding 归档 | `docs/FastLedger-R0-独立复核补充-RV-05至06.md` |
+| 可移植复现脚本与脱敏测试 | `tools/r0/{rv01-isolation.js,redaction.js,test-redaction.js,scan-credentials.js,README.md}` |
 
 ---
 
@@ -953,8 +965,19 @@
 
 ### 10.3 独立复核补充 RV-01~04（即外部文档 R0-RV-01~04）修正（[1.65]）
 
-- **RV-01**：新增隔离运行时证据 `docs/r0-screenshots/runtime/`（Edge `156.0.4314.58` + 原生 CDP，仅拦截 `GET /api/v1/books/1/transactions`，放行其它依赖请求；pending / 网络失败 / 503 / 解除拦截后恢复；5 PNG + 3 JSON + README）。本次实测：失败后 `.skel`=4、`aria-busy=true` 未清除、仅 toast 且无页内重试控件；重新导航可恢复。旧轮「页面主体空白」系泛化拦截打断 `loadBookMeta` 所致。**R0-E-35 仍为「待运行时复验 / 阻塞」，不得声称已关闭。**
-- **RV-02**：新增 §0.2「证据版本基准」表，分离文档 HEAD `557e4d2`、业务代码证据基准 `bff6a2b`、截图对应代码版本「**未独立验证**」与历史快照 `1cd56ab`；§0 / §3.1 / §5.3 / §7.5 口径已对齐。
+- **RV-01**：新增隔离运行时证据 `docs/r0-screenshots/runtime/`（Edge `156.0.4314.58` + 原生 CDP，仅拦截 `GET /api/v1/books/1/transactions`，放行其它依赖请求；pending / 网络失败 / 503 / 解除拦截后恢复；5 PNG + 3 JSON + README）。本次实测：失败后 `.skel`=4、`aria-busy=true` 未清除、仅 toast 且无页内重试控件；重新导航可恢复。旧轮「页面主体空白」系泛化拦截打断 `loadBookMeta` 所致。**R0-E-35 标准口径：本机隔离运行时复验已完成；失败态观察到骨架屏未清理（`.skel`=4、`aria-busy=true`）；待 Owner/CI 独立复跑及慢速网络、有数据态、多角色等场景验证；缺陷尚未关闭。**
+- **RV-02**：新增 §0.2「证据版本基准」表，分离**当时**文档 HEAD `557e4d2`（[1.68] 已改列为「运行时证据采集时历史文档 HEAD」，不再是当前报告版本）、业务代码证据基准 `bff6a2b`、截图对应代码版本「**未独立验证**」与历史快照 `1cd56ab`；§0 / §3.1 / §5.3 / §7.5 口径已对齐。[1.68] 另补本轮整改执行基准 `273cf08` 与全文 SHA 语义复核。
 - **RV-03**：§3.1 逐控件表内所有裸 `—` 单元格按列语义替换为 `N/A（不适用）` / `见 I-XXX` / `未验证` / `未实现` / `待确认`；228 条行数与 13 字段结构不变，交叉引用 ID 已逐条校验存在，新增字段语义词表。
 - **RV-04**：查证 PRD §3.1 / §4.2 / §4.8、Web 设计规范 §8.1 / §8.2、`prototype-v2/index.html` `pHome()`、`prototype/` 构建产物与 `prototype/README.md`，**均无「首页必须提供月份切换控件」的明确条款**（月份切换仅见于报表页与导出页时间预设）。`I-HOME-02` 由「缺失」改为「待 Owner 裁决的交互建议」，移出已确认缺陷统计。
 - **范围与状态**：仅修订审计文档、CHANGELOG、README 与新增运行时证据；未改业务代码 / PRD / 落地方案 / WBS / 数据库 / API；PWA 不动。**R0 未通过 / 阻塞，不授权 R1。**
+
+
+### 10.4 第三次最小整改 RV-02 / RV-05 / RV-06 / RV-01（[1.68]）
+
+> 依据 `docs/FastLedger-R0-第三次最小整改任务单-RV-02-RV-05-RV-06.md`；执行基准 `273cf08`。本节只记录已完成动作与证据路径，逐项回执见 `docs/FastLedger-R0-第三次整改交付回执.md`。
+
+- **RV-05（P0，安全优先）**：全仓凭证扫描器 `tools/r0/scan-credentials.js` 落盘脱敏报告 `docs/r0-screenshots/security-scan.md`（清理前 `--strict` 命中 2 处固定口令、`EXIT=2`；清理后命中 0、`EXIT=0`）；清理 `docs/r0-screenshots/runtime/README.md` 与 `docs/FastLedger-新手开发完整指南.md` 中可复制的固定口令，改为环境变量 / 占位符；`redaction.js` 覆盖请求头、响应头、`headersText`、Cookie、`Set-Cookie`、URL 查询参数、JSON 请求体与 JWT / Bearer 字面量，`test-redaction.js` 用合成假凭证断言；采集脚本另有「原始令牌不得出现在输出」自检（退出码 4）。旧令牌受控复验 `GET /api/v1/users/me` → **401「登录已失效，请重新登录」**（仅内存使用，不记录值）。**状态拆分**：当前 `main` 文件已脱敏 ✅ / 泄露凭证已失效 ✅ / 旧 SHA `259bd11` 经 GitHub API 与 raw 接口实测仍 HTTP 200 可读（旧日志仍含 29 处凭证字面量）⚠️ / **远端历史对象清理待 Owner 决策** ⛔。本地 `reflog expire` + `gc` **不等于**远端清除；本轮**未** force-push、未重写公开历史、未删除 refs、未改仓库可见性、未联系 GitHub Support。
+- **RV-02（P2）**：§0.2 拆分为「本轮整改执行基准 `273cf08`」「业务代码证据基准 `bff6a2b`」「运行时采集时历史文档 HEAD `557e4d2`」「截图 / 运行时对应后端二进制代码 SHA 未独立验证」「历史快照 `1cd56ab`」五类；§0 / §5.3 引言 / §5.3.0 / §7.5 / §10.3 逐处按语义校正，未机械替换历史条目中的 `557e4d2`。
+- **RV-06（P2）**：`tools/r0/rv01-isolation.js` 提交入库，路径由脚本位置 / 仓库根 / 环境变量推导，凭证只从 `R0_TOKEN` 读取且缺失即安全失败（退出码 2），默认输出在仓库外临时目录，写正式证据目录须双重显式确认；`tools/r0/README.md` 给出依赖、环境变量、测试账号准备、退出码、清理与**平台限制（仅 Windows + Git Bash 实测，不声称跨平台）**；干净 clone 复现记录与 SHA256 见核验记录 §5 / 交付回执 §3。
+- **RV-01**：R0-E-35 全文统一为「本机隔离运行时复验已完成；失败态观察到骨架屏未清理（`.skel`=4、`aria-busy=true`）；待 Owner/CI 独立复跑及慢速网络、有数据态、多角色等场景验证；缺陷尚未关闭」，**不再使用该状态旧称，也未写成已修复 / 已关闭**；单次本机实测的证据边界保留。
+- **范围与门禁**：仅新增 / 修订审计文档、CHANGELOG、README、`tools/r0/` 与脱敏报告；**未改业务代码、PRD、落地方案、WBS、数据库或 API**；未删除或覆盖既有 5 PNG + 3 JSON；未启动 R1–R7，PWA 未实施。**R0 未通过 / 阻塞。**

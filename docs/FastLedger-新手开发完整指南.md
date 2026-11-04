@@ -559,7 +559,7 @@ CREATE INDEX idx_members_book ON book_members(book_id);
 **登录**
 ```json
 // 请求
-{ "username": "me", "password": "123456" }
+{ "username": "me", "password": "<your-password>" }
 // 响应
 { "code": 0, "data": { "accessToken": "xxx", "refreshToken": "yyy", "user": { "id": 1, "username": "me" } } }
 ```
