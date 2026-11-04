@@ -42,6 +42,7 @@
 | [`docs/FastLedger-原型还原与PWA分阶段实施总方案.md`](docs/FastLedger-原型还原与PWA分阶段实施总方案.md) | **原型还原与 PWA 分阶段实施总方案** | R0–R7 总路线、原型差异盘点、AI 分批实施纪律、移动端/PWA/离线/备份验收门禁 |
 | [`docs/FastLedger-R0-基准冻结与差异盘点.md`](docs/FastLedger-R0-基准冻结与差异盘点.md) | **R0 基准冻结与差异盘点（二次整改后）** | 13 页/逐控件交互矩阵（228 条）、两版原型差异、当前实现与后端 API 权限/DTO/错误码/测试映射、差异根因、截图基线执行结果与阻塞清单、Owner 裁决清单；**R0 未通过 / 阻塞** |
 | [`docs/FastLedger-R0-独立补漏与复核记录.md`](docs/FastLedger-R0-独立补漏与复核记录.md) | **R0 独立补漏与复核记录** | 修正误判、补充 R0-E-20~39、复核 R0 退出条件与 D-1~D-8；静态复核 + 二次整改复核，R0 尚未通过 |
+| [`docs/FastLedger-R0-独立复核补充-RV-01至04.md`](docs/FastLedger-R0-独立复核补充-RV-01至04.md) | **R0 二次整改后的独立复核补充** | R0-RV-01~04：骨架屏失败态证据、SHA 基准、逐控件字段语义、首页月份切换需求依据；R0 仍阻塞 |
 | [`docs/r0-screenshots/`](docs/r0-screenshots/) | **R0 真实截图基线（43 张 PNG）+ 索引 / 阻塞清单** | Edge headless 采集的 normal / empty / error 首屏；见目录内 `README.md`。**截图基线未完成，R0 未通过** |
 | [`docs/FastLedger-新手开发完整指南.md`](docs/FastLedger-新手开发完整指南.md) | 新手开发完整指南（含可照敲代码骨架） | 应届生照着做即可开发 |
 | [`docs/FastLedger-枚举字典.md`](docs/FastLedger-枚举字典.md) | 统一枚举字典（唯一权威来源） | 各端枚举值对齐 |
