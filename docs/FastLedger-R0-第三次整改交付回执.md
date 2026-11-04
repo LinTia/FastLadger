@@ -19,7 +19,7 @@
 | **RV-02 全文 SHA 口径检查** | 主报告 §0 / §0.2 / §3.1 / §5.3 引言 / §5.3.0 / §5.3.4 / §10.3 / §10.4；`CHANGELOG.md` [1.68]；`README.md`；runtime README | 全文 grep `273cf08` / `557e4d2` / `bff6a2b` / `1cd56ab` / `ddbd1ae` / `575eae3` 与「当前 HEAD / 文档 HEAD / 本轮基准 / 采集时 HEAD」，逐处判断语义并精确替换 | §0.2 五类基准齐备；主报告「当前 HEAD」残留 **0**；`557e4d2` 仅保留历史时点语义；外部审阅产物与历史 CHANGELOG 条目按原文保留 | 核验记录 §6（命中清单）；主报告 §0.2 | **已完成** |
 | **RV-06 脚本提交与安全测试** | `tools/r0/{rv01-isolation.js,redaction.js,test-redaction.js,scan-credentials.js,README.md}`（新增） | `node --check` ×4；`node --test tools/r0/test-redaction.js` | 4 个脚本语法 `EXIT=0`；6 tests / **6 pass / 0 fail** / `EXIT_CODE=0`；合成 JWT / Cookie / 口令 / API Key / 查询参数 / 非 JWT Bearer 全部不可见于输出 | `tools/r0/README.md`；核验记录 §3；5 个文件 SHA256 见核验记录 §5 | **已完成** |
 | **RV-06 干净 clone 复现** | 核验记录 §5；`tools/r0/README.md` | 工作树导出为临时 git 仓库 → `git clone` 到独立目录（468 文件、无私有目录）→ 8 条命令逐条执行 | `node --check`×4 `EXIT=0`；脱敏测试 `EXIT=0`；`--strict` 0 命中 `EXIT=0`；缺 `R0_TOKEN` `EXIT=2`；缺浏览器 `EXIT=2`；危险开关未确认 `EXIT=3`；`sha256sum` `EXIT=0` | 核验记录 §5（命令 / 输出 / 退出码 / 5 个 SHA256） | **已完成（含预期安全失败路径）**；端到端浏览器采集本轮未重跑 |
-| **RV-06 QA 独立复跑** | 本回执 §3.2（QA 补记）；`docs/FastLedger-R0-凭证安全核验记录.md` §5 | 已派发独立 QA 子代理在**自建**干净 clone 中复跑；WorkBuddy 自建干净 clone 8 项已完成 | 独立 QA 截至本回执落盘**未回报结论**（其临时目录已有 clone 与检查输出，但未形成报告）；WorkBuddy 自测 8 项退出码全部符合预期 | 本回执 §3.2；核验记录 §5 | **WorkBuddy 干净 clone 自测已完成；独立 QA 结果待补；Owner/CI 独立复跑未完成**（不同执行者的重复运行不冒充 Owner/CI） |
+| **RV-06 QA 独立复跑** | 本回执 §3.2；`docs/FastLedger-R0-凭证安全核验记录.md` §5 | 独立 QA 子代理在**自建**干净 clone 中复跑 11 条命令 + 全树只读复核；WorkBuddy 自建干净 clone 8 项 | **ALLOW（限定范围）**、无 FAIL：退出码 `0×7 / 2 / 2 / 3 / 0`，`--strict` 真实凭证 0，6/6 脱敏测试通过，脚本无个人绝对路径与真实凭证；R0 整体验收仍 **BLOCK** | 本回执 §3.2；QA 临时目录 `.tmp_shot/qa-rv3/`（不入库） | **独立 QA 复跑已完成（ALLOW 限定范围）；Owner/CI 独立复跑仍未完成**（同一工程环境的复跑不冒充 Owner/CI） |
 | **RV-01 状态口径统一** | 主报告 §3 / §3.1 / §7.5 / §8 / §9 / §10.3 / §10.4；`docs/r0-screenshots/runtime/README.md`；`CHANGELOG.md` [1.65] / [1.66] / [1.68]；`README.md` 导航 | 精确替换全部状态旧称；新增标准口径段落 | 交付文档中状态旧称 **0**；统一为「本机隔离运行时复验已完成；失败态观察到骨架屏未清理（`.skel`=4、`aria-busy=true`）；待 Owner/CI 独立复跑及慢速网络、有数据态、多角色等场景验证；**缺陷尚未关闭**」；无「已修复 / 已关闭」表述 | 主报告 §7.5 / §8 / §10.4；`CHANGELOG.md` [1.68] | **已完成** |
 | **RV-05 / RV-06 finding 归档** | `docs/FastLedger-R0-独立复核补充-RV-05至06.md`（新增） | 按 `workbuddy/多AI对齐规范.md` §2 的 13 字段逐项填写；RV-05 拆四项状态、RV-06 拆五项状态 | 2 条 finding 字段齐备；`docs/FastLedger-R0-独立复核补充-RV-01至04.md` 与第三次整改任务单 **未被改动** | 新增文档；`git status --short` 核对 | **已完成** |
 
@@ -71,12 +71,22 @@
 | `git diff --check` | 无输出 | 0 |
 | `go test ./...` | **本轮未执行**（无业务代码改动）；[1.63] / [1.65] 的 10 包 ok / 2 包无测试 / 0 FAIL 属历史记录，不作为本轮证据 | — |
 
-### 3.2 QA 独立复跑
+### 3.2 QA 独立复跑（已回填）
 
-已派发独立 QA 子代理在**自建**的干净 clone 中复跑与全树口径复核；截至本回执落盘，该子代理**尚未回报结论**（临时目录 `.tmp_shot/qa-rv3/` 中已可见 clone、检查脚本与 `--strict` 输出，但未形成 PASS/FAIL 报告），故本轮**不把它的结果写成已完成**。
+独立 QA 子代理 `qa-rv3` 在**自建**干净 clone（`.tmp_shot/qa-rv3/`，未复用 WorkBuddy 的 `.tmp_shot/rv3-clean/`）中完成复跑并给出 **ALLOW（限定范围）**：
 
-本轮可引用的复跑证据仅为 WorkBuddy 自建干净 clone 的 8 项记录（`docs/FastLedger-R0-凭证安全核验记录.md` §5：退出码 0 / 0 / 0 / 0 / 2 / 2 / 3 / 0，5 个脚本 SHA256 可与仓库文件核对）。这些属于**同一执行者的自测**；即便后续 QA 子代理回报，也仍属同一工程环境，**不等同 Owner/CI 独立复跑**。后者列为未完成项（§4），并在推送后通知第三方独立复核。
+| 复核项 | 结论 |
+|---|---|
+| 干净 clone 建立 | 从 `repo_tmp` 工作树导出 502 文件，`git init` / `add` / `commit` / `clone` 全 `EXIT=0`；clone 中无 `.tools` / `.localdata` / `.tmp_shot` / `.dart_tool` / `.gotmp` / `build` 与 `*.exe`/`*.db`/`*.log`；`tools/r0/` 5 文件齐全 |
+| 11 条命令 | `node --version` 0；`node --check` ×4 全 0；`node --test` 6 pass / 0 fail / 0；`--strict` 扫描 380 文本、真实凭证候选 0 / 0；缺 `R0_TOKEN` 2；缺浏览器 2；危险开关未确认 3；`sha256sum` 0 —— **退出码序列 `0×7 / 2 / 2 / 3 / 0`，无 FAIL** |
+| 脚本可移植性 | `tools/r0/*.js` 中 7 类个人绝对路径模式 **0 命中**；过滤合成样本后真实 JWT / 口令赋值 **0 命中** |
+| 主仓库只读复核 | `git diff --check` 干净；10 项改动仅文档与 `tools/r0/`，业务代码 / PRD / 落地方案 / WBS / 数据库 / API **0 改动**；外部审阅产物（RV-01至04 补充、第三次整改任务单）未改；状态旧称在非豁免文件 0 命中；`不授权 R1` 仍在；主报告 §0.2 五类 SHA 基准齐备 |
+| 归档证据 | 3 个 JSON 全部可解析（145 / 5 / 5 条）；`network-log.json` 含 29 处 `[REDACTED]`、JWT 字面量 0；5 PNG + 3 JSON 齐全、未被修改 |
+| 放行结论 | **ALLOW（限定范围）**——仅对「RV-05 / RV-06 的技术交付与证据一致性」放行；**R0 整体验收 / 授权 R1 维持 BLOCK** |
 
+**如实记录的观察项**：QA 的 clone 在 `core.autocrlf=true` 下检出为 CRLF，故其记录的 5 个文件 SHA256 与 LF 工作树不同；QA 逐字节实测 `normalized_equal=True`、差异 100% 来自行尾规范化，脚本内容等价，复跑结论不受影响。WorkBuddy 侧的干净 clone 已用 `git -c core.autocrlf=false clone`（LF），哈希见 `docs/FastLedger-R0-凭证安全核验记录.md` §5，两组哈希可分别按各自检出方式核对。
+
+QA 全程只读、未修改仓库文件、未 commit / push、未启动常驻服务、未做端到端浏览器采集、未执行任何需 Owner 授权的历史动作；所有产物在其临时目录内且不入库。WorkBuddy 自测与 QA 复跑**同处一个工程环境**，均**不等同 Owner/CI 独立复跑**，后者仍列为未完成项（§4），并在推送后通知第三方独立复核。
 ---
 
 ## 4. 未完成项（如实列出，不降低 R0 门槛、不挪到 R1）

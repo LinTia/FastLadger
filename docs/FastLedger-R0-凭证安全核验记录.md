@@ -106,6 +106,8 @@
 | `tools/r0/scan-credentials.js` | `0ad2eadaa69ec26e4b3c095efeda007b1a7d03971f4c078d69cc129c3b5fcce9` |
 | `tools/r0/test-redaction.js` | `e87469050e4de4e7c3332967202f4555b39ea19f375c46399d27bd43ae5bf96d` |
 
+**独立 QA 复跑**：另有独立 QA 子代理在自建干净 clone 完成 11 条命令与全树只读复核，结论 **ALLOW（限定范围）**、无 FAIL，详见 `docs/FastLedger-R0-第三次整改交付回执.md` §3.2；其 clone 在 `core.autocrlf=true` 下检出为 CRLF，故两组 SHA256 不同属行尾规范化差异（QA 逐字节实测 `normalized_equal=True`），脚本内容等价。
+
 **边界**：#5–#7 属于任务单 §3.3 允许的「因明确缺失的外部依赖安全失败」。**端到端浏览器采集本轮未重跑**（需本地服务、测试账号凭证与 Edge），归档的 5 PNG + 3 JSON **未被覆盖**；`R0_WRITE_EVIDENCE` 危险开关默认关闭且有双重确认，实测 #7 确实拒绝写入正式证据目录。WorkBuddy 与 QA 的重复运行**不等于** Owner/CI 独立复跑，后者仍为待办。
 
 ---

@@ -24,6 +24,7 @@
   - 清理前同命令 → 真实凭证候选 2、`EXIT_CODE=2`（基线留档 `.tmp_shot/scan_before.json`，不入库）。
   - 受控失效复验 → `GET /api/v1/users/me` HTTP 401；远端 commit API / raw 均 HTTP 200。
   - 干净 clone：`node --test` 与 `--strict` 通过；采集脚本在缺少 `R0_TOKEN` 时以 `EXIT_CODE=2` 明确安全失败（详见核验记录 §5）。
+  - 独立 QA 子代理复跑：在**自建**干净 clone 完成 11 条命令 + 全树只读复核，结论 **ALLOW（限定范围）**、无 FAIL；退出码 `0×7 / 2 / 2 / 3 / 0`，`--strict` 真实凭证候选 0，脚本无个人绝对路径；`R0 整体验收 / 授权 R1` 维持 **BLOCK**。详见 `docs/FastLedger-R0-第三次整改交付回执.md` §3.2。该复跑与 WorkBuddy 自测**同处一个工程环境，不等同 Owner/CI 独立复跑**。
   - `git diff --check` 干净；`go test ./...` 本轮未执行（无业务代码改动；上一轮 [1.63]/[1.65] 的 10 包 ok / 2 包无测试 / 0 FAIL 仍为历史记录，不作为本轮证据）。
 - **未完成 / Owner 待决策**：远端历史对象清理（需 Owner 明确批准，附影响面与回滚方案）、仓库是否改回 Private、是否联系 GitHub Support、Owner/CI 对 R0-E-35 的独立复跑与慢速网络 / 有数据态 / 权限 / 离线 / 多角色场景、截图基线整体补齐、逐控件运行时验收、逐路由逐用例断言与 `-race`、D-1~D-8 裁决、RV-04 的 Owner 决策记录、历史文档 / 外部审阅产物中遗留的个人绝对路径是否统一清理。
 - **范围**：仅新增 / 修订审计文档、CHANGELOG、README、`tools/r0/` 与脱敏扫描报告；**未改业务代码、PRD、落地方案、WBS、数据库或 API**；未删除或覆盖既有 5 PNG + 3 JSON；未启动 R1–R7，PWA 未实施。
