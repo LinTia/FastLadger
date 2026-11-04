@@ -37,6 +37,7 @@
 | [`docs/FastLedger-产品需求文档-PRD.md`](docs/FastLedger-产品需求文档-PRD.md) | 产品需求文档（PRD） | 做什么、为什么、范围与验收 |
 | [`docs/FastLedger-落地方案.md`](docs/FastLedger-落地方案.md) | 软件开发 8 环节落地方案 | 整体技术方案、数据模型、API、版本规划 |
 | [`docs/FastLedger-手机PWA实施指导书.md`](docs/FastLedger-手机PWA实施指导书.md) | 手机 PWA 实施指导书 | 完整移动端、完整离线、IndexedDB、同步、离线分析与本地备份恢复；指导后续 PRD / 落地方案 / WBS 修订 |
+| [`docs/FastLedger-原型还原与PWA分阶段实施总方案.md`](docs/FastLedger-原型还原与PWA分阶段实施总方案.md) | **原型还原与 PWA 分阶段实施总方案** | R0–R7 总路线、原型差异盘点、AI 分批实施纪律、移动端/PWA/离线/备份验收门禁 |
 | [`docs/FastLedger-新手开发完整指南.md`](docs/FastLedger-新手开发完整指南.md) | 新手开发完整指南（含可照敲代码骨架） | 应届生照着做即可开发 |
 | [`docs/FastLedger-枚举字典.md`](docs/FastLedger-枚举字典.md) | 统一枚举字典（唯一权威来源） | 各端枚举值对齐 |
 | [`docs/ezbookkeeping-代码导读.md`](docs/ezbookkeeping-代码导读.md) | 开源参考项目 ezbookkeeping 代码导读 | 可借鉴的设计与实现 |
@@ -56,6 +57,7 @@
 | 新手开发指南 | 怎么一步步写出来（可照敲骨架） | 重新讨论需求 |
 | 枚举字典 | 枚举值的唯一权威 | 业务流程 |
 | 原型 | 长什么样、怎么交互 | 数据持久化 |
+| 原型还原与 PWA 总方案 | 如何分阶段推进、如何验收、AI 如何交接 | 重新定义需求或技术契约 |
 
 > 规则：需求/范围以 **PRD** 为准；技术选型以**落地方案**为准；枚举值以**枚举字典**为准。三份文档冲突时，按此优先级，并在 CHANGELOG 记录。
 
