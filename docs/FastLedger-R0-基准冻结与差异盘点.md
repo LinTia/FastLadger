@@ -13,7 +13,7 @@
 |---|---|
 | 当前基线 SHA | 独立复核时 GitHub 默认分支最新可见 HEAD = **`1cd56ab7830d2d3f33faf7fc5372d3824c088ae0`**。原记录的 `f9f075e` 已过时；`55bbd4e` 的本地分支/工作区状态无法从 GitHub 只读视角验证，需本地重新检查。 |
 | 工作分支 | `main`（本地） |
-| 关键决策文档（本次已读） | `workbuddy/多AI对齐规范.md`、`workbuddy/第三方审阅者导读.md`、根 `CHANGELOG.md`（[1.44]/[1.57]/[1.58]/[1.59]）、`docs/FastLedger-原型还原与PWA分阶段实施总方案.md`、`docs/FastLedger-手机PWA实施指导书.md`、`docs/FastLedger-Web设计规范.md`（§8 信息架构）、`docs/FastLedger-交易更新语义设计.md`、`prototype/README.md`、`prototype-v2/README.md` |
+| 关键决策文档（原编制回执所列） | `workbuddy/多AI对齐规范.md`、`workbuddy/第三方审阅者导读.md`、根 `CHANGELOG.md`、原型还原与 PWA 总方案、手机 PWA 指导书、Web 设计规范、交易更新语义设计、两版原型 README。原回执未列 PRD、落地方案、开发 WBS、枚举字典；不能据此证明原编制者已逐项核对。独立复核已另行对照这些文件，详见补漏记录。 |
 | 本次范围 | R0-A ~ R0-G（页面/交互盘点、两版原型差异、当前实现与后端 API 映射、差异根因、截图与覆盖率方法、Owner 裁决清单） |
 | **明确不做** | 不改 `server/`、`client/`、`server/web/dist/` 业务代码；不改 PRD/落地方案/枚举字典/WBS；不做 PWA 代码；不做 UI 重构；不给"还原度百分比"主观估值（见 §1.3） |
 | 相关证据源 | `prototype/`（构建产物）、`prototype-v2/index.html`、`server/web/dist/{index.html,app.js,style.css}`、`server/internal/api/router.go`、`docs/FastLedger-Web设计规范.md` §8 |
@@ -179,9 +179,7 @@
 | 同步 | `GET /books/:id/sync/pull`、`POST /books/:id/sync/push` | JWT | ❌（当前 Web `app.js` 未调用） |
 | WS | `GET /api/v1/ws` | JWT | ❌（后端路由存在；当前 Web `index.html` 仅加载 `/app.js`，`app.js` 未发现 WebSocket 客户端） |
 
-**关键结论**：
-- 后端**能力完整**，"账户/分类/交易详情/删除恢复/报表/预算/投资/成员/设置"均有 API —— 差异主要在**前端 UX/页面结构与原型对齐**，而非后端缺能力（符合总方案 §3.1）。
-- **前端未接通**：OCR（范围待裁决）、会话管理 API、sync pull/push（离线/PWA 阶段再定）。
+**关键结论（修正）**：后端已有多组 API 路由，但路由存在不等于服务层、权限、DTO、测试均完整；本矩阵尚未达到总方案要求的契约粒度。当前 Web 未发现 WS 客户端或 sync pull/push 调用；OCR 的 Web 范围由 PRD §5.2 明确为不做；会话、可见性和邀请撤销等 API/能力不能据此推断前端已接通。
 - `PUT /transactions/:txId` 已开放且是**全量替换 + 类型不可改**（改类型=删除+重建），R1 不得伪造类型变更。
 
 ---
@@ -202,12 +200,12 @@
 | R0-E-08 | 截图识别：Web 无实现，OCR 范围未决 | P1 | dist 无 `/ocr/*` 调用；PRD §5.2 vs 设计规范含截图页 | 产品冲突 | Owner 裁决（R0-G D-2） |
 | R0-E-09 | 报表：柱状+环形+月份切换已实现，视觉对齐未验收 | P2 | `renderReport` L804 | UI 对齐（待截图） | 主题色柱状 + conic 环形 + 切换 |
 | R0-E-10 | 预算：三态（正常/接近/超支）色未验收 | P2 | `renderBudget` L1108 | UI 对齐（待截图） | 三态色 + 总进度 + 信封 |
-| R0-E-11 | 成员：角色徽标/可见性开关/常驻隐私提示对齐未验收 | P2 | `renderMembers` L1636 | UI 对齐（待截图） | 徽标 + 开关 + 隐私提示 |
-| R0-E-12 | 状态覆盖缺口：空/加载(骨架)/错误/权限不足/离线/同步中/冲突 未系统化 | P2 | 全局（无统一状态组件证据） | 健壮性/UX | 逐页补状态组件 |
+| R0-E-11 | 成员角色徽标的视觉/状态仍待截图验收；可见性开关与隐私提示统一见 R0-E-19、27，不在本项重复统计 | P3 | `renderMembers` L1636–1775 | 视觉验收待做 | 对照 owner/admin/member 徽标和窄屏表格布局采集截图 |
+| R0-E-12 | 状态覆盖缺口：局部空态/加载骨架已存在，但网络错误、权限不足、离线、同步中、冲突尚未逐页验收 | P2 | 全局；首页加载失败见 R0-E-35 | 健壮性/UX | 建立逐页状态矩阵；失败态必须清除骨架并提供可恢复反馈 |
 | R0-E-13 | 设计 token 落地：`style.css` 与 `design-tokens.json` 一致性未逐项核 | P2 | `dist/style.css`；规范 §9 L338 | 视觉（token） | 全量 token 对齐，禁散落硬编码 |
 | R0-E-14 | 会话管理 UI 缺失（后端 WBS 5.10 已交付 API） | P2 | `router.go` `/auth/sessions`；前端无调用 | 前端未接 API | 设置页加"登录设备/会话"管理 |
 | R0-E-15 | 当前 Web 未接 WS 客户端，也未使用 sync pull/push；后端有路由不代表 Web 已同步 | P2 | `index.html` L1–75；`app.js` 全文；`router.go` L125–135、L215–235 | Web 客户端同步能力缺失 | 明确本阶段 Web 在线/实时边界；按 R 阶段实现 WS 通知 + pull 补漏或明确不纳入 |
-| R0-E-16 | 账本/交易总表/回收站为原型外扩展，需确认保留与归属；另 `PUT /books/:id`（账本重命名）前端未接 | P3 | `renderBooks` L234、`renderTxns` L337、`renderRecycle` L751；`router.go` L161 | 范围确认 | 保留（PRD 依据），导航归位 |
+| R0-E-16 | 交易总表为原型外的辅助入口，需确认其独立入口/导航归属；多账本与回收站不得列为可删扩展 | P3 | `renderTxns` L337；`renderBooks` L234；`renderRecycle` L751；PRD 多账本/软删除要求 | IA/范围管理 | 账本列表与回收站按已定需求保留；交易总表仅裁决入口归属 |
 | R0-E-17 | 设置页仅有 API Token/退出；个人资料能力在“我的”页，服务器/备份区块缺失 | P2 | `renderSettings` L1518–1635；`renderMine` L2138–2215；设计规范 §8.1–8.2 | 信息架构/入口缺失 | 按裁决后的 IA 补资料入口、服务器与备份状态区块；不误报资料能力完全缺失 |
 | R0-E-18 | 改密 UI 缺失（后端 `POST /users/me/password` 已存在，前端无入口） | P2 | `router.go` L139；`dist/app.js` 无 `/users/me/password` 调用（"密码"仅登录/注册表单 L179/L184） | 前端未接 API | 设置/个人资料加改密入口（旧密码+新密码） |
 | R0-E-19 | 成员账本可见性 UI 缺失：无 `PUT /books/:id/visibility` 调用；逐成员 `canViewOthers` 徽标不等于 MVP 账本级状态 | P1 | `renderMembers` L1636–1775；`router.go` visibility 路由；PRD §7.3；枚举字典 §11 | 隐私控制/字段粒度错误 | 使用 `books.members_can_view_others` 提供账本级开关 + 常驻隐私提示 |
@@ -263,7 +261,7 @@
 | **D-5** | 投资资产是否独立成页？ | prototype/ 独立页；v2 疑似折入账户 | 建议：保留独立页（依 prototype/），v2 仅视觉 | 待确认 |
 | **D-6** | 交易总表是否保留为独立导航入口，还是作为首页/我的的辅助检索视图？ | 多账本与回收站由 PRD/已定软删除要求支持，不属于可删扩展；交易总表是额外检索视图 | 建议保留交易总表能力，但由 Owner 裁决独立入口/导航归属；账本列表与回收站按既定需求保留 | 待确认（仅交易总表入口） |
 | **D-7** | 多端会话管理是否属于产品需求？ | PRD §4.1/§4.12 已要求可查看与撤销会话；后端 `/auth/sessions` 已有路由，Web UI 未接（R0-E-31） | 需求已确定；Owner 只需决定排期/入口，不得裁决为“不需要”而不修订 PRD | 已确认需求，排期待定 |
-| **D-8** | Web 设置页是否需要「服务器与备份」状态展示？ | 原型设置有该区块；后端当前**无备份状态 API**（仅 CLI `instance bump`） | 建议：MVP 仅展示静态说明/部署信息，或新增只读 `instance.meta` 接口；不做 Web 触发备份 | 待确认 |
+| **D-8** | Web 设置页的服务器/备份区块展示到什么程度、数据从何处安全读取？ | PRD §4.12 与设计规范 §8.1–8.2 已要求服务器信息/备份入口；当前 Web 无状态 API 证据，运维备份另有部署机制 | 需求入口已确定；待 Owner 裁决 Web 只读状态范围、权限与是否提供受控备份/恢复操作。未设计安全边界前不得暴露恢复按钮 | 展示/操作边界待确认 |
 
 > **R0 通过条件**：D-1、D-3、D-5、D-6（仅交易总表入口）、D-8 的未决范围须有 Owner 结论或明确阻塞；D-2 的 Web OCR 已由 PRD 决定为不做，PWA 本地 OCR若新增须单独裁决；D-4 需求已确定，仅技术实现待确认；D-7 会话管理需求已确定，仅排期待定。并且必须完成逐控件交互清单、API 权限/DTO/测试矩阵及 §7 截图基线，R0 才可通过。
 
