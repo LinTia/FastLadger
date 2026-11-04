@@ -108,9 +108,9 @@
 | 分类 | 大类卡片→子类列表、分类色板 | `renderCategories` L2069；`GET /categories?tree=1` + CRUD | 删除引用计数 [待确认] | 具备 |
 | 预算 | 总进度条 + 信封列表、正常/接近/超支三态 | `renderBudget` L1108；`GET/POST/PUT/DELETE /budgets` | 三态色 [待确认] | 具备，视觉待验 |
 | 报表 | 月度柱状（chart-1 主色）+ 分类占比环形（conic）+ 月份切换 | `renderReport` L804；`GET /reports/monthly?months=6` + `/reports/categories` | 空态 [待确认] | 具备，视觉待验 |
-| 家庭成员 | 角色徽标、可见性开关 + 常驻隐私提示 | `renderMembers` L1636（`.family-block` 家庭信息）+ 成员 CRUD | 权限不足 [待确认] | 具备，视觉待验 |
+| 家庭成员 | 角色徽标、可见性开关 + 常驻隐私提示 | `renderMembers` L1636：`.family-block` 家庭信息 + 成员 CRUD；**可见性仅只读徽标**（L1720 `canViewOthers`），无可操作开关，未调用 `PUT /books/:id/visibility` | 权限不足 [待确认] | **部分具备**（缺可见性开关，R0-E-19） |
 | 导出 | 筛选 + 预览 + CSV/JSON | `renderExport` L933（时间范围预设 + "共N条"预览 + `GET /export` blob 下载 + `X-Export-Count/Truncated`） | 空态/超大截断 [待确认] | 具备 |
-| 设置 | API Token 生成/复制/撤销、备份入口、退出登录 | `renderSettings` L1518（tokens CRUD）+ `renderMine` 资料编辑 | — | 具备 |
+| 设置 | 个人资料、API Token、服务器与备份、退出登录 | `renderSettings` L1518：**仅 API Token（生成/复制/撤销）+ 退出登录**；个人资料在"我的"页；**缺服务器与备份区块、缺改密** | — | **部分具备**（缺 个人资料/服务器与备份/改密，R0-E-17/18） |
 | 我的 | 菜单中枢 | `renderMine` L2138：头像 + 资料编辑（改邮箱）+ **8 个二级入口**（我的账本/账户/成员/导出/报表/预算/资产/回收站） | — | 具备（8 入口；与平铺顶栏重复，R0-E-01） |
 
 **状态覆盖缺口（统一记为 R0-E-12）**：空 / 加载(骨架屏) / 网络错误 / 权限不足 / 离线 / 同步中 / 冲突 —— 当前代码未见系统性状态组件，需逐页补齐并截图。
@@ -206,7 +206,10 @@
 | R0-E-13 | 设计 token 落地：`style.css` 与 `design-tokens.json` 一致性未逐项核 | P2 | `dist/style.css`；规范 §9 L338 | 视觉（token） | 全量 token 对齐，禁散落硬编码 |
 | R0-E-14 | 会话管理 UI 缺失（后端 WBS 5.10 已交付 API） | P2 | `router.go` `/auth/sessions`；前端无调用 | 前端未接 API | 设置页加"登录设备/会话"管理 |
 | R0-E-15 | 未使用 `sync pull/push`（仅 WS）；离线/PWA 阶段再定 | P3 | 前端无 `/sync/*` 调用 | 架构（阶段 3 后端有） | 归入 R4/R5 |
-| R0-E-16 | 账本/交易总表/回收站为原型外扩展，需确认保留与归属 | P3 | `renderBooks` L234、`renderTxns` L337、`renderRecycle` L751 | 范围确认 | 保留（PRD 依据），导航归位 |
+| R0-E-16 | 账本/交易总表/回收站为原型外扩展，需确认保留与归属；另 `PUT /books/:id`（账本重命名）前端未接 | P3 | `renderBooks` L234、`renderTxns` L337、`renderRecycle` L751；`router.go` L161 | 范围确认 | 保留（PRD 依据），导航归位 |
+| R0-E-17 | 设置页缺「个人资料」「服务器与备份」区块（原型设置三区：个人资料/API Token/服务器与备份） | P2 | `renderSettings` L1518（仅 Token+退出）；原型设置含三区；"资料"仅在 `renderMine` L2158 | UI 缺失 / 前端位置错置 | 设置页补齐三区块（个人资料可复用 mine 的资料编辑） |
+| R0-E-18 | 改密 UI 缺失（后端 `POST /users/me/password` 已存在，前端无入口） | P2 | `router.go` L139；`dist/app.js` 无 `/users/me/password` 调用（"密码"仅登录/注册表单 L179/L184） | 前端未接 API | 设置/个人资料加改密入口（旧密码+新密码） |
+| R0-E-19 | 成员「账本可见性」开关缺失：仅只读徽标，无 `PUT /books/:id/visibility` 调用 | P2 | `renderMembers` L1720（`canViewOthers` 只读徽标）；`router.go` L165 | 前端未接 API / UI 缺失 | 加 book 级"成员互看"开关 + 常驻隐私提示 |
 
 ---
 
@@ -259,8 +262,9 @@
 | **D-5** | 投资资产是否独立成页？ | prototype/ 独立页；v2 疑似折入账户 | 建议：保留独立页（依 prototype/），v2 仅视觉 | 待确认 |
 | **D-6** | 账本列表/交易总表/回收站 是否保留为独立入口？ | 原型 13 页未含；PRD 多账本/软删除 | 建议：保留（PRD 依据），导航归位至合理位置 | 待确认 |
 | **D-7** | 会话管理 UI 是否纳入 R1？ | 后端 5.10 已交付 `/auth/sessions`；前端未接 | 建议：纳入设置页（低风险） | 待确认 |
+| **D-8** | Web 设置页是否需要「服务器与备份」状态展示？ | 原型设置有该区块；后端当前**无备份状态 API**（仅 CLI `instance bump`） | 建议：MVP 仅展示静态说明/部署信息，或新增只读 `instance.meta` 接口；不做 Web 触发备份 | 待确认 |
 
-> **R0 通过条件**：以上 D-1~D-7 均获 Owner 明确结论（或标"阻塞，不开发"），且 §7 截图基线开始采集，方可进入 R1。
+> **R0 通过条件**：以上 D-1~D-8 均获 Owner 明确结论（或标"阻塞，不开发"），且 §7 截图基线开始采集，方可进入 R1。
 
 ---
 
