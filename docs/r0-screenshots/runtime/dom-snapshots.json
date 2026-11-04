@@ -1,0 +1,144 @@
+[
+  {
+    "scenario": "pending-390x844",
+    "file": "01-pending-390x844.png",
+    "viewport": "390x844",
+    "mobile": true,
+    "mode": "pending",
+    "capturedAt": "2026-11-04T11:57:19.479Z",
+    "targetPauses": [
+      {
+        "requestId": "interception-job-9.0",
+        "url": "http://127.0.0.1:8080/api/v1/books/1/transactions?page=1&count=60",
+        "method": "GET",
+        "at": "2026-11-04T11:57:17.647Z",
+        "scenario": "pending-390x844"
+      }
+    ],
+    "dom": {
+      "href": "http://127.0.0.1:8080/?rv01=pending-390x844#b/1",
+      "skelCount": 4,
+      "ariaBusyCount": 1,
+      "toast": {
+        "text": "",
+        "className": "hidden",
+        "hidden": true
+      },
+      "retryControls": [],
+      "viewText": "我的家庭账本 · 概览\n本月收入\n+¥0.00\n家庭总收入\n本月支出\n-¥0.00\n家庭总支出\n结余\n¥0.00\n净资产",
+      "bodyText": "我的家庭账本 · 概览\n本月收入\n+¥0.00\n家庭总收入\n本月支出\n-¥0.00\n家庭总支出\n结余\n¥0.00\n净资产\n🏠\n首页\n🧾\n账单\n＋\n📊\n报表\n👤\n我的"
+    }
+  },
+  {
+    "scenario": "rejected-network-390x844",
+    "file": "02-rejected-network-390x844.png",
+    "viewport": "390x844",
+    "mobile": true,
+    "mode": "fail",
+    "capturedAt": "2026-11-04T11:57:20.523Z",
+    "targetPauses": [
+      {
+        "requestId": "interception-job-16.0",
+        "url": "http://127.0.0.1:8080/api/v1/books/1/transactions?page=1&count=60",
+        "method": "GET",
+        "at": "2026-11-04T11:57:19.585Z",
+        "scenario": "rejected-network-390x844"
+      }
+    ],
+    "dom": {
+      "href": "http://127.0.0.1:8080/?rv01=rejected-network-390x844#b/1",
+      "skelCount": 4,
+      "ariaBusyCount": 1,
+      "toast": {
+        "text": "✕ Failed to fetch",
+        "className": "err",
+        "hidden": false
+      },
+      "retryControls": [],
+      "viewText": "我的家庭账本 · 概览\n本月收入\n+¥0.00\n家庭总收入\n本月支出\n-¥0.00\n家庭总支出\n结余\n¥0.00\n净资产",
+      "bodyText": "我的家庭账本 · 概览\n本月收入\n+¥0.00\n家庭总收入\n本月支出\n-¥0.00\n家庭总支出\n结余\n¥0.00\n净资产\n🏠\n首页\n🧾\n账单\n＋\n📊\n报表\n👤\n我的\n✕ Failed to fetch"
+    }
+  },
+  {
+    "scenario": "rejected-503-390x844",
+    "file": "03-rejected-503-390x844.png",
+    "viewport": "390x844",
+    "mobile": true,
+    "mode": "503",
+    "capturedAt": "2026-11-04T11:57:21.562Z",
+    "targetPauses": [
+      {
+        "requestId": "interception-job-23.0",
+        "url": "http://127.0.0.1:8080/api/v1/books/1/transactions?page=1&count=60",
+        "method": "GET",
+        "at": "2026-11-04T11:57:20.621Z",
+        "scenario": "rejected-503-390x844"
+      }
+    ],
+    "dom": {
+      "href": "http://127.0.0.1:8080/?rv01=rejected-503-390x844#b/1",
+      "skelCount": 4,
+      "ariaBusyCount": 1,
+      "toast": {
+        "text": "✕ 模拟故障：账单列表服务暂不可用（R0-RV-01 隔离注入）",
+        "className": "err",
+        "hidden": false
+      },
+      "retryControls": [],
+      "viewText": "我的家庭账本 · 概览\n本月收入\n+¥0.00\n家庭总收入\n本月支出\n-¥0.00\n家庭总支出\n结余\n¥0.00\n净资产",
+      "bodyText": "我的家庭账本 · 概览\n本月收入\n+¥0.00\n家庭总收入\n本月支出\n-¥0.00\n家庭总支出\n结余\n¥0.00\n净资产\n🏠\n首页\n🧾\n账单\n＋\n📊\n报表\n👤\n我的\n✕ 模拟故障：账单列表服务暂不可用（R0-RV-01 隔离注入）"
+    }
+  },
+  {
+    "scenario": "pending-1280x800",
+    "file": "04-pending-1280x800.png",
+    "viewport": "1280x800",
+    "mobile": false,
+    "mode": "pending",
+    "capturedAt": "2026-11-04T11:57:23.491Z",
+    "targetPauses": [
+      {
+        "requestId": "interception-job-30.0",
+        "url": "http://127.0.0.1:8080/api/v1/books/1/transactions?page=1&count=60",
+        "method": "GET",
+        "at": "2026-11-04T11:57:21.654Z",
+        "scenario": "pending-1280x800"
+      }
+    ],
+    "dom": {
+      "href": "http://127.0.0.1:8080/?rv01=pending-1280x800#b/1",
+      "skelCount": 4,
+      "ariaBusyCount": 1,
+      "toast": {
+        "text": "",
+        "className": "hidden",
+        "hidden": true
+      },
+      "retryControls": [],
+      "viewText": "我的家庭账本 · 概览\n＋ 记一笔\n本月收入\n+¥0.00\n家庭总收入\n本月支出\n-¥0.00\n家庭总支出\n结余\n¥0.00\n净资产",
+      "bodyText": "FastLedger\n交易\n报表\n预算\n资产\n导出\n对账\n成员\n回收站\n设置\nadmin\n退出\n我的家庭账本 · 概览\n＋ 记一笔\n本月收入\n+¥0.00\n家庭总收入\n本月支出\n-¥0.00\n家庭总支出\n结余\n¥0.00\n净资产"
+    }
+  },
+  {
+    "scenario": "recovered-390x844",
+    "file": "05-recovered-390x844.png",
+    "viewport": "390x844",
+    "mobile": true,
+    "mode": "recovered",
+    "capturedAt": "2026-11-04T11:57:25.369Z",
+    "targetPauses": [],
+    "dom": {
+      "href": "http://127.0.0.1:8080/?rv01=recovered-390x844#b/1",
+      "skelCount": 0,
+      "ariaBusyCount": 0,
+      "toast": {
+        "text": "",
+        "className": "hidden",
+        "hidden": true
+      },
+      "retryControls": [],
+      "viewText": "我的家庭账本 · 概览\n本月收入\n+¥0.00\n家庭总收入\n本月支出\n-¥0.00\n家庭总支出\n结余\n¥0.00\n净资产\n🧾\n\n还没有账单——点下方「＋ 记一笔」开始记录。",
+      "bodyText": "我的家庭账本 · 概览\n本月收入\n+¥0.00\n家庭总收入\n本月支出\n-¥0.00\n家庭总支出\n结余\n¥0.00\n净资产\n🧾\n\n还没有账单——点下方「＋ 记一笔」开始记录。\n\n🏠\n首页\n🧾\n账单\n＋\n📊\n报表\n👤\n我的"
+    }
+  }
+]

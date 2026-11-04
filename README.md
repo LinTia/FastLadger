@@ -44,6 +44,7 @@
 | [`docs/FastLedger-R0-独立补漏与复核记录.md`](docs/FastLedger-R0-独立补漏与复核记录.md) | **R0 独立补漏与复核记录** | 修正误判、补充 R0-E-20~39、复核 R0 退出条件与 D-1~D-8；静态复核 + 二次整改复核，R0 尚未通过 |
 | [`docs/FastLedger-R0-独立复核补充-RV-01至04.md`](docs/FastLedger-R0-独立复核补充-RV-01至04.md) | **R0 二次整改后的独立复核补充** | R0-RV-01~04：骨架屏失败态证据、SHA 基准、逐控件字段语义、首页月份切换需求依据；R0 仍阻塞 |
 | [`docs/r0-screenshots/`](docs/r0-screenshots/) | **R0 真实截图基线（43 张 PNG）+ 索引 / 阻塞清单** | Edge headless 采集的 normal / empty / error 首屏；见目录内 `README.md`。**截图基线未完成，R0 未通过** |
+| [`docs/r0-screenshots/runtime/`](docs/r0-screenshots/runtime/) | **R0-RV-01 隔离运行时复验证据（5 PNG + 3 JSON）** | 仅拦截交易列表请求后的 pending / rejected / 恢复态截图与真实 CDP Network/Console 日志；见目录内 `README.md`。**R0-E-35 仍待运行时复验 / 阻塞，R0 未通过** |
 | [`docs/FastLedger-新手开发完整指南.md`](docs/FastLedger-新手开发完整指南.md) | 新手开发完整指南（含可照敲代码骨架） | 应届生照着做即可开发 |
 | [`docs/FastLedger-枚举字典.md`](docs/FastLedger-枚举字典.md) | 统一枚举字典（唯一权威来源） | 各端枚举值对齐 |
 | [`docs/ezbookkeeping-代码导读.md`](docs/ezbookkeeping-代码导读.md) | 开源参考项目 ezbookkeeping 代码导读 | 可借鉴的设计与实现 |

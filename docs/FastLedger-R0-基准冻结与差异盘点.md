@@ -11,7 +11,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 当前基线 SHA | 独立复核时 GitHub 默认分支最新可见 HEAD = **`1cd56ab7830d2d3f33faf7fc5372d3824c088ae0`**。原记录的 `f9f075e` 已过时；`55bbd4e` 的本地分支/工作区状态无法从 GitHub 只读视角验证，需本地重新检查。 |
+| 当前基线 SHA | 见 §0.2「证据版本基准」：文档 HEAD = `557e4d2...`；业务代码证据基准 = `bff6a2b...`；截图对应代码版本**未独立验证**；`1cd56ab...` 为历史快照、不再作为本轮有效代码基准。 |
 | 工作分支 | 本次为 GitHub 默认分支只读复核；本地工作分支/工作区状态未验证。 |
 | 关键决策文档（原编制回执所列） | `workbuddy/多AI对齐规范.md`、`workbuddy/第三方审阅者导读.md`、根 `CHANGELOG.md`、原型还原与 PWA 总方案、手机 PWA 指导书、Web 设计规范、交易更新语义设计、两版原型 README。原回执未列 PRD、落地方案、开发 WBS、枚举字典；不能据此证明原编制者已逐项核对。独立复核已另行对照这些文件，详见补漏记录。 |
 | 本次范围 | R0-A ~ R0-G（页面/交互盘点、两版原型差异、当前实现与后端 API 映射、差异根因、截图与覆盖率方法、Owner 裁决清单） |
@@ -25,6 +25,19 @@
 3. **区分"后端有能力"与"前端已接通"**：总方案 §3.1 指出不得把"有同名页面/能调 API"冒充原型还原。本 R0 的 R0-D 对每条后端能力标注"前端是否调用"，避免误判。
 4. **不动已定决策**（导读 §5）：多账本、同步版本号、整数分、软删除/恢复/审计、隐私定位（图片不上传）等一律不改，仅为视觉一致不得破坏。
 5. **本地分支状态**：原编制者报告其前端提交已 rebase 至当时 GPT `main` 之上；本次独立复核无法读取其本地工作区，也无法验证是否干净或是否存在未推送提交。GitHub 端只确认本报告列明的远端提交。
+
+---
+
+### 0.2 证据版本基准（RV-02 纠偏）
+
+> 不同证据资产的基准**不合并、不互相推定**；本表为 §0 / §3.1 / §5.3 / §7.5 的统一口径。
+
+| 证据类别 | 基准 / 状态 | 说明 |
+|---|---|---|
+| 文档版本 HEAD | `557e4d223064c149cdf1063429a2fdd79158e609`（`557e4d2`，含 RV-01~04 补充） | 本轮审计文档、CHANGELOG、README 与截图资产所在 HEAD |
+| 业务代码证据基准 | `bff6a2b351bf5a039cdf7c762ec2693fb330cd00` | §3.1 / §5.3 的 `file:line` 源码取证均按此提交实读；`557e4d2` 相对它仅有文档/资产变更，**无业务代码变更** |
+| 截图采集对应代码版本 | **未独立验证** | 服务二进制构建于 `2026-11-04 01:13:59 +0800`；截图时实测 HTTP 提供的 `/app.js` 与仓库 HEAD 一致、`/style.css` 仅 CRLF 差异，但**后端二进制对应的代码 SHA 未独立验证**，不得推定等于 `bff6a2b`；隔离运行时证据见 `docs/r0-screenshots/runtime/` |
+| 历史快照 | `1cd56ab7830d2d3f33faf7fc5372d3824c088ae0` | **历史快照，不再作为本轮有效代码基准**；仅用于解释 [1.61] 当时的回执记录 |
 
 ---
 
@@ -101,7 +114,7 @@
 | 页面 | 必备交互（规范 §8.2） | 当前实现证据 | 状态（空/加载/错误/权限/离线） | 结论 |
 |---|---|---|---|---|
 | 登录 | 预填、pending、错误红字、成功进首页 | `renderLogin` L161；`POST /auth/login`/`/auth/register` | 错误红字/pending [待确认] | 基本具备，细节待验 |
-| 首页账单 | 概览三卡联动、按日分组账单、行点击进详情、筛选条、骨架屏 | `renderHome` L1947–1965；`renderBillStream` L1872–1927：**骨架屏与按日小计已实现**；行点击→`#b/:id/tx/:tid` | 首页无筛选；账单行缺账户/渠道；请求失败时 skeleton 未替换为错误态；日小计仅基于首批 60 条 | **部分具备**（见 R0-E-02、20、21、34、35） |
+| 首页账单 | 概览三卡联动、按日分组账单、行点击进详情、筛选条、骨架屏 | `renderHome` L1947–1965；`renderBillStream` L1872–1927：**骨架屏与按日小计已实现**；行点击→`#b/:id/tx/:tid` | 首页无筛选；账单行缺账户/渠道；**请求失败时是否正确清理骨架屏待隔离运行时复验（R0-E-35，阻塞，见 §7.5）**；日小计仅基于首批 60 条 | **部分具备**（见 R0-E-02、20、21、34；R0-E-35 待运行时复验 / 阻塞） |
 | 记一笔 | 支出/收入/转账分段、转账双账户、必填校验红字、pending→toast→返回首页顶部插入 | `#formDlg`（`fType` 为普通 select；含金额/账户/对方账户/分类/日期/备注）；`POST /transactions` | 缺支付渠道/商户输入；类型不是分段控件；其余校验/pending 需浏览器验证 | **部分具备**（见 R0-E-23、29） |
 | 截图识别 | 三级漏斗 → 确认弹窗 → 确认入账（绝不自动入账） | Web 无入口/无 OCR 调用 | — | **PRD §5.2 明确 Web 不做 OCR；Flutter 端能力另行审计** |
 | 交易详情 | 全字段、编辑、删除二次确认→toast+余额回滚 | `renderTxDetail` L1974–2015：展示账户/分类/日期/备注；编辑/删除入口存在 | 未展示 paymentChannel；备注非空时 merchant 不显示；删除文案称无法恢复，与回收站/恢复能力矛盾 | **部分具备**（见 R0-E-22、24） |
@@ -114,14 +127,15 @@
 | 设置 | 个人资料、账号安全、API Token、服务器与备份、退出登录 | `renderSettings` L1518–1635：API Token 管理 + 退出；邮箱资料编辑在 `renderMine` L2138–2215 | 资料能力存在但入口在“我的”；设置缺改密 UI、会话管理 UI（R0-E-14）、服务器/备份区块 | **部分具备**（见 R0-E-17、18、14） |
 | 我的 | 菜单中枢 | `renderMine` L2138：头像 + 资料编辑（改邮箱）+ **8 个二级入口**（我的账本/账户/成员/导出/报表/预算/资产/回收站） | — | 具备（8 入口；与平铺顶栏重复，R0-E-01） |
 
-**状态覆盖缺口（R0-E-12）修正**：首页账单流已有骨架屏，不能将“骨架屏缺失”列为缺陷；但请求失败时 catch 仅 toast 并 return，骨架仍留在页面（R0-E-35）。空态已有局部实现；网络错误、权限不足、离线、同步中、冲突仍未形成逐页证据矩阵，需逐页验证并截图。
+**状态覆盖缺口（R0-E-12）修正**：须区分两个判断：①「首页账单流已实现骨架屏」——已有源码与隔离运行时 pending 截图证据（`docs/r0-screenshots/runtime/01-pending-390x844.png`），不得再列为「骨架屏缺失」；②「特定请求失败时是否正确清理骨架屏」——**R0-E-35 状态为「待运行时复验 / 阻塞」**，本轮隔离实测（§7.5）观察到失败后骨架仍在，但属单次本机实测，**未关闭缺陷**。空态已有局部实现；网络错误、权限不足、离线、同步中、冲突仍未形成逐页证据矩阵，需逐页验证并截图。
 
 ### 3.1 逐控件交互清单（二次整改重做版）
 
-> **取证基线**：执行时 GitHub `origin/main` HEAD = `bff6a2b351bf5a039cdf7c762ec2693fb330cd00`（`git fetch` 已重试成功，本地 0 ahead / 0 behind）。源码行号全部按该 HEAD 重新定位：`server/web/dist/index.html`（151 行）、`server/web/dist/app.js`（2241 行）。
+> **取证基线（业务代码证据基准，见 §0.2）**：`bff6a2b351bf5a039cdf7c762ec2693fb330cd00`（执行时 `git fetch` 已重试成功，本地 0 ahead / 0 behind）；源码行号全部按该提交重新定位：`server/web/dist/index.html`（151 行）、`server/web/dist/app.js`（2241 行）。**该 SHA 不是截图采集对应代码版本的推定依据**（§0.2 / §7.5）。
 > **本轮纠偏**：原 §3.1 把多个独立控件合并成一行（如金额/账户/分类/日期/备注合并、FAB 与 Tab 合并、账户增改删合并、「我的」8 入口合并），且误引不存在的 `#loginForm`。本版**每个独立输入框 / 按钮 / Tab / 菜单 / 弹窗动作单独一行**，统一 13 字段。
 > **字段口径**：`代码位置` = DOM selector 或 JS 函数 + 当前 HEAD 行号；`验证证据` = `C:` 静态源码定位、`S:` 本轮 Edge 真实浏览器截图（路径相对 `docs/r0-screenshots/`）、或明确的「未采集 / grep 无命中」；`当前状态` 区分 `已实现` / `已实现但缺陷` / `缺失` / `待验证` / `不适用`，并关联原 R0-E 编号（不另起重复编号）。**标「运行时未验证」即未验证，不用「—」掩盖。**
-> **截图范围**：本轮共采集 43 张真实截图，覆盖 4 个视口 × 16 个页面/弹层；但**仅首屏/空态/错误态**，绝大多数成功/失败交互路径、加载态、权限不足态、离线态、原型侧对照截图仍未采集，见 §7.5 阻塞清单。因此本清单的 `S:` 证据只证明「控件/页面在此状态下可见」，**不证明交互成功路径已验收**。
+> **RV-03 字段语义词表**（本版统一消歧）：`N/A（不适用）` = 该字段对本控件确实不适用；`见 I-XXX` = 行为由该**真实存在**的交互条目覆盖；`未验证` = 无运行时证据；`未实现` = 代码中无对应能力；`待确认` = 需求/产品行为尚未裁决。`代码位置` 列形如 `—（grep 无命中）` 为带注解的「未实现」，不是语义不明的裸 `—`；本版已消除逐控件表中全部裸 `—` 单元格（228 行 / 13 字段不变）。
+> **截图范围**：本轮共采集 43 张真实截图 + 5 张 RV-01 隔离运行时截图（`docs/r0-screenshots/runtime/`，含 pending / rejected / 恢复态与真实 CDP 日志），覆盖 4 个视口 × 16 个页面/弹层；但**仅首屏/空态/错误态**，绝大多数成功/失败交互路径、加载态、权限不足态、离线态、原型侧对照截图仍未采集，见 §7.5 阻塞清单。因此本清单的 `S:` 证据只证明「控件/页面在此状态下可见」，**不证明交互成功路径已验收**。
 
 #### 3.1.1 登录 / 注册 / 加入账本
 
@@ -132,18 +146,18 @@
 | I-LOGIN-01 | 登录 | 用户名输入 | app.js L178（变量 u `<input>`） | 无 token | placeholder=用户名, autocomplete=username, required | 键入 | 输入框显示文本 | 浏览器 required 提示 | 无 | 留在登录页 | C:app.js L178；S:login/390x844/normal.png（首屏可见输入框） | 已实现｜输入态运行时未验证 |
 | I-LOGIN-02 | 登录 | 密码输入 | app.js L179–181（变量 p） | 无 token | type=password, required；注册模式 minLength=8，placeholder「密码（至少 8 位）」 | 键入 | 密文显示 | required / 不足 8 位提示 | 无 | 留在登录页 | C:app.js L179–181；S:login/390x844/normal.png | 已实现｜输入态运行时未验证 |
 | I-LOGIN-03 | 注册 | 确认密码输入 | app.js L184–185（变量 p2） | 注册模式 | type=password, placeholder=确认密码, required | 键入 | 密文显示 | required 提示 | 与 p 比对见 I-LOGIN-07 | 留在注册页 | C:app.js L184–185；注册态截图未采集 | 已实现｜运行时未验证 |
-| I-LOGIN-04 | 登录/注册 | 密码明文切换 | —（grep 无命中） | 登录或注册 | — | 点击显隐切换 | 应切换 type=text/password | — | — | — | 缺失：app.js 全文 `showPassword\|明文\|type="text"` 无命中；p.type 恒为 password（L179/L184） | **缺失**｜本轮二次复核新增 R0-E-39 |
-| I-LOGIN-05 | 登录 | 登录提交按钮 | app.js L182（变量 b「登 录」） | 未登录，表单有效 | — | 点击 → form submit | 触发 I-LOGIN-06 | — | — | — | C:app.js L182；S:login/390x844/normal.png | 已实现｜运行时未验证 |
-| I-LOGIN-06 | 登录 | 登录提交行为 | app.js L205–218 | 表单有效 | btnPending「登录中…」L207 | POST /auth/login {username,password} L209 | data.accessToken→state.token + localStorage fl_token/fl_whoami + toast「登录成功，欢迎回来！」L210–214；hash=#books L215 | toast(err.message,"err") L216；按钮 finally 恢复 L217 | 写入 localStorage；401 由 api() L105–109 清会话回登录页 | #books | C:app.js L205–218；运行时：本轮已用 API 实测登录链路（交付报告记录），UI 提交未采集 | 已实现｜UI 运行时未验证 |
+| I-LOGIN-04 | 登录/注册 | 密码明文切换 | —（grep 无命中） | 登录或注册 | 未实现 | 点击显隐切换 | 应切换 type=text/password | 未实现 | 未实现 | 未实现 | 缺失：app.js 全文 `showPassword\|明文\|type="text"` 无命中；p.type 恒为 password（L179/L184） | **缺失**｜本轮二次复核新增 R0-E-39 |
+| I-LOGIN-05 | 登录 | 登录提交按钮 | app.js L182（变量 b「登 录」） | 未登录，表单有效 | N/A（不适用） | 点击 → form submit | 触发 I-LOGIN-06 | 见 I-LOGIN-13 | 见 I-LOGIN-06 | 见 I-LOGIN-06 | C:app.js L182；S:login/390x844/normal.png | 已实现｜运行时未验证 |
+| I-LOGIN-06 | 登录 | 登录提交行为 | app.js L205–218 | 表单有效 | btnPending「登录中…」L207 | POST /auth/login {username,password} L209 | data.accessToken→state.token + localStorage fl_token/fl_whoami + toast「登录成功，欢迎回来！」L210–214；hash=#books L215 | toast(err.message,"err") L216；按钮 finally 恢复 L217 | 写入 localStorage；401 由 api() L105–109 清会话回登录页 | #books | C:app.js L205–218；运行时：登录 API 调用见 `docs/r0-screenshots/runtime/README.md` 复现步骤（本轮实测取到 accessToken）；UI 提交截图未采集 | 已实现｜UI 运行时未验证 |
 | I-LOGIN-07 | 注册 | 注册提交行为 | app.js L187–202 | 注册模式；两次密码一致 | 先校验 p.value!==p2.value→toast「两次输入的密码不一致」L189；btnPending L190 | POST /auth/register L192 → 成功后 POST /auth/login L193（自动登录） | toast「注册成功，已自动登录！」+ 写 localStorage + hash=#books L194–199 | 密码不一致 toast（不请求）；注册/登录失败 toast(err.message,"err") L200 | 写入 localStorage | #books | C:app.js L187–202；注册态截图未采集（受 EBK_ENABLE_REGISTER 开关影响） | 已实现｜运行时未验证 |
-| I-LOGIN-08 | 登录 | 注册入口切换 | app.js L220–228（toggle `<a>`） | 登录/注册页 | — | 点击「没有账号？注册新账号」/「已有账号？返回登录」→ renderLogin(mode) L227 | 重渲染为对应表单（注册多出确认密码、按钮变「注 册」） | — | 无（原地重绘，无 hash 变化） | 留在登录/注册页 | C:app.js L220–228；S:login/390x844/normal.png（可见「没有账号？注册新账号」入口） | 已实现｜截图仅见入口，切换后未采集 |
-| I-LOGIN-09 | 登录/注册 | 注册关闭 / 返回登录 | app.js L227 | 注册模式 | — | 点击「已有账号？返回登录」 | 重渲染登录表单 | — | — | 登录页 | C:app.js L227；切换后截图未采集 | 已实现｜运行时未验证 |
-| I-LOGIN-10 | 登录 | 加入账本入口 | —（grep 无命中） | 未登录 | — | 应存在第三入口 | — | — | — | — | 缺失：app.js `joinForm\|joinLedger\|redeemInvite` 无命中；renderLogin 仅 login/register 两模式（L161–231）；但 renderMembers L1667 文案「对方在登录页选择「加入账本」并输入邀请码即可」为悬空引导 | **缺失**｜本轮二次复核新增 R0-E-38 |
-| I-LOGIN-11 | 登录 | 邀请码输入与提交 | —（grep 无命中） | 未登录 | — | 应输入邀请码并兑换 | — | — | — | — | 缺失：app.js 全文无 `/invite/.../redeem` 或 `/members/join` 调用；后端 POST /books/:id/members/join 公开（router.go L128）前端未接 | **缺失**｜R0-E-38 |
-| I-LOGIN-12 | 登录 | 邀请码失效 / 异常反馈 | —（无控件） | 未登录 | — | — | — | 无错误提示实现 | — | — | 缺失：依赖 I-LOGIN-11，控件与反馈均不存在 | **缺失**｜R0-E-38 |
-| I-LOGIN-13 | 登录/注册 | 登录 / 注册失败反馈 | app.js L216 / L200 | 请求失败 | — | — | — | toast 显示后端 msg（err 变体） | 按钮 finally 恢复（L201/L217） | 停留当前页 | C:app.js L200,L216,L110；错误态截图未采集 | 已实现｜运行时未验证 |
-| I-LOGIN-14 | 登录/注册 | 重复提交 / pending 恢复 | app.js L56（btnPending）+ L201/L217 finally | 提交中 | 按钮禁用 + 文案切换 | — | — | 失败也恢复按钮 | — | — | C:app.js L56,L201,L217；运行时未验证 | 已实现｜代码层｜运行时未验证 |
-| I-LOGIN-15 | 全局 | 顶栏退出 | index.html L25 / app.js L155 | 已登录 | — | 点击 #logoutBtn | clearSession() + route() | — | 清 localStorage fl_token/fl_whoami | 登录页 | C:index.html L25, app.js L155；运行时未验证 | 已实现｜运行时未验证 |
+| I-LOGIN-08 | 登录 | 注册入口切换 | app.js L220–228（toggle `<a>`） | 登录/注册页 | N/A（不适用） | 点击「没有账号？注册新账号」/「已有账号？返回登录」→ renderLogin(mode) L227 | 重渲染为对应表单（注册多出确认密码、按钮变「注 册」） | 未验证 | 无（原地重绘，无 hash 变化） | 留在登录/注册页 | C:app.js L220–228；S:login/390x844/normal.png（可见「没有账号？注册新账号」入口） | 已实现｜截图仅见入口，切换后未采集 |
+| I-LOGIN-09 | 登录/注册 | 注册关闭 / 返回登录 | app.js L227 | 注册模式 | N/A（不适用） | 点击「已有账号？返回登录」 | 重渲染登录表单 | N/A（不适用） | N/A（不适用） | 登录页 | C:app.js L227；切换后截图未采集 | 已实现｜运行时未验证 |
+| I-LOGIN-10 | 登录 | 加入账本入口 | —（grep 无命中） | 未登录 | 未实现 | 应存在第三入口 | 未实现 | 未实现 | 未实现 | 未实现 | 缺失：app.js `joinForm\|joinLedger\|redeemInvite` 无命中；renderLogin 仅 login/register 两模式（L161–231）；但 renderMembers L1667 文案「对方在登录页选择「加入账本」并输入邀请码即可」为悬空引导 | **缺失**｜本轮二次复核新增 R0-E-38 |
+| I-LOGIN-11 | 登录 | 邀请码输入与提交 | —（grep 无命中） | 未登录 | 未实现 | 应输入邀请码并兑换 | 未实现 | 未实现 | 未实现 | 未实现 | 缺失：app.js 全文无 `/invite/.../redeem` 或 `/members/join` 调用；后端 POST /books/:id/members/join 公开（router.go L128）前端未接 | **缺失**｜R0-E-38 |
+| I-LOGIN-12 | 登录 | 邀请码失效 / 异常反馈 | —（无控件） | 未登录 | 未实现 | 未实现 | 未实现 | 无错误提示实现 | 未实现 | 未实现 | 缺失：依赖 I-LOGIN-11，控件与反馈均不存在 | **缺失**｜R0-E-38 |
+| I-LOGIN-13 | 登录/注册 | 登录 / 注册失败反馈 | app.js L216 / L200 | 请求失败 | N/A（不适用） | N/A（不适用） | 未验证 | toast 显示后端 msg（err 变体） | 按钮 finally 恢复（L201/L217） | 停留当前页 | C:app.js L200,L216,L110；错误态截图未采集 | 已实现｜运行时未验证 |
+| I-LOGIN-14 | 登录/注册 | 重复提交 / pending 恢复 | app.js L56（btnPending）+ L201/L217 finally | 提交中 | 按钮禁用 + 文案切换 | N/A（不适用） | 未验证 | 失败也恢复按钮 | N/A（不适用） | 未验证 | C:app.js L56,L201,L217；运行时未验证 | 已实现｜代码层｜运行时未验证 |
+| I-LOGIN-15 | 全局 | 顶栏退出 | index.html L25 / app.js L155 | 已登录 | N/A（不适用） | 点击 #logoutBtn | clearSession() + route() | 未验证 | 清 localStorage fl_token/fl_whoami | 登录页 | C:index.html L25, app.js L155；运行时未验证 | 已实现｜运行时未验证 |
 
 #### 3.1.2 账本列表 `#books`
 
@@ -151,17 +165,17 @@
 
 | ID | 页面 | 控件 / 动作 | 代码位置 | 前置条件 | 输入与校验 | 操作 | 成功结果 | 失败结果 | 数据联动 | 返回路径 | 验证证据 | 当前状态 / 关联 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| I-BOOKS-01 | 账本列表 | 账本行链接 | app.js L250–255 | 已登录 | — | 点击 → #b/{id} | 进入账本首页 | — | — | #b/{id} | C:app.js L250–255；S:books/390x844/normal.png | 已实现｜截图已见 |
+| I-BOOKS-01 | 账本列表 | 账本行链接 | app.js L250–255 | 已登录 | N/A（不适用） | 点击 → #b/{id} | 进入账本首页 | N/A（不适用） | N/A（不适用） | #b/{id} | C:app.js L250–255；S:books/390x844/normal.png | 已实现｜截图已见 |
 | I-BOOKS-02 | 账本列表 | 账本删除按钮 | app.js L260–276 | 列表加载后 | confirmDialog 二次确认 L263–267 | DELETE /books/:id L271 | toast「账本已删除」+ renderBooks() L272–273 | toast(err.message,"err") L274 | 重绘本页 | 本页 | C:app.js L260–276；删除态未采集 | 已实现｜运行时未验证｜R0-E-16 |
-| I-BOOKS-03 | 账本列表 | 删除取消 | app.js L268 | 确认框打开 | — | 点「取消」/ if(!okD) return | 不删除 | — | 无 | 本页 | C:app.js L268 | 已实现｜运行时未验证 |
-| I-BOOKS-04 | 账本列表 | 新账本名称输入 | app.js L283–284 | — | placeholder=新账本名称, required, maxLength=40 | 键入 | 显示文本 | required 提示 | — | — | C:app.js L283–284；S:books/390x844/normal.png | 已实现｜截图已见 |
-| I-BOOKS-05 | 账本列表 | 账本类型下拉 | app.js L285–288 | — | option 1=个人账本 / 2=家庭账本 | 选择 | 选中值 | — | — | — | C:app.js L285–288；S:books/390x844/normal.png | 已实现｜截图已见 |
+| I-BOOKS-03 | 账本列表 | 删除取消 | app.js L268 | 确认框打开 | N/A（不适用） | 点「取消」/ if(!okD) return | 不删除 | N/A（不适用） | 无 | 本页 | C:app.js L268 | 已实现｜运行时未验证 |
+| I-BOOKS-04 | 账本列表 | 新账本名称输入 | app.js L283–284 | N/A（不适用） | placeholder=新账本名称, required, maxLength=40 | 键入 | 显示文本 | required 提示 | N/A（不适用） | 未验证 | C:app.js L283–284；S:books/390x844/normal.png | 已实现｜截图已见 |
+| I-BOOKS-05 | 账本列表 | 账本类型下拉 | app.js L285–288 | N/A（不适用） | option 1=个人账本 / 2=家庭账本 | 选择 | 选中值 | 未验证 | N/A（不适用） | 未验证 | C:app.js L285–288；S:books/390x844/normal.png | 已实现｜截图已见 |
 | I-BOOKS-06 | 账本列表 | 创建账本提交 | app.js L289–300 | 名称非空 | btnPending「创建中…」L293 | POST /books {name,bookType} L295 | toast「账本已创建」L296；hash=#b/{bk.id} L297 | toast(err.message,"err") L298 | 新建账本写入 | #b/{id} | C:app.js L289–300；运行时未验证 | 已实现｜运行时未验证 |
-| I-BOOKS-07 | 账本列表 | 空态 | app.js L242–248 | 无账本 | — | — | 「还没有账本——在下面创建第一个吧。」 | — | — | 本页 | C:app.js L242–248；本轮本地库有 1 个账本，空态未采集 | 已实现｜空态未采集 |
-| I-BOOKS-08 | 全局 | 品牌点击 | index.html L11 / app.js L156 | 已登录 | — | 点击 #brand | hash=#books | — | — | #books | C:index.html L11, app.js L156 | 已实现｜运行时未验证 |
-| I-BOOKS-09 | 全局 | 顶栏「账本」 | index.html L13（#navBooks） | 已登录，有账本 | — | 点击 | hash=#books | — | — | #books | C:index.html L13；S:books/1280x800/normal.png | 已实现｜截图已见｜R0-E-01 |
-| I-BOOKS-10 | 账本列表 | 账本重命名 UI | —（grep 无命中） | 已登录 | — | — | — | — | — | — | 缺失：app.js 无 `api("PUT","/books/"` 调用；PUT 仅用于 accounts/transactions/budgets/categories/holdings/instruments/members/users/me；后端 PUT /books/:id 已有（router.go L161） | **缺失**｜R0-E-32 |
-| I-BOOKS-11 | 账本列表 | 账本详情 / 账本设置页入口 | —（grep 无命中） | 已登录，已选账本 | — | 应存在承载账本设置的独立入口 | — | — | — | — | 缺失：`route()` 分支（app.js L2200–2239）无账本设置 hash；账本重命名（R0-E-32）与账本级可见性开关（R0-E-19）均无承载页面，仅散落在成员页/账本列表 | **缺失**｜R0-E-19 / R0-E-32 |
+| I-BOOKS-07 | 账本列表 | 空态 | app.js L242–248 | 无账本 | N/A（不适用） | N/A（不适用） | 「还没有账本——在下面创建第一个吧。」 | 未验证 | N/A（不适用） | 本页 | C:app.js L242–248；本轮本地库有 1 个账本，空态未采集 | 已实现｜空态未采集 |
+| I-BOOKS-08 | 全局 | 品牌点击 | index.html L11 / app.js L156 | 已登录 | N/A（不适用） | 点击 #brand | hash=#books | 未验证 | N/A（不适用） | #books | C:index.html L11, app.js L156 | 已实现｜运行时未验证 |
+| I-BOOKS-09 | 全局 | 顶栏「账本」 | index.html L13（#navBooks） | 已登录，有账本 | N/A（不适用） | 点击 | hash=#books | 未验证 | N/A（不适用） | #books | C:index.html L13；S:books/1280x800/normal.png | 已实现｜截图已见｜R0-E-01 |
+| I-BOOKS-10 | 账本列表 | 账本重命名 UI | —（grep 无命中） | 已登录 | 未实现 | 未实现 | 未实现 | 未实现 | 未实现 | 未实现 | 缺失：app.js 无 `api("PUT","/books/"` 调用；PUT 仅用于 accounts/transactions/budgets/categories/holdings/instruments/members/users/me；后端 PUT /books/:id 已有（router.go L161） | **缺失**｜R0-E-32 |
+| I-BOOKS-11 | 账本列表 | 账本详情 / 账本设置页入口 | —（grep 无命中） | 已登录，已选账本 | 未实现 | 应存在承载账本设置的独立入口 | 未实现 | 未实现 | 未实现 | 未实现 | 缺失：`route()` 分支（app.js L2200–2239）无账本设置 hash；账本重命名（R0-E-32）与账本级可见性开关（R0-E-19）均无承载页面，仅散落在成员页/账本列表 | **缺失**｜R0-E-19 / R0-E-32 |
 
 #### 3.1.3 首页 `#b/:id`
 
@@ -169,24 +183,24 @@
 
 | ID | 页面 | 控件 / 动作 | 代码位置 | 前置条件 | 输入与校验 | 操作 | 成功结果 | 失败结果 | 数据联动 | 返回路径 | 验证证据 | 当前状态 / 关联 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| I-HOME-01 | 首页 | 账本切换控件（本页内） | —（无） | 已选账本 | — | — | — | — | — | — | 缺失：renderHome L1929–1971 无账本 select；切换只能经 #brand/#navBooks → #books（I-BOOKS-08/09） | **缺失**｜R0-E-01 |
-| I-HOME-02 | 首页 | 月份切换控件（首页） | —（无） | 已选账本 | — | — | — | — | — | — | 缺失：月份切换仅报表页 reportMonthOffset L802/L817–824；首页月报固定 months=2（L1949） | **缺失**｜本轮二次复核观察项（无既有 R0-E 编号） |
+| I-HOME-01 | 首页 | 账本切换控件（本页内） | —（无） | 已选账本 | 未实现 | 未实现 | 未实现 | 未实现 | 未实现 | 未实现 | 缺失：renderHome L1929–1971 无账本 select；切换只能经 #brand/#navBooks → #books（I-BOOKS-08/09） | **缺失**｜R0-E-01 |
+| I-HOME-02 | 首页 | 月份切换控件（首页） | 未实现 | 已选账本 | 待确认 | 待确认 | 待确认 | 待确认 | 待确认 | N/A（不适用） | **RV-04 查证（无明确需求依据）**：`docs/FastLedger-产品需求文档-PRD.md` §3.1 L132「首页与账单＝本月概览、账单流、筛选」、§4.2 L192–198（仅本月三卡/按日分组/筛选/记一笔/实时联动）、§4.8 L261–266（「切换时间范围」属报表页）；`docs/FastLedger-Web设计规范.md` §8.1 L305 首页＝本月概览+账单流+筛选+记一笔、§8.2 L323 首页必备交互无月份切换、L330「报表…+ 月份切换」；`prototype-v2/index.html` `pHome()` L685–715 只有类型 chips 与本月三卡，无月份切换；`prototype/assets/index-DNvhksAn.js` 「上月」仅出现在导出页时间预设（this_month/last_month/this_quarter/custom）；`prototype/README.md` 13 页清单无此交互。**结论：PRD / 原型 / 设计规范均无「首页必须提供月份切换控件」条款，月份切换属报表页。** | **待 Owner 裁决的交互建议**（移出已确认缺陷统计、不计入 R0 缺陷数；不得擅自扩大需求范围）｜RV-04 |
 | I-HOME-03 | 首页 | 本月收入卡 | app.js L1961（mkCard） | 月报返回 | GET /reports/monthly?months=2 L1949 | 渲染 cur.income | 显示 +¥… | 月报异常静默降级 {income:0,expense:0}（catch(_){} L1949） | 无 | 本页 | C:app.js L1949,L1961；S:home/390x844/empty.png（显示 +¥0.00） | 已实现｜截图已见 |
 | I-HOME-04 | 首页 | 本月支出卡 | app.js L1962 | 月报返回 | 同上 | 渲染 cur.expense | 显示 -¥… | 同上 | 无 | 本页 | C:app.js L1962；S:home/390x844/empty.png（显示 -¥0.00） | 已实现｜截图已见 |
 | I-HOME-05 | 首页 | 结余卡 | app.js L1963 + L1951 | 账户列表返回 | `for (const a of accs) balance += a.balance \|\| 0` | Σ 账户余额并标「结余」+ 小字「净资产」 | 显示 ¥… | 同上 | 无 | 本页 | C:app.js L1951,L1963；S:home/390x844/empty.png（第三卡显示 结余 ¥0.00 / 净资产） | **已实现但财务口径错误**｜R0-E-20（Σ账户余额 ≠ 本月结余，更 ≠ 净资产；净资产公式见 service/invest.go L541–569） |
-| I-HOME-06 | 首页 | 首页筛选入口 / 筛选条 | —（首页无） | 已选账本 | — | — | — | — | — | — | 缺失：renderHome 全文无 filters；筛选能力在交易总表 `.filters`（L352–366：关键词/类型/账户/分类/起止日期/查询/重置），不可笼统说「全局缺失」 | **缺失（首页）**｜R0-E-02 / R0-E-21 |
-| I-HOME-07 | 首页 | 每条账单行 | app.js L1907–1923 | 有交易数据 | — | 点击 row → #b/{id}/tx/{tx.id} L1922 | 进入交易详情 | — | — | #b/:id/tx/:txId | C:app.js L1907–1923；本轮本地库 transactions total=0，行点击未采集 | 已实现｜运行时未验证（需有数据） |
-| I-HOME-08 | 首页 | 账单行内容（分类/备注/商户/时间/金额） | app.js L1911–1920 | 有交易数据 | — | — | 显示分类或转账账户、备注/商户、金额 | — | — | 详情 | C:app.js L1911–1920 | 已实现｜缺账户/支付渠道标签｜R0-E-21 |
-| I-HOME-09 | 首页 | 桌面「＋ 记一笔」按钮 | app.js L1942–1943（.only-desktop） | 已选账本 | — | 点击 → openTxForm(bookId,()=>route()) | 打开 #formDlg | — | 提交后 route() 重绘 | 本页 | C:app.js L1942–1943；S:add-transaction/1280x800/normal.png（桌面弹窗） | 已实现｜截图已见 |
-| I-HOME-10 | 首页 | 中央 FAB「＋」 | index.html L33 / app.js L1868 | 有账本（showNav L122 控制显隐） | — | 点击 → openTxForm(bookId,()=>route()) | 打开 #formDlg | — | 提交后重绘 | 本页 | C:index.html L33, app.js L1868；S:add-transaction/390x844/normal.png（FAB 点击后弹窗） | 已实现｜截图已见｜R0-E-01 |
-| I-HOME-11 | 首页 | 底部 Tab「首页」 | index.html L31 / app.js L1862–1866 | 已选账本 | — | 点击 .tab[data-path=""] | hash=#b/{id} | — | — | #b/{id} | C:index.html L31；S:home/390x844/empty.png（底栏 首页 高亮） | 已实现｜截图已见｜R0-E-01 |
-| I-HOME-12 | 首页 | 底部 Tab「账单」 | index.html L32 / app.js L1865 | 已选账本 | — | 点击 | hash=#b/{id}/txns | — | — | 交易总表 | C:index.html L32；S:home/390x844/empty.png | 已实现｜截图已见｜R0-E-01 |
-| I-HOME-13 | 首页 | 底部 Tab「报表」 | index.html L34 / app.js L1865 | 已选账本 | — | 点击 | hash=#b/{id}/report | — | — | 报表 | C:index.html L34；S:home/390x844/empty.png | 已实现｜截图已见 |
-| I-HOME-14 | 首页 | 底部 Tab「我的」 | index.html L35 / app.js L1865 | 已选账本 | — | 点击 | hash=#b/{id}/mine | — | — | 我的 | C:index.html L35；S:home/390x844/empty.png | 已实现｜截图已见 |
-| I-HOME-15 | 首页 | 账单加载态（骨架屏） | app.js L1874–1876（sk, aria-busy=true, 4 条） | 进入首页 / 刷新 | — | — | 骨架占位 | — | — | 本页 | C:app.js L1874–1876；加载态截图未采集（本地 API 响应过快） | 已实现｜加载态未采集｜R0-E-02 |
-| I-HOME-16 | 首页 | 账单空态 | app.js L1882–1887 | 无交易 | — | — | 「还没有账单——点下方「＋ 记一笔」开始记录。」 | — | — | 本页 | C:app.js L1882–1887；S:home/390x844/empty.png（可见空态文案） | 已实现｜截图已见 |
-| I-HOME-17 | 首页 | 账单错误态 | app.js L1878–1879（catch 仅 toast 并 return） | API 失败 | — | GET /transactions?page=1&count=60 失败 | — | toast(e.message,"err")；代码未清除骨架屏 | 无 | 本页 | C:app.js L1878–1879；S:home/390x844/error.png（CDP 拦截 /api/v1/* 后实测：页面主体空白 + 红色「Failed to fetch」toast，**未观察到明显骨架屏残留**） | **已实现但有缺陷｜R0-E-35 描述需复核**：实测与「骨架残留」不完全一致，需 Owner/CI 用慢速网络复验 |
-| I-HOME-18 | 首页 | 按日分组标题 + 日小计 | app.js L1897–1905（gt / daySum） | 有交易数据 | 仅基于首批 60 条（L1878 count=60） | 收入加 / 支出减 | 显示「今天/昨天/前天/N 天前」+ 日合计 | — | — | 本页 | C:app.js L1897–1905；有数据态未采集 | 已实现｜分页边界缺陷｜R0-E-34 |
+| I-HOME-06 | 首页 | 首页筛选入口 / 筛选条 | —（首页无） | 已选账本 | N/A（不适用） | N/A（不适用） | 未验证 | 未验证 | N/A（不适用） | 未验证 | 缺失：renderHome 全文无 filters；筛选能力在交易总表 `.filters`（L352–366：关键词/类型/账户/分类/起止日期/查询/重置），不可笼统说「全局缺失」 | **缺失（首页）**｜R0-E-02 / R0-E-21 |
+| I-HOME-07 | 首页 | 每条账单行 | app.js L1907–1923 | 有交易数据 | N/A（不适用） | 点击 row → #b/{id}/tx/{tx.id} L1922 | 进入交易详情 | 未验证 | 见 I-TXDET-01 | #b/:id/tx/:txId | C:app.js L1907–1923；本轮本地库 transactions total=0，行点击未采集 | 已实现｜运行时未验证（需有数据） |
+| I-HOME-08 | 首页 | 账单行内容（分类/备注/商户/时间/金额） | app.js L1911–1920 | 有交易数据 | N/A（不适用） | N/A（不适用） | 显示分类或转账账户、备注/商户、金额 | 未验证 | N/A（不适用） | 详情 | C:app.js L1911–1920 | 已实现｜缺账户/支付渠道标签｜R0-E-21 |
+| I-HOME-09 | 首页 | 桌面「＋ 记一笔」按钮 | app.js L1942–1943（.only-desktop） | 已选账本 | N/A（不适用） | 点击 → openTxForm(bookId,()=>route()) | 打开 #formDlg | 未验证 | 提交后 route() 重绘 | 本页 | C:app.js L1942–1943；S:add-transaction/1280x800/normal.png（桌面弹窗） | 已实现｜截图已见 |
+| I-HOME-10 | 首页 | 中央 FAB「＋」 | index.html L33 / app.js L1868 | 有账本（showNav L122 控制显隐） | N/A（不适用） | 点击 → openTxForm(bookId,()=>route()) | 打开 #formDlg | 未验证 | 提交后重绘 | 本页 | C:index.html L33, app.js L1868；S:add-transaction/390x844/normal.png（FAB 点击后弹窗） | 已实现｜截图已见｜R0-E-01 |
+| I-HOME-11 | 首页 | 底部 Tab「首页」 | index.html L31 / app.js L1862–1866 | 已选账本 | N/A（不适用） | 点击 .tab[data-path=""] | hash=#b/{id} | N/A（不适用） | N/A（不适用） | #b/{id} | C:index.html L31；S:home/390x844/empty.png（底栏 首页 高亮） | 已实现｜截图已见｜R0-E-01 |
+| I-HOME-12 | 首页 | 底部 Tab「账单」 | index.html L32 / app.js L1865 | 已选账本 | N/A（不适用） | 点击 | hash=#b/{id}/txns | N/A（不适用） | N/A（不适用） | 交易总表 | C:index.html L32；S:home/390x844/empty.png | 已实现｜截图已见｜R0-E-01 |
+| I-HOME-13 | 首页 | 底部 Tab「报表」 | index.html L34 / app.js L1865 | 已选账本 | N/A（不适用） | 点击 | hash=#b/{id}/report | N/A（不适用） | N/A（不适用） | 报表 | C:index.html L34；S:home/390x844/empty.png | 已实现｜截图已见 |
+| I-HOME-14 | 首页 | 底部 Tab「我的」 | index.html L35 / app.js L1865 | 已选账本 | N/A（不适用） | 点击 | hash=#b/{id}/mine | N/A（不适用） | N/A（不适用） | 我的 | C:index.html L35；S:home/390x844/empty.png | 已实现｜截图已见 |
+| I-HOME-15 | 首页 | 账单加载态（骨架屏） | app.js L1874–1876（sk, aria-busy=true, 4 条） | 进入首页 / 刷新 | N/A（不适用） | N/A（不适用） | 骨架占位 | 见 I-HOME-17 | N/A（不适用） | 本页 | C:app.js L1874–1876；S:runtime/01-pending-390x844.png、04-pending-1280x800.png（隔离拦截目标请求后实测骨架占位，见 §7.5） | 已实现｜pending 态已采集（隔离复验）｜R0-E-02 |
+| I-HOME-16 | 首页 | 账单空态 | app.js L1882–1887 | 无交易 | N/A（不适用） | N/A（不适用） | 「还没有账单——点下方「＋ 记一笔」开始记录。」 | 未验证 | N/A（不适用） | 本页 | C:app.js L1882–1887；S:home/390x844/empty.png（可见空态文案） | 已实现｜截图已见 |
+| I-HOME-17 | 首页 | 账单错误态 | app.js L1878–1879（catch 仅 toast 并 return） | API 失败 | N/A（不适用） | GET /transactions?page=1&count=60 失败 | N/A（不适用） | toast(e.message,"err")；代码未清除骨架屏 | 无 | 本页 | C:app.js L1878–1879；S:home/390x844/error.png（旧轮泛化拦截 `/api/v1/*`：主体空白 + `Failed to fetch` toast，因依赖请求同时被打断）；S:runtime/02-rejected-network-390x844.png、03-rejected-503-390x844.png（本轮仅拦截目标请求：`.skel`=4 仍在 + toast，见 `dom-snapshots.json`） | **待运行时复验 / 阻塞｜R0-E-35**（本轮隔离实测见 §7.5；单次本机实测不关闭缺陷，须 Owner/CI 独立复跑） |
+| I-HOME-18 | 首页 | 按日分组标题 + 日小计 | app.js L1897–1905（gt / daySum） | 有交易数据 | 仅基于首批 60 条（L1878 count=60） | 收入加 / 支出减 | 显示「今天/昨天/前天/N 天前」+ 日合计 | 未验证 | N/A（不适用） | 本页 | C:app.js L1897–1905；有数据态未采集 | 已实现｜分页边界缺陷｜R0-E-34 |
 
 #### 3.1.4 记一笔弹窗 `#formDlg`
 
@@ -194,21 +208,21 @@
 
 | ID | 页面 | 控件 / 动作 | 代码位置 | 前置条件 | 输入与校验 | 操作 | 成功结果 | 失败结果 | 数据联动 | 返回路径 | 验证证据 | 当前状态 / 关联 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| I-ADD-01 | 记一笔 | 打开弹窗 | app.js L530–541 | 有账本/账户/分类 | fType=2、fillSelect 三下拉、fDate=今天、清空 fNote/fAmount、syncFormFields()、showModal() | 由 FAB/桌面按钮触发 | 显示 #formDlg | — | — | 本页（弹层） | C:app.js L530–541；S:add-transaction/390x844/normal.png | 已实现｜截图已见 |
-| I-ADD-02 | 记一笔 | 类型选择 `#fType` | index.html L42 / app.js L532,L547 | 弹窗打开 | 值 2=支出 / 1=收入 / 3=转账；**普通 `<select>`** | change → syncFormFields() L542–546 | t=3 显 #fToRow 隐 #fCatRow，否则相反 | — | — | 弹层 | C:index.html L42, app.js L542–547；S:add-transaction/390x844/normal.png（可见「类型 支出」下拉） | 已实现**但形态不符**（非分段控件）｜R0-E-05 / R0-E-29 |
-| I-ADD-03 | 记一笔 | 金额输入 `#fAmount` | index.html L48 / app.js L538,L551–552 | 弹窗打开 | str2cents 正则 `^(\d+)(?:\.(\d{1,2}))?$`；cents===null 或 <=0 → toast「金额格式不合法（最多两位小数）」L552 | 键入 | 显示文本 | toast err，不关闭弹窗 | — | 弹层 | C:index.html L48, app.js L551–552；S:add-transaction/390x844/normal.png（可见 0.00 占位） | 已实现｜校验失败态未采集 |
-| I-ADD-04 | 记一笔 | 资金账户 `#fAccount` | index.html L49 / app.js L533,L557 | 弹窗打开 | 非转账时 !body.accountId → toast「请选择账户」L568 | 选择 | 选中账户 | toast err | — | 弹层 | C:index.html L49, app.js L568；S:add-transaction/390x844/normal.png（可见「账户 现金」） | 已实现｜校验失败态未采集 |
-| I-ADD-05 | 记一笔 | 转入账户 `#fTo`（#fToRow hidden） | index.html L50 / app.js L534,L544,L566–567 | 类型=转账 | !toAccountId 或 toAccountId===accountId → toast「转账需选择不同的两个账户」L567 | 选择 | 选中账户 | toast err | — | 弹层 | C:index.html L50, app.js L566–567；转账态截图未采集 | 已实现｜运行时未验证 |
-| I-ADD-06 | 记一笔 | 分类 `#fCategory` | index.html L51 / app.js L535,L545,L559 | 非转账 | 转账时 categoryId=0 | 选择 | 选中分类 | — | — | 弹层 | C:index.html L51；S:add-transaction/390x844/normal.png（可见「分类 工资」） | 已实现｜截图已见 |
-| I-ADD-07 | 记一笔 | 日期 `#fDate` | index.html L52 / app.js L536,L560 | 弹窗打开 | type=date required；dateStartUnix(...,false) | 选择 | 选中日期 | 浏览器 required | — | 弹层 | C:index.html L52；S:add-transaction/390x844/normal.png（可见 2026/11/04） | 已实现｜截图已见 |
-| I-ADD-08 | 记一笔 | 备注 `#fNote` | index.html L53 / app.js L537,L562 | 弹窗打开 | maxlength=255 → comment | 键入 | 显示文本 | — | — | 弹层 | C:index.html L53；S:add-transaction/390x844/normal.png（可见「可选」占位） | 已实现｜截图已见 |
-| I-ADD-09 | 记一笔 | 支付渠道选择器 | —（grep 无命中） | 弹窗打开 | — | — | — | — | — | — | 缺失：记一笔 body L554–564 无 paymentChannel；`paymentChannel` 全文仅 7 处命中（L425/449/620/929/1914/1916/2004），均为展示/导出/编辑只读继承；S:add-transaction/390x844/normal.png 可见无该字段 | **缺失**｜R0-E-23 |
-| I-ADD-10 | 记一笔 | 商户输入 | —（grep 无命中） | 弹窗打开 | — | — | — | — | — | — | 缺失：body 无 merchant；`merchant` 全文仅展示/导出命中；后端 service/tx.go CreateRequest 亦无 Merchant 字段（R0-E-37 端到端缺口） | **缺失**｜R0-E-37 |
+| I-ADD-01 | 记一笔 | 打开弹窗 | app.js L530–541 | 有账本/账户/分类 | fType=2、fillSelect 三下拉、fDate=今天、清空 fNote/fAmount、syncFormFields()、showModal() | 由 FAB/桌面按钮触发 | 显示 #formDlg | 未验证 | N/A（不适用） | 本页（弹层） | C:app.js L530–541；S:add-transaction/390x844/normal.png | 已实现｜截图已见 |
+| I-ADD-02 | 记一笔 | 类型选择 `#fType` | index.html L42 / app.js L532,L547 | 弹窗打开 | 值 2=支出 / 1=收入 / 3=转账；**普通 `<select>`** | change → syncFormFields() L542–546 | t=3 显 #fToRow 隐 #fCatRow，否则相反 | 未验证 | 见 I-ADD-05 | 弹层 | C:index.html L42, app.js L542–547；S:add-transaction/390x844/normal.png（可见「类型 支出」下拉） | 已实现**但形态不符**（非分段控件）｜R0-E-05 / R0-E-29 |
+| I-ADD-03 | 记一笔 | 金额输入 `#fAmount` | index.html L48 / app.js L538,L551–552 | 弹窗打开 | str2cents 正则 `^(\d+)(?:\.(\d{1,2}))?$`；cents===null 或 <=0 → toast「金额格式不合法（最多两位小数）」L552 | 键入 | 显示文本 | toast err，不关闭弹窗 | N/A（不适用） | 弹层 | C:index.html L48, app.js L551–552；S:add-transaction/390x844/normal.png（可见 0.00 占位） | 已实现｜校验失败态未采集 |
+| I-ADD-04 | 记一笔 | 资金账户 `#fAccount` | index.html L49 / app.js L533,L557 | 弹窗打开 | 非转账时 !body.accountId → toast「请选择账户」L568 | 选择 | 选中账户 | toast err | N/A（不适用） | 弹层 | C:index.html L49, app.js L568；S:add-transaction/390x844/normal.png（可见「账户 现金」） | 已实现｜校验失败态未采集 |
+| I-ADD-05 | 记一笔 | 转入账户 `#fTo`（#fToRow hidden） | index.html L50 / app.js L534,L544,L566–567 | 类型=转账 | !toAccountId 或 toAccountId===accountId → toast「转账需选择不同的两个账户」L567 | 选择 | 选中账户 | toast err | N/A（不适用） | 弹层 | C:index.html L50, app.js L566–567；转账态截图未采集 | 已实现｜运行时未验证 |
+| I-ADD-06 | 记一笔 | 分类 `#fCategory` | index.html L51 / app.js L535,L545,L559 | 非转账 | 转账时 categoryId=0 | 选择 | 选中分类 | 未验证 | 见 I-ADD-02 | 弹层 | C:index.html L51；S:add-transaction/390x844/normal.png（可见「分类 工资」） | 已实现｜截图已见 |
+| I-ADD-07 | 记一笔 | 日期 `#fDate` | index.html L52 / app.js L536,L560 | 弹窗打开 | type=date required；dateStartUnix(...,false) | 选择 | 选中日期 | 浏览器 required | N/A（不适用） | 弹层 | C:index.html L52；S:add-transaction/390x844/normal.png（可见 2026/11/04） | 已实现｜截图已见 |
+| I-ADD-08 | 记一笔 | 备注 `#fNote` | index.html L53 / app.js L537,L562 | 弹窗打开 | maxlength=255 → comment | 键入 | 显示文本 | 未验证 | N/A（不适用） | 弹层 | C:index.html L53；S:add-transaction/390x844/normal.png（可见「可选」占位） | 已实现｜截图已见 |
+| I-ADD-09 | 记一笔 | 支付渠道选择器 | —（grep 无命中） | 弹窗打开 | 未实现 | 未实现 | 未实现 | 未实现 | 未实现 | 未实现 | 缺失：记一笔 body L554–564 无 paymentChannel；`paymentChannel` 全文仅 7 处命中（L425/449/620/929/1914/1916/2004），均为展示/导出/编辑只读继承；S:add-transaction/390x844/normal.png 可见无该字段 | **缺失**｜R0-E-23 |
+| I-ADD-10 | 记一笔 | 商户输入 | —（grep 无命中） | 弹窗打开 | 未实现 | 未实现 | 未实现 | 未实现 | 未实现 | 未实现 | 缺失：body 无 merchant；`merchant` 全文仅展示/导出命中；后端 service/tx.go CreateRequest 亦无 Merchant 字段（R0-E-37 端到端缺口） | **缺失**｜R0-E-37 |
 | I-ADD-11 | 记一笔 | 提交保存 `#fSubmit` | index.html L56 / app.js L549–579 | 校验通过 | btnPending「保存中…」L570 | POST /books/:id/transactions（body L554–564：clientUuid/txType/accountId/amount/categoryId/txTime/timezoneOffset/comment/source=0）L572 | toast「已记账」L573 + 关闭弹窗 L574–575 + onDone() L576 | toast(err.message,"err") L578 | onDone=重绘列表/首页 | 首页/账单流 | C:app.js L549–579；提交态未采集 | 已实现｜运行时未验证 |
-| I-ADD-12 | 记一笔 | 取消 `#fCancel` | index.html L55 / app.js L548 | 弹窗打开 | — | 点击 | dlg.close() + 加 hidden，不提交 | — | 无 | 本页 | C:index.html L55, app.js L548；S:add-transaction/390x844/normal.png（可见「取消」） | 已实现｜运行时未验证 |
-| I-ADD-13 | 记一笔 | 弹窗关闭（Esc / ×） | —（无显式绑定） | 弹窗打开 | — | 按 Esc / 点原生关闭 | 应关闭 | — | — | 本页 | 缺失：仅 #fCancel 自定义关闭，无 cancel/close 事件绑定，依赖 `<dialog>` 原生行为 | **待验证**｜运行时未验证 |
-| I-ADD-14 | 记一笔 | 重复提交防护 | app.js L56 + L570–577 finally | 提交中 | 按钮禁用 | — | — | 失败也恢复按钮 | — | 弹层 | C:app.js L56,L570–577；运行时未验证 | 已实现（代码层）｜运行时未验证 |
-| I-ADD-15 | 记一笔 | 表单校验失败汇总 | app.js L552 / L567 / L568 | 金额/转账双账户/账户三项 | — | 提交触发 | — | toast err、弹窗不关闭、输入保留 | — | 弹层 | C:app.js L552,L567,L568；校验失败态未采集 | 已实现｜运行时未验证｜R0-E-05 |
+| I-ADD-12 | 记一笔 | 取消 `#fCancel` | index.html L55 / app.js L548 | 弹窗打开 | N/A（不适用） | 点击 | dlg.close() + 加 hidden，不提交 | N/A（不适用） | 无 | 本页 | C:index.html L55, app.js L548；S:add-transaction/390x844/normal.png（可见「取消」） | 已实现｜运行时未验证 |
+| I-ADD-13 | 记一笔 | 弹窗关闭（Esc / ×） | —（无显式绑定） | 弹窗打开 | N/A（不适用） | 按 Esc / 点原生关闭 | 应关闭 | 待确认 | N/A（不适用） | 本页 | 缺失：仅 #fCancel 自定义关闭，无 cancel/close 事件绑定，依赖 `<dialog>` 原生行为 | **待验证**｜运行时未验证 |
+| I-ADD-14 | 记一笔 | 重复提交防护 | app.js L56 + L570–577 finally | 提交中 | 按钮禁用 | N/A（不适用） | 未验证 | 失败也恢复按钮 | N/A（不适用） | 弹层 | C:app.js L56,L570–577；运行时未验证 | 已实现（代码层）｜运行时未验证 |
+| I-ADD-15 | 记一笔 | 表单校验失败汇总 | app.js L552 / L567 / L568 | 金额/转账双账户/账户三项 | N/A（不适用） | 提交触发 | 未验证 | toast err、弹窗不关闭、输入保留 | N/A（不适用） | 弹层 | C:app.js L552,L567,L568；校验失败态未采集 | 已实现｜运行时未验证｜R0-E-05 |
 
 #### 3.1.5 交易详情 `#b/:id/tx/:txId`
 
@@ -216,20 +230,20 @@
 
 | ID | 页面 | 控件 / 动作 | 代码位置 | 前置条件 | 输入与校验 | 操作 | 成功结果 | 失败结果 | 数据联动 | 返回路径 | 验证证据 | 当前状态 / 关联 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| I-TXDET-01 | 交易详情 | 详情加载 | app.js L1982；后端锚点 router.go L194 | 进入 hash | — | GET /transactions/:txId | 渲染详情 | toast(err.message,"err") + hash=#b/{id}/txns L1983 | — | 账单页（失败时） | C:app.js L1982–1983 + C:router.go L194（前后端双向锚点）；截图未采集（无数据） | 已实现｜运行时未验证 |
-| I-TXDET-02 | 交易详情 | 返回 | app.js L1979（wireBottomNav(bookId,"/txns")） | 详情页 | — | 底部 Tab / 浏览器返回 | — | — | — | #b/{id}/txns | C:app.js L1979 | 已实现｜运行时未验证 |
-| I-TXDET-03 | 交易详情 | 完整字段展示 | app.js L1995–2006（addRow） | tx 就绪 | — | — | 账户/分类/日期/备注（转账显示 A→B） | — | — | 本页 | C:app.js L1995–2006；截图未采集（无数据） | **部分具备**｜R0-E-03 / R0-E-22 |
-| I-TXDET-04 | 交易详情 | paymentChannel 展示 | —（无 addRow 行） | tx 就绪 | — | — | — | — | — | — | 缺失：addRow 无渠道行 | **缺失**｜R0-E-22 / R0-E-23 |
-| I-TXDET-05 | 交易详情 | 商户与备注显示逻辑 | app.js L2004 | tx 就绪 | `tx.note \|\| (tx.merchant?"商户："+tx.merchant:"—")` | — | 备注非空时显示备注 | 备注非空时 merchant 被吞，不显示 | — | 本页 | C:app.js L2004 | **已实现但缺陷**｜R0-E-22 |
-| I-TXDET-06 | 交易详情 | 编辑按钮 | app.js L2008–2009 | 详情页 | — | 点击 → openTxEditForm(bookId,tx,()=>renderTxDetail(...)) | 打开 #editDlg | — | 保存后重绘详情 | 详情 | C:app.js L2008–2009；截图未采集 | 已实现｜运行时未验证｜R0-E-03 |
-| I-TXDET-07 | 交易详情 | 编辑表单打开 / 类型只读 | app.js L583–608（openTxEditForm） | 详情页点编辑 | eType 只读文本 L585；转账显 eToRow/隐 eCatRow L596–606 | — | 回填 eAmount/eDate/eNote | — | — | 弹层 | C:app.js L583–608 | 已实现｜运行时未验证｜R0-E-23 |
+| I-TXDET-01 | 交易详情 | 详情加载 | app.js L1982；后端锚点 router.go L194 | 进入 hash | N/A（不适用） | GET /transactions/:txId | 渲染详情 | toast(err.message,"err") + hash=#b/{id}/txns L1983 | N/A（不适用） | 账单页（失败时） | C:app.js L1982–1983 + C:router.go L194（前后端双向锚点）；截图未采集（无数据） | 已实现｜运行时未验证 |
+| I-TXDET-02 | 交易详情 | 返回 | app.js L1979（wireBottomNav(bookId,"/txns")） | 详情页 | N/A（不适用） | 底部 Tab / 浏览器返回 | 未验证 | 未验证 | N/A（不适用） | #b/{id}/txns | C:app.js L1979 | 已实现｜运行时未验证 |
+| I-TXDET-03 | 交易详情 | 完整字段展示 | app.js L1995–2006（addRow） | tx 就绪 | N/A（不适用） | N/A（不适用） | 账户/分类/日期/备注（转账显示 A→B） | 未验证 | N/A（不适用） | 本页 | C:app.js L1995–2006；截图未采集（无数据） | **部分具备**｜R0-E-03 / R0-E-22 |
+| I-TXDET-04 | 交易详情 | paymentChannel 展示 | —（无 addRow 行） | tx 就绪 | 未实现 | 未实现 | 未实现 | 未实现 | 未实现 | 未实现 | 缺失：addRow 无渠道行 | **缺失**｜R0-E-22 / R0-E-23 |
+| I-TXDET-05 | 交易详情 | 商户与备注显示逻辑 | app.js L2004 | tx 就绪 | `tx.note \|\| (tx.merchant?"商户："+tx.merchant:"—")` | N/A（不适用） | 备注非空时显示备注 | 备注非空时 merchant 被吞，不显示 | N/A（不适用） | 本页 | C:app.js L2004 | **已实现但缺陷**｜R0-E-22 |
+| I-TXDET-06 | 交易详情 | 编辑按钮 | app.js L2008–2009 | 详情页 | N/A（不适用） | 点击 → openTxEditForm(bookId,tx,()=>renderTxDetail(...)) | 打开 #editDlg | 未验证 | 保存后重绘详情 | 详情 | C:app.js L2008–2009；截图未采集 | 已实现｜运行时未验证｜R0-E-03 |
+| I-TXDET-07 | 交易详情 | 编辑表单打开 / 类型只读 | app.js L583–608（openTxEditForm） | 详情页点编辑 | eType 只读文本 L585；转账显 eToRow/隐 eCatRow L596–606 | N/A（不适用） | 回填 eAmount/eDate/eNote | 未验证 | N/A（不适用） | 弹层 | C:app.js L583–608 | 已实现｜运行时未验证｜R0-E-23 |
 | I-TXDET-08 | 交易详情 | 编辑保存 | app.js L610–641（#txEditForm onsubmit） | 弹窗打开 | str2cents L612–613；转账双账户 L628；非转账 !accountId\|\|!categoryId → toast「请选择账户与分类」L629 | PUT /transactions/:txId（body L614–625 含 paymentChannel: tx.paymentChannel\|\|0 只读继承、baseVersion）L633 | toast「已保存修改」+ 关弹窗 + onDone() L634–637 | toast(err.message + 并发提示,"err") L639 | onDone=重绘详情 | 详情 | C:app.js L610–641；运行时未验证 | 已实现｜运行时未验证｜R0-E-23 |
-| I-TXDET-09 | 交易详情 | 编辑失败 / 409 并发 | app.js L639 | PUT 409 | — | — | — | toast 并发提示 | — | 弹层保留 | C:app.js L639；运行时未验证 | 已实现｜运行时未验证 |
-| I-TXDET-10 | 交易详情 | 编辑取消 `#eCancel` | index.html L71 / app.js L609 | 弹窗打开 | — | 点击 | 关闭弹窗 | — | — | 详情 | C:index.html L71, app.js L609 | 已实现｜运行时未验证 |
-| I-TXDET-11 | 交易详情 | 删除按钮 | app.js L2010–2023 | 详情页 | — | 点击 → 二次确认 + DELETE | — | — | — | — | C:app.js L2010–2023；截图未采集 | 已实现｜运行时未验证｜R0-E-03 |
-| I-TXDET-12 | 交易详情 | 删除二次确认 | app.js L2012–2016（confirmDialog） | 点删除 | 文案「删除后将无法恢复，账户余额会相应调整。」 | 确认/取消 | 确认后 DELETE | — | — | — | C:app.js L2012–2016 | **已实现但文案与软删除/回收站矛盾**｜R0-E-24 |
-| I-TXDET-13 | 交易详情 | 删除取消 | app.js L2017（if(!ok) return） | 确认框打开 | — | 点「取消」 | 不删除 | — | 无 | 详情 | C:app.js L2017 | 已实现｜运行时未验证 |
-| I-TXDET-14 | 交易详情 | 删除提交 | app.js L2020 | 已确认 | btnPending L2018 | DELETE /transactions/:id?clientUuid=uuid() | toast「已删除」+ hash=#b/{id}/txns L2021 | toast(e.message,"err") L2022 | — | 账单页 | C:app.js L2020–2022；运行时未验证 | 已实现｜运行时未验证｜R0-E-24 |
+| I-TXDET-09 | 交易详情 | 编辑失败 / 409 并发 | app.js L639 | PUT 409 | N/A（不适用） | N/A（不适用） | 未验证 | toast 并发提示 | N/A（不适用） | 弹层保留 | C:app.js L639；运行时未验证 | 已实现｜运行时未验证 |
+| I-TXDET-10 | 交易详情 | 编辑取消 `#eCancel` | index.html L71 / app.js L609 | 弹窗打开 | N/A（不适用） | 点击 | 关闭弹窗 | 未验证 | N/A（不适用） | 详情 | C:index.html L71, app.js L609 | 已实现｜运行时未验证 |
+| I-TXDET-11 | 交易详情 | 删除按钮 | app.js L2010–2023 | 详情页 | N/A（不适用） | 点击 → 二次确认 + DELETE | 未验证 | 未验证 | N/A（不适用） | 未验证 | C:app.js L2010–2023；截图未采集 | 已实现｜运行时未验证｜R0-E-03 |
+| I-TXDET-12 | 交易详情 | 删除二次确认 | app.js L2012–2016（confirmDialog） | 点删除 | 文案「删除后将无法恢复，账户余额会相应调整。」 | 确认/取消 | 确认后 DELETE | 未验证 | N/A（不适用） | 未验证 | C:app.js L2012–2016 | **已实现但文案与软删除/回收站矛盾**｜R0-E-24 |
+| I-TXDET-13 | 交易详情 | 删除取消 | app.js L2017（if(!ok) return） | 确认框打开 | N/A（不适用） | 点「取消」 | 不删除 | 未验证 | 无 | 详情 | C:app.js L2017 | 已实现｜运行时未验证 |
+| I-TXDET-14 | 交易详情 | 删除提交 | app.js L2020 | 已确认 | btnPending L2018 | DELETE /transactions/:id?clientUuid=uuid() | toast「已删除」+ hash=#b/{id}/txns L2021 | toast(e.message,"err") L2022 | N/A（不适用） | 账单页 | C:app.js L2020–2022；运行时未验证 | 已实现｜运行时未验证｜R0-E-24 |
 
 #### 3.1.6 交易总表 `#b/:id/txns`
 
@@ -237,25 +251,25 @@
 
 | ID | 页面 | 控件 / 动作 | 代码位置 | 前置条件 | 输入与校验 | 操作 | 成功结果 | 失败结果 | 数据联动 | 返回路径 | 验证证据 | 当前状态 / 关联 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| I-TXNS-01 | 交易总表 | 关键词搜索 | app.js L355（kw input） | — | placeholder=关键词搜索 | 键入 + 查询 | state.filter.keyword 生效 | — | — | 本页 | C:app.js L355；S:transactions/390x844/empty.png | 已实现｜截图已见 |
-| I-TXNS-02 | 交易总表 | 类型筛选 | app.js L356–358（typeSel） | — | 1/2/3 + 全部类型 | 选择 | 过滤 | — | — | 本页 | C:app.js L356–358 | 已实现｜截图已见 |
-| I-TXNS-03 | 交易总表 | 账户筛选 | app.js L359（accSel） | — | 全部账户 + 账户列表 | 选择 | 过滤 | — | — | 本页 | C:app.js L359 | 已实现｜截图已见 |
-| I-TXNS-04 | 交易总表 | 分类筛选 | app.js L360（catSel） | — | 全部分类 + 分类列表 | 选择 | 过滤 | — | — | 本页 | C:app.js L360 | 已实现｜截图已见 |
-| I-TXNS-05 | 交易总表 | 开始日期 | app.js L361（dFrom type=date） | — | dateStartUnix(minDate,false) L396 | 选择 | 过滤 | — | — | 本页 | C:app.js L361 | 已实现｜截图已见 |
-| I-TXNS-06 | 交易总表 | 结束日期 | app.js L362（dTo type=date） | — | dateStartUnix(maxDate,true) L396 | 选择 | 过滤 | — | — | 本页 | C:app.js L362 | 已实现｜截图已见 |
-| I-TXNS-07 | 交易总表 | 查询按钮 | app.js L363 / L523（applyFilters） | 筛选条件已填 | 组装 state.filter L520 | 点击 → GET /transactions?page&count&keyword&type&accountId&categoryId&minTime&maxTime L399 | renderTable(data) L401；页码回 1、scrollTo 顶部 L402 | load().catch → toast(e.message,"err") L521 | — | 本页 | C:app.js L363,L519–522；运行时未验证 | 已实现｜运行时未验证 |
-| I-TXNS-08 | 交易总表 | 重置按钮 | app.js L364 / L524 | — | — | 点击 → applyFilters() | 清空 6 个控件并回到全量第一页 | — | — | 本页 | C:app.js L364,L524 | 已实现｜运行时未验证 |
-| I-TXNS-09 | 交易总表 | 回车提交 | app.js L516–518（6 控件 keydown Enter） | 筛选控件聚焦 | — | 按 Enter | applyFilters() | — | — | 本页 | C:app.js L516–518 | 已实现｜运行时未验证 |
-| I-TXNS-10 | 交易总表 | 全选本页 | app.js L370 / L483–490（allChk） | 有行 | — | 勾选 | 勾选 tbody 全部 checkbox；state.sel 增删 | — | — | 本页 | C:app.js L370,L483–490 | 已实现｜运行时未验证 |
-| I-TXNS-11 | 交易总表 | 行勾选 | app.js L433–437（chk change） | 每行 | — | 勾选/取消 | state.sel.add/delete(tx.id)；refreshSel() 更新按钮态 L378–381 | — | — | 本页 | C:app.js L433–437 | 已实现｜运行时未验证 |
+| I-TXNS-01 | 交易总表 | 关键词搜索 | app.js L355（kw input） | N/A（不适用） | placeholder=关键词搜索 | 键入 + 查询 | state.filter.keyword 生效 | 未验证 | N/A（不适用） | 本页 | C:app.js L355；S:transactions/390x844/empty.png | 已实现｜截图已见 |
+| I-TXNS-02 | 交易总表 | 类型筛选 | app.js L356–358（typeSel） | N/A（不适用） | 1/2/3 + 全部类型 | 选择 | 过滤 | 未验证 | N/A（不适用） | 本页 | C:app.js L356–358 | 已实现｜截图已见 |
+| I-TXNS-03 | 交易总表 | 账户筛选 | app.js L359（accSel） | N/A（不适用） | 全部账户 + 账户列表 | 选择 | 过滤 | 未验证 | N/A（不适用） | 本页 | C:app.js L359 | 已实现｜截图已见 |
+| I-TXNS-04 | 交易总表 | 分类筛选 | app.js L360（catSel） | N/A（不适用） | 全部分类 + 分类列表 | 选择 | 过滤 | 未验证 | N/A（不适用） | 本页 | C:app.js L360 | 已实现｜截图已见 |
+| I-TXNS-05 | 交易总表 | 开始日期 | app.js L361（dFrom type=date） | N/A（不适用） | dateStartUnix(minDate,false) L396 | 选择 | 过滤 | 未验证 | N/A（不适用） | 本页 | C:app.js L361 | 已实现｜截图已见 |
+| I-TXNS-06 | 交易总表 | 结束日期 | app.js L362（dTo type=date） | N/A（不适用） | dateStartUnix(maxDate,true) L396 | 选择 | 过滤 | 未验证 | N/A（不适用） | 本页 | C:app.js L362 | 已实现｜截图已见 |
+| I-TXNS-07 | 交易总表 | 查询按钮 | app.js L363 / L523（applyFilters） | 筛选条件已填 | 组装 state.filter L520 | 点击 → GET /transactions?page&count&keyword&type&accountId&categoryId&minTime&maxTime L399 | renderTable(data) L401；页码回 1、scrollTo 顶部 L402 | load().catch → toast(e.message,"err") L521 | N/A（不适用） | 本页 | C:app.js L363,L519–522；运行时未验证 | 已实现｜运行时未验证 |
+| I-TXNS-08 | 交易总表 | 重置按钮 | app.js L364 / L524 | N/A（不适用） | N/A（不适用） | 点击 → applyFilters() | 清空 6 个控件并回到全量第一页 | 见 I-TXNS-07 | N/A（不适用） | 本页 | C:app.js L364,L524 | 已实现｜运行时未验证 |
+| I-TXNS-09 | 交易总表 | 回车提交 | app.js L516–518（6 控件 keydown Enter） | 筛选控件聚焦 | N/A（不适用） | 按 Enter | applyFilters() | 未验证 | N/A（不适用） | 本页 | C:app.js L516–518 | 已实现｜运行时未验证 |
+| I-TXNS-10 | 交易总表 | 全选本页 | app.js L370 / L483–490（allChk） | 有行 | N/A（不适用） | 勾选 | 勾选 tbody 全部 checkbox；state.sel 增删 | 未验证 | N/A（不适用） | 本页 | C:app.js L370,L483–490 | 已实现｜运行时未验证 |
+| I-TXNS-11 | 交易总表 | 行勾选 | app.js L433–437（chk change） | 每行 | N/A（不适用） | 勾选/取消 | state.sel.add/delete(tx.id)；refreshSel() 更新按钮态 L378–381 | 未验证 | N/A（不适用） | 本页 | C:app.js L433–437 | 已实现｜运行时未验证 |
 | I-TXNS-12 | 交易总表 | 删除选中 | app.js L372 / L491–514 | state.sel.size>0 L492 | confirmDialog 文案「将删除选中的 N 条交易，删除后可在回收站恢复。」L494–499 | 逐条 DELETE /transactions/:id?clientUuid=uuid() L506 | toast「删除完成：成功 X，失败 Y」L510 + page=1 + await load() L511–512 | 单条失败计入 failN | 重绘列表 | 本页 | C:app.js L491–514；运行时未验证 | 已实现｜文案与详情页矛盾（R0-E-24） |
-| I-TXNS-13 | 交易总表 | 删除选中取消 | app.js L500（if(!yes) return） | 确认框 | — | 取消 | 不删除 | — | 无 | 本页 | C:app.js L500 | 已实现｜运行时未验证 |
-| I-TXNS-14 | 交易总表 | ＋ 记一笔 | app.js L373 / L515 | — | — | 点击 → openTxForm(bookId,load) | 打开弹窗；提交后 load() | — | — | 本页 | C:app.js L373,L515 | 已实现｜运行时未验证 |
-| I-TXNS-15 | 交易总表 | 行编辑 | app.js L454–455（editBtn） | 每行 | — | 点击 → openTxEditForm(bookId,tx,load) | 打开编辑弹窗；保存后 load() | — | — | 本页 | C:app.js L454–455 | 已实现｜运行时未验证 |
-| I-TXNS-16 | 交易总表 | 上一页 / 下一页 | app.js L472–478（prev/next） | data.page>1 / page*count<total | — | 点击 | state.filter.page±1 + load() | — | — | 本页 | C:app.js L472–478 | 已实现｜运行时未验证 |
-| I-TXNS-17 | 交易总表 | 骨架屏 | app.js L406–416 / L388（renderSkeleton, 5 条, aria-busy=true） | 加载前 | — | — | 骨架占位 | — | — | 本页 | C:app.js L406–416；加载态未采集 | 已实现｜加载态未采集｜R0-E-02 |
-| I-TXNS-18 | 交易总表 | 空态 | app.js L460–468 | 无结果 | — | — | 「没有符合条件的交易…」 | — | — | 本页 | C:app.js L460–468；S:transactions/390x844/empty.png | 已实现｜截图已见 |
-| I-TXNS-19 | 交易总表 | 加载失败 | app.js L526（try/catch toast） | API 失败 | — | — | — | 仅 toast(e.message,"err") | — | 本页 | C:app.js L526；错误态未采集 | 已实现｜运行时未验证｜R0-E-12 |
+| I-TXNS-13 | 交易总表 | 删除选中取消 | app.js L500（if(!yes) return） | 确认框 | N/A（不适用） | 取消 | 不删除 | 未验证 | 无 | 本页 | C:app.js L500 | 已实现｜运行时未验证 |
+| I-TXNS-14 | 交易总表 | ＋ 记一笔 | app.js L373 / L515 | N/A（不适用） | N/A（不适用） | 点击 → openTxForm(bookId,load) | 打开弹窗；提交后 load() | 未验证 | N/A（不适用） | 本页 | C:app.js L373,L515 | 已实现｜运行时未验证 |
+| I-TXNS-15 | 交易总表 | 行编辑 | app.js L454–455（editBtn） | 每行 | N/A（不适用） | 点击 → openTxEditForm(bookId,tx,load) | 打开编辑弹窗；保存后 load() | 未验证 | N/A（不适用） | 本页 | C:app.js L454–455 | 已实现｜运行时未验证 |
+| I-TXNS-16 | 交易总表 | 上一页 / 下一页 | app.js L472–478（prev/next） | data.page>1 / page*count<total | N/A（不适用） | 点击 | state.filter.page±1 + load() | 未验证 | N/A（不适用） | 本页 | C:app.js L472–478 | 已实现｜运行时未验证 |
+| I-TXNS-17 | 交易总表 | 骨架屏 | app.js L406–416 / L388（renderSkeleton, 5 条, aria-busy=true） | 加载前 | N/A（不适用） | N/A（不适用） | 骨架占位 | 未验证 | N/A（不适用） | 本页 | C:app.js L406–416；加载态未采集 | 已实现｜加载态未采集｜R0-E-02 |
+| I-TXNS-18 | 交易总表 | 空态 | app.js L460–468 | 无结果 | N/A（不适用） | N/A（不适用） | 「没有符合条件的交易…」 | 未验证 | N/A（不适用） | 本页 | C:app.js L460–468；S:transactions/390x844/empty.png | 已实现｜截图已见 |
+| I-TXNS-19 | 交易总表 | 加载失败 | app.js L526（try/catch toast） | API 失败 | N/A（不适用） | N/A（不适用） | 未验证 | 仅 toast(e.message,"err") | N/A（不适用） | 本页 | C:app.js L526；错误态未采集 | 已实现｜运行时未验证｜R0-E-12 |
 
 #### 3.1.7 账户 `#b/:id/accounts`
 
@@ -263,21 +277,21 @@
 
 | ID | 页面 | 控件 / 动作 | 代码位置 | 前置条件 | 输入与校验 | 操作 | 成功结果 | 失败结果 | 数据联动 | 返回路径 | 验证证据 | 当前状态 / 关联 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| I-ACCT-01 | 账户 | ＋ 新增账户 | app.js L657–658（addBtn） | 对账页 | — | 点击 → openAcctForm(bookId,null) | 打开 #acctDlg | — | — | 弹层 | C:app.js L657–658；S:accounts/390x844/normal.png | 已实现｜截图已见 |
-| I-ACCT-02 | 账户 | 账户行（名称/类型/余额） | app.js L668–673 | loadBookMeta L649 | — | — | 显示 ACC_CAT_NAME、cents2str 余额、正负色 L672 | — | — | 本页 | C:app.js L668–673；S:accounts/390x844/normal.png | 已实现｜截图已见 |
-| I-ACCT-03 | 账户 | 编辑按钮 | app.js L676–677（edit） | 每行 | — | 点击 → openAcctForm(bookId,a) | 打开 #acctDlg（回填） | — | — | 弹层 | C:app.js L676–677 | 已实现｜运行时未验证 |
+| I-ACCT-01 | 账户 | ＋ 新增账户 | app.js L657–658（addBtn） | 对账页 | 见 I-ACCT-08 | 点击 → openAcctForm(bookId,null) | 打开 #acctDlg | 见 I-ACCT-12 | 见 I-ACCT-13 | 弹层 | C:app.js L657–658；S:accounts/390x844/normal.png | 已实现｜截图已见 |
+| I-ACCT-02 | 账户 | 账户行（名称/类型/余额） | app.js L668–673 | loadBookMeta L649 | N/A（不适用） | N/A（不适用） | 显示 ACC_CAT_NAME、cents2str 余额、正负色 L672 | 未验证 | N/A（不适用） | 本页 | C:app.js L668–673；S:accounts/390x844/normal.png | 已实现｜截图已见 |
+| I-ACCT-03 | 账户 | 编辑按钮 | app.js L676–677（edit） | 每行 | N/A（不适用） | 点击 → openAcctForm(bookId,a) | 打开 #acctDlg（回填） | 未验证 | N/A（不适用） | 弹层 | C:app.js L676–677 | 已实现｜运行时未验证 |
 | I-ACCT-04 | 账户 | 删除按钮 | app.js L678–689（del） | 每行 | confirmDialog L680–684 | DELETE /books/:id/accounts/:id L687 | toast「账户已删除」+ await renderAccounts(bookId) | toast(e.message,"err") L688（后端 409 引用保护） | 重绘本页余额 | 本页 | C:app.js L678–689；运行时未验证 | 已实现｜运行时未验证 |
-| I-ACCT-05 | 账户 | 删除取消 | app.js L685（if(!ok) return） | 确认框 | — | 取消 | 不删除 | — | 无 | 本页 | C:app.js L685 | 已实现｜运行时未验证 |
-| I-ACCT-06 | 账户 | 删除引用保护 | app.js L688 + 后端 409 | 账户被交易引用 | — | 确认删除 | — | toast 后端 ErrAccountInUse → 409 | — | 本页 | C:app.js L688；common.go mapSvcErr（见 §5.3） | 已实现｜运行时未验证 |
-| I-ACCT-07 | 账户 | 期初余额输入 | —（grep 无命中） | 新增账户弹窗 | — | — | — | — | — | — | 缺失：app.js `initialBalance\|期初\|opening\|initBalance\|初始` No matches；新增 body L737 仅 name/category/currency；后端 AccountService.Create 固定 Balance:0（account.go L21） | **缺失**｜R0-E-06 / R0-E-30 |
-| I-ACCT-08 | 账户 | 账户名称 `#acctName` | index.html L137 / app.js L719,L731–732 | 弹窗 | name.trim() 空 → #acctErr「请输入账户名称」L732 | 键入 | 显示文本 | err-msg | — | 弹层 | C:index.html L137, app.js L731–732 | 已实现｜运行时未验证 |
-| I-ACCT-09 | 账户 | 账户类型 `#acctCat` | index.html L139 / app.js L720–722 | 弹窗 | 编辑时 disabled=editing L722（后端仅改名称） | 选择 | 选中类型 | — | — | 弹层 | C:index.html L139, app.js L720–722 | 已实现｜运行时未验证 |
-| I-ACCT-10 | 账户 | 币种 `#acctCur` | index.html L141 / app.js L723–724 | 弹窗 | 默认 CNY；编辑时 disabled L724 | 键入 | 显示文本 | — | — | 弹层 | C:index.html L141, app.js L723–724 | 已实现｜运行时未验证 |
-| I-ACCT-11 | 账户 | 取消 `#acctCancel` | index.html L144 / app.js L728 | 弹窗 | — | 点击 | 关闭 | — | 无 | 本页 | C:index.html L144, app.js L728 | 已实现｜运行时未验证 |
+| I-ACCT-05 | 账户 | 删除取消 | app.js L685（if(!ok) return） | 确认框 | N/A（不适用） | 取消 | 不删除 | N/A（不适用） | 无 | 本页 | C:app.js L685 | 已实现｜运行时未验证 |
+| I-ACCT-06 | 账户 | 删除引用保护 | app.js L688 + 后端 409 | 账户被交易引用 | N/A（不适用） | 确认删除 | 未验证 | toast 后端 ErrAccountInUse → 409 | N/A（不适用） | 本页 | C:app.js L688；common.go mapSvcErr（见 §5.3） | 已实现｜运行时未验证 |
+| I-ACCT-07 | 账户 | 期初余额输入 | —（grep 无命中） | 新增账户弹窗 | 未实现 | 未实现 | 未实现 | 未实现 | 未实现 | 未实现 | 缺失：app.js `initialBalance\|期初\|opening\|initBalance\|初始` No matches；新增 body L737 仅 name/category/currency；后端 AccountService.Create 固定 Balance:0（account.go L21） | **缺失**｜R0-E-06 / R0-E-30 |
+| I-ACCT-08 | 账户 | 账户名称 `#acctName` | index.html L137 / app.js L719,L731–732 | 弹窗 | name.trim() 空 → #acctErr「请输入账户名称」L732 | 键入 | 显示文本 | err-msg | N/A（不适用） | 弹层 | C:index.html L137, app.js L731–732 | 已实现｜运行时未验证 |
+| I-ACCT-09 | 账户 | 账户类型 `#acctCat` | index.html L139 / app.js L720–722 | 弹窗 | 编辑时 disabled=editing L722（后端仅改名称） | 选择 | 选中类型 | 未验证 | N/A（不适用） | 弹层 | C:index.html L139, app.js L720–722 | 已实现｜运行时未验证 |
+| I-ACCT-10 | 账户 | 币种 `#acctCur` | index.html L141 / app.js L723–724 | 弹窗 | 默认 CNY；编辑时 disabled L724 | 键入 | 显示文本 | 未验证 | N/A（不适用） | 弹层 | C:index.html L141, app.js L723–724 | 已实现｜运行时未验证 |
+| I-ACCT-11 | 账户 | 取消 `#acctCancel` | index.html L144 / app.js L728 | 弹窗 | N/A（不适用） | 点击 | 关闭 | 未验证 | 无 | 本页 | C:index.html L144, app.js L728 | 已实现｜运行时未验证 |
 | I-ACCT-12 | 账户 | 保存 `#acctSubmit` | index.html L145 / app.js L729–747 | 名称非空 | btnPending L739 | 编辑 PUT /accounts/:id {name} L741；新增 POST /accounts {name,category,currency} L742 | toast「账户已创建/已更新」L743 + 关弹窗 L744 + await renderAccounts L745 | #acctErr.textContent=err.message L746 | 重绘本页余额 | 本页 | C:app.js L729–747；运行时未验证 | 已实现｜运行时未验证 |
-| I-ACCT-13 | 账户 | 余额刷新 | app.js L687 / L745 | 增删后 | — | renderAccounts(bookId) | loadBookMeta 重拉，余额列表更新 | — | — | 本页 | C:app.js L687,L745 | 已实现｜运行时未验证 |
-| I-ACCT-14 | 账户 | 本页净资产摘要 | —（在 renderInvest L1255–1276） | 对账页 | — | — | — | — | — | — | 缺失：净资产四卡在投资页 | **缺失**｜R0-E-28 |
-| I-ACCT-15 | 账户 | 投资账户行点击 → 详情 | app.js L693–700 | category===5 | 排除 .row-actions L697 | 点击 → #b/{id}/account/{a.id} L698 | 进入投资账户详情 | — | — | #b/:id/account/:accId | C:app.js L693–700；S:account-detail/390x844/normal.png | 已实现｜截图已见 |
+| I-ACCT-13 | 账户 | 余额刷新 | app.js L687 / L745 | 增删后 | N/A（不适用） | renderAccounts(bookId) | loadBookMeta 重拉，余额列表更新 | 未验证 | N/A（不适用） | 本页 | C:app.js L687,L745 | 已实现｜运行时未验证 |
+| I-ACCT-14 | 账户 | 本页净资产摘要 | —（在 renderInvest L1255–1276） | 对账页 | 未实现 | 未实现 | 未实现 | 未实现 | 未实现 | 未实现 | 缺失：净资产四卡在投资页 | **缺失**｜R0-E-28 |
+| I-ACCT-15 | 账户 | 投资账户行点击 → 详情 | app.js L693–700 | category===5 | 排除 .row-actions L697 | 点击 → #b/{id}/account/{a.id} L698 | 进入投资账户详情 | 未验证 | N/A（不适用） | #b/:id/account/:accId | C:app.js L693–700；S:account-detail/390x844/normal.png | 已实现｜截图已见 |
 
 #### 3.1.8 分类 `#b/:id/categories`
 
@@ -285,21 +299,21 @@
 
 | ID | 页面 | 控件 / 动作 | 代码位置 | 前置条件 | 输入与校验 | 操作 | 成功结果 | 失败结果 | 数据联动 | 返回路径 | 验证证据 | 当前状态 / 关联 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| I-CAT-01 | 分类 | ＋ 新增大类 | app.js L2084–2085（addTop） | 分类页 | — | 点击 → openCatForm(bookId,null) | 打开 #catDlg | — | — | 弹层 | C:app.js L2084–2085；S:categories/390x844/normal.png | 已实现｜截图已见｜R0-E-04 |
-| I-CAT-02 | 分类 | ＋ 小类 | app.js L2108–2109（addSub） | 每个大类行 | 传 {parentId:top.id,catType:top.catType} | 点击 → openCatForm | 打开 #catDlg（预置上级） | — | — | 弹层 | C:app.js L2108–2109 | 已实现｜运行时未验证 |
-| I-CAT-03 | 分类 | 大类编辑 | app.js L2110–2111 | 每行 | — | 点击 → openCatForm(bookId,top) | 打开弹窗回填 | — | — | 弹层 | C:app.js L2110–2111 | 已实现｜运行时未验证 |
-| I-CAT-04 | 分类 | 子类编辑 | app.js L2123–2124（ke） | 每个子类 | — | 点击 → openCatForm(bookId,kid) | 打开弹窗回填 | — | — | 弹层 | C:app.js L2123–2124 | 已实现｜运行时未验证 |
-| I-CAT-05 | 分类 | 大类删除 | app.js L2112–2113 | 每行 | — | 点击 → deleteCategory(bookId,top) | 进入 I-CAT-07 引用确认 | — | — | 本页 | C:app.js L2112–2113 | 已实现｜运行时未验证 |
-| I-CAT-06 | 分类 | 子类删除 | app.js L2125–2126（kd） | 每个子类 | — | 点击 → deleteCategory(bookId,kid) | 进入 I-CAT-07 引用确认 | — | — | 本页 | C:app.js L2125–2126 | 已实现｜运行时未验证 |
+| I-CAT-01 | 分类 | ＋ 新增大类 | app.js L2084–2085（addTop） | 分类页 | N/A（不适用） | 点击 → openCatForm(bookId,null) | 打开 #catDlg | 未验证 | N/A（不适用） | 弹层 | C:app.js L2084–2085；S:categories/390x844/normal.png | 已实现｜截图已见｜R0-E-04 |
+| I-CAT-02 | 分类 | ＋ 小类 | app.js L2108–2109（addSub） | 每个大类行 | 传 {parentId:top.id,catType:top.catType} | 点击 → openCatForm | 打开 #catDlg（预置上级） | 未验证 | N/A（不适用） | 弹层 | C:app.js L2108–2109 | 已实现｜运行时未验证 |
+| I-CAT-03 | 分类 | 大类编辑 | app.js L2110–2111 | 每行 | N/A（不适用） | 点击 → openCatForm(bookId,top) | 打开弹窗回填 | 未验证 | N/A（不适用） | 弹层 | C:app.js L2110–2111 | 已实现｜运行时未验证 |
+| I-CAT-04 | 分类 | 子类编辑 | app.js L2123–2124（ke） | 每个子类 | N/A（不适用） | 点击 → openCatForm(bookId,kid) | 打开弹窗回填 | 未验证 | N/A（不适用） | 弹层 | C:app.js L2123–2124 | 已实现｜运行时未验证 |
+| I-CAT-05 | 分类 | 大类删除 | app.js L2112–2113 | 每行 | N/A（不适用） | 点击 → deleteCategory(bookId,top) | 进入 I-CAT-07 引用确认 | 未验证 | N/A（不适用） | 本页 | C:app.js L2112–2113 | 已实现｜运行时未验证 |
+| I-CAT-06 | 分类 | 子类删除 | app.js L2125–2126（kd） | 每个子类 | N/A（不适用） | 点击 → deleteCategory(bookId,kid) | 进入 I-CAT-07 引用确认 | 未验证 | N/A（不适用） | 本页 | C:app.js L2125–2126 | 已实现｜运行时未验证 |
 | I-CAT-07 | 分类 | 引用保护确认 | app.js L2056–2068（deleteCategory） | 删除前 | 先 GET /transactions?categoryId=&count=1 取 n L2058；confirmDialog 文案「删除「…」后，n 笔账单将归入「其他」分类，且不可恢复。」L2061 | 确认 → DELETE /categories/:id L2066 | toast「分类已删除」+ await renderCategories(bookId) | toast(e.message,"err") L2067 | 重绘分类树 | 本页 | C:app.js L2056–2068；运行时未验证 | 已实现｜运行时未验证｜R0-E-04 |
-| I-CAT-08 | 分类 | 删除取消 | app.js L2064（if(!ok) return） | 确认框 | — | 取消 | 不删除 | — | 无 | 本页 | C:app.js L2064 | 已实现｜运行时未验证 |
-| I-CAT-09 | 分类 | 名称 `#catName` | index.html L122 / app.js L2032,L2043–2044 | 弹窗 | name.trim() 空 → #catErr「请输入分类名称」L2044 | 键入 | 显示文本 | err-msg | — | 弹层 | C:index.html L122, app.js L2043–2044 | 已实现｜运行时未验证 |
-| I-CAT-10 | 分类 | 类型 `#catType` | index.html L124 / app.js L2033 | 弹窗 | 支出(2)/收入(1) | 选择 | 选中类型 | — | — | 弹层 | C:index.html L124, app.js L2033 | 已实现｜运行时未验证 |
-| I-CAT-11 | 分类 | 上级大类 `#catParent` | index.html L126 / app.js L2034–2036 | 弹窗 | fillSelect(...,"无（作为大类）")，顶级填 0 | 选择 | 选中上级 | — | — | 弹层 | C:index.html L126, app.js L2034–2036 | 已实现｜运行时未验证 |
-| I-CAT-12 | 分类 | 取消 `#catCancel` | index.html L129 / app.js L2040 | 弹窗 | — | 点击 | 关闭 | — | 无 | 本页 | C:index.html L129, app.js L2040 | 已实现｜运行时未验证 |
+| I-CAT-08 | 分类 | 删除取消 | app.js L2064（if(!ok) return） | 确认框 | N/A（不适用） | 取消 | 不删除 | 未验证 | 无 | 本页 | C:app.js L2064 | 已实现｜运行时未验证 |
+| I-CAT-09 | 分类 | 名称 `#catName` | index.html L122 / app.js L2032,L2043–2044 | 弹窗 | name.trim() 空 → #catErr「请输入分类名称」L2044 | 键入 | 显示文本 | err-msg | N/A（不适用） | 弹层 | C:index.html L122, app.js L2043–2044 | 已实现｜运行时未验证 |
+| I-CAT-10 | 分类 | 类型 `#catType` | index.html L124 / app.js L2033 | 弹窗 | 支出(2)/收入(1) | 选择 | 选中类型 | 未验证 | N/A（不适用） | 弹层 | C:index.html L124, app.js L2033 | 已实现｜运行时未验证 |
+| I-CAT-11 | 分类 | 上级大类 `#catParent` | index.html L126 / app.js L2034–2036 | 弹窗 | fillSelect(...,"无（作为大类）")，顶级填 0 | 选择 | 选中上级 | 未验证 | N/A（不适用） | 弹层 | C:index.html L126, app.js L2034–2036 | 已实现｜运行时未验证 |
+| I-CAT-12 | 分类 | 取消 `#catCancel` | index.html L129 / app.js L2040 | 弹窗 | N/A（不适用） | 点击 | 关闭 | 未验证 | 无 | 本页 | C:index.html L129, app.js L2040 | 已实现｜运行时未验证 |
 | I-CAT-13 | 分类 | 保存 `#catSubmit` | index.html L130 / app.js L2041–2054 | 名称非空 | btnPending L2046 | 编辑 PUT /categories/:id L2048；新增 POST /categories L2049，body {name,catType,parentId} L2045 | toast「分类已添加/已更新」L2050 + 关弹窗 L2051 + await renderCategories L2052 | #catErr.textContent=err.message L2053 | 重绘 | 本页 | C:app.js L2041–2054；运行时未验证 | 已实现｜运行时未验证 |
-| I-CAT-14 | 分类 | 树展开 / 收起 | —（无事件） | 分类页 | — | — | — | — | — | — | 缺失：renderGroup L2091–2131 一次性平铺大类+子类，无折叠/展开按钮或事件 | **缺失**｜R0-E-04 |
-| I-CAT-15 | 分类 | 空态 | app.js L2097–2100（cat-empty） | 无分类 | — | — | 「暂无，点击上方「新增大类」添加。」 | — | — | 本页 | C:app.js L2097–2100；本轮有默认分类，空态未采集 | 已实现｜空态未采集 |
+| I-CAT-14 | 分类 | 树展开 / 收起 | —（无事件） | 分类页 | 未实现 | 未实现 | 未实现 | 未实现 | 未实现 | 未实现 | 缺失：renderGroup L2091–2131 一次性平铺大类+子类，无折叠/展开按钮或事件 | **缺失**｜R0-E-04 |
+| I-CAT-15 | 分类 | 空态 | app.js L2097–2100（cat-empty） | 无分类 | N/A（不适用） | N/A（不适用） | 「暂无，点击上方「新增大类」添加。」 | 未验证 | N/A（不适用） | 本页 | C:app.js L2097–2100；本轮有默认分类，空态未采集 | 已实现｜空态未采集 |
 
 #### 3.1.9 成员 `#b/:id/members`
 
@@ -307,22 +321,22 @@
 
 | ID | 页面 | 控件 / 动作 | 代码位置 | 前置条件 | 输入与校验 | 操作 | 成功结果 | 失败结果 | 数据联动 | 返回路径 | 验证证据 | 当前状态 / 关联 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| I-MEM-01 | 成员 | 邀请成员按钮 | app.js L1647–1677（invBtn） | 成员页 | — | 点击 → 打开 openInvestDialog | 显示邀请弹窗 | — | — | 弹层 | C:app.js L1647–1677；S:members/390x844/normal.png | 已实现｜截图已见 |
-| I-MEM-02 | 成员 | 角色下拉 | app.js L1649–1652（roleSel） | 邀请弹窗 | 3=普通成员 / 2=管理员 | 选择 | 选中角色 | — | — | 弹层 | C:app.js L1649–1652 | 已实现｜运行时未验证 |
-| I-MEM-03 | 成员 | 绑定用户名 | app.js L1653（bound input） | 邀请弹窗 | placeholder「可选：限定用户名（空 = 任何人凭码加入）」 | 键入 | 显示文本 | — | — | 弹层 | C:app.js L1653 | 已实现｜运行时未验证 |
-| I-MEM-04 | 成员 | 邀请提交 | app.js L1658–1659 | 邀请弹窗 | {role,boundUsername} | POST /books/:id/members/invite | 返回 {code,role,expiresAt}（**无 inviteId**） | — | — | 弹层 | C:app.js L1658–1659 | 已实现｜响应缺 inviteId｜R0-E-26 |
-| I-MEM-05 | 成员 | 邀请码展示 | app.js L1660–1666 | 生成成功 | 复用 investDlg；#iSubmit 隐藏 L1674 | — | 弹窗显示 code + 引导文案 L1667 | — | — | 弹层 | C:app.js L1660–1667 | 已实现｜运行时未验证 |
-| I-MEM-06 | 成员 | 复制邀请码 | app.js L1668–1672（cp） | 邀请码已展示 | navigator.clipboard.writeText | 点击 | toast「邀请码已复制」L1670 | toast「复制失败，请手动选中复制」L1671 | — | 弹层 | C:app.js L1668–1672 | 已实现｜运行时未验证 |
-| I-MEM-07 | 成员 | 邀请撤销 UI | —（grep 无命中） | 成员页 | — | — | — | — | — | — | 缺失：app.js `revoke` 仅命中 L1593/1596–1606（Token 撤销）、L1085（URL.revokeObjectURL）；无邀请撤销按钮、无 /invite/:inviteId/revoke 调用 | **缺失**｜R0-E-26 |
-| I-MEM-08 | 成员 | 成员列表 | app.js L1707 / L1683–1684 | 成员页 | GET /members + GET /users/me | — | 表头 成员姓名/角色/可见性/操作 | — | — | 本页 | C:app.js L1683–1684,L1707；S:members/390x844/normal.png | 已实现｜截图已见｜R0-E-11 |
-| I-MEM-09 | 成员 | 角色徽标 | app.js L1715–1717（badge） | 每行 | 1=所有者/2=管理员/3=普通成员 | — | 显示徽标 | — | — | 本页 | C:app.js L1715–1717；S:members/390x844/normal.png | 已实现｜视觉待验收｜R0-E-11 |
-| I-MEM-10 | 成员 | 可见性徽标（只读） | app.js L1719–1720（vbadge） | 每行 | 只读 mb.canViewOthers | — | 显示「已开启/已关闭账本可见」 | — | — | 本页 | C:app.js L1719–1720；S:members/390x844/normal.png | **仅只读徽标，非开关；字段粒度为成员级而非账本级**｜R0-E-19 / R0-E-27 |
-| I-MEM-11 | 成员 | 账本可见性开关 | —（grep 无命中） | 成员页 | — | — | — | — | — | — | 缺失：无 checkbox/toggle、无 PUT /books/:id/visibility 调用；`canViewOthers` 全文仅 L1719–1720；权威字段为 books.members_can_view_others | **缺失**｜R0-E-19 / R0-E-27 |
-| I-MEM-12 | 成员 | 设为管理员 | app.js L1724–1732（bUp） | role===3 | — | PUT /members/:uid {role:2} L1727 | toast「已设为管理员」+ renderMembers(bookId) | toast(err.message,"err") L1730 | 重绘本页 | 本页 | C:app.js L1724–1732 | 已实现｜运行时未验证 |
-| I-MEM-13 | 成员 | 降级为成员 | app.js L1734–1742（bDown） | role===2 | — | PUT /members/:uid {role:3} L1737 | toast「已降级为成员」+ 重绘 | toast(err.message,"err") L1740 | 重绘本页 | 本页 | C:app.js L1734–1742 | 已实现｜运行时未验证 |
+| I-MEM-01 | 成员 | 邀请成员按钮 | app.js L1647–1677（invBtn） | 成员页 | N/A（不适用） | 点击 → 打开 openInvestDialog | 显示邀请弹窗 | 未验证 | N/A（不适用） | 弹层 | C:app.js L1647–1677；S:members/390x844/normal.png | 已实现｜截图已见 |
+| I-MEM-02 | 成员 | 角色下拉 | app.js L1649–1652（roleSel） | 邀请弹窗 | 3=普通成员 / 2=管理员 | 选择 | 选中角色 | 未验证 | N/A（不适用） | 弹层 | C:app.js L1649–1652 | 已实现｜运行时未验证 |
+| I-MEM-03 | 成员 | 绑定用户名 | app.js L1653（bound input） | 邀请弹窗 | placeholder「可选：限定用户名（空 = 任何人凭码加入）」 | 键入 | 显示文本 | 未验证 | N/A（不适用） | 弹层 | C:app.js L1653 | 已实现｜运行时未验证 |
+| I-MEM-04 | 成员 | 邀请提交 | app.js L1658–1659 | 邀请弹窗 | {role,boundUsername} | POST /books/:id/members/invite | 返回 {code,role,expiresAt}（**无 inviteId**） | 未验证 | N/A（不适用） | 弹层 | C:app.js L1658–1659 | 已实现｜响应缺 inviteId｜R0-E-26 |
+| I-MEM-05 | 成员 | 邀请码展示 | app.js L1660–1666 | 生成成功 | 复用 investDlg；#iSubmit 隐藏 L1674 | N/A（不适用） | 弹窗显示 code + 引导文案 L1667 | 未验证 | N/A（不适用） | 弹层 | C:app.js L1660–1667 | 已实现｜运行时未验证 |
+| I-MEM-06 | 成员 | 复制邀请码 | app.js L1668–1672（cp） | 邀请码已展示 | navigator.clipboard.writeText | 点击 | toast「邀请码已复制」L1670 | toast「复制失败，请手动选中复制」L1671 | N/A（不适用） | 弹层 | C:app.js L1668–1672 | 已实现｜运行时未验证 |
+| I-MEM-07 | 成员 | 邀请撤销 UI | —（grep 无命中） | 成员页 | 未实现 | 未实现 | 未实现 | 未实现 | 未实现 | 未实现 | 缺失：app.js `revoke` 仅命中 L1593/1596–1606（Token 撤销）、L1085（URL.revokeObjectURL）；无邀请撤销按钮、无 /invite/:inviteId/revoke 调用 | **缺失**｜R0-E-26 |
+| I-MEM-08 | 成员 | 成员列表 | app.js L1707 / L1683–1684 | 成员页 | GET /members + GET /users/me | N/A（不适用） | 表头 成员姓名/角色/可见性/操作 | 未验证 | N/A（不适用） | 本页 | C:app.js L1683–1684,L1707；S:members/390x844/normal.png | 已实现｜截图已见｜R0-E-11 |
+| I-MEM-09 | 成员 | 角色徽标 | app.js L1715–1717（badge） | 每行 | 1=所有者/2=管理员/3=普通成员 | N/A（不适用） | 显示徽标 | 未验证 | N/A（不适用） | 本页 | C:app.js L1715–1717；S:members/390x844/normal.png | 已实现｜视觉待验收｜R0-E-11 |
+| I-MEM-10 | 成员 | 可见性徽标（只读） | app.js L1719–1720（vbadge） | 每行 | 只读 mb.canViewOthers | N/A（不适用） | 显示「已开启/已关闭账本可见」 | 未验证 | N/A（不适用） | 本页 | C:app.js L1719–1720；S:members/390x844/normal.png | **仅只读徽标，非开关；字段粒度为成员级而非账本级**｜R0-E-19 / R0-E-27 |
+| I-MEM-11 | 成员 | 账本可见性开关 | —（grep 无命中） | 成员页 | 未实现 | 未实现 | 未实现 | 未实现 | 未实现 | 未实现 | 缺失：无 checkbox/toggle、无 PUT /books/:id/visibility 调用；`canViewOthers` 全文仅 L1719–1720；权威字段为 books.members_can_view_others | **缺失**｜R0-E-19 / R0-E-27 |
+| I-MEM-12 | 成员 | 设为管理员 | app.js L1724–1732（bUp） | role===3 | N/A（不适用） | PUT /members/:uid {role:2} L1727 | toast「已设为管理员」+ renderMembers(bookId) | toast(err.message,"err") L1730 | 重绘本页 | 本页 | C:app.js L1724–1732 | 已实现｜运行时未验证 |
+| I-MEM-13 | 成员 | 降级为成员 | app.js L1734–1742（bDown） | role===2 | N/A（不适用） | PUT /members/:uid {role:3} L1737 | toast「已降级为成员」+ 重绘 | toast(err.message,"err") L1740 | 重绘本页 | 本页 | C:app.js L1734–1742 | 已实现｜运行时未验证 |
 | I-MEM-14 | 成员 | 移除成员 | app.js L1745–1757（bDel） | role!==1 | confirmDialog L1747–1749 | DELETE /members/:uid L1752 | toast「成员已移除」+ renderMembers(bookId) | toast(err.message,"err") L1755 | 重绘本页 | 本页 | C:app.js L1745–1757 | 已实现｜运行时未验证 |
-| I-MEM-15 | 成员 | 移除取消 | app.js L1750（if(!okD) return） | 确认框 | — | 取消 | 不移除 | — | 无 | 本页 | C:app.js L1750 | 已实现｜运行时未验证 |
-| I-MEM-16 | 成员 | 家庭信息块 | app.js L1686–1703（fblock） | 成员页 | — | — | 显示家庭名/成员数/类型/创建时间 | — | — | 本页 | C:app.js L1686–1703；S:members/390x844/normal.png | 已实现｜截图已见 |
+| I-MEM-15 | 成员 | 移除取消 | app.js L1750（if(!okD) return） | 确认框 | N/A（不适用） | 取消 | 不移除 | 未验证 | 无 | 本页 | C:app.js L1750 | 已实现｜运行时未验证 |
+| I-MEM-16 | 成员 | 家庭信息块 | app.js L1686–1703（fblock） | 成员页 | N/A（不适用） | N/A（不适用） | 显示家庭名/成员数/类型/创建时间 | 未验证 | N/A（不适用） | 本页 | C:app.js L1686–1703；S:members/390x844/normal.png | 已实现｜截图已见 |
 
 #### 3.1.10 我的 `#b/:id/mine`
 
@@ -330,20 +344,20 @@
 
 | ID | 页面 | 控件 / 动作 | 代码位置 | 前置条件 | 输入与校验 | 操作 | 成功结果 | 失败结果 | 数据联动 | 返回路径 | 验证证据 | 当前状态 / 关联 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| I-MINE-01 | 我的 | 头像 / 用户名 | app.js L2148–2153 | — | 取 state.whoami | — | 显示 | — | — | 本页 | C:app.js L2148–2153；S:mine/390x844/normal.png | 已实现｜截图已见 |
-| I-MINE-02 | 我的 | 用户名（只读） | app.js L2162–2164（vu） | GET /users/me L2157 | 注释「用户名按后端设计为只读」L2155 | — | 显示用户名 | — | — | 本页 | C:app.js L2155,L2162–2164；S:mine/390x844/normal.png | 已实现｜截图已见｜R0-E-17 |
-| I-MINE-03 | 我的 | 邮箱输入 | app.js L2168（eInput type=email） | — | placeholder「未设置」 | 键入 | 显示文本 | 浏览器 type=email 校验 | — | 本页 | C:app.js L2168；S:mine/390x844/normal.png | 已实现｜截图已见 |
-| I-MINE-04 | 我的 | 邮箱保存 | app.js L2169–2174（eSave） | — | btnPending L2171 | PUT /users/me {email} L2172 | toast「资料已更新」L2172 | toast(err.message,"err") L2173 | — | 本页 | C:app.js L2169–2174；运行时未验证 | 已实现｜入口在「我的」而非设置页｜R0-E-17 |
-| I-MINE-05 | 我的 | 二级入口：我的账本 | app.js L2180–2196（links[0] → #books） | — | — | 点击 | hash=#books | — | — | #books | C:app.js L2180–2196；S:mine/390x844/normal.png | 已实现｜截图已见｜R0-E-01 |
-| I-MINE-06 | 我的 | 二级入口：账户 | app.js L2180–2196（→ #b/{id}/accounts） | — | — | 点击 | 进账户页 | — | — | accounts | C:app.js L2180–2196 | 已实现｜截图已见 |
-| I-MINE-07 | 我的 | 二级入口：家庭成员 | app.js L2180–2196（→ members） | — | — | 点击 | 进成员页 | — | — | members | C:app.js L2180–2196 | 已实现｜截图已见 |
-| I-MINE-08 | 我的 | 二级入口：导出数据 | app.js L2180–2196（→ export） | — | — | 点击 | 进导出页 | — | — | export | C:app.js L2180–2196 | 已实现｜截图已见 |
-| I-MINE-09 | 我的 | 二级入口：报表 | app.js L2180–2196（→ report） | — | — | 点击 | 进报表页 | — | — | report | C:app.js L2180–2196 | 已实现｜截图已见 |
-| I-MINE-10 | 我的 | 二级入口：预算 | app.js L2180–2196（→ budget） | — | — | 点击 | 进预算页 | — | — | budget | C:app.js L2180–2196 | 已实现｜截图已见 |
-| I-MINE-11 | 我的 | 二级入口：资产 | app.js L2180–2196（→ invest） | — | — | 点击 | 进投资页 | — | — | invest | C:app.js L2180–2196 | 已实现｜截图已见 |
-| I-MINE-12 | 我的 | 二级入口：回收站 | app.js L2180–2196（→ recycle） | — | — | 点击 | 进回收站 | — | — | recycle | C:app.js L2180–2196 | 已实现｜截图已见 |
-| I-MINE-13 | 我的 | 改密入口 | —（grep 无命中） | 我的/设置 | — | — | — | — | — | — | 缺失：app.js `password` 仅 L179/180/184/185/192/193/209（登录注册）；无 /users/me/password 调用 | **缺失**｜R0-E-18 |
-| I-MINE-14 | 我的 | 会话管理入口 | —（grep 无命中） | 我的/设置 | — | — | — | — | — | — | 缺失：app.js `session\|会话` 仅 L3 头部注释 | **缺失**｜R0-E-14 / R0-E-31 |
+| I-MINE-01 | 我的 | 头像 / 用户名 | app.js L2148–2153 | N/A（不适用） | 取 state.whoami | N/A（不适用） | 显示 | 未验证 | N/A（不适用） | 本页 | C:app.js L2148–2153；S:mine/390x844/normal.png | 已实现｜截图已见 |
+| I-MINE-02 | 我的 | 用户名（只读） | app.js L2162–2164（vu） | GET /users/me L2157 | 注释「用户名按后端设计为只读」L2155 | N/A（不适用） | 显示用户名 | 未验证 | N/A（不适用） | 本页 | C:app.js L2155,L2162–2164；S:mine/390x844/normal.png | 已实现｜截图已见｜R0-E-17 |
+| I-MINE-03 | 我的 | 邮箱输入 | app.js L2168（eInput type=email） | N/A（不适用） | placeholder「未设置」 | 键入 | 显示文本 | 浏览器 type=email 校验 | N/A（不适用） | 本页 | C:app.js L2168；S:mine/390x844/normal.png | 已实现｜截图已见 |
+| I-MINE-04 | 我的 | 邮箱保存 | app.js L2169–2174（eSave） | N/A（不适用） | btnPending L2171 | PUT /users/me {email} L2172 | toast「资料已更新」L2172 | toast(err.message,"err") L2173 | N/A（不适用） | 本页 | C:app.js L2169–2174；运行时未验证 | 已实现｜入口在「我的」而非设置页｜R0-E-17 |
+| I-MINE-05 | 我的 | 二级入口：我的账本 | app.js L2180–2196（links[0] → #books） | N/A（不适用） | N/A（不适用） | 点击 | hash=#books | 未验证 | N/A（不适用） | #books | C:app.js L2180–2196；S:mine/390x844/normal.png | 已实现｜截图已见｜R0-E-01 |
+| I-MINE-06 | 我的 | 二级入口：账户 | app.js L2180–2196（→ #b/{id}/accounts） | N/A（不适用） | N/A（不适用） | 点击 | 进账户页 | 未验证 | N/A（不适用） | accounts | C:app.js L2180–2196 | 已实现｜截图已见 |
+| I-MINE-07 | 我的 | 二级入口：家庭成员 | app.js L2180–2196（→ members） | N/A（不适用） | N/A（不适用） | 点击 | 进成员页 | 未验证 | N/A（不适用） | members | C:app.js L2180–2196 | 已实现｜截图已见 |
+| I-MINE-08 | 我的 | 二级入口：导出数据 | app.js L2180–2196（→ export） | N/A（不适用） | N/A（不适用） | 点击 | 进导出页 | 未验证 | N/A（不适用） | export | C:app.js L2180–2196 | 已实现｜截图已见 |
+| I-MINE-09 | 我的 | 二级入口：报表 | app.js L2180–2196（→ report） | N/A（不适用） | N/A（不适用） | 点击 | 进报表页 | 未验证 | N/A（不适用） | report | C:app.js L2180–2196 | 已实现｜截图已见 |
+| I-MINE-10 | 我的 | 二级入口：预算 | app.js L2180–2196（→ budget） | N/A（不适用） | N/A（不适用） | 点击 | 进预算页 | 未验证 | N/A（不适用） | budget | C:app.js L2180–2196 | 已实现｜截图已见 |
+| I-MINE-11 | 我的 | 二级入口：资产 | app.js L2180–2196（→ invest） | N/A（不适用） | N/A（不适用） | 点击 | 进投资页 | 未验证 | N/A（不适用） | invest | C:app.js L2180–2196 | 已实现｜截图已见 |
+| I-MINE-12 | 我的 | 二级入口：回收站 | app.js L2180–2196（→ recycle） | N/A（不适用） | N/A（不适用） | 点击 | 进回收站 | 未验证 | N/A（不适用） | recycle | C:app.js L2180–2196 | 已实现｜截图已见 |
+| I-MINE-13 | 我的 | 改密入口 | —（grep 无命中） | 我的/设置 | 未实现 | 未实现 | 未实现 | 未实现 | 未实现 | 未实现 | 缺失：app.js `password` 仅 L179/180/184/185/192/193/209（登录注册）；无 /users/me/password 调用 | **缺失**｜R0-E-18 |
+| I-MINE-14 | 我的 | 会话管理入口 | —（grep 无命中） | 我的/设置 | 未实现 | 未实现 | 未实现 | 未实现 | 未实现 | 未实现 | 缺失：app.js `session\|会话` 仅 L3 头部注释 | **缺失**｜R0-E-14 / R0-E-31 |
 
 #### 3.1.11 设置 `#settings`
 
@@ -352,17 +366,17 @@
 | ID | 页面 | 控件 / 动作 | 代码位置 | 前置条件 | 输入与校验 | 操作 | 成功结果 | 失败结果 | 数据联动 | 返回路径 | 验证证据 | 当前状态 / 关联 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | I-SET-01 | 设置 | 生成新 Token | app.js L1539–1547（genBtn） | 设置页 | dlgInput「用途备注」L1541 | POST /users/me/tokens {name} L1543 | toast「Token 已生成——请立即复制保存」+ renderSettingsFresh(data.token,data.item) L1544–1545 | 由 openInvestDialog 捕获 | 显示明文 + 刷新列表 | 本页 | C:app.js L1539–1547；S:settings/390x844/normal.png | 已实现｜截图已见 |
-| I-SET-02 | 设置 | Token 明文展示 | app.js L1555–1557（code, user-select:all） | 生成后 | — | — | 显示明文（仅一次） | — | — | 本页 | C:app.js L1555–1557 | 已实现｜运行时未验证 |
-| I-SET-03 | 设置 | 复制 Token | app.js L1558–1562（cp） | 生成后 | navigator.clipboard.writeText(plaintext) | 点击 | toast「Token 已复制」L1560 | toast「复制失败，请手动选中复制」L1561 | — | 本页 | C:app.js L1558–1562 | 已实现｜运行时未验证 |
-| I-SET-04 | 设置 | Token 列表 | app.js L1573–1617（loadTokens） | 设置页 | — | GET /users/me/tokens L1574 | 表列 备注/创建时间/最近使用/状态 | — | — | 本页 | C:app.js L1573–1617；S:settings/390x844/normal.png | 已实现｜截图已见 |
+| I-SET-02 | 设置 | Token 明文展示 | app.js L1555–1557（code, user-select:all） | 生成后 | N/A（不适用） | N/A（不适用） | 显示明文（仅一次） | 未验证 | N/A（不适用） | 本页 | C:app.js L1555–1557 | 已实现｜运行时未验证 |
+| I-SET-03 | 设置 | 复制 Token | app.js L1558–1562（cp） | 生成后 | navigator.clipboard.writeText(plaintext) | 点击 | toast「Token 已复制」L1560 | toast「复制失败，请手动选中复制」L1561 | N/A（不适用） | 本页 | C:app.js L1558–1562 | 已实现｜运行时未验证 |
+| I-SET-04 | 设置 | Token 列表 | app.js L1573–1617（loadTokens） | 设置页 | N/A（不适用） | GET /users/me/tokens L1574 | 表列 备注/创建时间/最近使用/状态 | 未验证 | N/A（不适用） | 本页 | C:app.js L1573–1617；S:settings/390x844/normal.png | 已实现｜截图已见 |
 | I-SET-05 | 设置 | 撤销 Token | app.js L1597–1609（b） | !it.revokedAt | confirmDialog L1599–1602 | DELETE /users/me/tokens/:id L1605 | toast「Token 已撤销」+ loadTokens() | toast(err.message,"err") L1608 | 刷新列表 | 本页 | C:app.js L1597–1609 | 已实现｜运行时未验证 |
-| I-SET-06 | 设置 | 撤销取消 | app.js L1603（if(!okD) return） | 确认框 | — | 取消 | 不撤销 | — | 无 | 本页 | C:app.js L1603 | 已实现｜运行时未验证 |
-| I-SET-07 | 设置 | Token 空态 | app.js L1576–1579 | 无 Token | — | — | 「还没有长期 Token。」 | — | — | 本页 | C:app.js L1576–1579；S:settings/390x844/normal.png（本轮无 Token） | 已实现｜截图已见 |
-| I-SET-08 | 设置 | 退出登录 | app.js L1623–1630（ob） | 设置页 | confirmDialog L1625 | clearSession() + toast「已退出登录」+ route() L1627–1629 | — | — | 清 localStorage | 登录页 | C:app.js L1623–1630；S:settings/390x844/normal.png | 已实现｜截图已见 |
-| I-SET-09 | 设置 | 个人资料入口（设置页内） | —（无） | 设置页 | — | — | — | — | — | — | 缺失：资料编辑在 renderMine L2165–2175；设置页无资料入口 | **缺失**｜R0-E-17 |
-| I-SET-10 | 设置 | 改密 UI | —（grep 无命中） | 设置页 | — | — | — | — | — | — | 缺失：见 I-MINE-13；后端 POST /users/me/password 已有（router.go L139） | **缺失**｜R0-E-18 |
-| I-SET-11 | 设置 | 会话管理 UI | —（grep 无命中） | 设置页 | — | — | — | — | — | — | 缺失：见 I-MINE-14；后端 /auth/sessions 已有（router.go L154–156） | **缺失**｜R0-E-14 / R0-E-31 |
-| I-SET-12 | 设置 | 服务器 / 备份区块 | —（grep 无命中） | 设置页 | — | — | — | — | — | — | 缺失：app.js `server\|服务器\|备份\|backup` 仅 L991/L1048 导出格式描述文案；renderSettings L1518–1633 无相关卡片 | **缺失**｜R0-E-17 / D-8 |
+| I-SET-06 | 设置 | 撤销取消 | app.js L1603（if(!okD) return） | 确认框 | N/A（不适用） | 取消 | 不撤销 | 未验证 | 无 | 本页 | C:app.js L1603 | 已实现｜运行时未验证 |
+| I-SET-07 | 设置 | Token 空态 | app.js L1576–1579 | 无 Token | N/A（不适用） | N/A（不适用） | 「还没有长期 Token。」 | 未验证 | N/A（不适用） | 本页 | C:app.js L1576–1579；S:settings/390x844/normal.png（本轮无 Token） | 已实现｜截图已见 |
+| I-SET-08 | 设置 | 退出登录 | app.js L1623–1630（ob） | 设置页 | confirmDialog L1625 | clearSession() + toast「已退出登录」+ route() L1627–1629 | 未验证 | 未验证 | 清 localStorage | 登录页 | C:app.js L1623–1630；S:settings/390x844/normal.png | 已实现｜截图已见 |
+| I-SET-09 | 设置 | 个人资料入口（设置页内） | —（无） | 设置页 | 未实现 | 未实现 | 未实现 | 未实现 | 未实现 | 未实现 | 缺失：资料编辑在 renderMine L2165–2175；设置页无资料入口 | **缺失**｜R0-E-17 |
+| I-SET-10 | 设置 | 改密 UI | —（grep 无命中） | 设置页 | 未实现 | 未实现 | 未实现 | 未实现 | 未实现 | 未实现 | 缺失：见 I-MINE-13；后端 POST /users/me/password 已有（router.go L139） | **缺失**｜R0-E-18 |
+| I-SET-11 | 设置 | 会话管理 UI | —（grep 无命中） | 设置页 | 未实现 | 未实现 | 未实现 | 未实现 | 未实现 | 未实现 | 缺失：见 I-MINE-14；后端 /auth/sessions 已有（router.go L154–156） | **缺失**｜R0-E-14 / R0-E-31 |
+| I-SET-12 | 设置 | 服务器 / 备份区块 | —（grep 无命中） | 设置页 | 未实现 | 未实现 | 未实现 | 未实现 | 未实现 | 未实现 | 缺失：app.js `server\|服务器\|备份\|backup` 仅 L991/L1048 导出格式描述文案；renderSettings L1518–1633 无相关卡片 | **缺失**｜R0-E-17 / D-8 |
 
 #### 3.1.12 报表 `#b/:id/report`
 
@@ -370,15 +384,15 @@
 
 | ID | 页面 | 控件 / 动作 | 代码位置 | 前置条件 | 输入与校验 | 操作 | 成功结果 | 失败结果 | 数据联动 | 返回路径 | 验证证据 | 当前状态 / 关联 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| I-RPT-01 | 报表 | 「本月」按钮 | app.js L817–824（mkMonthBtn 0） | 报表页 | reportMonthOffset===off 决定 active | 点击 → offset=0 + renderReport L821 | 重绘本页（本月） | — | 切换月份 | 本页 | C:app.js L817–824；S:report/390x844/empty.png | 已实现｜截图已见｜R0-E-09 |
-| I-RPT-02 | 报表 | 「上月」按钮 | app.js L817–824（mkMonthBtn 1） | 报表页 | 同上 | 点击 → offset=1 + renderReport | 重绘本页（上月） | — | 切换月份 | 本页 | C:app.js L817–824；S:report/390x844/empty.png | 已实现｜截图已见｜R0-E-09 |
-| I-RPT-03 | 报表 | 月份计算 | app.js L918–924（monthShift） | — | 本地时区 YYYY-MM | — | 生成月份字符串 | — | — | 本页 | C:app.js L918–924 | 已实现｜运行时未验证 |
-| I-RPT-04 | 报表 | 收支趋势数据 | app.js L831（GET /reports/monthly?months=6） | 报表页 | trend.items\|\|[] L839 | — | 柱状图数据 | — | — | 本页 | C:app.js L831；S:report/390x844/empty.png | 已实现｜截图已见 |
-| I-RPT-05 | 报表 | 柱状图 | app.js L837–863（bars/mkBar, maxV 归一化） | 有数据 | — | — | 渲染柱子 | — | — | 本页 | C:app.js L837–863；有数据态未采集 | 已实现｜视觉待验收｜R0-E-09 |
-| I-RPT-06 | 报表 | 图例 | app.js L864–867 / L909–915（mkLegend） | — | — | — | 收入/支出色块 | — | — | 本页 | C:app.js L864–867,L909–915 | 已实现｜视觉待验收｜R0-E-09 |
-| I-RPT-07 | 报表 | 分类占比数据 | app.js L871（GET /reports/categories?type=2&month=） | 月份确定 | share.items\|\|[] L876 | — | 排行表数据 | — | — | 本页 | C:app.js L871；S:report/390x844/empty.png | 已实现｜截图已见 |
-| I-RPT-08 | 报表 | 分类排行表 | app.js L885–905（分类/笔数/金额/占比, Math.round） | 有数据 | — | — | 渲染表格 | — | — | 本页 | C:app.js L885–905；有数据态未采集 | 已实现｜视觉待验收｜R0-E-09 |
-| I-RPT-09 | 报表 | 空态 | app.js L877–881 | 无数据 | — | — | 「该月暂无支出记录。」 | — | — | 本页 | C:app.js L877–881；S:report/390x844/empty.png | 已实现｜截图已见 |
+| I-RPT-01 | 报表 | 「本月」按钮 | app.js L817–824（mkMonthBtn 0） | 报表页 | reportMonthOffset===off 决定 active | 点击 → offset=0 + renderReport L821 | 重绘本页（本月） | 未验证 | 切换月份 | 本页 | C:app.js L817–824；S:report/390x844/empty.png | 已实现｜截图已见｜R0-E-09 |
+| I-RPT-02 | 报表 | 「上月」按钮 | app.js L817–824（mkMonthBtn 1） | 报表页 | 同上 | 点击 → offset=1 + renderReport | 重绘本页（上月） | 未验证 | 切换月份 | 本页 | C:app.js L817–824；S:report/390x844/empty.png | 已实现｜截图已见｜R0-E-09 |
+| I-RPT-03 | 报表 | 月份计算 | app.js L918–924（monthShift） | N/A（不适用） | 本地时区 YYYY-MM | N/A（不适用） | 生成月份字符串 | 未验证 | N/A（不适用） | 本页 | C:app.js L918–924 | 已实现｜运行时未验证 |
+| I-RPT-04 | 报表 | 收支趋势数据 | app.js L831（GET /reports/monthly?months=6） | 报表页 | trend.items\|\|[] L839 | N/A（不适用） | 柱状图数据 | 未验证 | N/A（不适用） | 本页 | C:app.js L831；S:report/390x844/empty.png | 已实现｜截图已见 |
+| I-RPT-05 | 报表 | 柱状图 | app.js L837–863（bars/mkBar, maxV 归一化） | 有数据 | N/A（不适用） | N/A（不适用） | 渲染柱子 | 未验证 | N/A（不适用） | 本页 | C:app.js L837–863；有数据态未采集 | 已实现｜视觉待验收｜R0-E-09 |
+| I-RPT-06 | 报表 | 图例 | app.js L864–867 / L909–915（mkLegend） | N/A（不适用） | N/A（不适用） | N/A（不适用） | 收入/支出色块 | 未验证 | N/A（不适用） | 本页 | C:app.js L864–867,L909–915 | 已实现｜视觉待验收｜R0-E-09 |
+| I-RPT-07 | 报表 | 分类占比数据 | app.js L871（GET /reports/categories?type=2&month=） | 月份确定 | share.items\|\|[] L876 | N/A（不适用） | 排行表数据 | 未验证 | N/A（不适用） | 本页 | C:app.js L871；S:report/390x844/empty.png | 已实现｜截图已见 |
+| I-RPT-08 | 报表 | 分类排行表 | app.js L885–905（分类/笔数/金额/占比, Math.round） | 有数据 | N/A（不适用） | N/A（不适用） | 渲染表格 | 未验证 | N/A（不适用） | 本页 | C:app.js L885–905；有数据态未采集 | 已实现｜视觉待验收｜R0-E-09 |
+| I-RPT-09 | 报表 | 空态 | app.js L877–881 | 无数据 | N/A（不适用） | N/A（不适用） | 「该月暂无支出记录。」 | 未验证 | N/A（不适用） | 本页 | C:app.js L877–881；S:report/390x844/empty.png | 已实现｜截图已见 |
 
 #### 3.1.13 预算 `#b/:id/budget`
 
@@ -386,17 +400,17 @@
 
 | ID | 页面 | 控件 / 动作 | 代码位置 | 前置条件 | 输入与校验 | 操作 | 成功结果 | 失败结果 | 数据联动 | 返回路径 | 验证证据 | 当前状态 / 关联 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| I-BUD-01 | 预算 | 新增预算 | app.js L1120–1122（addBtn） | 预算页 | — | 点击 → openBudgetDialog(bookId,null) | 打开 #budgetDlg | — | — | 弹层 | C:app.js L1120–1122；S:budget/390x844/empty.png | 已实现｜截图已见｜R0-E-10 |
-| I-BUD-02 | 预算 | 预算行（名称/三态徽标/进度条） | app.js L1138–1155 | GET /budgets L1129 | BUDGET_STATUS_NAME L1105 | — | 显示三态徽标与进度 | — | — | 本页 | C:app.js L1138–1155；有数据态未采集 | 已实现｜三态色待截图｜R0-E-10 |
-| I-BUD-03 | 预算 | 编辑 | app.js L1157–1159（edit） | 每行 | — | 点击 → openBudgetDialog(bookId,it) | 打开弹窗回填 | — | — | 弹层 | C:app.js L1157–1159 | 已实现｜运行时未验证 |
+| I-BUD-01 | 预算 | 新增预算 | app.js L1120–1122（addBtn） | 预算页 | N/A（不适用） | 点击 → openBudgetDialog(bookId,null) | 打开 #budgetDlg | 未验证 | N/A（不适用） | 弹层 | C:app.js L1120–1122；S:budget/390x844/empty.png | 已实现｜截图已见｜R0-E-10 |
+| I-BUD-02 | 预算 | 预算行（名称/三态徽标/进度条） | app.js L1138–1155 | GET /budgets L1129 | BUDGET_STATUS_NAME L1105 | N/A（不适用） | 显示三态徽标与进度 | 未验证 | N/A（不适用） | 本页 | C:app.js L1138–1155；有数据态未采集 | 已实现｜三态色待截图｜R0-E-10 |
+| I-BUD-03 | 预算 | 编辑 | app.js L1157–1159（edit） | 每行 | N/A（不适用） | 点击 → openBudgetDialog(bookId,it) | 打开弹窗回填 | 未验证 | N/A（不适用） | 弹层 | C:app.js L1157–1159 | 已实现｜运行时未验证 |
 | I-BUD-04 | 预算 | 删除 | app.js L1160–1173（del） | 每行 | confirmDialog L1163–1166 | DELETE /budgets/:id L1169 | toast「预算已删除」+ renderBudget L1170–1171 | toast(err.message,"err") L1172 | 重绘 | 本页 | C:app.js L1160–1173 | 已实现｜运行时未验证 |
-| I-BUD-05 | 预算 | 删除取消 | app.js L1167（if(!okD) return） | 确认框 | — | 取消 | 不删除 | — | 无 | 本页 | C:app.js L1167 | 已实现｜运行时未验证 |
-| I-BUD-06 | 预算 | 空态 | app.js L1132–1137 | 无预算 | — | — | 「还没有预算——先设一个本月总预算…」 | — | — | 本页 | C:app.js L1132–1137；S:budget/390x844/empty.png | 已实现｜截图已见 |
-| I-BUD-07 | 预算 | 类型 `#bType` | index.html L91 / app.js L1190–1193 | 弹窗 | 编辑时 disabled=!!edit L1193 | 选择 | 选中类型 | — | — | 弹层 | C:index.html L91, app.js L1190–1193 | 已实现｜运行时未验证 |
-| I-BUD-08 | 预算 | 分类 `#bCategory` | index.html L96 / app.js L1197–1206 | 非总预算 | 仅列 catType===2 支出分类 L1200；编辑总预算时 catRow 隐藏 L1194 | 选择 | 选中分类 | — | — | 弹层 | C:index.html L96, app.js L1197–1206 | 已实现｜运行时未验证 |
-| I-BUD-09 | 预算 | 金额 `#bAmount` | index.html L97 / app.js L1187,L1213–1214 | 弹窗 | str2cents；!cents\|\|cents<=0 → #bErr「请输入大于 0 的金额」L1214 | 键入 | 显示文本 | err-msg | — | 弹层 | C:index.html L97, app.js L1213–1214 | 已实现｜运行时未验证 |
-| I-BUD-10 | 预算 | 结转 `#bRollover` | index.html L99 / app.js L1188,L1215 | 弹窗 | 文案「结转上月余额（预留，MVP 不生效）」 | 勾选 | 提交 rollover | — | — | 弹层 | C:index.html L99, app.js L1215 | 已实现（MVP 不生效）｜运行时未验证 |
-| I-BUD-11 | 预算 | 取消 `#bCancel` | index.html L103 / app.js L1210 | 弹窗 | — | 点击 → closeBudgetDlg() L1237–1241 | 关闭 | — | 无 | 本页 | C:index.html L103, app.js L1210 | 已实现｜运行时未验证 |
+| I-BUD-05 | 预算 | 删除取消 | app.js L1167（if(!okD) return） | 确认框 | N/A（不适用） | 取消 | 不删除 | 未验证 | 无 | 本页 | C:app.js L1167 | 已实现｜运行时未验证 |
+| I-BUD-06 | 预算 | 空态 | app.js L1132–1137 | 无预算 | N/A（不适用） | N/A（不适用） | 「还没有预算——先设一个本月总预算…」 | 未验证 | N/A（不适用） | 本页 | C:app.js L1132–1137；S:budget/390x844/empty.png | 已实现｜截图已见 |
+| I-BUD-07 | 预算 | 类型 `#bType` | index.html L91 / app.js L1190–1193 | 弹窗 | 编辑时 disabled=!!edit L1193 | 选择 | 选中类型 | 未验证 | N/A（不适用） | 弹层 | C:index.html L91, app.js L1190–1193 | 已实现｜运行时未验证 |
+| I-BUD-08 | 预算 | 分类 `#bCategory` | index.html L96 / app.js L1197–1206 | 非总预算 | 仅列 catType===2 支出分类 L1200；编辑总预算时 catRow 隐藏 L1194 | 选择 | 选中分类 | 未验证 | N/A（不适用） | 弹层 | C:index.html L96, app.js L1197–1206 | 已实现｜运行时未验证 |
+| I-BUD-09 | 预算 | 金额 `#bAmount` | index.html L97 / app.js L1187,L1213–1214 | 弹窗 | str2cents；!cents\|\|cents<=0 → #bErr「请输入大于 0 的金额」L1214 | 键入 | 显示文本 | err-msg | N/A（不适用） | 弹层 | C:index.html L97, app.js L1213–1214 | 已实现｜运行时未验证 |
+| I-BUD-10 | 预算 | 结转 `#bRollover` | index.html L99 / app.js L1188,L1215 | 弹窗 | 文案「结转上月余额（预留，MVP 不生效）」 | 勾选 | 提交 rollover | 未验证 | N/A（不适用） | 弹层 | C:index.html L99, app.js L1215 | 已实现（MVP 不生效）｜运行时未验证 |
+| I-BUD-11 | 预算 | 取消 `#bCancel` | index.html L103 / app.js L1210 | 弹窗 | N/A（不适用） | 点击 → closeBudgetDlg() L1237–1241 | 关闭 | 未验证 | 无 | 本页 | C:index.html L103, app.js L1210 | 已实现｜运行时未验证 |
 | I-BUD-12 | 预算 | 保存 `#bSubmit` | index.html L104 / app.js L1211–1235 | 金额合法 | btnPending L1216 | 编辑 PUT /budgets/:id {amount,rollover,name:""} L1220；新增 POST /budgets {amount,rollover,budgetType,categoryId,name} L1226 | toast「预算已创建/已更新」+ closeBudgetDlg() + renderBudget L1229–1230 | #bErr.textContent=err.message + toast L1232–1233 | 重绘 | 本页 | C:app.js L1211–1235 | 已实现｜运行时未验证 |
 
 #### 3.1.14 投资 / 资产 `#b/:id/invest`
@@ -405,22 +419,22 @@
 
 | ID | 页面 | 控件 / 动作 | 代码位置 | 前置条件 | 输入与校验 | 操作 | 成功结果 | 失败结果 | 数据联动 | 返回路径 | 验证证据 | 当前状态 / 关联 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| I-INV-01 | 投资 | 资产总览 4 卡 | app.js L1255–1276（mkCell） | GET /net-worth L1255 | — | — | 总资产/总负债/持仓市值/家庭净资产 | — | — | 本页 | C:app.js L1255–1276；S:invest/390x844/empty.png | 已实现｜位置在投资页｜R0-E-28 / R0-E-07 |
-| I-INV-02 | 投资 | 添加持仓 | app.js L1288–1289（addHolding） | 持仓区 | — | 点击 → openHoldingDialog(bookId) | 打开弹窗 | — | — | 弹层 | C:app.js L1288–1289；S:invest/390x844/empty.png | 已实现｜截图已见｜R0-E-07 |
-| I-INV-03 | 投资 | 持仓编辑 | app.js L1321–1322（bEdit） | 每行 | — | 点击 → openHoldingDialog(bookId,it) | 打开弹窗回填 | — | — | 弹层 | C:app.js L1321–1322 | 已实现｜运行时未验证 |
-| I-INV-04 | 投资 | 录价 | app.js L1323–1324（bPrice） | 每行 | — | 点击 → openPriceDialog(...) | 打开录价弹窗 | — | — | 弹层 | C:app.js L1323–1324 | 已实现｜运行时未验证 |
+| I-INV-01 | 投资 | 资产总览 4 卡 | app.js L1255–1276（mkCell） | GET /net-worth L1255 | N/A（不适用） | N/A（不适用） | 总资产/总负债/持仓市值/家庭净资产 | 未验证 | N/A（不适用） | 本页 | C:app.js L1255–1276；S:invest/390x844/empty.png | 已实现｜位置在投资页｜R0-E-28 / R0-E-07 |
+| I-INV-02 | 投资 | 添加持仓 | app.js L1288–1289（addHolding） | 持仓区 | N/A（不适用） | 点击 → openHoldingDialog(bookId) | 打开弹窗 | 未验证 | N/A（不适用） | 弹层 | C:app.js L1288–1289；S:invest/390x844/empty.png | 已实现｜截图已见｜R0-E-07 |
+| I-INV-03 | 投资 | 持仓编辑 | app.js L1321–1322（bEdit） | 每行 | N/A（不适用） | 点击 → openHoldingDialog(bookId,it) | 打开弹窗回填 | 未验证 | N/A（不适用） | 弹层 | C:app.js L1321–1322 | 已实现｜运行时未验证 |
+| I-INV-04 | 投资 | 录价 | app.js L1323–1324（bPrice） | 每行 | N/A（不适用） | 点击 → openPriceDialog(...) | 打开录价弹窗 | 未验证 | N/A（不适用） | 弹层 | C:app.js L1323–1324 | 已实现｜运行时未验证 |
 | I-INV-05 | 投资 | 持仓删除 | app.js L1325–1334（bDel） | 每行 | confirmDialog L1327 | DELETE /holdings/:id L1330 | toast「持仓已删除」+ renderInvest | toast(err.message,"err") L1333 | 重绘 | 本页 | C:app.js L1325–1334 | 已实现｜运行时未验证 |
-| I-INV-06 | 投资 | 新增标的 | app.js L1349–1350（addInstr） | 标的库 | — | 点击 → openInstrumentDialog(bookId) | 打开弹窗 | — | — | 弹层 | C:app.js L1349–1350；S:invest/390x844/empty.png | 已实现｜截图已见 |
-| I-INV-07 | 投资 | 标的编辑 | app.js L1374–1375（bEdit） | 每行 | — | 点击 → openInstrumentDialog(bookId,it) | 打开弹窗回填 | — | — | 弹层 | C:app.js L1374–1375 | 已实现｜运行时未验证 |
+| I-INV-06 | 投资 | 新增标的 | app.js L1349–1350（addInstr） | 标的库 | N/A（不适用） | 点击 → openInstrumentDialog(bookId) | 打开弹窗 | 未验证 | N/A（不适用） | 弹层 | C:app.js L1349–1350；S:invest/390x844/empty.png | 已实现｜截图已见 |
+| I-INV-07 | 投资 | 标的编辑 | app.js L1374–1375（bEdit） | 每行 | N/A（不适用） | 点击 → openInstrumentDialog(bookId,it) | 打开弹窗回填 | 未验证 | N/A（不适用） | 弹层 | C:app.js L1374–1375 | 已实现｜运行时未验证 |
 | I-INV-08 | 投资 | 标的删除 | app.js L1376–1385（bDel） | 每行 | confirmDialog 文案「仍有持仓引用的标的无法删除。」L1378 | DELETE /instruments/:id L1381 | toast「标的已删除」+ renderInvest | toast(err.message,"err") L1384（409） | 重绘 | 本页 | C:app.js L1376–1385 | 已实现｜运行时未验证 |
-| I-INV-09 | 投资 | 空态（持仓 / 标的） | app.js L1292–1297 / L1353–1358 | 无数据 | — | — | 空态文案 | — | — | 本页 | C:app.js L1292–1297,L1353–1358；S:invest/390x844/empty.png | 已实现｜截图已见 |
-| I-INV-10 | 投资 | 通用弹窗字段容器 | app.js L1396–1422（openInvestDialog → #investFields L1401–1407） | — | 动态注入 | — | 渲染字段 | — | — | 弹层 | C:app.js L1396–1422 | 已实现｜运行时未验证 |
-| I-INV-11 | 投资 | 取消 `#iCancel` | index.html L114 / app.js L1410 | 弹窗 | — | 点击 → closeInvestDlg() L1423–1427 | 关闭 | — | 无 | 本页 | C:index.html L114, app.js L1410 | 已实现｜运行时未验证 |
-| I-INV-12 | 投资 | 保存 `#iSubmit` | index.html L115 / app.js L1411–1421 | — | btnPending L1413 | await onSubmit() L1415 + closeInvestDlg() L1416 | 关闭 | #iErr.textContent=err.message + toast L1418–1419 | — | 本页 | C:app.js L1411–1421 | 已实现｜运行时未验证 |
+| I-INV-09 | 投资 | 空态（持仓 / 标的） | app.js L1292–1297 / L1353–1358 | 无数据 | N/A（不适用） | N/A（不适用） | 空态文案 | 未验证 | N/A（不适用） | 本页 | C:app.js L1292–1297,L1353–1358；S:invest/390x844/empty.png | 已实现｜截图已见 |
+| I-INV-10 | 投资 | 通用弹窗字段容器 | app.js L1396–1422（openInvestDialog → #investFields L1401–1407） | N/A（不适用） | 动态注入 | N/A（不适用） | 渲染字段 | 未验证 | N/A（不适用） | 弹层 | C:app.js L1396–1422 | 已实现｜运行时未验证 |
+| I-INV-11 | 投资 | 取消 `#iCancel` | index.html L114 / app.js L1410 | 弹窗 | N/A（不适用） | 点击 → closeInvestDlg() L1423–1427 | 关闭 | 未验证 | 无 | 本页 | C:index.html L114, app.js L1410 | 已实现｜运行时未验证 |
+| I-INV-12 | 投资 | 保存 `#iSubmit` | index.html L115 / app.js L1411–1421 | N/A（不适用） | btnPending L1413 | await onSubmit() L1415 + closeInvestDlg() L1416 | 关闭 | #iErr.textContent=err.message + toast L1418–1419 | N/A（不适用） | 本页 | C:app.js L1411–1421 | 已实现｜运行时未验证 |
 | I-INV-13 | 投资 | 标的字段（名称/类型/市场/代码） | app.js L1435–1443 | 标的弹窗 | 编辑回填 | POST/PUT /instruments L1449/L1452 | toast + renderInvest L1450/L1453/L1455 | 通用弹窗捕获 | 重绘 | 本页 | C:app.js L1435–1455 | 已实现｜运行时未验证 |
 | I-INV-14 | 投资 | 持仓字段（账户/标的/数量/成本/现价） | app.js L1460–1480 | 持仓弹窗 | 标的异步拉取 L1469；编辑时账户/标的 disabled；str2cents 成本 L1486 | POST/PUT /holdings L1497/L1492 | toast + renderInvest L1500 | 通用弹窗捕获 | 重绘 | 本页 | C:app.js L1460–1500 | 已实现｜运行时未验证 |
-| I-INV-15 | 投资 | 录价字段（最新价） | app.js L1505 | 录价弹窗 | — | POST /instruments/:id/price {price} L1509 | toast「行情已更新…」+ renderInvest L1511–1512 | 通用弹窗捕获 | 现价/市值刷新 | 本页 | C:app.js L1505–1512 | 已实现｜运行时未验证 |
-| I-INV-16 | 投资账户详情 | 返回对账 | app.js L1783–1785（back） | #b/:id/account/:accId | — | 点击 → #b/{id}/accounts | — | — | — | 对账页 | C:app.js L1783–1785；S:account-detail/390x844/normal.png | 已实现｜截图已见 |
+| I-INV-15 | 投资 | 录价字段（最新价） | app.js L1505 | 录价弹窗 | N/A（不适用） | POST /instruments/:id/price {price} L1509 | toast「行情已更新…」+ renderInvest L1511–1512 | 通用弹窗捕获 | 现价/市值刷新 | 本页 | C:app.js L1505–1512 | 已实现｜运行时未验证 |
+| I-INV-16 | 投资账户详情 | 返回对账 | app.js L1783–1785（back） | #b/:id/account/:accId | N/A（不适用） | 点击 → #b/{id}/accounts | 未验证 | 未验证 | N/A（不适用） | 对账页 | C:app.js L1783–1785；S:account-detail/390x844/normal.png | 已实现｜截图已见 |
 
 #### 3.1.15 导出 `#b/:id/export`
 
@@ -428,30 +442,30 @@
 
 | ID | 页面 | 控件 / 动作 | 代码位置 | 前置条件 | 输入与校验 | 操作 | 成功结果 | 失败结果 | 数据联动 | 返回路径 | 验证证据 | 当前状态 / 关联 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| I-EXP-01 | 导出 | 时间预设「本月」 | app.js L950–953 / L970（setRange this） | 导出页 | — | 点击 → setRange("this") | 高亮 + 填日期 | — | — | 本页 | C:app.js L950–970；S:export/390x844/normal.png | 已实现｜截图已见 |
-| I-EXP-02 | 导出 | 时间预设「上月」 | app.js L950 / L961–969 | 导出页 | — | 点击 → setRange("last") | 高亮 + 填日期 | — | — | 本页 | C:app.js L961–969；S:export/390x844/normal.png | 已实现｜截图已见 |
-| I-EXP-03 | 导出 | 时间预设「本季度」 | app.js L950 / L966 | 导出页 | — | 点击 → setRange("quarter") | 高亮 + 填日期 | — | — | 本页 | C:app.js L966；S:export/390x844/normal.png | 已实现｜截图已见 |
-| I-EXP-04 | 导出 | 时间预设「自定义」 | app.js L950 / L967 | 导出页 | 不自动填日期 | 点击 | 高亮 custom | — | — | 本页 | C:app.js L967；S:export/390x844/normal.png | 已实现｜截图已见 |
-| I-EXP-05 | 导出 | 开始日期 `#xFrom` | app.js L955 | 导出页 | change 时切到 custom L971–973 | 选择 | 填入日期 | — | — | 本页 | C:app.js L955,L971–973；S:export/390x844/normal.png | 已实现｜截图已见 |
-| I-EXP-06 | 导出 | 结束日期 `#xTo` | app.js L956 | 导出页 | 同上 | 选择 | 填入日期 | — | — | 本页 | C:app.js L956；S:export/390x844/normal.png | 已实现｜截图已见 |
-| I-EXP-07 | 导出 | 收支类型 | app.js L979–982（typeSel） | 导出页 | 0 全部/1 收入/2 支出/3 转账 | 选择 | 选中类型 | — | — | 本页 | C:app.js L979–982；S:export/390x844/normal.png | 已实现｜截图已见 |
-| I-EXP-08 | 导出 | 格式 CSV | app.js L991–995（radio value=csv 默认 checked） | 导出页 | — | 选中 | 选中 CSV | — | — | 本页 | C:app.js L991–995；S:export/390x844/normal.png | 已实现｜截图已见 |
-| I-EXP-09 | 导出 | 格式 JSON | app.js L991–995（radio value=json） | 导出页 | — | 选中 | 选中 JSON | — | — | 本页 | C:app.js L991–995；S:export/390x844/normal.png | 已实现｜截图已见 |
-| I-EXP-10 | 导出 | 字段勾选：time | app.js L927–931 / L1011–1018（EXPORT_FIELDS） | 导出页 | 默认全选 L1014 | 勾选/取消 | 字段列表变化 | — | — | 本页 | C:app.js L927–931,L1011–1018；S:export/390x844/normal.png | 已实现｜截图已见 |
-| I-EXP-11 | 导出 | 字段勾选：type | 同上 | 导出页 | 默认全选 | 勾选/取消 | 字段列表变化 | — | — | 本页 | C:同上；S:export/390x844/normal.png | 已实现｜截图已见 |
-| I-EXP-12 | 导出 | 字段勾选：amount | 同上 | 导出页 | 默认全选 | 勾选/取消 | 字段列表变化 | — | — | 本页 | C:同上；S:export/390x844/normal.png | 已实现｜截图已见 |
-| I-EXP-13 | 导出 | 字段勾选：category | 同上 | 导出页 | 默认全选 | 勾选/取消 | 字段列表变化 | — | — | 本页 | C:同上；S:export/390x844/normal.png | 已实现｜截图已见 |
-| I-EXP-14 | 导出 | 字段勾选：account | 同上 | 导出页 | 默认全选 | 勾选/取消 | 字段列表变化 | — | — | 本页 | C:同上；S:export/390x844/normal.png | 已实现｜截图已见 |
-| I-EXP-15 | 导出 | 字段勾选：toAccount | 同上 | 导出页 | 默认全选 | 勾选/取消 | 字段列表变化 | — | — | 本页 | C:同上；S:export/390x844/normal.png | 已实现｜截图已见 |
-| I-EXP-16 | 导出 | 字段勾选：channel | 同上 | 导出页 | 默认全选 | 勾选/取消 | 字段列表变化 | — | — | 本页 | C:同上；S:export/390x844/normal.png | 已实现｜截图已见 |
-| I-EXP-17 | 导出 | 字段勾选：merchant | 同上 | 导出页 | 默认全选 | 勾选/取消 | 字段列表变化 | — | — | 本页 | C:同上；S:export/390x844/normal.png | 已实现｜截图已见 |
-| I-EXP-18 | 导出 | 字段勾选：note | 同上 | 导出页 | 默认全选 | 勾选/取消 | 字段列表变化 | — | — | 本页 | C:同上；S:export/390x844/normal.png | 已实现｜截图已见 |
-| I-EXP-19 | 导出 | 预览 | app.js L1022 / L1024–1038 / L1093 | 导出页 | btnPending L1031 | GET /transactions?…&count=1&page=1 L1033 | 「共 N 条记录将导出。」L1035 | 「预览失败：…」L1036 | — | 本页 | C:app.js L1024–1038；S:export/390x844/normal.png | 已实现｜截图已见 |
-| I-EXP-20 | 导出 | 自动预览 | app.js L1094（updatePreview()） | 进入页 | — | — | — | — | — | 本页 | C:app.js L1094；S:export/390x844/normal.png | 已实现｜截图已见 |
-| I-EXP-21 | 导出 | 导出 CSV | app.js L1042 / L1091（btnCsv） | 至少 1 字段 | !fields.length → toast「请至少勾选一个导出字段」L1054 | 原生 fetch /export?format=csv&fields=… L1062 → blob | 下载 FastLedger_导出_YYYYMMDD.csv L1081 + toast「已导出 N 条记录」L1086 | toast(err.message,"err") L1088 | — | 本页 | C:app.js L1042–1088；下载动作未采集 | 已实现｜运行时未验证 |
-| I-EXP-22 | 导出 | 导出 JSON | app.js L1043 / L1092（btnJson） | 至少 1 字段 | 同上 | doExport("json") | 下载 .json | 同上 | — | 本页 | C:app.js L1043,L1092；运行时未验证 | 已实现｜运行时未验证 |
-| I-EXP-23 | 导出 | 空数据提示 | app.js L1070–1071（X-Export-Count===0） | 导出返回 0 条 | — | — | — | toast「没有可导出的数据」info | — | 本页 | C:app.js L1070–1071；未采集 | 已实现｜运行时未验证 |
-| I-EXP-24 | 导出 | 截断提示 | app.js L1072–1074（X-Export-Truncated==="1"） | 结果 >10000 条 | — | — | — | toast「结果超过 10000 条，已截断」info | — | 本页 | C:app.js L1072–1074；未采集 | 已实现｜运行时未验证 |
+| I-EXP-01 | 导出 | 时间预设「本月」 | app.js L950–953 / L970（setRange this） | 导出页 | N/A（不适用） | 点击 → setRange("this") | 高亮 + 填日期 | 未验证 | N/A（不适用） | 本页 | C:app.js L950–970；S:export/390x844/normal.png | 已实现｜截图已见 |
+| I-EXP-02 | 导出 | 时间预设「上月」 | app.js L950 / L961–969 | 导出页 | N/A（不适用） | 点击 → setRange("last") | 高亮 + 填日期 | 未验证 | N/A（不适用） | 本页 | C:app.js L961–969；S:export/390x844/normal.png | 已实现｜截图已见 |
+| I-EXP-03 | 导出 | 时间预设「本季度」 | app.js L950 / L966 | 导出页 | N/A（不适用） | 点击 → setRange("quarter") | 高亮 + 填日期 | 未验证 | N/A（不适用） | 本页 | C:app.js L966；S:export/390x844/normal.png | 已实现｜截图已见 |
+| I-EXP-04 | 导出 | 时间预设「自定义」 | app.js L950 / L967 | 导出页 | 不自动填日期 | 点击 | 高亮 custom | 未验证 | N/A（不适用） | 本页 | C:app.js L967；S:export/390x844/normal.png | 已实现｜截图已见 |
+| I-EXP-05 | 导出 | 开始日期 `#xFrom` | app.js L955 | 导出页 | change 时切到 custom L971–973 | 选择 | 填入日期 | 未验证 | N/A（不适用） | 本页 | C:app.js L955,L971–973；S:export/390x844/normal.png | 已实现｜截图已见 |
+| I-EXP-06 | 导出 | 结束日期 `#xTo` | app.js L956 | 导出页 | 同上 | 选择 | 填入日期 | 未验证 | N/A（不适用） | 本页 | C:app.js L956；S:export/390x844/normal.png | 已实现｜截图已见 |
+| I-EXP-07 | 导出 | 收支类型 | app.js L979–982（typeSel） | 导出页 | 0 全部/1 收入/2 支出/3 转账 | 选择 | 选中类型 | 未验证 | N/A（不适用） | 本页 | C:app.js L979–982；S:export/390x844/normal.png | 已实现｜截图已见 |
+| I-EXP-08 | 导出 | 格式 CSV | app.js L991–995（radio value=csv 默认 checked） | 导出页 | N/A（不适用） | 选中 | 选中 CSV | 未验证 | N/A（不适用） | 本页 | C:app.js L991–995；S:export/390x844/normal.png | 已实现｜截图已见 |
+| I-EXP-09 | 导出 | 格式 JSON | app.js L991–995（radio value=json） | 导出页 | N/A（不适用） | 选中 | 选中 JSON | 未验证 | N/A（不适用） | 本页 | C:app.js L991–995；S:export/390x844/normal.png | 已实现｜截图已见 |
+| I-EXP-10 | 导出 | 字段勾选：time | app.js L927–931 / L1011–1018（EXPORT_FIELDS） | 导出页 | 默认全选 L1014 | 勾选/取消 | 字段列表变化 | 未验证 | N/A（不适用） | 本页 | C:app.js L927–931,L1011–1018；S:export/390x844/normal.png | 已实现｜截图已见 |
+| I-EXP-11 | 导出 | 字段勾选：type | 同上 | 导出页 | 默认全选 | 勾选/取消 | 字段列表变化 | 未验证 | N/A（不适用） | 本页 | C:同上；S:export/390x844/normal.png | 已实现｜截图已见 |
+| I-EXP-12 | 导出 | 字段勾选：amount | 同上 | 导出页 | 默认全选 | 勾选/取消 | 字段列表变化 | 未验证 | N/A（不适用） | 本页 | C:同上；S:export/390x844/normal.png | 已实现｜截图已见 |
+| I-EXP-13 | 导出 | 字段勾选：category | 同上 | 导出页 | 默认全选 | 勾选/取消 | 字段列表变化 | 未验证 | N/A（不适用） | 本页 | C:同上；S:export/390x844/normal.png | 已实现｜截图已见 |
+| I-EXP-14 | 导出 | 字段勾选：account | 同上 | 导出页 | 默认全选 | 勾选/取消 | 字段列表变化 | 未验证 | N/A（不适用） | 本页 | C:同上；S:export/390x844/normal.png | 已实现｜截图已见 |
+| I-EXP-15 | 导出 | 字段勾选：toAccount | 同上 | 导出页 | 默认全选 | 勾选/取消 | 字段列表变化 | 未验证 | N/A（不适用） | 本页 | C:同上；S:export/390x844/normal.png | 已实现｜截图已见 |
+| I-EXP-16 | 导出 | 字段勾选：channel | 同上 | 导出页 | 默认全选 | 勾选/取消 | 字段列表变化 | 未验证 | N/A（不适用） | 本页 | C:同上；S:export/390x844/normal.png | 已实现｜截图已见 |
+| I-EXP-17 | 导出 | 字段勾选：merchant | 同上 | 导出页 | 默认全选 | 勾选/取消 | 字段列表变化 | 未验证 | N/A（不适用） | 本页 | C:同上；S:export/390x844/normal.png | 已实现｜截图已见 |
+| I-EXP-18 | 导出 | 字段勾选：note | 同上 | 导出页 | 默认全选 | 勾选/取消 | 字段列表变化 | 未验证 | N/A（不适用） | 本页 | C:同上；S:export/390x844/normal.png | 已实现｜截图已见 |
+| I-EXP-19 | 导出 | 预览 | app.js L1022 / L1024–1038 / L1093 | 导出页 | btnPending L1031 | GET /transactions?…&count=1&page=1 L1033 | 「共 N 条记录将导出。」L1035 | 「预览失败：…」L1036 | N/A（不适用） | 本页 | C:app.js L1024–1038；S:export/390x844/normal.png | 已实现｜截图已见 |
+| I-EXP-20 | 导出 | 自动预览 | app.js L1094（updatePreview()） | 进入页 | N/A（不适用） | N/A（不适用） | 未验证 | 未验证 | N/A（不适用） | 本页 | C:app.js L1094；S:export/390x844/normal.png | 已实现｜截图已见 |
+| I-EXP-21 | 导出 | 导出 CSV | app.js L1042 / L1091（btnCsv） | 至少 1 字段 | !fields.length → toast「请至少勾选一个导出字段」L1054 | 原生 fetch /export?format=csv&fields=… L1062 → blob | 下载 FastLedger_导出_YYYYMMDD.csv L1081 + toast「已导出 N 条记录」L1086 | toast(err.message,"err") L1088 | N/A（不适用） | 本页 | C:app.js L1042–1088；下载动作未采集 | 已实现｜运行时未验证 |
+| I-EXP-22 | 导出 | 导出 JSON | app.js L1043 / L1092（btnJson） | 至少 1 字段 | 同上 | doExport("json") | 下载 .json | 同上 | N/A（不适用） | 本页 | C:app.js L1043,L1092；运行时未验证 | 已实现｜运行时未验证 |
+| I-EXP-23 | 导出 | 空数据提示 | app.js L1070–1071（X-Export-Count===0） | 导出返回 0 条 | N/A（不适用） | N/A（不适用） | 未验证 | toast「没有可导出的数据」info | N/A（不适用） | 本页 | C:app.js L1070–1071；未采集 | 已实现｜运行时未验证 |
+| I-EXP-24 | 导出 | 截断提示 | app.js L1072–1074（X-Export-Truncated==="1"） | 结果 >10000 条 | N/A（不适用） | N/A（不适用） | 未验证 | toast「结果超过 10000 条，已截断」info | N/A（不适用） | 本页 | C:app.js L1072–1074；未采集 | 已实现｜运行时未验证 |
 
 #### 3.1.16 回收站 `#b/:id/recycle`
 
@@ -459,17 +473,17 @@
 
 | ID | 页面 | 控件 / 动作 | 代码位置 | 前置条件 | 输入与校验 | 操作 | 成功结果 | 失败结果 | 数据联动 | 返回路径 | 验证证据 | 当前状态 / 关联 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| I-REC-01 | 回收站 | 加载 | app.js L766（GET /recycle?page=1&count=100） | 进入页 | — | — | 行渲染 L767–789 | — | — | 本页 | C:app.js L766；S:recycle/390x844/empty.png | 已实现｜截图已见｜R0-E-16 |
+| I-REC-01 | 回收站 | 加载 | app.js L766（GET /recycle?page=1&count=100） | 进入页 | N/A（不适用） | N/A（不适用） | 行渲染 L767–789 | 未验证 | N/A（不适用） | 本页 | C:app.js L766；S:recycle/390x844/empty.png | 已实现｜截图已见｜R0-E-16 |
 | I-REC-02 | 回收站 | 恢复按钮 | app.js L778–787（btn） | 每行 | btnPending L780 | POST /transactions/:id/restore?clientUuid=uuid() L782 | toast「已恢复」+ 行 fade-out 后 tr.remove() L783–785 | toast(e.message,"err"); done() L786 | 行移除 | 本页 | C:app.js L778–787；有数据态未采集 | 已实现｜运行时未验证 |
-| I-REC-03 | 回收站 | 空态 | app.js L791–796 | 无数据 | — | — | 「回收站为空——…」 | — | — | 本页 | C:app.js L791–796；S:recycle/390x844/empty.png | 已实现｜截图已见 |
+| I-REC-03 | 回收站 | 空态 | app.js L791–796 | 无数据 | N/A（不适用） | N/A（不适用） | 「回收站为空——…」 | 未验证 | N/A（不适用） | 本页 | C:app.js L791–796；S:recycle/390x844/empty.png | 已实现｜截图已见 |
 
-**逐控件清单统计**：16 个分组、227 条独立控件/动作；其中「缺失」项均给出 grep 无命中证据并关联 R0-E 编号。本轮二次复核**新发现 2 项**（R0-E-38 加入账本/邀请码兑换断口、R0-E-39 密码明文切换缺失），详见 `docs/FastLedger-R0-独立补漏与复核记录.md` §9，非重复编号。
+**逐控件清单统计**：16 个分组、228 条独立控件/动作；其中「缺失」项均给出 grep 无命中证据并关联 R0-E 编号；`I-HOME-02` 经 RV-04 查证无需求依据，已改为「待 Owner 裁决的交互建议」，**不计入已确认缺陷统计**。本轮二次复核**新发现 2 项**（R0-E-38 加入账本/邀请码兑换断口、R0-E-39 密码明文切换缺失），详见 `docs/FastLedger-R0-独立补漏与复核记录.md` §9，非重复编号。
 
 **状态判定**：§3.1 已按单一控件拆分并可定位到 DOM/JS 行号，但「运行时未验证」项仍大量存在、截图仅覆盖部分状态；按任务单自检规则，**§3.1 仍未达到「每个成功/失败路径均有记录且可验证」的完整通过条件**，不得据此宣称 R0 通过。
 
 **逐控件交互清单状态（二次整改后）**：本版共 16 个页面分组、228 条独立控件/动作，每条 13 字段；原 §3.1 把多个独立控件合并成一行（金额/账户/分类/日期/备注合并、FAB 与 Tab 合并、账户增改删合并、「我的」8 入口合并）的写法已全部拆开，误引的 `#loginForm` 已更正为「`renderLogin` 动态生成、无 id」。本轮二次复核新增两项独立缺口：**R0-E-38**（登录页无「加入账本」入口/邀请码兑换，而 `renderMembers` L1667 有悬空引导，邀请链路在 Web 端断开）、**R0-E-39**（密码明文切换缺失）；另补 I-BOOKS-11「账本详情/账本设置页入口缺失」，关联 R0-E-19 / R0-E-32。
 
-**证据边界（不得夸大）**：`C:` 为静态源码定位；`S:` 为本轮 Edge 真实浏览器截图，仅证明「控件/页面在该状态下可见」，**不证明交互成功路径已验收**。当前 43 张截图只覆盖 normal / empty / error 首屏，绝大多数成功/失败交互路径、加载态、权限不足态、离线态、同步/冲突态与原型侧对照截图均未采集（见 §7.5 与 `docs/r0-screenshots/README.md`）。因此**本清单不构成逐控件运行时验收通过**，标「运行时未验证」即未验证；R0 截图门槛仍为未完成 / 阻塞。
+**证据边界（不得夸大）**：`C:` 为静态源码定位；`S:` 为本轮 Edge 真实浏览器截图，仅证明「控件/页面在该状态下可见」，**不证明交互成功路径已验收**。当前 43 张截图只覆盖 normal / empty / error 首屏，另 5 张 RV-01 隔离运行时截图仅覆盖首页交易列表请求的 pending / 失败 / 恢复态；绝大多数成功/失败交互路径、加载态、权限不足态、离线态、同步/冲突态与原型侧对照截图均未采集（见 §7.5 与 `docs/r0-screenshots/README.md`）。因此**本清单不构成逐控件运行时验收通过**，标「运行时未验证」即未验证；R0 截图门槛仍为未完成 / 阻塞。
 
 ---
 
@@ -539,11 +553,11 @@
 
 ### 5.3 后端 API 权限 / DTO / 测试矩阵（源码取证重做）
 
-> **本矩阵为 R0 二次整改重做版，整体替换 [1.62] 初稿**。全部 `file:line` 均以执行时 `origin/main` HEAD `bff6a2b` 的源码实读为准；权限来自真实 service / guard 函数，DTO 来自 handler 与 struct 定义，错误码追溯 `mapSvcErr` / `mapLoginErr` / `mapAuthErr` / OCR 独立映射，测试证据列具体测试函数 + `file:line` + 断言类型，未找到独立命名测试的接口明确写「未覆盖」。
+> **本矩阵为 R0 二次整改重做版，整体替换 [1.62] 初稿**。全部 `file:line` 均以 §0.2 所列**业务代码证据基准** `bff6a2b`（非文档 HEAD `557e4d2`、非截图运行时二进制）的源码实读为准；权限来自真实 service / guard 函数，DTO 来自 handler 与 struct 定义，错误码追溯 `mapSvcErr` / `mapLoginErr` / `mapAuthErr` / OCR 独立映射，测试证据列具体测试函数 + `file:line` + 断言类型，未找到独立命名测试的接口明确写「未覆盖」。
 
 #### 5.3.0 取证基线
 
-- **执行时 `origin/main` HEAD = `bff6a2b351bf5a039cdf7c762ec2693fb330cd00`**（`git rev-parse HEAD` 复核，`fetch` 已复核 0/0）。本矩阵所有 `file:line` 均以该 HEAD 为准，路径相对 `C:/Users/47006/WorkBuddy/fastledger/repo_tmp/`。
+- **业务代码证据基准 = `bff6a2b351bf5a039cdf7c762ec2693fb330cd00`**（§0.2；执行时 `git rev-parse HEAD` 复核，`fetch` 已复核 0/0；文档 HEAD 为 `557e4d2`，两者不同且不可互相推定）。本矩阵所有 `file:line` 均以该提交为准，路径相对 `C:/Users/47006/WorkBuddy/fastledger/repo_tmp/`。
 - **本矩阵是静态源码取证，不是运行时验证**：权限判定、DTO 字段、错误码映射、测试函数名与断言类型均来自当前 HEAD 的源码实读（`Read` / `Grep`），**本矩阵自身未做逐路由集成测试运行确认**；本轮二次整改已在 §7.6 真实执行 `go test ./...`（10 包 `ok` / 2 包无测试文件 / `FAIL` 0 / `EXIT_CODE=0`），但按任务单口径 **全量绿不等于逐路由测试覆盖证据**，不得用它或「CI 绿」替代逐用例断言。凡「未经集成测试运行确认」的部分逐项标注：测试证据列中「**未覆盖：未找到独立命名测试**」表示该接口在 `server/**/*_test.go` 中未找到独立命名的测试用例；已列出测试名的行仅表示**源码中存在该命名的测试用例及其断言类型**，不代表本次已执行通过。主表「测试证据」列不出现「CI 绿」「待测」等笼统结论（§5.3.3 与附录引用旧表错值属逐条纠错对照，不作本表结论）。
 - **路径前缀**：除 `GET /healthz`(router.go:109) 外，全部路由挂在 `v1 := r.Group("/api/v1")`(router.go:122) 下，真实路径 = `/api/v1` + 组内路径。旧表把 WS 写作 `/ws` 属错值（见 §5.3.3 #1）。
 - **鉴权分组**：公开 v1 组 `register/login/join`(router.go:124/125/128)；`GET /api/v1/ws` 用独立 `wsAuth(d.AuthService,d.PATs)`(router.go:133，刻意不挂 JWTAuth 组，注释 130-133，浏览器 WS 无法设 Authorization 头，需 Header→`?token=` 回退)；其余全部 `auth := v1.Group("", JWTAuth(d.AuthService, d.PATs))`(router.go:135)。`JWTAuth` 解析 `Authorization: Bearer`，`flt_` 前缀走 PAT 分支且 `patSvc==nil` fail-closed 401(middleware.go:52-93)。全局 `gin.Recovery()`(55)、`r.SetTrustedProxies(nil)`(52-54)、`NoRoute(newWebHandler())`(105-107)。**注册开关** `enableRegister = d.Config.EnableRegister`(router.go:74)，关闭时 403(auth_handler.go:51-54)；**PAT 开关** `if ph != nil`(141，`d.PATs==nil` 不注册 94-97)。
@@ -813,7 +827,7 @@
 3. 同一数据、同一状态、同一视口分别截图：原型 vs 实现，命名 `r0/<page>/<viewport>/<state>.png`。
 4. 关键动作录屏或可重复步骤（点击前置条件 → 结果可观察）。
 5. 首屏/加载/空/错误/权限/离线状态各至少一张。
-6. **截图执行状态（二次整改实测）**：本轮已用 Microsoft Edge `156.0.4314.58` headless + CDP 采集 **43 张真实 PNG**，覆盖 4 个视口 × 16 个页面/弹层，落盘于 `docs/r0-screenshots/`，逐张索引、采集环境与可复现步骤见 `docs/r0-screenshots/README.md`。但**仅覆盖 normal / empty / error 首屏**；成功/失败交互路径、加载态、权限不足态、离线态、同步/冲突态、以及**原型侧对照截图**均未采集。按总方案 §5 验收基线，**截图基线未完成 / 阻塞，R0 不因此通过**；不得用原型截图、HTML/SVG 或伪造截图替代，不得把该门槛挪到 R1，也不得以文字代替截图。
+6. **截图执行状态（二次整改实测）**：本轮已用 Microsoft Edge `156.0.4314.58` headless + CDP 采集 **43 张真实 PNG**，覆盖 4 个视口 × 16 个页面/弹层，落盘于 `docs/r0-screenshots/`，逐张索引、采集环境与可复现步骤见 `docs/r0-screenshots/README.md`。但**仅覆盖 normal / empty / error 首屏**；成功/失败交互路径、加载态、权限不足态、离线态、同步/冲突态、以及**原型侧对照截图**均未采集。按总方案 §5 验收基线，**截图基线未完成 / 阻塞，R0 不因此通过**；不得用原型截图、HTML/SVG 或伪造截图替代，不得把该门槛挪到 R1，也不得以文字代替截图。另新增 RV-01 隔离运行时证据 `docs/r0-screenshots/runtime/`（5 PNG + 3 JSON，真实 CDP Network/Console 事件，见 §7.5），但**不改变**截图基线未完成 / 阻塞的结论。
 
 ### 7.3 覆盖率计算（严禁主观百分比）
 
@@ -838,12 +852,13 @@
 | 项目 | 状态 | 证据 / 说明 |
 |---|---|---|
 | 真实截图文件 | 已交付 43 张 PNG | `docs/r0-screenshots/`，逐张索引见该目录 `README.md` |
+| RV-01 隔离运行时证据 | 已交付 5 张 PNG + 3 个 JSON | `docs/r0-screenshots/runtime/`（pending / rejected / 恢复态；`network-log.json`（请求头已脱敏，见 [1.66]）/ `console-log.json` / `dom-snapshots.json` + README）；**R0-E-35 仍待运行时复验 / 阻塞** |
 | 浏览器与视口 | 已记录 | Edge `156.0.4314.58`；360×800 / 390×844 / 430×932 / 1280×800 |
 | 账号与数据样例 | 已记录 | `admin`（owner 角色），账本「我的家庭账本」id=1，本地 schema v8；`transactions total=0` |
 | 页面 / 弹层 | 部分 | 16 个页面/弹层首屏 |
-| 状态覆盖 | **不足** | 仅 normal / empty / error 首屏 |
-| 成功 / 失败交互路径 | **未采集** | 需构造测试数据与逐控件操作脚本 |
-| 加载 / 骨架屏 / pending | **未采集** | 需 CDP 慢速网络或请求拦截 |
+| 状态覆盖 | **不足** | 仅 normal / empty / error 首屏；另 5 张 RV-01 隔离运行时截图仅覆盖首页交易列表请求的 pending / 失败 / 恢复态 |
+| 成功 / 失败交互路径 | **部分（仅首页列表失败态）** | RV-01 隔离复验记录首页交易列表请求 network 失败 / 503 两态；成功交互路径与逐控件操作仍未采集，需构造测试数据与脚本 |
+| 加载 / 骨架屏 / pending | **部分（仅首页）** | RV-01 隔离复验已采集首页 pending 骨架屏 2 张（`docs/r0-screenshots/runtime/`）；其余页面与慢速网络仍未采集 |
 | 权限不足（owner/admin/member） | **未采集** | 需多角色账号与多成员账本 |
 | 离线 / 同步 / 冲突 | **未采集** | 需离线与冲突构造环境 |
 | 原型侧对照截图 | **未采集** | 需启动 `prototype/` 静态服务（8765）同视口对照 |
@@ -851,9 +866,9 @@
 
 **阻塞与执行要求**：以上空缺**不降低 R0 门槛、不挪至 R1**，须由 Owner 在浏览器或 CI 中按 §7.2 协议补齐；执行人、所需环境与可复现步骤见 `docs/r0-screenshots/README.md` 的「未覆盖/阻塞清单」。
 
-**复验项 R0-E-35**：「骨架屏残留」在本轮 CDP 拦截 `/api/v1/*` 的实测中表现为「页面主体空白 + 红色 `Failed to fetch` toast」，与原描述不完全一致；需 Owner/CI 用慢速网络复验，**不得据此判定已修复或已证伪**。
+**复验项 R0-E-35（RV-01 口径）**：状态 **「待运行时复验 / 阻塞」，未关闭**。本轮已补隔离运行时证据：Edge `156.0.4314.58` headless + CDP，仅拦截 `GET /api/v1/books/1/transactions?page=1&count=60`（放行 `/books`、`/accounts`、`/categories`、`/reports/monthly` 等全部依赖请求），分别实测 pending、网络失败、HTTP 503、解除拦截后重新导航恢复；证据落盘 `docs/r0-screenshots/runtime/`（5 张 PNG + `network-log.json` + `console-log.json` + `dom-snapshots.json` + `README.md`）。**本次实测（单次本机）**：pending 与两种失败态下 `.skel` 恒为 4 条、`aria-busy=true` 未清除、仅红色 toast 且 DOM 中无「重试/刷新」控件；解除拦截并重新导航后 `.skel`=0、显示空态，可恢复。旧轮「页面主体空白」系泛化拦截 `/api/v1/*` 同时打断 `loadBookMeta`、使 `renderHome` 未走到 `renderBillStream` 所致，差异已解释。**但不得据此判定已修复、已证伪或已关闭**：仍缺 Owner/CI 独立复跑、慢速网络、有数据态、多角色等验证。
 
-**证据边界（诚实声明）**：服务端 `server/fastledger.exe` 构建于 `2026-11-04 01:13:59 +0800`，早于 `bff6a2b` 提交时间 `2026-11-04 13:45:36 +0800`（该提交本身仅文档改动）；截图采集时已实测 HTTP 提供的 `/app.js` 与仓库 HEAD 完全一致、`/style.css` 仅 CRLF 差异，故截图中前端资源与 `bff6a2b` 一致。后端权限 / DTO / 错误码契约**全部来自 `bff6a2b` 源码静态实读**（§5.3），不以运行时二进制为依据。当前本地服务已停止（`/healthz` 无响应），**运行时未复验**；既不得据此宣称已验证，也不得据此宣称截图无效。
+**证据边界（诚实声明，与 §0.2 一致）**：服务端 `server/fastledger.exe` 构建于 `2026-11-04 01:13:59 +0800`，早于 `bff6a2b` 提交时间 `2026-11-04 13:45:36 +0800`（该提交本身仅文档改动）；实测 HTTP 提供的 `/index.html`、`/app.js` 与仓库 HEAD 哈希完全一致、`/style.css` 仅 CRLF 差异（见 `docs/r0-screenshots/runtime/network-log.json` 的 `__META__.servedAssetSha256`），但**后端二进制对应的代码 SHA 未独立验证，不得推定等于 `bff6a2b`**。后端权限 / DTO / 错误码契约**全部来自 `bff6a2b` 源码静态实读**（§5.3），不以运行时二进制为依据。本轮为 RV-01 已重新启动本地服务（`/healthz` 实测 `status:"up"`）并完成上述隔离复验；该运行时复验**不替代**对后端二进制代码 SHA 的独立验证，也不使截图基线整体达标。
 
 ### 7.6 测试执行结果（2026-11-04 二次整改实测）
 
@@ -883,10 +898,11 @@
 | **D-8** | Web 设置页的服务器/备份区块展示到什么程度、数据从何处安全读取？ | PRD §4.12 与设计规范 §8.1–8.2 已要求服务器信息/备份入口；当前 Web 无状态 API 证据，运维备份另有部署机制 | 需求入口已确定；待 Owner 裁决 Web 只读状态范围、权限与是否提供受控备份/恢复操作。未设计安全边界前不得暴露恢复按钮 | 展示/操作边界待确认 |
 
 > **R0 通过条件（2026-11-04 二次整改后修订 · 当前状态：未通过 / 阻塞）**：
-> - **本轮已完成（文档与证据层面，不等于验收通过）**：① §3.1 逐控件交互清单重做（16 个分组、228 条独立控件/动作、13 字段，修正合并行与 `#loginForm` 误引，新增 R0-E-38 / R0-E-39）；② §5.3 API 权限 / DTO / 测试矩阵重做（逐路由源码实读：权限来自 service guard 函数、DTO 来自 handler / struct、错误码追溯 `mapSvcErr` 等、测试证据列具体测试函数或明确「未覆盖」）；③ 43 张真实浏览器截图与索引落盘。
-> - **仍未完成（阻塞项，不得挪至 R1、不得降低门槛）**：① §7 截图基线——当前仅首屏 normal/empty/error，成功/失败交互、加载、权限、离线、同步/冲突与原型侧对照截图均缺；按总方案 §5，截图基线未完成 R0 不得通过。② 逐控件交互的**运行时验收**（校验红字、pending、三态色、空态、骨架屏视觉、成功/失败反馈、返回路径）尚无逐项截图或测试输出为证。③ `go test ./...` 已实测全绿（10 包 ok / 2 包无测试 / 0 FAIL / EXIT_CODE=0，见 §7.6），但**全量绿不等于逐路由测试覆盖证据**；§5.3 逐接口列具体测试函数并标注「未覆盖」的接口仍需 Owner/CI 补齐逐用例断言与 `-race` 结果。
+> - **本轮已完成（文档与证据层面，不等于验收通过）**：① §3.1 逐控件交互清单重做（16 个分组、228 条独立控件/动作、13 字段，修正合并行与 `#loginForm` 误引，新增 R0-E-38 / R0-E-39）；② §5.3 API 权限 / DTO / 测试矩阵重做（逐路由源码实读：权限来自 service guard 函数、DTO 来自 handler / struct、错误码追溯 `mapSvcErr` 等、测试证据列具体测试函数或明确「未覆盖」）；③ 43 张真实浏览器截图与索引落盘；④ RV-01 隔离运行时证据（5 PNG + 3 JSON + README，`docs/r0-screenshots/runtime/`），但 **R0-E-35 仍待运行时复验 / 阻塞**。
+> - **仍未完成（阻塞项，不得挪至 R1、不得降低门槛）**：① §7 截图基线——当前仅首屏 normal/empty/error（RV-01 隔离证据另补首页 pending/失败/恢复，不改变整体缺口），成功/失败交互、加载、权限、离线、同步/冲突与原型侧对照截图均缺；按总方案 §5，截图基线未完成 R0 不得通过。② 逐控件交互的**运行时验收**（校验红字、pending、三态色、空态、骨架屏视觉、成功/失败反馈、返回路径）尚无逐项截图或测试输出为证。③ `go test ./...` 已实测全绿（10 包 ok / 2 包无测试 / 0 FAIL / EXIT_CODE=0，见 §7.6），但**全量绿不等于逐路由测试覆盖证据**；§5.3 逐接口列具体测试函数并标注「未覆盖」的接口仍需 Owner/CI 补齐逐用例断言与 `-race` 结果。
 > - **Owner 裁决未关闭**：D-1（两套原型最终基准）、D-3（导航结构）、D-5（投资资产是否独立页）、D-6（仅交易总表独立入口）、D-8（服务器/备份展示与权限边界）待结论；D-2 的 PWA 本地 OCR 待裁决；D-4 期初余额技术实现模型待确认。
 > - **裁决前既定口径（不得重开）**：D-2 的 Web OCR 已由 PRD §5.2 决定为不做；D-4 期初余额需求已确定；D-7 会话管理需求已确定仅排期待定；多账本与回收站按既定需求保留。
+> - **R0-E-35 / RV-01**：状态「**待运行时复验 / 阻塞**」，未关闭。隔离运行时证据已登记于 `docs/r0-screenshots/runtime/`（5 张 PNG + `network-log.json`（请求头已脱敏）/ `console-log.json` / `dom-snapshots.json` + README）；单次本机实测不构成缺陷关闭，须 Owner/CI 独立复跑并补齐慢速网络、有数据态、多角色等缺口。**不得声称已关闭。**
 > - **结论**：**R0 未通过 / 阻塞**。满足上述截图基线落地、逐控件运行时验收证据、测试执行输出与 Owner 对未决范围给出结论后，R0 方可通过并进入 R1 最小批次拆分。**本次整改不代表 R1–R7 已获授权。**
 
 ---
@@ -906,6 +922,7 @@
 | 已定决策 | `workbuddy/第三方审阅者导读.md` §5 |
 | 阶段编排 | `docs/FastLedger-原型还原与PWA分阶段实施总方案.md` §4–§5 |
 | 真实截图基线与索引 | `docs/r0-screenshots/`（43 张 PNG）、`docs/r0-screenshots/README.md` |
+| RV-01 隔离运行时证据 | `docs/r0-screenshots/runtime/`（5 PNG + `network-log.json`（请求头已脱敏，见 [1.66]）/ `console-log.json` / `dom-snapshots.json` + README；仅拦截 `GET /api/v1/books/1/transactions` 的 pending / 失败 / 恢复态） |
 | §5.3 权限 / DTO / 错误码源码取证 | `server/internal/api/router.go` L109–L235、`common.go` L17–L136、`auth_handler.go` L103–L122、`middleware.go` L34–L40、`service/guard.go`、`service/visibility.go`、各 `*_handler.go` / `service/*.go` |
 | 逐路由测试函数索引 | `server/**/*_test.go`（§5.3 逐行列出 file:line 与断言类型） |
 | R0 二次整改复核 | `docs/FastLedger-R0-独立补漏与复核记录.md` §9、`CHANGELOG.md` [1.63] |
@@ -933,3 +950,11 @@
 - **范围**：仅修订审计/交付文档、`CHANGELOG.md` 与 README 状态快照；**未改业务代码、PRD、落地方案、WBS、数据库或 API**；未启动 R1–R7。
 - **测试执行**：`go test ./...` 实测 10 包 ok / 2 包无测试 / 0 FAIL / EXIT_CODE=0（见 §7.6）；全量绿**不等于**逐路由覆盖证据，逐用例断言与 `-race` 仍待 Owner/CI。
 - **当前状态**：**R0 未通过 / 阻塞**——截图基线未完成、逐控件运行时验收缺证据、逐路由逐用例断言与 `-race` 结果未产出、Owner 裁决未关闭。
+
+### 10.3 独立复核补充 RV-01~04（即外部文档 R0-RV-01~04）修正（[1.65]）
+
+- **RV-01**：新增隔离运行时证据 `docs/r0-screenshots/runtime/`（Edge `156.0.4314.58` + 原生 CDP，仅拦截 `GET /api/v1/books/1/transactions`，放行其它依赖请求；pending / 网络失败 / 503 / 解除拦截后恢复；5 PNG + 3 JSON + README）。本次实测：失败后 `.skel`=4、`aria-busy=true` 未清除、仅 toast 且无页内重试控件；重新导航可恢复。旧轮「页面主体空白」系泛化拦截打断 `loadBookMeta` 所致。**R0-E-35 仍为「待运行时复验 / 阻塞」，不得声称已关闭。**
+- **RV-02**：新增 §0.2「证据版本基准」表，分离文档 HEAD `557e4d2`、业务代码证据基准 `bff6a2b`、截图对应代码版本「**未独立验证**」与历史快照 `1cd56ab`；§0 / §3.1 / §5.3 / §7.5 口径已对齐。
+- **RV-03**：§3.1 逐控件表内所有裸 `—` 单元格按列语义替换为 `N/A（不适用）` / `见 I-XXX` / `未验证` / `未实现` / `待确认`；228 条行数与 13 字段结构不变，交叉引用 ID 已逐条校验存在，新增字段语义词表。
+- **RV-04**：查证 PRD §3.1 / §4.2 / §4.8、Web 设计规范 §8.1 / §8.2、`prototype-v2/index.html` `pHome()`、`prototype/` 构建产物与 `prototype/README.md`，**均无「首页必须提供月份切换控件」的明确条款**（月份切换仅见于报表页与导出页时间预设）。`I-HOME-02` 由「缺失」改为「待 Owner 裁决的交互建议」，移出已确认缺陷统计。
+- **范围与状态**：仅修订审计文档、CHANGELOG、README 与新增运行时证据；未改业务代码 / PRD / 落地方案 / WBS / 数据库 / API；PWA 不动。**R0 未通过 / 阻塞，不授权 R1。**

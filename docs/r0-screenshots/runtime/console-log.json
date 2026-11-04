@@ -1,0 +1,68 @@
+[
+  {
+    "event": "Log.entryAdded",
+    "capturedAt": "2026-11-04T11:57:19.549Z",
+    "params": {
+      "entry": {
+        "source": "network",
+        "level": "error",
+        "text": "Failed to load resource: net::ERR_FAILED",
+        "timestamp": 1793793439549.425,
+        "url": "http://127.0.0.1:8080/api/v1/books/1/transactions?page=1&count=60",
+        "networkRequestId": "31488.11"
+      }
+    }
+  },
+  {
+    "event": "Log.entryAdded",
+    "capturedAt": "2026-11-04T11:57:19.585Z",
+    "params": {
+      "entry": {
+        "source": "network",
+        "level": "error",
+        "text": "Failed to load resource: net::ERR_FAILED",
+        "timestamp": 1793793439586.069,
+        "url": "http://127.0.0.1:8080/api/v1/books/1/transactions?page=1&count=60",
+        "networkRequestId": "31488.22"
+      }
+    }
+  },
+  {
+    "event": "Log.entryAdded",
+    "capturedAt": "2026-11-04T11:57:20.622Z",
+    "params": {
+      "entry": {
+        "source": "network",
+        "level": "error",
+        "text": "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+        "timestamp": 1793793440622.675,
+        "url": "http://127.0.0.1:8080/api/v1/books/1/transactions?page=1&count=60",
+        "networkRequestId": "31488.33"
+      }
+    }
+  },
+  {
+    "event": "Log.entryAdded",
+    "capturedAt": "2026-11-04T11:57:23.555Z",
+    "params": {
+      "entry": {
+        "source": "network",
+        "level": "error",
+        "text": "Failed to load resource: net::ERR_FAILED",
+        "timestamp": 1793793443555.587,
+        "url": "http://127.0.0.1:8080/api/v1/books/1/transactions?page=1&count=60",
+        "networkRequestId": "31488.44"
+      }
+    }
+  },
+  {
+    "event": "__META__",
+    "capturedAt": "2026-11-04T11:57:25.380Z",
+    "params": {
+      "generatedAt": "2026-11-04T11:57:17.193Z",
+      "browser": "Edg/156.0.4314.58",
+      "headSha": "557e4d223064c149cdf1063429a2fdd79158e609",
+      "note": "console/Log/Runtime 事件均为真实 CDP 事件；脚本自身未向页面注入任何 console 调用"
+    }
+  }
+]
