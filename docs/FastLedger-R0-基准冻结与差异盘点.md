@@ -3,6 +3,7 @@
 > 文档性质：**R0 阶段交付（盘点，非代码完成）**。本文件只做基准冻结、逐页差异盘点、根因分类与裁决清单，**不修改任何业务代码 / PRD / 落地方案 / 枚举字典 / WBS**。
 > 依据：`docs/FastLedger-原型还原与PWA分阶段实施总方案.md` §5「R0」、§6「强制交付格式」；`workbuddy/多AI对齐规范.md`（颗粒度/编号/状态/文档权威）。
 > 编制：实施 AI（WorkBuddy）。编制日期：2026-11-04。
+> **独立复核更正**：本文件部分结论已由 [`FastLedger-R0-独立补漏与复核记录.md`](FastLedger-R0-独立补漏与复核记录.md) 修订；凡原文与复核记录冲突，以复核记录为准。复核仅为静态审查，未运行测试、未采集截图，R0 尚未通过。
 
 ---
 
@@ -10,7 +11,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 当前基线 SHA | `origin/main` = **f9f075e**（GPT 总方案 + PWA 指导书 7 个提交）；本分支 `main` = **55bbd4e**（本地前端提交，已 rebase 到 f9f075e 之上，**未推送**） |
+| 当前基线 SHA | 独立复核时 GitHub 默认分支最新可见 HEAD = **`1cd56ab7830d2d3f33faf7fc5372d3824c088ae0`**。原记录的 `f9f075e` 已过时；`55bbd4e` 的本地分支/工作区状态无法从 GitHub 只读视角验证，需本地重新检查。 |
 | 工作分支 | `main`（本地） |
 | 关键决策文档（本次已读） | `workbuddy/多AI对齐规范.md`、`workbuddy/第三方审阅者导读.md`、根 `CHANGELOG.md`（[1.44]/[1.57]/[1.58]/[1.59]）、`docs/FastLedger-原型还原与PWA分阶段实施总方案.md`、`docs/FastLedger-手机PWA实施指导书.md`、`docs/FastLedger-Web设计规范.md`（§8 信息架构）、`docs/FastLedger-交易更新语义设计.md`、`prototype/README.md`、`prototype-v2/README.md` |
 | 本次范围 | R0-A ~ R0-G（页面/交互盘点、两版原型差异、当前实现与后端 API 映射、差异根因、截图与覆盖率方法、Owner 裁决清单） |
@@ -100,20 +101,20 @@
 | 页面 | 必备交互（规范 §8.2） | 当前实现证据 | 状态（空/加载/错误/权限/离线） | 结论 |
 |---|---|---|---|---|
 | 登录 | 预填、pending、错误红字、成功进首页 | `renderLogin` L161；`POST /auth/login`/`/auth/register` | 错误红字/pending [待确认] | 基本具备，细节待验 |
-| 首页账单 | 概览三卡联动、按日分组账单、行点击进详情、筛选条、骨架屏 | `renderHome` L1929：**三卡已实现**（L1947–1965 本月收入/支出/净资产=Σ账户余额）；`renderBillStream` L1872 按日分组；行点击→`#b/:id/tx/:tid` | **筛选条/骨架屏缺失** | **部分具备**（缺筛选条与骨架屏，R0-E-02） |
-| 记一笔 | 支出/收入/转账分段、转账双账户、必填校验红字、pending→toast→返回首页顶部插入 | `#formDlg`（`fType/fAmount/fAccount/fTo/fCategory/fDate/fNote`）；`POST /transactions` | 校验/pending [待确认] | 具备，细节待验 |
+| 首页账单 | 概览三卡联动、按日分组账单、行点击进详情、筛选条、骨架屏 | `renderHome` L1947–1965；`renderBillStream` L1872–1927：**骨架屏与按日小计已实现**；行点击→`#b/:id/tx/:tid` | 首页无筛选；账单行缺账户/渠道；请求失败时 skeleton 未替换为错误态；日小计仅基于首批 60 条 | **部分具备**（见 R0-E-02、20、21、34、35） |
+| 记一笔 | 支出/收入/转账分段、转账双账户、必填校验红字、pending→toast→返回首页顶部插入 | `#formDlg`（`fType` 为普通 select；含金额/账户/对方账户/分类/日期/备注）；`POST /transactions` | 缺支付渠道/商户输入；类型不是分段控件；其余校验/pending 需浏览器验证 | **部分具备**（见 R0-E-23、29） |
 | 截图识别 | 三级漏斗 → 确认弹窗 → 确认入账（绝不自动入账） | **无**（dist 仅 1 处"截图"文案，无 OCR 调用） | — | **未实现**（R0-E-08，待裁决） |
-| 交易详情 | 全字段、编辑、删除二次确认→toast+余额回滚 | `renderTxDetail` L1974（编辑复用 `openTxEditForm`；删除含确认文案） | 已删实体 409 `ENTITY_DELETED` [待确认] | 具备 |
-| 账户 | 账户卡（余额/类型徽标）、净资产汇总、正负余额色 | `renderAccounts` L647；`GET/POST/PUT/DELETE /accounts` | 空态 [待确认] | 具备（初始余额限制见 R0-E-06） |
+| 交易详情 | 全字段、编辑、删除二次确认→toast+余额回滚 | `renderTxDetail` L1974–2015：展示账户/分类/日期/备注；编辑/删除入口存在 | 未展示 paymentChannel；备注非空时 merchant 不显示；删除文案称无法恢复，与回收站/恢复能力矛盾 | **部分具备**（见 R0-E-22、24） |
+| 账户 | 账户卡（余额/类型徽标）、净资产汇总、正负余额色 | `renderAccounts` L647–735；账户 CRUD | 账户列表无净资产摘要（净资产在 `renderInvest` L1246）；无期初余额输入 | **部分具备**（见 R0-E-06、28、30） |
 | 分类 | 大类卡片→子类列表、分类色板 | `renderCategories` L2069；`GET /categories?tree=1` + CRUD | 删除引用计数 [待确认] | 具备 |
 | 预算 | 总进度条 + 信封列表、正常/接近/超支三态 | `renderBudget` L1108；`GET/POST/PUT/DELETE /budgets` | 三态色 [待确认] | 具备，视觉待验 |
 | 报表 | 月度柱状（chart-1 主色）+ 分类占比环形（conic）+ 月份切换 | `renderReport` L804；`GET /reports/monthly?months=6` + `/reports/categories` | 空态 [待确认] | 具备，视觉待验 |
-| 家庭成员 | 角色徽标、可见性开关 + 常驻隐私提示 | `renderMembers` L1636：`.family-block` 家庭信息 + 成员 CRUD；**可见性仅只读徽标**（L1720 `canViewOthers`），无可操作开关，未调用 `PUT /books/:id/visibility` | 权限不足 [待确认] | **部分具备**（缺可见性开关，R0-E-19） |
+| 家庭成员 | 角色徽标、账本级可见性开关 + 常驻隐私提示、邀请管理 | `renderMembers` L1636–1775：成员 CRUD、创建邀请码；逐成员显示 `mb.canViewOthers` | 无账本级开关、无常驻隐私提示；MVP 权威字段为 `books.members_can_view_others`，成员级字段仅预留；无邀请码撤销 UI | **部分具备**（见 R0-E-19、26、27） |
 | 导出 | 筛选 + 预览 + CSV/JSON | `renderExport` L933（时间范围预设 + "共N条"预览 + `GET /export` blob 下载 + `X-Export-Count/Truncated`） | 空态/超大截断 [待确认] | 具备 |
-| 设置 | 个人资料、API Token、服务器与备份、退出登录 | `renderSettings` L1518：**仅 API Token（生成/复制/撤销）+ 退出登录**；个人资料在"我的"页；**缺服务器与备份区块、缺改密** | — | **部分具备**（缺 个人资料/服务器与备份/改密，R0-E-17/18） |
+| 设置 | 个人资料、账号安全、API Token、服务器与备份、退出登录 | `renderSettings` L1518–1635：API Token 管理 + 退出；邮箱资料编辑在 `renderMine` L2138–2215 | 资料能力存在但入口在“我的”；设置缺改密 UI、会话管理 UI、服务器/备份区块 | **部分具备**（见 R0-E-17、18、31） |
 | 我的 | 菜单中枢 | `renderMine` L2138：头像 + 资料编辑（改邮箱）+ **8 个二级入口**（我的账本/账户/成员/导出/报表/预算/资产/回收站） | — | 具备（8 入口；与平铺顶栏重复，R0-E-01） |
 
-**状态覆盖缺口（统一记为 R0-E-12）**：空 / 加载(骨架屏) / 网络错误 / 权限不足 / 离线 / 同步中 / 冲突 —— 当前代码未见系统性状态组件，需逐页补齐并截图。
+**状态覆盖缺口（R0-E-12）修正**：首页账单流已有骨架屏，不能将“骨架屏缺失”列为缺陷；但请求失败时 catch 仅 toast 并 return，骨架仍留在页面（R0-E-35）。空态已有局部实现；网络错误、权限不足、离线、同步中、冲突仍未形成逐页证据矩阵，需逐页验证并截图。
 
 ---
 
@@ -175,8 +176,8 @@
 | 导出 | `GET /books/:id/export` | JWT | ✅ |
 | 预算 | `GET/POST /books/:id/budgets`、`PUT/DELETE .../budgets/:budgetId` | JWT | ✅ |
 | 投资 | `GET/POST /books/:id/instruments`、`PUT/DELETE .../instruments/:id`、`POST .../:id/price`、`GET/POST /holdings`、`PUT/DELETE /holdings/:id`、`GET /net-worth` | JWT | ✅ |
-| 同步 | `GET /books/:id/sync/pull`、`POST /books/:id/sync/push` | JWT | ❌（前端未调用；当前靠 WS 提示） |
-| WS | `GET /api/v1/ws` | JWT | ✅（`ws.js`/连接逻辑 [待确认]） |
+| 同步 | `GET /books/:id/sync/pull`、`POST /books/:id/sync/push` | JWT | ❌（当前 Web `app.js` 未调用） |
+| WS | `GET /api/v1/ws` | JWT | ❌（后端路由存在；当前 Web `index.html` 仅加载 `/app.js`，`app.js` 未发现 WebSocket 客户端） |
 
 **关键结论**：
 - 后端**能力完整**，"账户/分类/交易详情/删除恢复/报表/预算/投资/成员/设置"均有 API —— 差异主要在**前端 UX/页面结构与原型对齐**，而非后端缺能力（符合总方案 §3.1）。
@@ -192,11 +193,11 @@
 | ID | 差异 | severity | 位置/证据 | 根因分类 | 目标 |
 |---|---|---|---|---|---|
 | R0-E-01 | 导航 IA 不符：桌面 10 项平铺 vs 规范 5 项；移动 5 Tab vs 规范 4 Tab；二级页未挂"我的" | **P1** | `dist/index.html` topbar/bottomNav；规范 §8.1 L301–316 | 视觉/交互（导航结构） | 改为 4 Tab + "我的"中枢；桌面 5 项 |
-| R0-E-02 | 首页账单：三卡已实现，**缺筛选条与骨架屏**；日小计待核 | P1 | `renderHome` L1929（三卡 L1947–1965）、`renderBillStream` L1872；规范 §8.2 | UI 缺失（筛选条/骨架屏） | 三卡（已）+ 日小计 + 筛选条 + 骨架屏 |
+| R0-E-02 | 首页账单：筛选条缺失；骨架屏与日小计已实现，不得重复报缺失 | P2 | `renderHome` L1947–1965、`renderBillStream` L1872–1927；规范 §8.2 | UI/查询能力缺失 | 首页筛选条；骨架屏/日小计保留并补失败态与全量小计边界 |
 | R0-E-03 | 交易详情：全字段/编辑/删除回滚已实现，但状态与视觉未逐项验收 | P1 | `renderTxDetail` L1974 | UI 对齐（待截图） | 全字段 + 二次确认 + toast + 余额回滚 |
 | R0-E-04 | 两级分类：已接 CRUD，但色板/大类卡片视觉与默认分类策略待核 | P1 | `renderCategories` L2069；`GET /categories?tree=1` | UI 对齐 / 业务规则 | 大类卡片 + 子类 + 色板 + 引用保护 |
-| R0-E-05 | 记一笔：类型分段/双账户已实现，校验/pending/返回插入未验收 | P1 | `#formDlg` L529；规范 §8.2 | UI 对齐（待截图） | 分段切换 + 必填红字 + pending→toast |
-| R0-E-06 | 账户：后端 `Create` 强制 `Balance:0`，无"期初余额"入口 | P1 | `service/account.go` AccountCreateInput；前端已移除初始余额字段 | 业务契约（缺口） | 明确期初余额策略（R0-G D-4） |
+| R0-E-05 | 记一笔：类型切换能力存在，但当前为普通 select；校验/pending 仍需实测 | P2 | `index.html` L40–49；`openTxForm` L529–580；规范 §8.2 | UI 交互差异 | 改为可访问的分段控件；双账户显隐与校验按类型验收 |
+| R0-E-06 | 账户：PRD 要求期初余额，但创建服务固定 `Balance:0`，前端无输入入口 | P1 | PRD §4.5；`service/account.go` Create；`index.html` 账户弹窗 | 业务契约未落实 | 保留期初余额需求；实现方案见 D-4，禁止直接计入普通收入 |
 | R0-E-07 | 投资资产：`renderInvest` 存在但独立成页/持仓交互对齐未证 | P1 | `renderInvest` L1246；prototype/ 有独立页 | UI 对齐 / 基准冲突 | 依原型对齐持仓/实物/净资产 |
 | R0-E-08 | 截图识别：Web 无实现，OCR 范围未决 | P1 | dist 无 `/ocr/*` 调用；PRD §5.2 vs 设计规范含截图页 | 产品冲突 | Owner 裁决（R0-G D-2） |
 | R0-E-09 | 报表：柱状+环形+月份切换已实现，视觉对齐未验收 | P2 | `renderReport` L804 | UI 对齐（待截图） | 主题色柱状 + conic 环形 + 切换 |
@@ -205,11 +206,11 @@
 | R0-E-12 | 状态覆盖缺口：空/加载(骨架)/错误/权限不足/离线/同步中/冲突 未系统化 | P2 | 全局（无统一状态组件证据） | 健壮性/UX | 逐页补状态组件 |
 | R0-E-13 | 设计 token 落地：`style.css` 与 `design-tokens.json` 一致性未逐项核 | P2 | `dist/style.css`；规范 §9 L338 | 视觉（token） | 全量 token 对齐，禁散落硬编码 |
 | R0-E-14 | 会话管理 UI 缺失（后端 WBS 5.10 已交付 API） | P2 | `router.go` `/auth/sessions`；前端无调用 | 前端未接 API | 设置页加"登录设备/会话"管理 |
-| R0-E-15 | 未使用 `sync pull/push`（仅 WS）；离线/PWA 阶段再定 | P3 | 前端无 `/sync/*` 调用 | 架构（阶段 3 后端有） | 归入 R4/R5 |
+| R0-E-15 | 当前 Web 未接 WS 客户端，也未使用 sync pull/push；后端有路由不代表 Web 已同步 | P2 | `index.html` L1–75；`app.js` 全文；`router.go` L125–135、L215–235 | Web 客户端同步能力缺失 | 明确本阶段 Web 在线/实时边界；按 R 阶段实现 WS 通知 + pull 补漏或明确不纳入 |
 | R0-E-16 | 账本/交易总表/回收站为原型外扩展，需确认保留与归属；另 `PUT /books/:id`（账本重命名）前端未接 | P3 | `renderBooks` L234、`renderTxns` L337、`renderRecycle` L751；`router.go` L161 | 范围确认 | 保留（PRD 依据），导航归位 |
-| R0-E-17 | 设置页缺「个人资料」「服务器与备份」区块（原型设置三区：个人资料/API Token/服务器与备份） | P2 | `renderSettings` L1518（仅 Token+退出）；原型设置含三区；"资料"仅在 `renderMine` L2158 | UI 缺失 / 前端位置错置 | 设置页补齐三区块（个人资料可复用 mine 的资料编辑） |
+| R0-E-17 | 设置页仅有 API Token/退出；个人资料能力在“我的”页，服务器/备份区块缺失 | P2 | `renderSettings` L1518–1635；`renderMine` L2138–2215；设计规范 §8.1–8.2 | 信息架构/入口缺失 | 按裁决后的 IA 补资料入口、服务器与备份状态区块；不误报资料能力完全缺失 |
 | R0-E-18 | 改密 UI 缺失（后端 `POST /users/me/password` 已存在，前端无入口） | P2 | `router.go` L139；`dist/app.js` 无 `/users/me/password` 调用（"密码"仅登录/注册表单 L179/L184） | 前端未接 API | 设置/个人资料加改密入口（旧密码+新密码） |
-| R0-E-19 | 成员「账本可见性」开关缺失：仅只读徽标，无 `PUT /books/:id/visibility` 调用 | P2 | `renderMembers` L1720（`canViewOthers` 只读徽标）；`router.go` L165 | 前端未接 API / UI 缺失 | 加 book 级"成员互看"开关 + 常驻隐私提示 |
+| R0-E-19 | 成员账本可见性 UI 缺失：无 `PUT /books/:id/visibility` 调用；逐成员 `canViewOthers` 徽标不等于 MVP 账本级状态 | P1 | `renderMembers` L1636–1775；`router.go` visibility 路由；PRD §7.3；枚举字典 §11 | 隐私控制/字段粒度错误 | 使用 `books.members_can_view_others` 提供账本级开关 + 常驻隐私提示 |
 
 ---
 
@@ -256,15 +257,15 @@
 | 编号 | 待裁决问题 | 现有依据 | 备选与建议 | 状态 |
 |---|---|---|---|---|
 | **D-1** | 最终前端基准：`prototype/`（13 页）还是 `prototype-v2/`（12 视图）？ | 总方案 §2.2 暂行：prototype/ 为流程基准、v2 为视觉补充 | 建议：流程/页面以 prototype/ 为准，视觉/组件以 v2+设计规范为准；两者冲突先登记 | 待确认 |
-| **D-2** | Web/PWA 是否提供截图识别？ | PRD §5.2 限 Web OCR；设计规范含截图页；PWA 指导书仅建议用户选图本地 OCR | 建议 Web 首期不做；PWA 仅"用户主动选图 + 端侧 OCR"，不承诺跨 App 截图 | 待确认 |
+| **D-2** | PWA 浏览器端是否新增本地 OCR？Web 本身是否做 OCR 已由 PRD §5.2 明确为“不做” | PRD §5.2：Web 不做 OCR；PWA 指导书提出浏览器端本地识别评估 | Web 不做 OCR 是既定要求；若 PWA 要增加浏览器端本地 OCR，属于 PRD 范围变更，需 Owner 明确批准并同步 PRD/WBS/隐私边界 | 仅 PWA 扩展待确认 |
 | **D-3** | 导航是否按规范改为 4 Tab + "我的"中枢（拆除 10 项平铺顶栏）？ | 设计规范 §8.1；总方案 R2 | 建议：按规范改；保留账本切换入口于顶栏左上 | 待确认 |
-| **D-4** | 账户"期初余额"如何处理？ | 后端 `Create` 强制 `Balance:0`；原型账户页可能体现余额 | 建议：不新增期初字段；以"期初调整"交易（收入类）体现，或明确"创建即 0，余额由交易产生" | 待确认 |
+| **D-4** | 期初余额的技术实现模型如何设计（需求本身不再待裁决）？ | PRD §4.5 明确要求支持期初余额；当前服务固定 `Balance:0`；服务注释建议用普通收入交易初始化 | 保留 PRD 需求；建议设计不进入收支统计的 opening-balance/余额调整记录，并同步数据模型、审计、同步、净资产和迁移契约；禁止伪装成普通收入 | 技术方案待 Owner 确认 |
 | **D-5** | 投资资产是否独立成页？ | prototype/ 独立页；v2 疑似折入账户 | 建议：保留独立页（依 prototype/），v2 仅视觉 | 待确认 |
-| **D-6** | 账本列表/交易总表/回收站 是否保留为独立入口？ | 原型 13 页未含；PRD 多账本/软删除 | 建议：保留（PRD 依据），导航归位至合理位置 | 待确认 |
-| **D-7** | 会话管理 UI 是否纳入 R1？ | 后端 5.10 已交付 `/auth/sessions`；前端未接 | 建议：纳入设置页（低风险） | 待确认 |
+| **D-6** | 交易总表是否保留为独立导航入口，还是作为首页/我的的辅助检索视图？ | 多账本与回收站由 PRD/已定软删除要求支持，不属于可删扩展；交易总表是额外检索视图 | 建议保留交易总表能力，但由 Owner 裁决独立入口/导航归属；账本列表与回收站按既定需求保留 | 待确认（仅交易总表入口） |
+| **D-7** | 多端会话管理是否属于产品需求？ | PRD §4.1/§4.12 已要求可查看与撤销会话；后端 `/auth/sessions` 已有路由，Web UI 未接（R0-E-31） | 需求已确定；Owner 只需决定排期/入口，不得裁决为“不需要”而不修订 PRD | 已确认需求，排期待定 |
 | **D-8** | Web 设置页是否需要「服务器与备份」状态展示？ | 原型设置有该区块；后端当前**无备份状态 API**（仅 CLI `instance bump`） | 建议：MVP 仅展示静态说明/部署信息，或新增只读 `instance.meta` 接口；不做 Web 触发备份 | 待确认 |
 
-> **R0 通过条件**：以上 D-1~D-8 均获 Owner 明确结论（或标"阻塞，不开发"），且 §7 截图基线开始采集，方可进入 R1。
+> **R0 通过条件**：D-1、D-3、D-5、D-6（仅交易总表入口）、D-8 的未决范围须有 Owner 结论或明确阻塞；D-2 的 Web OCR 已由 PRD 决定为不做，PWA 本地 OCR若新增须单独裁决；D-4 需求已确定，仅技术实现待确认；D-7 会话管理需求已确定，仅排期待定。并且必须完成逐控件交互清单、API 权限/DTO/测试矩阵及 §7 截图基线，R0 才可通过。
 
 ---
 
@@ -286,3 +287,10 @@
 ---
 
 *本文件为 R0 盘点交付，不含代码改动。待 Owner 对 §8 裁决清单给出结论后，再由 Owner 指定 R1 首个小批次。*
+
+
+## 10. 独立复核补漏（2026-11-04）
+
+详细证据、根因、验收及页面交互补充见 [`docs/FastLedger-R0-独立补漏与复核记录.md`](FastLedger-R0-独立补漏与复核记录.md)。新增 R0-E-20 至 R0-E-36，覆盖首页财务口径、账单字段/筛选、交易详情/表单、删除文案、Web 同步客户端、邀请码撤销、账本可见性、净资产页面归属、期初余额、多端会话、账本重命名、README 状态漂移、日小计分页边界、加载错误态和 API 矩阵粒度。
+
+**复核结论：R0 尚未通过。** 本次为静态审查；没有运行服务、测试、浏览器或采集截图。逐控件交互清单、完整 API 权限/DTO/测试矩阵和截图基线仍未完成。
