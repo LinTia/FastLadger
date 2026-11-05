@@ -2,6 +2,17 @@
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.77] - 2026-11-05
+
+### R0 第五次最小整改任务单：纠正第四次证据状态与文档口径
+
+- 新增 [《FastLedger R0 第五次最小整改任务单》](docs/FastLedger-R0-第五次最小整改任务单.md)，交 WorkBuddy 执行第四次整改后的独立复核纠偏。
+- **预设状态口径：A BLOCKED / B PARTIAL / C BLOCKED / D PARTIAL**。B 需复核并修正 4 笔交易被错误映射到父分类的问题、角色字段真实性、页面数据与状态覆盖，并对 104 张 PNG 执行字节级 SHA256 校验；D 需更正 CI job 元数据、区分测试 commit/业务代码基准/证据提交，并逐条处置未覆盖路由。
+- 要求同步修正 R0 主报告 §3.1/§5.3/§7/§8/§10、第四次执行回执、README 与第三方导读；A/C 不得以静态证据冒充运行时验收。
+- **RV-05 单列 Owner ACTION REQUIRED**：WorkBuddy 不得更改仓库可见性、force-push、重写历史、删除 refs 或联系 GitHub Support。
+- **权限边界**：仅授权审计/证据/文档整改；不改业务代码、PRD、WBS，不启动 R1–R7，不实施 PWA。
+- **状态**：本条仅创建任务单，尚不代表 WorkBuddy 已执行或任何包已验收；**R0 继续 BLOCK，不授权 R1**。
+
 ## [1.76] - 2026-11-05
 
 ### R0 第四次证据补齐：包 B 升级为「同一数据集」104 张成对图；包 D 升级为正式 CI run
