@@ -2,6 +2,19 @@
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.76] - 2026-11-05
+
+### R0 第四次证据补齐：包 B 升级为「同一数据集」104 张成对图；包 D 升级为正式 CI run
+
+- **包 B（13 页对照）PASS（同数据主集）**：新增 `tools/r0/extract-prototype-dataset.js`（从原型 bundle 提取原生数据集 → `tools/r0/prototype-dataset.json`，含 bundle SHA256）与 `tools/r0/seed-from-dataset.js`（按同一数据集经公开 API 种入实现侧空账本，先清空建账本时自动播种的默认账户/分类）。
+  - 数据集：5 账户 / 37 分类（12 大类 + 25 小类）/ 22 交易 / 5 预算；两侧账户余额一致（28,100.00 / 0.00 / −716.30 / −1,125.00 / 3,868.00）。
+  - 采集：原型 **52** + 实现 **52** = **104 张**（13 页 × 4 视口），两侧 `errors=0`、`skipped=0`；实现侧补齐**登录页**（`state=logged-out`，`hasToken=false`）与**记一笔弹层**（`click=fab`、`#formDlg open=true`、`320×552`）。
+  - `tools/r0/capture-pairs.js` 增：同数据集注入（运行时探测 toolkit 命名空间前缀 `__miaoda_<appid>__:`）、动作级采集、manifest 字段 `state`/`action`/`actionMeta`/`hasToken`/`dataset`；实现侧 hash 路由用一次性 query 强制新建文档。
+  - 证据：`docs/r0-screenshots/pairs/`（104 PNG + 2 manifest + `seed-manifest.json` + `SHA256SUMS.txt` 108 行 + 重写 README）。
+- **包 D 口径修正为正式 CI**：上一版"非正式 CI、无 run URL"**表述错误**——仓库一直有 `.github/workflows/ci.yml` 且 `push: [main]` 触发。现证据为 run [`41951501832`](https://github.com/LinTia/FastLadger/actions/runs/41951501832)（head `31716b0`，业务代码仍 `bff6a2b`）：`build / vet / test / race` 与 `docker build / run / healthz` 两 job **全 success**；`go1.22.12 linux/amd64`、`gcc 13.3.0`、`CGO=1`；`ok` 10 包、`[no test files]` 2 包、`--- FAIL` 0、`DATA RACE` 0。原始日志与元数据：`docs/r0-evidence-4th/ci-run/`。CI 的 `-race` 只覆盖 `ws/service/api`，全仓 `-race` 由服务器复跑（`plain.log`/`race.log`）补齐。
+- **采集中发现的实现侧问题（待 QA 复现确认）**：① 记一笔弹层分类未按类型过滤（支出下首项为「工资」，直接保存 400）；② 移动端报表「本月支出分类占比」丢失分类名列（1280 宽正常）；③ 余额全由交易派生、电子钱包为负（D-4 未实现）；④ 首页「结余」原型=收入−支出、实现=净资产；⑤ 实现侧无 merchant 字段，账单行信息密度低于原型。
+- **仍未覆盖**：loading/empty/error/permission/offline/conflict 态；`invest`/`members` 两侧数据未对齐；无像素级 diff；单角色。**包 A/C 仍 BLOCKED；R0 仍 BLOCK，不授权 R1–R7。**
+
 ## [1.75] - 2026-11-05
 
 ### R0 第四次证据补齐：包 D 服务器 Linux 全量+race 通过；包 B 成对截图骨架与 96 张同视口证据

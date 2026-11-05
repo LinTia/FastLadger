@@ -1,0 +1,39 @@
+# CI run 41951501832 — 关键证明行（自 test-job.log / docker-job.log 原文摘录，未改写结论）
+# head_sha=31716b0d51a12ee6c705cc670059b2e129c1e37f  event=push  attempt=1  conclusion=success
+# 来源: https://github.com/LinTia/FastLadger/actions/runs/41951501832
+
+## 环境（CGO 前提 + 编译器）
+2026-11-05T01:53:24.3284880Z go version go1.22.12 linux/amd64
+2026-11-05T01:53:24.3866343Z go version go1.22.12 linux/amd64
+2026-11-05T01:53:24.3878074Z gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+
+## 步骤8 SQLite 驱动冒烟（反向门禁：出现 no test files 即失败）
+2026-11-05T01:53:27.2243982Z ok  	fastledger/internal/migrate	0.443s
+2026-11-05T01:53:27.2248162Z ok  	fastledger/internal/database	0.127s
+
+## 步骤9 go test ./... -count=1 -v（全量）
+2026-11-05T01:53:28.3448861Z ok  	fastledger/cmd/server	0.278s
+2026-11-05T01:53:30.5400956Z ?   	fastledger/internal/version	[no test files]
+2026-11-05T01:53:31.4727902Z ok  	fastledger/internal/api	2.902s
+2026-11-05T01:53:31.4728154Z ?   	fastledger/web	[no test files]
+2026-11-05T01:53:36.7528660Z ok  	fastledger/internal/authzreview	8.186s
+2026-11-05T01:53:36.7549107Z ok  	fastledger/internal/config	0.004s
+2026-11-05T01:53:36.7553499Z ok  	fastledger/internal/database	0.019s
+2026-11-05T01:53:36.7563215Z ok  	fastledger/internal/instance	0.062s
+2026-11-05T01:53:36.7616992Z ok  	fastledger/internal/migrate	0.692s
+2026-11-05T01:53:36.7619470Z ok  	fastledger/internal/model	0.002s
+2026-11-05T01:53:46.6492452Z ok  	fastledger/internal/service	16.074s
+2026-11-05T01:53:46.6514382Z ok  	fastledger/internal/ws	5.505s
+
+## 步骤10 -race（ws/service/api）
+2026-11-05T01:53:57.5461268Z ok  	fastledger/internal/ws	10.422s
+2026-11-05T01:54:55.7979364Z ok  	fastledger/internal/service	66.366s
+2026-11-05T01:54:55.7979698Z ok  	fastledger/internal/api	24.027s
+
+## 容器冒烟 healthz（docker job）
+2026-11-05T01:56:36.0062954Z {"code":0,"data":{"instanceId":"9e4ee1c3c6c42eee7440a9648549a700","restoreEpoch":1,"schemaVersion":8,"status":"up"},"msg":"ok"}
+
+## 计数
+--- FAIL 行数: 0
+DATA RACE 行数: 0
+ok 行数(含重复运行): 15

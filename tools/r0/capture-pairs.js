@@ -67,6 +67,16 @@ const VIEWPORTS = (process.env.R0_VIEWPORTS || '360x800,390x844,430x932,1280x800
   .split(',').map((v) => v.trim()).filter(Boolean)
   .map((v) => { const [w, h] = v.split('x').map(Number); return { w, h, mobile: w < 600 }; });
 const WAIT_MS = Number(process.env.R0_WAIT_MS || 1200);
+const ACTION_WAIT_MS = Number(process.env.R0_ACTION_WAIT_MS || 700);
+
+// 同数据集注入：把 seed-from-dataset.js 产出的注入包写进原型 localStorage，
+// 使原型不再使用内置演示数据，而是与实现侧完全同一份数据（含账户余额）。
+const PROTO_INJECT_PATH = process.env.R0_PROTO_INJECT ? path.resolve(process.env.R0_PROTO_INJECT) : '';
+let PROTO_INJECT = null;
+if (PROTO_INJECT_PATH) {
+  if (!fs.existsSync(PROTO_INJECT_PATH)) failConfig('R0_PROTO_INJECT 指向的文件不存在');
+  PROTO_INJECT = JSON.parse(fs.readFileSync(PROTO_INJECT_PATH, 'utf8'));
+}
 
 const WRITE_EVIDENCE = process.env.R0_WRITE_EVIDENCE === '1';
 let OUT;
@@ -83,9 +93,9 @@ if (WRITE_EVIDENCE) {
 // 13 页路由映射（可按需用 R0_PAGES_JSON 覆盖）。
 // proto：路径路由；impl：hash 路由；null 表示该页是弹层/动作，需交互采集，本轮跳过并标 BLOCKED。
 const DEFAULT_PAGES = [
-  { id: 'login', proto: '/login', impl: null, note: '实现侧登录为状态页，需清 token 采集' },
+  { id: 'login', proto: '/login', impl: '', action: 'login', note: '两侧均为未登录状态页：清会话后访问根路径' },
   { id: 'home', proto: '/home', impl: '#b/{book}' },
-  { id: 'add-transaction', proto: '/add', impl: null, note: '记一笔为弹层（含截图识别/手动），需动作采集' },
+  { id: 'add-transaction', proto: '/add', impl: '#b/{book}', action: 'fab', note: '实现侧「记一笔」为弹层：在首页点 #fab 打开 #formDlg（原型 /add 为整页）' },
   { id: 'transaction-detail', proto: '/transaction', impl: '#b/{book}/tx/{tx}' },
   { id: 'accounts', proto: '/accounts', impl: '#b/{book}/accounts' },
   { id: 'categories', proto: '/categories', impl: '#b/{book}/categories' },
@@ -226,55 +236,133 @@ function expand(tpl, book, tx) {
     await cdp.send('Page.enable');
     await cdp.send('Runtime.enable');
 
-    // 实现侧登录态注入（仅内存，不打印）
-    if (SIDES.includes('impl') && TOKEN) {
-      await cdp.send('Page.addScriptToEvaluateOnNewDocument', {
-        source: `try{localStorage.setItem("fl_token",${JSON.stringify(TOKEN)});localStorage.setItem("fl_whoami",${JSON.stringify(WHOAMI)});}catch(e){}`,
-      });
-    }
+    // 注入脚本管理：登录页需要"未登录"态，其余页面需要登录态，因此必须可挂可摘
+    const addScript = async (source) => {
+      const r = await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source });
+      return r.identifier;
+    };
+    // 用 sessionStorage 标志位控制"本次导航是否为未登录态"，避免 add/remove 脚本与导航的竞态
+    const tokenSource = `try{if(!sessionStorage.getItem("__r0_logged_out")){localStorage.setItem("fl_token",${JSON.stringify(TOKEN)});localStorage.setItem("fl_whoami",${JSON.stringify(WHOAMI)});}}catch(e){}`;
+    const LOGOUT_FLAG = '__r0_logged_out';
 
-    // 原型登录：点一次「登录」，之后按路径重载（若仍跳登录，manifest 会记录 actualPath 供核对）
-    let protoLoggedIn = false;
-    if (SIDES.includes('proto')) {
-      await cdp.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
-      await cdp.send('Page.navigate', { url: `http://127.0.0.1:${PROTO_PORT}/login` });
-      await sleep(1500);
-      try {
+    let implTokenId = null;
+    if (SIDES.includes('impl') && TOKEN) implTokenId = await addScript(tokenSource);
+
+    // 原型的数据层由 toolkit 做了命名空间前缀（`__miaoda_<appid>__:__fastledger_loggedIn`），
+    // 前缀随构建变化且未登录时不会建键，因此不能硬编码：
+    // 先打开 /login，必要时点一次演示登录让 app 建键，再从键名反推前缀，最后清空存储再正式采集。
+    let protoPrefix = null;
+    async function ensureProtoPrefix() {
+      if (protoPrefix !== null) return protoPrefix;
+      const readPrefix = async () => {
         const r = await cdp.send('Runtime.evaluate', {
+          expression: `(()=>{const suf=':__fastledger_loggedIn';const k=Object.keys(localStorage).find(x=>x.endsWith(suf));return k?k.slice(0,k.length-suf.length):'';})()`,
+          returnByValue: true,
+        });
+        return (r.result && r.result.value) || '';
+      };
+      await cdp.send('Page.navigate', { url: `http://127.0.0.1:${PROTO_PORT}/login` });
+      await sleep(1200);
+      protoPrefix = await readPrefix();
+      if (!protoPrefix) {
+        await cdp.send('Runtime.evaluate', {
           expression: `(()=>{const b=[...document.querySelectorAll('button')].find(x=>/登\\s*录/.test(x.textContent||''));if(b){b.click();return 'clicked';}return 'no-button';})()`,
           returnByValue: true,
         });
-        protoLoggedIn = r.result && r.result.value === 'clicked';
-        await sleep(1800);
-      } catch (_) { /* record below */ }
-      manifest.protoLogin = { clicked: protoLoggedIn };
+        await sleep(1500);
+        protoPrefix = await readPrefix();
+      }
+      try { await cdp.send('Runtime.evaluate', { expression: 'try{localStorage.clear();sessionStorage.clear();}catch(e){}' }); } catch (_) { /* ignore */ }
+      return protoPrefix;
+    }
+    async function applyProtoInjection() {
+      const prefix = await ensureProtoPrefix();
+      const flat = {};
+      for (const [k, v] of Object.entries(PROTO_INJECT || {})) flat[k] = typeof v === 'string' ? v : JSON.stringify(v);
+      const r = await cdp.send('Runtime.evaluate', {
+        expression: `(()=>{const m=${JSON.stringify(flat)};const p=${JSON.stringify(prefix)};let n=0;for(const k in m){localStorage.setItem(p?(p+':'+k):k,m[k]);n++;}return n;})()`,
+        returnByValue: true,
+      });
+      return r.result && r.result.value;
+    }
+
+    manifest.authStrategy = {
+      proto: PROTO_INJECT ? 'localStorage 注入同数据集（运行时探测 toolkit 命名空间前缀）' : '内置演示数据 + 点击登录',
+      impl: TOKEN ? 'localStorage 注入 fl_token' : '未提供 token',
+    };
+    if (PROTO_INJECT) {
+      const prefix = await ensureProtoPrefix();
+      manifest.datasetInjection = {
+        path: '<R0_PROTO_INJECT> (未记录绝对路径)',
+        storagePrefix: prefix ? `${prefix}:` : '(无前缀)',
+        keys: Object.keys(PROTO_INJECT),
+        counts: Object.fromEntries(Object.entries(PROTO_INJECT).map(([k, v]) => [k, Array.isArray(v) ? v.length : 1])),
+        sha256: sha256(fs.readFileSync(PROTO_INJECT_PATH)),
+      };
     }
 
     for (const vp of VIEWPORTS) {
       await cdp.send('Emulation.setDeviceMetricsOverride', { width: vp.w, height: vp.h, deviceScaleFactor: 1, mobile: vp.mobile });
       for (const page of PAGES) {
         for (const side of SIDES) {
-          let tpl;
-          if (side === 'proto') tpl = page.proto;
-          else tpl = page.impl;
-          if (!tpl) {
+          const isProto = side === 'proto';
+          const action = page.action || '';
+          const tpl = isProto ? page.proto : page.impl;
+          if (!tpl && !action) {
             manifest.skipped.push({ page: page.id, side, reason: page.note || '无路由（动作/弹层）' });
             continue;
           }
-          const isProto = side === 'proto';
-          const url = isProto
-            ? `http://127.0.0.1:${PROTO_PORT}${tpl}`
-            : `${APP_URL}${expand(tpl, BOOK_ID, TX_ID)}`;
           const file = `${page.id}__${side}__${vp.w}x${vp.h}.png`;
-          // 登录页需先清会话，否则已登录会被重定向到首页（原型 /login → /home）。
-          if (isProto && page.id === 'login') {
-            try { await cdp.send('Runtime.evaluate', { expression: 'localStorage.clear();sessionStorage.clear();' }); } catch (_) { /* ignore */ }
+
+          // 登录页：先在**同源**页面里置未登录标志再清 localStorage（写在 about:blank 上无效）
+          if (action === 'login') {
+            const originUrl = isProto ? `http://127.0.0.1:${PROTO_PORT}/login` : APP_URL;
+            try {
+              await cdp.send('Page.navigate', { url: originUrl });
+              await sleep(600);
+              await cdp.send('Runtime.evaluate', {
+                expression: `try{sessionStorage.setItem(${JSON.stringify(LOGOUT_FLAG)},'1');localStorage.clear();}catch(e){}`,
+              });
+            } catch (_) { /* ignore */ }
+          } else {
+            try {
+              await cdp.send('Runtime.evaluate', {
+                expression: `try{sessionStorage.removeItem(${JSON.stringify(LOGOUT_FLAG)});}catch(e){}`,
+              });
+            } catch (_) { /* ignore */ }
+            if (isProto && PROTO_INJECT) await applyProtoInjection();
           }
+
+          const url = action === 'login'
+            ? (isProto ? `http://127.0.0.1:${PROTO_PORT}/login` : APP_URL)
+            : (isProto
+              ? `http://127.0.0.1:${PROTO_PORT}${tpl}`
+              : `${APP_URL}${expand(tpl || '', BOOK_ID, TX_ID)}`);
+
           try {
-            await cdp.send('Page.navigate', { url });
+            // 实现侧是 hash 路由：仅改 hash 属同文档跳转，new-document 注入脚本不会执行。
+            // 加一个一次性 query 强制新建文档、同时保留 hash（服务端 SPA fallback 忽略 query）。
+            const navUrl = isProto
+              ? url
+              : `${APP_URL}?r0=${encodeURIComponent(page.id)}${expand(tpl || '', BOOK_ID, TX_ID)}`;
+            await cdp.send('Page.navigate', { url: navUrl });
             await sleep(WAIT_MS);
+            let actionMeta = null;
+            if (action === 'fab') {
+              // 实现侧「记一笔」是 <dialog>：点 FAB 后等弹层真正打开再截
+              const clicked = await cdp.send('Runtime.evaluate', {
+                expression: `(()=>{const f=document.querySelector('#fab');if(!f)return 'no-fab';if(f.classList.contains('hidden'))return 'fab-hidden';f.click();return 'clicked';})()`,
+                returnByValue: true,
+              });
+              await sleep(ACTION_WAIT_MS);
+              const dlg = await cdp.send('Runtime.evaluate', {
+                expression: `(()=>{const d=document.querySelector('#formDlg');if(!d)return {found:false};const r=d.getBoundingClientRect();return {found:true,open:!!d.open,hidden:d.classList.contains('hidden'),w:Math.round(r.width),h:Math.round(r.height)};})()`,
+                returnByValue: true,
+              });
+              actionMeta = { click: clicked.result && clicked.result.value, dialog: dlg.result && dlg.result.value };
+            }
             const evalRes = await cdp.send('Runtime.evaluate', {
-              expression: '({href:location.href, pathname:location.pathname, hash:location.hash, title:document.title, text:(document.body.innerText||"").slice(0,200)})',
+              expression: '({href:location.href, pathname:location.pathname, hash:location.hash, title:document.title, hasToken:!!localStorage.getItem("fl_token"), text:(document.body.innerText||"").slice(0,200)})',
               returnByValue: true,
             });
             const meta = evalRes.result.value || {};
@@ -283,21 +371,15 @@ function expand(tpl, book, tx) {
             fs.writeFileSync(path.join(OUT, file), buf);
             manifest.items.push({
               page: page.id, side, viewport: `${vp.w}x${vp.h}`, w: vp.w, h: vp.h,
-              requested: url, actualPath: meta.pathname, actualHash: meta.hash,
+              state: action === 'login' ? 'logged-out' : (action === 'fab' ? 'dialog-open' : 'default'),
+              action: action || '',
+              requested: url, navigated: navUrl, actualPath: meta.pathname, actualHash: meta.hash, hasToken: meta.hasToken,
               title: meta.title, bytes: buf.length, sha256: sha256(buf), capturedAt: iso(),
+              dataset: PROTO_INJECT ? 'same-dataset' : 'native',
+              actionMeta,
               note: page.note || '',
             });
-            process.stdout.write(`OK ${file} ${buf.length}B path=${meta.pathname}${meta.hash || ''}\n`);
-            // 采集完登录页后重新登录，保证同视口后续页面仍是已登录态。
-            if (isProto && page.id === 'login') {
-              try {
-                await cdp.send('Runtime.evaluate', {
-                  expression: "(()=>{const b=[...document.querySelectorAll('button')].find(x=>/登\\s*录/.test(x.textContent||''));if(b){b.click();return 'clicked';}return 'no-button';})()",
-                  returnByValue: true,
-                });
-                await sleep(1600);
-              } catch (_) { /* ignore */ }
-            }
+            process.stdout.write(`OK ${file} ${buf.length}B path=${meta.pathname}${meta.hash || ''}${actionMeta ? ` action=${JSON.stringify(actionMeta)}` : ''}\n`);
           } catch (e) {
             manifest.errors.push({ page: page.id, side, viewport: `${vp.w}x${vp.h}`, error: String(e && e.message ? e.message : e) });
             process.stderr.write(`ERR ${page.id}/${side}/${vp.w}x${vp.h} ${e}\n`);

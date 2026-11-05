@@ -1,78 +1,129 @@
-# R0 第四次证据补齐 · 包 B：原型 × 实现同视口成对截图
+# R0 包 B · 同数据集成对截图（原型 × 实现）
 
-> 采集日期：2026-11-05　采集主体：WorkBuddy（Owner 授权本地隔离实例）
-> 浏览器：Microsoft Edge `156.0.4314.58`（headless=new）　Node：`v22.22.2`　DPR：1
-> 视口：`360x800` / `390x844` / `430x932` / `1280x800`
-> 业务代码证据基准：`bff6a2b351bf5a039cdf7c762ec2693fb330cd00`（`server/` 自该提交起零改动）
-> 采集脚本：`tools/r0/capture-pairs.js`
+本目录是 R0「13 页原型还原」的**同一数据集**成对截图证据：两侧使用**同一份账户/分类/交易/预算数据**、同一浏览器、同一视口，逐页成对。
 
-## 1. 目录与文件
+> 判定边界先说清：本目录证明的是「**同一份数据下，两侧页面结构与关键数值可逐页对照**」。
+> 它**不**证明「逐控件运行时行为合格」，也不等于 R0 通过（R0 仍 BLOCK）。
+
+## 1. 采集口径
+
+| 项 | 值 |
+|---|---|
+| 浏览器 | Microsoft Edge `Edg/156.0.4314.58`（headless + CDP），Node `v22.22.2`，DPR 1 |
+| 业务代码基准 | `bff6a2b351bf5a039cdf7c762ec2693fb330cd00`（`server/` 自该提交起零改动） |
+| 视口 | `360×800` / `390×844` / `430×932` / `1280×800`（4 档） |
+| 页面 | 13 页（见 §3），每页每视口各 1 张 |
+| 张数 | 原型 **52** + 实现 **52** = **104** PNG |
+| 状态 | `default`（已登录默认态）、`logged-out`（登录页 4×2）、`dialog-open`（实现侧记一笔弹层 4） |
+| 错误 | 两侧 `errors = 0`、`skipped = 0` |
+| 采集时间 | 2026-11-05（`manifest-*.json` 逐张记录 `capturedAt`） |
+
+## 2. 同一数据集（关键）
+
+数据集不是"手编一份差不多的"，而是**从原型打包产物里提取原生种子数据**，再用公开 API 原样种进实现侧空账本：
 
 ```
-pairs/
-├── prototype/            52 张：13 页 × 4 视口（原型静态构建）
-├── impl/                 44 张：11 路由 × 4 视口（本地隔离实例）
-├── manifest-prototype.json
-├── manifest-impl.json
-├── SHA256SUMS.txt        98 行（96 PNG + 2 manifest）
-└── README.md
+prototype/assets/index-*.js
+   └─(tools/r0/extract-prototype-dataset.js)→ tools/r0/prototype-dataset.json
+        └─(tools/r0/seed-from-dataset.js)→ 实现侧隔离实例（HTTP API）
+             └─ 回读实现侧派生余额 → proto-injection.json → 注入原型 localStorage
 ```
 
-## 2. 采集环境与数据前置
+| 数据 | 数量 | 说明 |
+|---|---|---|
+| accounts | 5 | 招商银行储蓄卡 / 现金 / 微信零钱 / 支付宝余额 / 招行信用卡 |
+| categories | 37 | 12 个大类 + 25 个小类（含收入/支出/转账） |
+| transactions | 22 | 金额、时间、账户、分类与原型完全一致 |
+| budgets | 5 | 总预算 + 餐饮/交通/旅游/购物 |
 
-- **原型**：`prototype/` 静态构建快照，由脚本内置静态服务（SPA fallback）提供；演示账号 `me/123456`（README 预填），脚本自动点击「登录」一次后按路径重载。
-- **实现**：本地隔离实例（`EBK_DB_PATH` 指向临时目录，一次性随机 `EBK_JWT_SECRET`），schema v8；种子数据：1 个账本「R0 采集账本」、4 个账户（现金/储蓄/零钱/信用卡）、2 笔交易（支出 ¥128.50 餐饮、收入 ¥8,000 工资）。token 仅经环境变量传入采集进程，不落盘、不打印。
-- **登录态**：实现侧经 `Page.addScriptToEvaluateOnNewDocument` 注入 `fl_token`；原型侧脚本点击登录按钮。
+建账本时实现侧会自动播种默认账户/分类，脚本先**清空默认播种**（`seed-manifest.json` → `defaultsRemoved`）再灌原型数据集，否则两侧账户数不一致。
 
-## 3. 覆盖矩阵（13 页）
+**余额对齐**（`seed-manifest.json` → `balances`）：实现侧初始余额恒为 0、余额由交易派生，因此截图前把实现侧派生余额回填进原型注入包，使两侧显示同一组数字：
 
-| 页面 | 原型路径 | 实现路由 | 原型 | 实现 |
+| 账户 | 两侧显示 |
+|---|---|
+| 招商银行储蓄卡 | ¥28,100.00 |
+| 现金 | ¥0.00 |
+| 微信零钱 | −¥716.30 |
+| 支付宝余额 | −¥1,125.00 |
+| 招行信用卡 | ¥3,868.00 |
+
+原型原先的静态演示余额（100000 / 5000 / 1200 / 800 / −3200）已被**替换**为上述派生值——这是"同数据"的必要一步，也顺带暴露了 D-4 期初余额未实现的后果（余额只能靠交易堆出来）。
+
+## 3. 页面对照状态
+
+| 页面 | 原型 | 实现 | 数据 | 备注 |
 |---|---|---|---|---|
-| 登录 | `/login` | 状态页（需清 token） | ✅ 4 视口 | ⏭ 跳过（见 §5） |
-| 首页账单 | `/home` | `#b/{book}` | ✅ 4 | ✅ 4 |
-| 记一笔（截图/手动） | `/add` | 弹层（无独立路由） | ✅ 4 | ⏭ 跳过（见 §5） |
-| 交易详情 | `/transaction` | `#b/{book}/tx/{tx}` | ✅ 4 | ✅ 4 |
-| 账户 | `/accounts` | `#b/{book}/accounts` | ✅ 4 | ✅ 4 |
-| 两级分类 | `/categories` | `#b/{book}/categories` | ✅ 4 | ✅ 4 |
-| 投资资产 | `/invest` | `#b/{book}/invest` | ✅ 4 | ✅ 4 |
-| 预算 | `/budget` | `#b/{book}/budget` | ✅ 4 | ✅ 4 |
-| 报表 | `/report` | `#b/{book}/report` | ✅ 4 | ✅ 4 |
-| 导出 | `/export` | `#b/{book}/export` | ✅ 4 | ✅ 4 |
-| 家庭成员 | `/family` | `#b/{book}/members` | ✅ 4 | ✅ 4 |
-| 我的 | `/profile` | `#b/{book}/mine` | ✅ 4 | ✅ 4 |
-| 我的设置 | `/profile`（二级菜单） | `#settings` | ✅ 4（与“我的”同路径） | ✅ 4 |
+| login | `/login` | `/`（未登录态） | — | 两侧均为未登录状态页 |
+| home | `/home` | `#b/1` | 一致 | 见 §4 差异 1/2 |
+| add-transaction | `/add`（整页） | 弹层 `#formDlg` | — | 形态不同：整页 vs `320×552` 弹层 |
+| transaction-detail | `/transaction` | `#b/1/tx/1` | 一致 | |
+| accounts | `/accounts` | `#b/1/accounts` | 一致 | 见 §4 差异 3 |
+| categories | `/categories` | `#b/1/categories` | 一致 | |
+| invest | `/invest` | `#b/1/invest` | **未对齐** | 实现侧持仓需 instrument 前置，无公开创建 API |
+| budget | `/budget` | `#b/1/budget` | 一致（5 条预算） | |
+| report | `/report` | `#b/1/report` | 一致 | 见 §5 发现 2 |
+| export | `/export` | `#b/1/export` | — | 静态说明页 |
+| members | `/family` | `#b/1/members` | **未对齐** | 原型 2 名成员；实现侧 1 名，需邀请流程 |
+| mine | `/profile` | `#b/1/mine` | 基本一致 | |
+| settings | `/profile`（二级菜单） | `#settings` | 基本一致 | 原型无独立设置路由，故 `mine`/`settings` 两图 SHA256 相同 |
 
-- 原型：52 张，**0 错误**，请求路径与落地路径 **0 偏差**（manifest `actualPath`）。
-- 实现：44 张，**0 错误**；`login`、`add-transaction` 各 4 视口跳过（8 条 skipped）。
+## 4. 结构差异（实测，非推测）
 
-## 4. 复现命令（不含凭证）
+1. **首页结余口径不同**：原型「本月结余」= 本月收入 − 本月支出（¥26,910.70）；实现卡片「结余」副标题为"净资产"，值 ¥30,126.70。**同一文案、不同语义**，属需裁决的口径问题。
+2. **首页账单行信息密度不同**：原型每行含 商户 + 分类 + 账户 + 支付渠道；实现每行是 分类名 + 备注（实现侧无 merchant 字段，见 `seed-manifest.json` → `fieldDiffs`）。
+3. **账户页形态不同**：原型是分组卡片流（净资产头图 + 分类分组）；实现是 `类型/余额/操作` 表格 + 「新增账户」按钮。
+
+## 5. 采集中暴露的实现侧问题（建议进 R0 缺陷清单）
+
+1. **记一笔弹层的分类未按类型过滤**：默认 `类型=支出` 时，`分类` 下拉首项是「工资」（收入类），直接保存会被服务端拒绝（`400 请求参数非法`）。本机种子脚本早期即踩到该问题。
+2. **移动端报表「本月支出分类占比」丢失分类名列**：`390×844` 下首列空白，只有 笔数/金额/占比；`1280×800` 下分类名正常（购物 / 超市日用 / 外卖 / 三餐 / 打车 / 公交地铁）。属响应式布局缺陷。
+3. **账户余额语义**：实现侧电子钱包余额为负（−716.30 / −1,125.00），因期初余额未实现、余额全部由支出派生；与原型演示值差异明显（D-4 待落地）。
+
+以上 3 条是**采集中实际看到的现象**，未做逐控件复核；是否成立需 QA 按缺陷流程复现确认。
+
+## 6. 复现方式
 
 ```bash
-# 原型侧（仓库外临时输出）
-R0_SIDES=proto R0_PROTO_DIR="$PWD/prototype" \
-R0_OUT_DIR="$(mktemp -d)" R0_EDGE_PATH="<edge-path>" \
-node tools/r0/capture-pairs.js
+# 1) 提取原型数据集（离线，无需服务）
+node tools/r0/extract-prototype-dataset.js
 
-# 实现侧（需先启动本地隔离实例并取得 token/bookId/txId）
-R0_SIDES=impl R0_APP_URL="http://127.0.0.1:8091/" \
-R0_TOKEN="<accessToken>" R0_BOOK_ID="<bookId>" R0_TX_ID="<txId>" \
-R0_OUT_DIR="$(mktemp -d)" R0_EDGE_PATH="<edge-path>" \
-node tools/r0/capture-pairs.js
+# 2) 起一个隔离实例并种子化（需空库 + 一个实例用户）
+R0_BASE=http://127.0.0.1:8091 R0_USER=admin R0_PW=*** \
+  node tools/r0/seed-from-dataset.js
+# 输出（默认在系统临时目录，不入库）：seed-manifest.json / proto-injection.json
+
+# 3) 两侧采集
+R0_SIDES=proto R0_PROTO_DIR=./prototype \
+R0_PROTO_INJECT=<临时目录>/proto-injection.json \
+  node tools/r0/capture-pairs.js
+
+R0_SIDES=impl R0_APP_URL=http://127.0.0.1:8091/ R0_TOKEN=*** \
+R0_BOOK_ID=1 R0_TX_ID=1 \
+  node tools/r0/capture-pairs.js
 ```
 
-写正式证据目录需 `R0_WRITE_EVIDENCE=1` 且 `R0_WRITE_EVIDENCE_CONFIRM=YES`（双重确认），否则默认输出仓库外临时目录。
+细节：
 
-## 5. 已知限制 / 未覆盖（诚实边界）
+- 原型数据层被 toolkit 加了命名空间前缀（`__miaoda_<appid>__:`），脚本**运行时探测**该前缀，不硬编码；
+- 实现侧是 hash 路由，脚本用一次性 query 强制新建文档，保证注入脚本生效；
+- 令牌只经环境变量传入，不打印、不落盘。
 
-1. **非同数据、非同状态**：原型用其内置演示数据，实现用本轮种子数据，两者数值不同。本目录完成的是**同视口、默认（normal）态**的页面级对照，**不是**严格"同数据同状态"对照；严格同数据需 QA 构造统一数据集后重采。
-2. **实现侧 `login` 跳过**：实现为状态页（清 token 才显示），而采集脚本注入 token 后会再次登录，故本轮未采实现登录页（原型登录页已采）。
-3. **实现侧 `add-transaction` 跳过**：记一笔为弹层（截图识别/手动/转账），无独立路由，需动作级交互采集。
-4. **原型 `settings` 与 `mine` 同路径**：原型设置入口在「我的」二级菜单，两页截图相同（SHA256 一致），属已知映射。
-5. **仅 normal 态**：未覆盖 loading/pending/empty/error/permission/offline/conflict 等状态；这些仍属包 B/C 后续工作。
-6. **未做像素级 diff**：本轮只采集成对截图与 manifest，未生成差异标注图；差异说明见 R0 主报告 §6/§7 与后续 QA 对照表。
+## 7. 未覆盖（不得据此声称 R0 通过）
 
-## 6. 证据完整性
+- 未覆盖 `loading` / `empty` / `error` / `permission`（多角色）/ `offline` / `sync-conflict` 状态；
+- 未做像素级 diff（本目录只提供成对图与逐张 SHA256，不做自动相似度打分）；
+- `invest` / `members` 两侧数据未对齐（原因见 §3）；
+- 仅 1 个角色（账本 owner），未覆盖 admin/member/只读/回收站视角；
+- 未在 4 档视口之外验证（平板横屏、超宽屏等）。
 
-- `SHA256SUMS.txt` 覆盖 96 张 PNG 与 2 个 manifest；任一张被替换可用 `sha256sum -c SHA256SUMS.txt` 检出。
-- manifest 不含 token、Authorization、JWT、Cookie 或个人绝对路径（`protoDir` 已占位为 `<R0_PROTO_DIR>`）。
-- 本目录为**新增**，未覆盖 `docs/r0-screenshots/` 既有 43 张与 `runtime/` 历史证据。
+## 8. 文件清单
+
+| 文件 | 说明 |
+|---|---|
+| `prototype/*.png` | 原型 52 张（13 页 × 4 视口） |
+| `impl/*.png` | 实现 52 张（同上） |
+| `manifest-prototype.json` | 原型侧逐张元数据：URL/实际路径/视口/字节/SHA256/时间/注入数据集信息 |
+| `manifest-impl.json` | 实现侧逐张元数据：同上 + `hasToken`/`action`/`actionMeta`（弹层尺寸与打开状态） |
+| `seed-manifest.json` | 数据集映射（原型 id → 实现 id）、余额回填值、字段差异清单、分类兜底记录 |
+| `SHA256SUMS.txt` | 上述全部文件校验和（107 行） |

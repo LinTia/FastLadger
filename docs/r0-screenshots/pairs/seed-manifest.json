@@ -1,0 +1,202 @@
+{
+  "generatedAt": "2026-11-05T02:03:51.761Z",
+  "dataset": {
+    "path": "tools/r0/prototype-dataset.json",
+    "bundleSha256": "e39521701732155ebde6bd9f0d95002facb87a11d1ca477f5961e4c7683965ef",
+    "counts": {
+      "accounts": 5,
+      "categories": 37,
+      "transactions": 22,
+      "investments": 0,
+      "budgets": 5,
+      "family": 2,
+      "profile": 6
+    }
+  },
+  "bookId": 1,
+  "bookName": "R0 同数据账本",
+  "defaultsRemoved": {
+    "accounts": 3,
+    "categories": 30
+  },
+  "accountMap": {
+    "cmb_savings": 4,
+    "cash": 5,
+    "wechat": 6,
+    "alipay": 7,
+    "cmb_credit": 8
+  },
+  "categoryMap": {
+    "cat_food": 31,
+    "cat_transport": 32,
+    "cat_shopping": 33,
+    "cat_travel": 34,
+    "cat_entertainment": 35,
+    "cat_home": 36,
+    "cat_other_expense": 37,
+    "cat_income_salary": 38,
+    "cat_income_bonus": 39,
+    "cat_income_invest": 40,
+    "cat_income_other": 41,
+    "transfer": 42,
+    "meal": 43,
+    "takeout": 44,
+    "dinner": 45,
+    "snack": 46,
+    "taxi": 47,
+    "bus": 48,
+    "gas": 49,
+    "train": 50,
+    "shopping_clothes": 51,
+    "grocery": 52,
+    "shopping_digital": 53,
+    "shopping_beauty": 54,
+    "travel_hotel": 55,
+    "travel_ticket": 56,
+    "travel_food": 57,
+    "movie": 58,
+    "game": 59,
+    "ktv": 60,
+    "rent": 61,
+    "utility": 62,
+    "home_decor": 63,
+    "salary": 64,
+    "bonus": 65,
+    "invest_income": 66,
+    "other_income": 67
+  },
+  "budgetMap": {
+    "total": 1,
+    "b_food": 2,
+    "b_transport": 3,
+    "b_travel": 4,
+    "b_shopping": 5
+  },
+  "firstTxId": 1,
+  "txMap": {
+    "t001": 1,
+    "t002": 2,
+    "t003": 3,
+    "t004": 4,
+    "t005": 5,
+    "t006": 6,
+    "t007": 7,
+    "t008": 8,
+    "t009": 9,
+    "t010": 10,
+    "t011": 11,
+    "t012": 12,
+    "t013": 13,
+    "t014": 14,
+    "t015": 15,
+    "t016": 16,
+    "t017": 17,
+    "t018": 18,
+    "t019": 19,
+    "t020": 20,
+    "t021": 21,
+    "t022": 22
+  },
+  "categoryFallbacks": [
+    {
+      "txId": "t007",
+      "protoCategoryId": "shopping",
+      "used": "cat_shopping",
+      "reason": "补 cat_ 前缀"
+    },
+    {
+      "txId": "t009",
+      "protoCategoryId": "travel",
+      "used": "cat_travel",
+      "reason": "补 cat_ 前缀"
+    },
+    {
+      "txId": "t010",
+      "protoCategoryId": "travel",
+      "used": "cat_travel",
+      "reason": "补 cat_ 前缀"
+    },
+    {
+      "txId": "t017",
+      "protoCategoryId": "shopping",
+      "used": "cat_shopping",
+      "reason": "补 cat_ 前缀"
+    }
+  ],
+  "balances": {
+    "unit": "分",
+    "byImplAccountId": {
+      "4": 2810000,
+      "5": 0,
+      "6": -71630,
+      "7": -112500,
+      "8": 386800
+    },
+    "protoAccountsAfterAlignment": [
+      {
+        "id": "cmb_savings",
+        "name": "招商银行储蓄卡",
+        "balance": 28100
+      },
+      {
+        "id": "cash",
+        "name": "现金",
+        "balance": 0
+      },
+      {
+        "id": "wechat",
+        "name": "微信零钱",
+        "balance": -716.3
+      },
+      {
+        "id": "alipay",
+        "name": "支付宝余额",
+        "balance": -1125
+      },
+      {
+        "id": "cmb_credit",
+        "name": "招行信用卡",
+        "balance": 3868
+      }
+    ]
+  },
+  "protoInjectionPath": "proto-injection.json（运行时临时文件，未入库）",
+  "fieldDiffs": [
+    {
+      "field": "merchant（商户）",
+      "proto": "交易有独立商户字段并展示",
+      "impl": "无该字段，交易仅 comment（备注）",
+      "handling": "不伪造；备注写原型 note，商户标签在对照时不计入"
+    },
+    {
+      "field": "account.balance（账户余额）",
+      "proto": "静态演示值 100000/5000/1200/800/-3200",
+      "impl": "由交易派生，创建时恒为 0（期初余额 D-4 未实现）",
+      "handling": "截图前把实现侧派生余额回填进原型注入包，使两侧显示同一组数字"
+    },
+    {
+      "field": "category.displayName",
+      "proto": "交易自带类目展示名（如「餐饮-早餐」）",
+      "impl": "由分类树「父-子」拼装（如「餐饮-三餐」）",
+      "handling": "分类 ID 一一映射；展示文案差异如实保留"
+    },
+    {
+      "field": "book（账本）",
+      "proto": "无账本概念，单库直接展示",
+      "impl": "必须有账本，名称固定为「R0 同数据账本」",
+      "handling": "记录在案"
+    },
+    {
+      "field": "family（成员）",
+      "proto": "2 名成员（我/配偶）",
+      "impl": "仅 1 名实例用户，多成员需邀请流程",
+      "handling": "本轮不伪造成员，成员页标注数据未对齐"
+    },
+    {
+      "field": "investments（投资）",
+      "proto": "券商账户/持仓/实物资产/负债",
+      "impl": "持仓需 instrument 前置且无公开创建 API",
+      "handling": "本轮不种子化，投资页仅作空态对照"
+    }
+  ]
+}

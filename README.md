@@ -44,7 +44,7 @@
 | [`docs/FastLedger-R0-基准冻结与差异盘点.md`](docs/FastLedger-R0-基准冻结与差异盘点.md) | **R0 基准冻结与差异盘点（第三次整改后）** | 13 页/逐控件交互矩阵（228 条）、两版原型差异、当前实现与后端 API 权限/DTO/错误码/测试映射、差异根因、截图基线执行结果与阻塞清单、Owner 裁决清单；**R0 未通过 / 阻塞** |
 | [`docs/FastLedger-R0-收尾执行清单.md`](docs/FastLedger-R0-收尾执行清单.md) | **R0 收尾执行清单（2026-11-05）** | 统一区分 R0 审计门槛与后续业务实现；汇总 RV 状态、D-4/D-8 待补、Owner 决策、截图/运行时/API 测试缺口与最终放行条件 |
 | [`docs/FastLedger-R0-第四次证据补齐任务单.md`](docs/FastLedger-R0-第四次证据补齐任务单.md) | **R0 第四次证据补齐任务单（WorkBuddy）** | R0-E-35 独立复验、13 页同视口对照、228 条控件运行时验收、API/race 测试证据；不授权业务代码修改或启动 R1–R7 |
-| [`docs/FastLedger-R0-第四次证据补齐-执行回执.md`](docs/FastLedger-R0-第四次证据补齐-执行回执.md) | **R0 第四次证据补齐 · 执行回执（2026-11-05）** | A/B/C 为 BLOCKED、D 为 PARTIAL；WorkBuddy 自测 9 包跨轮次曾 `ok`、无断言 FAIL，但受 Application Control 拦截无一次全量 0 FAIL；未伪造截图/228 行；R0 仍 BLOCK |
+| [`docs/FastLedger-R0-第四次证据补齐-执行回执.md`](docs/FastLedger-R0-第四次证据补齐-执行回执.md) | **R0 第四次证据补齐 · 执行回执（更新版 2）** | 包 B **PASS（同数据主集，104 张）**、包 D **PASS（正式 CI run `41951501832` + 全仓 race）**、A/C 仍 BLOCKED；含采集中发现的 5 条实现侧问题与未覆盖项；R0 仍 BLOCK |
 | [`docs/FastLedger-R0-独立补漏与复核记录.md`](docs/FastLedger-R0-独立补漏与复核记录.md) | **R0 独立补漏与复核记录** | 修正误判、补充 R0-E-20~39、复核 R0 退出条件与 D-1~D-8；静态复核 + 二次整改复核，R0 尚未通过 |
 | [`docs/FastLedger-R0-第三次最小整改任务单-RV-02-RV-05-RV-06.md`](docs/FastLedger-R0-第三次最小整改任务单-RV-02-RV-05-RV-06.md) | **R0 第三次最小整改任务单** | 第三方审阅任务单；[1.68] 已按此执行并推送，待第三方独立复核；Git 历史重写仍须 Owner 授权 |
 | [`docs/FastLedger-R0-独立复核补充-RV-05至06.md`](docs/FastLedger-R0-独立复核补充-RV-05至06.md) | **独立复核补充 RV-05~06** | 按多 AI 对齐规范 13 字段登记凭证安全事件与独立复现问题；状态拆分、证据与 Owner 待决策项 |
@@ -54,8 +54,8 @@
 | [`docs/r0-screenshots/security-scan.md`](docs/r0-screenshots/security-scan.md) | **凭证安全扫描报告（脱敏）** | `--strict` 真实凭证候选 0；只含路径 / 类型 / 数量 / 脱敏上下文，无敏感值 |
 | [`docs/FastLedger-R0-独立复核补充-RV-01至04.md`](docs/FastLedger-R0-独立复核补充-RV-01至04.md) | **R0 二次整改后的独立复核补充** | R0-RV-01~04：骨架屏失败态证据、SHA 基准、逐控件字段语义、首页月份切换需求依据；R0 仍阻塞 |
 | [`docs/r0-screenshots/`](docs/r0-screenshots/) | **R0 真实截图基线（43 张 PNG）+ 索引 / 阻塞清单** | Edge headless 采集的 normal / empty / error 首屏；见目录内 `README.md`。**截图基线未完成，R0 未通过** |
-| [`docs/r0-screenshots/pairs/`](docs/r0-screenshots/pairs/) | **R0 包 B 成对截图（96 张）** | 原型 52 + 实现 44，4 视口；同视口默认态、**非同数据同状态**；含 manifest / SHA256SUMS / README |
-| [`docs/r0-evidence-4th/`](docs/r0-evidence-4th/) | **R0 包 D 服务器测试证据** | 服务器 Linux `go test ./...` 与 `go test -race` 原始日志、退出码、环境与 SHA256 |
+| [`docs/r0-screenshots/pairs/`](docs/r0-screenshots/pairs/) | **R0 包 B 同数据集成对截图（104 张）** | 原型 52 + 实现 52，13 页 × 4 视口；**同一数据集**（5 账户 / 37 分类 / 22 交易 / 5 预算，余额两侧一致）；含未登录态与记一笔弹层动作级；`manifest` / `seed-manifest.json` / `SHA256SUMS.txt`（108 行）/ README |
+| [`docs/r0-evidence-4th/`](docs/r0-evidence-4th/) | **R0 包 D 测试证据（正式 CI + 服务器）** | `ci-run/`：Actions run `41951501832` 元数据、原始 job 日志与证明行摘录；根目录：服务器 Linux 全仓 `go test ./...` 与 `-race` 日志、退出码、环境与 SHA256 |
 | [`docs/r0-screenshots/runtime/`](docs/r0-screenshots/runtime/) | **R0-RV-01 隔离运行时复验证据（5 PNG + 3 JSON）** | 仅拦截交易列表请求后的 pending / rejected / 恢复态截图与真实 CDP Network/Console 日志；见目录内 `README.md`。**本机隔离运行时复验已完成；失败态观察到骨架屏未清理（`.skel`=4、`aria-busy=true`）；待 Owner/CI 独立复跑及慢速网络、有数据态、多角色等场景验证；缺陷尚未关闭，R0 未通过** |
 | [`docs/FastLedger-新手开发完整指南.md`](docs/FastLedger-新手开发完整指南.md) | 新手开发完整指南（含可照敲代码骨架） | 应届生照着做即可开发 |
 | [`docs/FastLedger-枚举字典.md`](docs/FastLedger-枚举字典.md) | 统一枚举字典（唯一权威来源） | 各端枚举值对齐 |

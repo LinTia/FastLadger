@@ -1,0 +1,880 @@
+{
+  "$comment": "由 tools/r0/extract-prototype-dataset.js 从原型 bundle 提取，勿手改；余额单位为元。",
+  "source": {
+    "bundle": "prototype/assets/index-DNvhksAn.js",
+    "bundleSha256": "e39521701732155ebde6bd9f0d95002facb87a11d1ca477f5961e4c7683965ef",
+    "extractedAt": "2026-11-05T02:01:04.831Z",
+    "extractor": "tools/r0/extract-prototype-dataset.js"
+  },
+  "counts": {
+    "accounts": 5,
+    "categories": 37,
+    "transactions": 22,
+    "investments": 0,
+    "budgets": 5,
+    "family": 2,
+    "profile": 6
+  },
+  "data": {
+    "accounts": [
+      {
+        "id": "cmb_savings",
+        "name": "招商银行储蓄卡",
+        "category": "savings",
+        "balance": 100000,
+        "currency": "CNY",
+        "icon": "🏦",
+        "color": "#E60012",
+        "source": "mock"
+      },
+      {
+        "id": "cash",
+        "name": "现金",
+        "category": "cash",
+        "balance": 5000,
+        "currency": "CNY",
+        "icon": "💵",
+        "color": "#22c55e",
+        "source": "mock"
+      },
+      {
+        "id": "wechat",
+        "name": "微信零钱",
+        "category": "ewallet",
+        "balance": 1200,
+        "currency": "CNY",
+        "icon": "💬",
+        "color": "#07C160",
+        "source": "mock"
+      },
+      {
+        "id": "alipay",
+        "name": "支付宝余额",
+        "category": "ewallet",
+        "balance": 800,
+        "currency": "CNY",
+        "icon": "🔵",
+        "color": "#1677FF",
+        "source": "mock"
+      },
+      {
+        "id": "cmb_credit",
+        "name": "招行信用卡",
+        "category": "credit",
+        "balance": -3200,
+        "currency": "CNY",
+        "icon": "💎",
+        "color": "#E60012",
+        "source": "mock"
+      }
+    ],
+    "categories": [
+      {
+        "id": "cat_food",
+        "name": "餐饮",
+        "type": "expense",
+        "parentId": null,
+        "icon": "🍜",
+        "color": "#f97316",
+        "source": "mock"
+      },
+      {
+        "id": "cat_transport",
+        "name": "交通",
+        "type": "expense",
+        "parentId": null,
+        "icon": "🚗",
+        "color": "#3b82f6",
+        "source": "mock"
+      },
+      {
+        "id": "cat_shopping",
+        "name": "购物",
+        "type": "expense",
+        "parentId": null,
+        "icon": "🛍️",
+        "color": "#ec4899",
+        "source": "mock"
+      },
+      {
+        "id": "cat_travel",
+        "name": "旅游",
+        "type": "expense",
+        "parentId": null,
+        "icon": "✈️",
+        "color": "#8b5cf6",
+        "source": "mock"
+      },
+      {
+        "id": "cat_entertainment",
+        "name": "娱乐",
+        "type": "expense",
+        "parentId": null,
+        "icon": "🎬",
+        "color": "#f59e0b",
+        "source": "mock"
+      },
+      {
+        "id": "cat_home",
+        "name": "居家",
+        "type": "expense",
+        "parentId": null,
+        "icon": "🏠",
+        "color": "#10b981",
+        "source": "mock"
+      },
+      {
+        "id": "cat_other_expense",
+        "name": "其他",
+        "type": "expense",
+        "parentId": null,
+        "icon": "📦",
+        "color": "#6b7280",
+        "source": "mock"
+      },
+      {
+        "id": "meal",
+        "name": "三餐",
+        "type": "expense",
+        "parentId": "cat_food",
+        "icon": "🍱",
+        "color": "#f97316",
+        "source": "mock"
+      },
+      {
+        "id": "takeout",
+        "name": "外卖",
+        "type": "expense",
+        "parentId": "cat_food",
+        "icon": "🥡",
+        "color": "#f97316",
+        "source": "mock"
+      },
+      {
+        "id": "dinner",
+        "name": "聚餐",
+        "type": "expense",
+        "parentId": "cat_food",
+        "icon": "🍻",
+        "color": "#f97316",
+        "source": "mock"
+      },
+      {
+        "id": "snack",
+        "name": "零食饮料",
+        "type": "expense",
+        "parentId": "cat_food",
+        "icon": "🍰",
+        "color": "#f97316",
+        "source": "mock"
+      },
+      {
+        "id": "taxi",
+        "name": "打车",
+        "type": "expense",
+        "parentId": "cat_transport",
+        "icon": "🚕",
+        "color": "#3b82f6",
+        "source": "mock"
+      },
+      {
+        "id": "bus",
+        "name": "公交地铁",
+        "type": "expense",
+        "parentId": "cat_transport",
+        "icon": "🚇",
+        "color": "#3b82f6",
+        "source": "mock"
+      },
+      {
+        "id": "gas",
+        "name": "加油停车",
+        "type": "expense",
+        "parentId": "cat_transport",
+        "icon": "⛽",
+        "color": "#3b82f6",
+        "source": "mock"
+      },
+      {
+        "id": "train",
+        "name": "火车高铁",
+        "type": "expense",
+        "parentId": "cat_transport",
+        "icon": "🚄",
+        "color": "#3b82f6",
+        "source": "mock"
+      },
+      {
+        "id": "shopping_clothes",
+        "name": "服饰",
+        "type": "expense",
+        "parentId": "cat_shopping",
+        "icon": "👕",
+        "color": "#ec4899",
+        "source": "mock"
+      },
+      {
+        "id": "grocery",
+        "name": "超市日用",
+        "type": "expense",
+        "parentId": "cat_shopping",
+        "icon": "🛒",
+        "color": "#ec4899",
+        "source": "mock"
+      },
+      {
+        "id": "shopping_digital",
+        "name": "数码家电",
+        "type": "expense",
+        "parentId": "cat_shopping",
+        "icon": "📱",
+        "color": "#ec4899",
+        "source": "mock"
+      },
+      {
+        "id": "shopping_beauty",
+        "name": "美妆护肤",
+        "type": "expense",
+        "parentId": "cat_shopping",
+        "icon": "💄",
+        "color": "#ec4899",
+        "source": "mock"
+      },
+      {
+        "id": "travel_hotel",
+        "name": "住宿",
+        "type": "expense",
+        "parentId": "cat_travel",
+        "icon": "🏨",
+        "color": "#8b5cf6",
+        "source": "mock"
+      },
+      {
+        "id": "travel_ticket",
+        "name": "门票",
+        "type": "expense",
+        "parentId": "cat_travel",
+        "icon": "🎫",
+        "color": "#8b5cf6",
+        "source": "mock"
+      },
+      {
+        "id": "travel_food",
+        "name": "旅途餐饮",
+        "type": "expense",
+        "parentId": "cat_travel",
+        "icon": "🍽️",
+        "color": "#8b5cf6",
+        "source": "mock"
+      },
+      {
+        "id": "movie",
+        "name": "电影演出",
+        "type": "expense",
+        "parentId": "cat_entertainment",
+        "icon": "🎬",
+        "color": "#f59e0b",
+        "source": "mock"
+      },
+      {
+        "id": "game",
+        "name": "游戏",
+        "type": "expense",
+        "parentId": "cat_entertainment",
+        "icon": "🎮",
+        "color": "#f59e0b",
+        "source": "mock"
+      },
+      {
+        "id": "ktv",
+        "name": "KTV酒吧",
+        "type": "expense",
+        "parentId": "cat_entertainment",
+        "icon": "🎤",
+        "color": "#f59e0b",
+        "source": "mock"
+      },
+      {
+        "id": "rent",
+        "name": "房租",
+        "type": "expense",
+        "parentId": "cat_home",
+        "icon": "🏠",
+        "color": "#10b981",
+        "source": "mock"
+      },
+      {
+        "id": "utility",
+        "name": "水电燃气",
+        "type": "expense",
+        "parentId": "cat_home",
+        "icon": "💡",
+        "color": "#10b981",
+        "source": "mock"
+      },
+      {
+        "id": "home_decor",
+        "name": "家居装饰",
+        "type": "expense",
+        "parentId": "cat_home",
+        "icon": "🪴",
+        "color": "#10b981",
+        "source": "mock"
+      },
+      {
+        "id": "cat_income_salary",
+        "name": "工资",
+        "type": "income",
+        "parentId": null,
+        "icon": "💰",
+        "color": "#22c55e",
+        "source": "mock"
+      },
+      {
+        "id": "cat_income_bonus",
+        "name": "奖金",
+        "type": "income",
+        "parentId": null,
+        "icon": "🏆",
+        "color": "#22c55e",
+        "source": "mock"
+      },
+      {
+        "id": "cat_income_invest",
+        "name": "理财",
+        "type": "income",
+        "parentId": null,
+        "icon": "📈",
+        "color": "#22c55e",
+        "source": "mock"
+      },
+      {
+        "id": "cat_income_other",
+        "name": "其他收入",
+        "type": "income",
+        "parentId": null,
+        "icon": "🎁",
+        "color": "#6b7280",
+        "source": "mock"
+      },
+      {
+        "id": "salary",
+        "name": "工资",
+        "type": "income",
+        "parentId": "cat_income_salary",
+        "icon": "💼",
+        "color": "#22c55e",
+        "source": "mock"
+      },
+      {
+        "id": "bonus",
+        "name": "奖金",
+        "type": "income",
+        "parentId": "cat_income_bonus",
+        "icon": "🏆",
+        "color": "#22c55e",
+        "source": "mock"
+      },
+      {
+        "id": "invest_income",
+        "name": "投资收益",
+        "type": "income",
+        "parentId": "cat_income_invest",
+        "icon": "📈",
+        "color": "#22c55e",
+        "source": "mock"
+      },
+      {
+        "id": "other_income",
+        "name": "其他",
+        "type": "income",
+        "parentId": "cat_income_other",
+        "icon": "🎁",
+        "color": "#6b7280",
+        "source": "mock"
+      },
+      {
+        "id": "transfer",
+        "name": "转账",
+        "type": "expense",
+        "parentId": null,
+        "icon": "🔄",
+        "color": "#6b7280",
+        "source": "mock"
+      }
+    ],
+    "transactions": [
+      {
+        "id": "t001",
+        "type": "expense",
+        "amount": 38.5,
+        "categoryId": "meal",
+        "categoryName": "餐饮-早餐",
+        "merchant": "瑞幸咖啡",
+        "accountId": "wechat",
+        "accountName": "微信零钱",
+        "channel": "wechat",
+        "time": "2026-11-05T00:30:00.000Z",
+        "note": "生椰拿铁",
+        "source": "mock"
+      },
+      {
+        "id": "t002",
+        "type": "expense",
+        "amount": 45,
+        "categoryId": "taxi",
+        "categoryName": "交通-打车",
+        "merchant": "滴滴出行",
+        "accountId": "wechat",
+        "accountName": "微信零钱",
+        "channel": "wechat",
+        "time": "2026-11-05T01:15:00.000Z",
+        "note": "上班打车",
+        "source": "mock"
+      },
+      {
+        "id": "t003",
+        "type": "expense",
+        "amount": 35,
+        "categoryId": "meal",
+        "categoryName": "餐饮-午餐",
+        "merchant": "公司食堂",
+        "accountId": "alipay",
+        "accountName": "支付宝余额",
+        "channel": "alipay",
+        "time": "2026-11-05T04:30:00.000Z",
+        "source": "mock"
+      },
+      {
+        "id": "t004",
+        "type": "expense",
+        "amount": 128,
+        "categoryId": "takeout",
+        "categoryName": "餐饮-外卖",
+        "merchant": "美团外卖",
+        "accountId": "alipay",
+        "accountName": "支付宝余额",
+        "channel": "alipay",
+        "time": "2026-11-04T11:00:00.000Z",
+        "note": "晚餐外卖",
+        "source": "mock"
+      },
+      {
+        "id": "t005",
+        "type": "expense",
+        "amount": 6,
+        "categoryId": "bus",
+        "categoryName": "交通-公交",
+        "merchant": "深圳地铁",
+        "accountId": "wechat",
+        "accountName": "微信零钱",
+        "channel": "wechat",
+        "time": "2026-11-04T00:45:00.000Z",
+        "source": "mock"
+      },
+      {
+        "id": "t006",
+        "type": "income",
+        "amount": 28000,
+        "categoryId": "salary",
+        "categoryName": "收入-工资",
+        "merchant": "公司发薪",
+        "accountId": "cmb_savings",
+        "accountName": "招商银行储蓄卡",
+        "channel": "direct",
+        "time": "2026-11-03T02:00:00.000Z",
+        "note": "10月工资",
+        "source": "mock"
+      },
+      {
+        "id": "t007",
+        "type": "expense",
+        "amount": 580,
+        "categoryId": "shopping",
+        "categoryName": "购物-服饰",
+        "merchant": "优衣库",
+        "accountId": "cmb_credit",
+        "accountName": "招行信用卡",
+        "channel": "card",
+        "time": "2026-11-02T07:30:00.000Z",
+        "note": "秋装外套",
+        "source": "mock"
+      },
+      {
+        "id": "t008",
+        "type": "expense",
+        "amount": 256.8,
+        "categoryId": "grocery",
+        "categoryName": "购物-超市",
+        "merchant": "华润万家",
+        "accountId": "wechat",
+        "accountName": "微信零钱",
+        "channel": "wechat",
+        "time": "2026-11-02T12:00:00.000Z",
+        "note": "周末采购",
+        "source": "mock"
+      },
+      {
+        "id": "t009",
+        "type": "expense",
+        "amount": 2480,
+        "categoryId": "travel",
+        "categoryName": "旅游-住宿",
+        "merchant": "希尔顿酒店",
+        "accountId": "cmb_credit",
+        "accountName": "招行信用卡",
+        "channel": "card",
+        "time": "2026-10-31T06:00:00.000Z",
+        "note": "珠海周末游",
+        "source": "mock"
+      },
+      {
+        "id": "t010",
+        "type": "expense",
+        "amount": 680,
+        "categoryId": "travel",
+        "categoryName": "旅游-门票",
+        "merchant": "长隆海洋王国",
+        "accountId": "alipay",
+        "accountName": "支付宝余额",
+        "channel": "alipay",
+        "time": "2026-10-31T01:30:00.000Z",
+        "source": "mock"
+      },
+      {
+        "id": "t011",
+        "type": "expense",
+        "amount": 89,
+        "categoryId": "movie",
+        "categoryName": "娱乐-电影",
+        "merchant": "万达影城",
+        "accountId": "wechat",
+        "accountName": "微信零钱",
+        "channel": "wechat",
+        "time": "2026-10-29T12:30:00.000Z",
+        "note": "2张票",
+        "source": "mock"
+      },
+      {
+        "id": "t012",
+        "type": "expense",
+        "amount": 128,
+        "categoryId": "meal",
+        "categoryName": "餐饮-晚餐",
+        "merchant": "海底捞",
+        "accountId": "cmb_credit",
+        "accountName": "招行信用卡",
+        "channel": "card",
+        "time": "2026-10-29T11:00:00.000Z",
+        "source": "mock"
+      },
+      {
+        "id": "t013",
+        "type": "income",
+        "amount": 3500,
+        "categoryId": "bonus",
+        "categoryName": "收入-奖金",
+        "merchant": "季度奖金",
+        "accountId": "cmb_savings",
+        "accountName": "招商银行储蓄卡",
+        "channel": "direct",
+        "time": "2026-10-26T02:00:00.000Z",
+        "note": "Q3季度奖",
+        "source": "mock"
+      },
+      {
+        "id": "t014",
+        "type": "expense",
+        "amount": 2000,
+        "categoryId": "transfer",
+        "categoryName": "转账-还款",
+        "merchant": "信用卡还款",
+        "accountId": "cmb_savings",
+        "accountName": "招商银行储蓄卡",
+        "channel": "direct",
+        "time": "2026-10-26T06:00:00.000Z",
+        "note": "招行信用卡还款",
+        "toAccountId": "cmb_credit",
+        "toAccountName": "招行信用卡",
+        "source": "mock"
+      },
+      {
+        "id": "t015",
+        "type": "expense",
+        "amount": 156,
+        "categoryId": "grocery",
+        "categoryName": "购物-超市",
+        "merchant": "山姆会员店",
+        "accountId": "wechat",
+        "accountName": "微信零钱",
+        "channel": "wechat",
+        "time": "2026-10-24T08:00:00.000Z",
+        "source": "mock"
+      },
+      {
+        "id": "t016",
+        "type": "expense",
+        "amount": 32,
+        "categoryId": "meal",
+        "categoryName": "餐饮-午餐",
+        "merchant": "麦当劳",
+        "accountId": "alipay",
+        "accountName": "支付宝余额",
+        "channel": "alipay",
+        "time": "2026-10-24T04:15:00.000Z",
+        "source": "mock"
+      },
+      {
+        "id": "t017",
+        "type": "expense",
+        "amount": 680,
+        "categoryId": "shopping",
+        "categoryName": "购物-数码",
+        "merchant": "京东商城",
+        "accountId": "cmb_credit",
+        "accountName": "招行信用卡",
+        "channel": "card",
+        "time": "2026-10-21T03:00:00.000Z",
+        "note": "蓝牙耳机",
+        "source": "mock"
+      },
+      {
+        "id": "t018",
+        "type": "expense",
+        "amount": 50,
+        "categoryId": "taxi",
+        "categoryName": "交通-打车",
+        "merchant": "高德打车",
+        "accountId": "alipay",
+        "accountName": "支付宝余额",
+        "channel": "alipay",
+        "time": "2026-10-21T13:30:00.000Z",
+        "source": "mock"
+      },
+      {
+        "id": "t019",
+        "type": "expense",
+        "amount": 2200,
+        "categoryId": "rent",
+        "categoryName": "居家-房租",
+        "merchant": "房东转账",
+        "accountId": "cmb_savings",
+        "accountName": "招商银行储蓄卡",
+        "channel": "direct",
+        "time": "2026-10-18T01:00:00.000Z",
+        "note": "10月房租",
+        "source": "mock"
+      },
+      {
+        "id": "t020",
+        "type": "expense",
+        "amount": 200,
+        "categoryId": "utility",
+        "categoryName": "居家-水电燃气",
+        "merchant": "南方电网",
+        "accountId": "alipay",
+        "accountName": "支付宝余额",
+        "channel": "alipay",
+        "time": "2026-10-18T02:30:00.000Z",
+        "note": "9月电费",
+        "source": "mock"
+      },
+      {
+        "id": "t021",
+        "type": "expense",
+        "amount": 125,
+        "categoryId": "meal",
+        "categoryName": "餐饮-聚餐",
+        "merchant": "西贝莜面村",
+        "accountId": "wechat",
+        "accountName": "微信零钱",
+        "channel": "wechat",
+        "time": "2026-10-16T11:00:00.000Z",
+        "note": "朋友聚餐AA",
+        "source": "mock"
+      },
+      {
+        "id": "t022",
+        "type": "income",
+        "amount": 800,
+        "categoryId": "other_income",
+        "categoryName": "收入-其他",
+        "merchant": "理财收益",
+        "accountId": "cmb_savings",
+        "accountName": "招商银行储蓄卡",
+        "channel": "direct",
+        "time": "2026-10-16T07:00:00.000Z",
+        "note": "货币基金赎回",
+        "source": "mock"
+      }
+    ],
+    "investments": {
+      "brokerAccounts": [
+        {
+          "id": "broker_huatai",
+          "name": "华泰证券",
+          "cash": 5000,
+          "market": "CN",
+          "holdings": [
+            {
+              "id": "h_maotai",
+              "symbol": "600519",
+              "name": "贵州茅台",
+              "type": "stock",
+              "quantity": 100,
+              "costPrice": 1680,
+              "currentPrice": 1720,
+              "currency": "CNY"
+            },
+            {
+              "id": "h_hs300",
+              "symbol": "510300",
+              "name": "沪深300ETF",
+              "type": "fund",
+              "quantity": 2000,
+              "costPrice": 3.8,
+              "currentPrice": 4.05,
+              "currency": "CNY"
+            }
+          ]
+        },
+        {
+          "id": "broker_futu",
+          "name": "富途港股",
+          "cash": 0,
+          "market": "HK",
+          "holdings": [
+            {
+              "id": "h_tencent",
+              "symbol": "0700.HK",
+              "name": "腾讯控股",
+              "type": "stock",
+              "quantity": 100,
+              "costPrice": 320,
+              "currentPrice": 380,
+              "currency": "HKD"
+            }
+          ]
+        },
+        {
+          "id": "broker_otc",
+          "name": "场外基金",
+          "cash": 0,
+          "market": "OTC",
+          "holdings": [
+            {
+              "id": "h_yifangda",
+              "symbol": "005827",
+              "name": "易方达蓝筹",
+              "type": "fund",
+              "quantity": 5000,
+              "costPrice": 2,
+              "currentPrice": 1.85,
+              "currency": "CNY"
+            }
+          ]
+        }
+      ],
+      "physicalAssets": [
+        {
+          "id": "phy_house",
+          "name": "深圳房产",
+          "type": "real_estate",
+          "value": 5000000,
+          "note": "自住，南山区"
+        },
+        {
+          "id": "phy_car",
+          "name": "家用汽车",
+          "type": "car",
+          "value": 150000,
+          "note": "特斯拉 Model 3"
+        },
+        {
+          "id": "phy_gold",
+          "name": "黄金 50g",
+          "type": "gold",
+          "value": 25000,
+          "note": "实物金条，50克"
+        }
+      ],
+      "liabilities": [
+        {
+          "id": "li_mortgage",
+          "name": "房贷",
+          "type": "mortgage",
+          "remaining": 2000000
+        },
+        {
+          "id": "li_car_loan",
+          "name": "车贷",
+          "type": "car_loan",
+          "remaining": 50000
+        }
+      ]
+    },
+    "budgets": [
+      {
+        "id": "total",
+        "categoryId": "total",
+        "categoryName": "总预算",
+        "amount": 8000,
+        "period": "monthly"
+      },
+      {
+        "id": "b_food",
+        "categoryId": "cat_food",
+        "categoryName": "餐饮",
+        "amount": 3000,
+        "period": "monthly"
+      },
+      {
+        "id": "b_transport",
+        "categoryId": "cat_transport",
+        "categoryName": "交通",
+        "amount": 800,
+        "period": "monthly"
+      },
+      {
+        "id": "b_travel",
+        "categoryId": "cat_travel",
+        "categoryName": "旅游",
+        "amount": 2000,
+        "period": "monthly"
+      },
+      {
+        "id": "b_shopping",
+        "categoryId": "cat_shopping",
+        "categoryName": "购物",
+        "amount": 1500,
+        "period": "monthly"
+      }
+    ],
+    "family": [
+      {
+        "id": "u_me",
+        "name": "我",
+        "avatar": "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop&crop=face",
+        "role": "owner",
+        "visibility": true,
+        "source": "mock"
+      },
+      {
+        "id": "u_spouse",
+        "name": "配偶",
+        "avatar": "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=100&h=100&fit=crop&crop=face",
+        "role": "member",
+        "visibility": true,
+        "source": "mock"
+      }
+    ],
+    "profile": {
+      "username": "me",
+      "displayName": "我",
+      "email": "me@fastledger.app",
+      "apiToken": "fl_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxx_abcd",
+      "serverUrl": "https://api.fastledger.app",
+      "version": "v0.2.1"
+    }
+  }
+}
