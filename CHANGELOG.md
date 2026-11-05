@@ -1306,3 +1306,13 @@ run #16（`644ddab`）起连续 4 次失败。**守卫本身是对的，漏登�
 ### 新增
 - 首版 PRD（评审稿）、8 环节落地方案、新手开发完整指南、ezbookkeeping 代码导读。
 - 完整可交互原型（13 个核心页面）。
+## [1.81] - 2026-11-05
+
+### R0 第七次测试质量纠偏任务单（A05 断言、C PASS 证据、清单漂移、t021 Owner 裁决）
+
+- 新增 [第七次测试质量纠偏任务单](docs/FastLedger-R0-第七次测试质量纠偏任务单.md)：独立复核发现 A05 仅按耗时判 PASS、C 至少 15 条硬编码 PASS 缺少独立断言/证据引用、CI 未强制校验 controls 清单与主报告 SHA 一致。
+- t021 的 `meal → dinner` override 当前由 WorkBuddy 自行署名，尚无 Owner 决策依据；要求先列明两种方案影响，不得代替 Owner 裁决。
+- 第六次发现的交易总表空白、记一笔分类未按类型过滤、member 邀请按钮未隐藏、新增账户列表疑似未刷新，先形成修复提案与回归测试，不授权改业务代码。
+- 独立 CI run `41990345757` 确认 A/C 流程真实执行，但 C 的 `continue-on-error` 意味着 job success 不等于 C 通过；A05 测试断言有效性仍需修正。
+- 状态口径：A 暂定 PARTIAL（A05 断言不足）；B PARTIAL；C PARTIAL（144/6/77/1）；D PARTIAL；RV-05 Owner ACTION REQUIRED；R0 仍 BLOCK，不授权 R1–R7。
+
