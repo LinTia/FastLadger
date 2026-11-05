@@ -1,0 +1,159 @@
+[prepare] 源目录：artifacts/r0-e2e
+[prepare] 目标目录：artifacts/r0-e2e-upload（运行前已清空）
+[prepare] 白名单：.png .md .json .log .txt
+[prepare] 排除清单（共 36，仅文件名与原因，不含内容）：
+  - 2026-11-05_07-25-54-ebab48d-a/A01/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-25-54-ebab48d-a/A02/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-25-54-ebab48d-a/A03/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-25-54-ebab48d-a/A04/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-25-54-ebab48d-a/A05/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-25-54-ebab48d-a/A06/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-25-54-ebab48d-a/A07/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-25-54-ebab48d-a/A08/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-25-54-ebab48d-a/A09/admin-trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-25-54-ebab48d-a/A09/member-trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-25-54-ebab48d-a/A09/owner-trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-25-54-ebab48d-a/A10/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-28-01-ebab48d-a/A01/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-28-01-ebab48d-a/A02/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-28-01-ebab48d-a/A03/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-28-01-ebab48d-a/A04/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-28-01-ebab48d-a/A05/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-28-01-ebab48d-a/A06/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-28-01-ebab48d-a/A07/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-28-01-ebab48d-a/A08/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-28-01-ebab48d-a/A09/admin-trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-28-01-ebab48d-a/A09/member-trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-28-01-ebab48d-a/A09/owner-trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-28-01-ebab48d-a/A10/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-48-36-ebab48d-all/A01/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-48-36-ebab48d-all/A02/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-48-36-ebab48d-all/A03/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-48-36-ebab48d-all/A04/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-48-36-ebab48d-all/A05/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-48-36-ebab48d-all/A06/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-48-36-ebab48d-all/A07/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-48-36-ebab48d-all/A08/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-48-36-ebab48d-all/A09/admin-trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-48-36-ebab48d-all/A09/member-trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-48-36-ebab48d-all/A09/owner-trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-48-36-ebab48d-all/A10/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+[prepare] 收集清单（共 113，仅文件名，不含内容）：
+  - 2026-11-05_07-25-54-ebab48d-a/A01/pending-then-home.png
+  - 2026-11-05_07-25-54-ebab48d-a/A02/network-abort.png
+  - 2026-11-05_07-25-54-ebab48d-a/A03/http-503.png
+  - 2026-11-05_07-25-54-ebab48d-a/A04/retry-success.png
+  - 2026-11-05_07-25-54-ebab48d-a/A05/slow-network.png
+  - 2026-11-05_07-25-54-ebab48d-a/A06/home-with-data.png
+  - 2026-11-05_07-25-54-ebab48d-a/A07/empty-book.png
+  - 2026-11-05_07-25-54-ebab48d-a/A08/member-members-page.png
+  - 2026-11-05_07-25-54-ebab48d-a/A09/members-admin.png
+  - 2026-11-05_07-25-54-ebab48d-a/A09/members-member.png
+  - 2026-11-05_07-25-54-ebab48d-a/A09/members-owner.png
+  - 2026-11-05_07-25-54-ebab48d-a/A10/back-online.png
+  - 2026-11-05_07-25-54-ebab48d-a/A10/offline.png
+  - 2026-11-05_07-25-54-ebab48d-a/A11/push-results.json
+  - 2026-11-05_07-25-54-ebab48d-a/SHA256SUMS.txt
+  - 2026-11-05_07-25-54-ebab48d-a/fixtures.json
+  - 2026-11-05_07-25-54-ebab48d-a/report.json
+  - 2026-11-05_07-25-54-ebab48d-a/report.md
+  - 2026-11-05_07-28-01-ebab48d-a/A01/after-login.png
+  - 2026-11-05_07-28-01-ebab48d-a/A01/pending.png
+  - 2026-11-05_07-28-01-ebab48d-a/A02/network-abort.png
+  - 2026-11-05_07-28-01-ebab48d-a/A03/http-503.png
+  - 2026-11-05_07-28-01-ebab48d-a/A04/retry-success.png
+  - 2026-11-05_07-28-01-ebab48d-a/A05/slow-network.png
+  - 2026-11-05_07-28-01-ebab48d-a/A06/home-with-data.png
+  - 2026-11-05_07-28-01-ebab48d-a/A07/empty-book.png
+  - 2026-11-05_07-28-01-ebab48d-a/A08/member-members-page.png
+  - 2026-11-05_07-28-01-ebab48d-a/A09/members-admin.png
+  - 2026-11-05_07-28-01-ebab48d-a/A09/members-member.png
+  - 2026-11-05_07-28-01-ebab48d-a/A09/members-owner.png
+  - 2026-11-05_07-28-01-ebab48d-a/A10/back-online.png
+  - 2026-11-05_07-28-01-ebab48d-a/A10/offline.png
+  - 2026-11-05_07-28-01-ebab48d-a/A11/push-results.json
+  - 2026-11-05_07-28-01-ebab48d-a/SHA256SUMS.txt
+  - 2026-11-05_07-28-01-ebab48d-a/fixtures.json
+  - 2026-11-05_07-28-01-ebab48d-a/report.json
+  - 2026-11-05_07-28-01-ebab48d-a/report.md
+  - 2026-11-05_07-34-07-ebab48d-c/C/I-LOGIN/I-LOGIN-10.png
+  - 2026-11-05_07-34-07-ebab48d-c/C/I-LOGIN/I-LOGIN-13.png
+  - 2026-11-05_07-34-07-ebab48d-c/C/I-LOGIN/I-LOGIN-14.png
+  - 2026-11-05_07-34-07-ebab48d-c/C/I-LOGIN/I-LOGIN-15.png
+  - 2026-11-05_07-34-07-ebab48d-c/C/controls-summary.json
+  - 2026-11-05_07-34-07-ebab48d-c/C/login/after-login.png
+  - 2026-11-05_07-34-07-ebab48d-c/SHA256SUMS.txt
+  - 2026-11-05_07-34-07-ebab48d-c/fixtures.json
+  - 2026-11-05_07-34-07-ebab48d-c/report.json
+  - 2026-11-05_07-34-07-ebab48d-c/report.md
+  - 2026-11-05_07-38-31-ebab48d-c/C/I-LOGIN/I-LOGIN-10.png
+  - 2026-11-05_07-38-31-ebab48d-c/C/I-LOGIN/I-LOGIN-13.png
+  - 2026-11-05_07-38-31-ebab48d-c/C/I-LOGIN/I-LOGIN-14.png
+  - 2026-11-05_07-38-31-ebab48d-c/C/I-LOGIN/I-LOGIN-15.png
+  - 2026-11-05_07-38-31-ebab48d-c/C/controls-summary.json
+  - 2026-11-05_07-38-31-ebab48d-c/C/login/after-login.png
+  - 2026-11-05_07-38-31-ebab48d-c/SHA256SUMS.txt
+  - 2026-11-05_07-38-31-ebab48d-c/fixtures.json
+  - 2026-11-05_07-38-31-ebab48d-c/report.json
+  - 2026-11-05_07-38-31-ebab48d-c/report.md
+  - 2026-11-05_07-40-21-ebab48d-c/C/I-CAT/diagnostics.json
+  - 2026-11-05_07-40-21-ebab48d-c/C/I-LOGIN/I-LOGIN-10.png
+  - 2026-11-05_07-40-21-ebab48d-c/C/I-LOGIN/I-LOGIN-13.png
+  - 2026-11-05_07-40-21-ebab48d-c/C/I-LOGIN/I-LOGIN-14.png
+  - 2026-11-05_07-40-21-ebab48d-c/C/I-LOGIN/I-LOGIN-15.png
+  - 2026-11-05_07-40-21-ebab48d-c/C/controls-summary.json
+  - 2026-11-05_07-40-21-ebab48d-c/C/login/after-login.png
+  - 2026-11-05_07-40-21-ebab48d-c/SHA256SUMS.txt
+  - 2026-11-05_07-40-21-ebab48d-c/fixtures.json
+  - 2026-11-05_07-40-21-ebab48d-c/report.json
+  - 2026-11-05_07-40-21-ebab48d-c/report.md
+  - 2026-11-05_07-44-22-ebab48d-c/C/I-LOGIN/I-LOGIN-10.png
+  - 2026-11-05_07-44-22-ebab48d-c/C/I-LOGIN/I-LOGIN-13.png
+  - 2026-11-05_07-44-22-ebab48d-c/C/I-LOGIN/I-LOGIN-14.png
+  - 2026-11-05_07-44-22-ebab48d-c/C/I-LOGIN/I-LOGIN-15.png
+  - 2026-11-05_07-44-22-ebab48d-c/C/controls-summary.json
+  - 2026-11-05_07-44-22-ebab48d-c/C/login/after-login.png
+  - 2026-11-05_07-44-22-ebab48d-c/SHA256SUMS.txt
+  - 2026-11-05_07-44-22-ebab48d-c/fixtures.json
+  - 2026-11-05_07-44-22-ebab48d-c/report.json
+  - 2026-11-05_07-44-22-ebab48d-c/report.md
+  - 2026-11-05_07-46-31-ebab48d-c/C/I-LOGIN/I-LOGIN-10.png
+  - 2026-11-05_07-46-31-ebab48d-c/C/I-LOGIN/I-LOGIN-13.png
+  - 2026-11-05_07-46-31-ebab48d-c/C/I-LOGIN/I-LOGIN-14.png
+  - 2026-11-05_07-46-31-ebab48d-c/C/I-LOGIN/I-LOGIN-15.png
+  - 2026-11-05_07-46-31-ebab48d-c/C/controls-summary.json
+  - 2026-11-05_07-46-31-ebab48d-c/C/login/after-login.png
+  - 2026-11-05_07-46-31-ebab48d-c/SHA256SUMS.txt
+  - 2026-11-05_07-46-31-ebab48d-c/fixtures.json
+  - 2026-11-05_07-46-31-ebab48d-c/report.json
+  - 2026-11-05_07-46-31-ebab48d-c/report.md
+  - 2026-11-05_07-48-36-ebab48d-all/A01/after-login.png
+  - 2026-11-05_07-48-36-ebab48d-all/A01/pending.png
+  - 2026-11-05_07-48-36-ebab48d-all/A02/network-abort.png
+  - 2026-11-05_07-48-36-ebab48d-all/A03/http-503.png
+  - 2026-11-05_07-48-36-ebab48d-all/A04/retry-success.png
+  - 2026-11-05_07-48-36-ebab48d-all/A05/slow-network.png
+  - 2026-11-05_07-48-36-ebab48d-all/A06/home-with-data.png
+  - 2026-11-05_07-48-36-ebab48d-all/A07/empty-book.png
+  - 2026-11-05_07-48-36-ebab48d-all/A08/member-members-page.png
+  - 2026-11-05_07-48-36-ebab48d-all/A09/members-admin.png
+  - 2026-11-05_07-48-36-ebab48d-all/A09/members-member.png
+  - 2026-11-05_07-48-36-ebab48d-all/A09/members-owner.png
+  - 2026-11-05_07-48-36-ebab48d-all/A10/back-online.png
+  - 2026-11-05_07-48-36-ebab48d-all/A10/offline.png
+  - 2026-11-05_07-48-36-ebab48d-all/A11/push-results.json
+  - 2026-11-05_07-48-36-ebab48d-all/C/I-LOGIN/I-LOGIN-10.png
+  - 2026-11-05_07-48-36-ebab48d-all/C/I-LOGIN/I-LOGIN-13.png
+  - 2026-11-05_07-48-36-ebab48d-all/C/I-LOGIN/I-LOGIN-14.png
+  - 2026-11-05_07-48-36-ebab48d-all/C/I-LOGIN/I-LOGIN-15.png
+  - 2026-11-05_07-48-36-ebab48d-all/C/controls-summary.json
+  - 2026-11-05_07-48-36-ebab48d-all/C/login/after-login.png
+  - 2026-11-05_07-48-36-ebab48d-all/SHA256SUMS.txt
+  - 2026-11-05_07-48-36-ebab48d-all/fixtures.json
+  - 2026-11-05_07-48-36-ebab48d-all/report.json
+  - 2026-11-05_07-48-36-ebab48d-all/report.md
+[prepare] 符号链接跳过：0
+[prepare] 汇总：扫描=149 收集=113 排除=36 符号链接跳过=0
+[prepare] 结论：OK（输出目录已就绪，仍需经 scan-artifacts.js 扫描后方可上传）
+
+[prepare-default] 退出码=0

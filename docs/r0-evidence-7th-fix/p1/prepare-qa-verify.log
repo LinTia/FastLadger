@@ -1,0 +1,121 @@
+[prepare] 源目录：artifacts/r0-qa-verify
+[prepare] 目标目录：artifacts/r0-e2e-upload（运行前已清空）
+[prepare] 白名单：.png .md .json .log .txt
+[prepare] 排除清单（共 12，仅文件名与原因，不含内容）：
+  - 2026-11-05_09-59-36-dadc9a3-a/A01/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_09-59-36-dadc9a3-a/A02/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_09-59-36-dadc9a3-a/A03/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_09-59-36-dadc9a3-a/A04/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_09-59-36-dadc9a3-a/A05/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_09-59-36-dadc9a3-a/A06/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_09-59-36-dadc9a3-a/A07/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_09-59-36-dadc9a3-a/A08/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_09-59-36-dadc9a3-a/A09/admin-trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_09-59-36-dadc9a3-a/A09/member-trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_09-59-36-dadc9a3-a/A09/owner-trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_09-59-36-dadc9a3-a/A10/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+[prepare] 收集清单（共 99，仅文件名，不含内容）：
+  - 2026-11-05_09-59-36-dadc9a3-a/A01/after-login.png
+  - 2026-11-05_09-59-36-dadc9a3-a/A01/pending.png
+  - 2026-11-05_09-59-36-dadc9a3-a/A02/network-abort.png
+  - 2026-11-05_09-59-36-dadc9a3-a/A03/http-503.png
+  - 2026-11-05_09-59-36-dadc9a3-a/A04/retry-success.png
+  - 2026-11-05_09-59-36-dadc9a3-a/A05/slow-network.png
+  - 2026-11-05_09-59-36-dadc9a3-a/A06/home-with-data.png
+  - 2026-11-05_09-59-36-dadc9a3-a/A07/empty-book.png
+  - 2026-11-05_09-59-36-dadc9a3-a/A08/member-members-page.png
+  - 2026-11-05_09-59-36-dadc9a3-a/A09/members-admin.png
+  - 2026-11-05_09-59-36-dadc9a3-a/A09/members-member.png
+  - 2026-11-05_09-59-36-dadc9a3-a/A09/members-owner.png
+  - 2026-11-05_09-59-36-dadc9a3-a/A10/back-online.png
+  - 2026-11-05_09-59-36-dadc9a3-a/A10/offline.png
+  - 2026-11-05_09-59-36-dadc9a3-a/A11/push-results.json
+  - 2026-11-05_09-59-36-dadc9a3-a/SHA256SUMS.txt
+  - 2026-11-05_09-59-36-dadc9a3-a/fixtures.json
+  - 2026-11-05_09-59-36-dadc9a3-a/report.json
+  - 2026-11-05_09-59-36-dadc9a3-a/report.md
+  - 2026-11-05_10-00-07-dadc9a3-d/D/I-TXNS/I-TXNS-01.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/I-TXNS/I-TXNS-02.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/I-TXNS/I-TXNS-03.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/I-TXNS/I-TXNS-04.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/I-TXNS/I-TXNS-05.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/I-TXNS/I-TXNS-06.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/I-TXNS/I-TXNS-07.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/I-TXNS/I-TXNS-08.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/I-TXNS/I-TXNS-09.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/I-TXNS/I-TXNS-10.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/I-TXNS/I-TXNS-11.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/I-TXNS/I-TXNS-12.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/I-TXNS/I-TXNS-13.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/I-TXNS/I-TXNS-14.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/I-TXNS/I-TXNS-15.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/I-TXNS/I-TXNS-16.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/I-TXNS/I-TXNS-17-skeleton.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/I-TXNS/I-TXNS-17.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/I-TXNS/I-TXNS-18.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/I-TXNS/I-TXNS-19.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/account/D-ACCT-01.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/account/D-ACCT-02.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/account/D-ACCT-03.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/account/D-ACCT-04.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/account/visibility-observations.json
+  - 2026-11-05_10-00-07-dadc9a3-d/D/category/D-CAT-01.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/category/D-CAT-02.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/category/D-CAT-03.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/category/D-CAT-04.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/category/D-CAT-05.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/category/D-CAT-06.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/defects-summary.json
+  - 2026-11-05_10-00-07-dadc9a3-d/D/members/D-MEM-01.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/members/D-MEM-02.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/members/D-MEM-03.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/members/D-MEM-04.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/members/D-MEM-05.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/members/D-MEM-06.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/txns/D-TXNS-01.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/txns/D-TXNS-02.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/txns/D-TXNS-03.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/txns/D-TXNS-04.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/txns/diagnostics.json
+  - 2026-11-05_10-00-07-dadc9a3-d/SHA256SUMS.txt
+  - 2026-11-05_10-00-07-dadc9a3-d/fixtures.json
+  - 2026-11-05_10-00-07-dadc9a3-d/report.json
+  - 2026-11-05_10-00-07-dadc9a3-d/report.md
+  - 2026-11-05_10-00-44-dadc9a3-c/C/I-ACCT/I-ACCT-06-visibility.png
+  - 2026-11-05_10-00-44-dadc9a3-c/C/I-ACCT/visibility-observations.json
+  - 2026-11-05_10-00-44-dadc9a3-c/C/I-LOGIN/I-LOGIN-10.png
+  - 2026-11-05_10-00-44-dadc9a3-c/C/I-LOGIN/I-LOGIN-13.png
+  - 2026-11-05_10-00-44-dadc9a3-c/C/I-LOGIN/I-LOGIN-14.png
+  - 2026-11-05_10-00-44-dadc9a3-c/C/I-LOGIN/I-LOGIN-15.png
+  - 2026-11-05_10-00-44-dadc9a3-c/C/I-TXNS/I-TXNS-01.png
+  - 2026-11-05_10-00-44-dadc9a3-c/C/I-TXNS/I-TXNS-02.png
+  - 2026-11-05_10-00-44-dadc9a3-c/C/I-TXNS/I-TXNS-03.png
+  - 2026-11-05_10-00-44-dadc9a3-c/C/I-TXNS/I-TXNS-04.png
+  - 2026-11-05_10-00-44-dadc9a3-c/C/I-TXNS/I-TXNS-05.png
+  - 2026-11-05_10-00-44-dadc9a3-c/C/I-TXNS/I-TXNS-06.png
+  - 2026-11-05_10-00-44-dadc9a3-c/C/I-TXNS/I-TXNS-07.png
+  - 2026-11-05_10-00-44-dadc9a3-c/C/I-TXNS/I-TXNS-08.png
+  - 2026-11-05_10-00-44-dadc9a3-c/C/I-TXNS/I-TXNS-09.png
+  - 2026-11-05_10-00-44-dadc9a3-c/C/I-TXNS/I-TXNS-10.png
+  - 2026-11-05_10-00-44-dadc9a3-c/C/I-TXNS/I-TXNS-11.png
+  - 2026-11-05_10-00-44-dadc9a3-c/C/I-TXNS/I-TXNS-12.png
+  - 2026-11-05_10-00-44-dadc9a3-c/C/I-TXNS/I-TXNS-13.png
+  - 2026-11-05_10-00-44-dadc9a3-c/C/I-TXNS/I-TXNS-14.png
+  - 2026-11-05_10-00-44-dadc9a3-c/C/I-TXNS/I-TXNS-15.png
+  - 2026-11-05_10-00-44-dadc9a3-c/C/I-TXNS/I-TXNS-16.png
+  - 2026-11-05_10-00-44-dadc9a3-c/C/I-TXNS/I-TXNS-17-skeleton.png
+  - 2026-11-05_10-00-44-dadc9a3-c/C/I-TXNS/I-TXNS-17.png
+  - 2026-11-05_10-00-44-dadc9a3-c/C/I-TXNS/I-TXNS-18.png
+  - 2026-11-05_10-00-44-dadc9a3-c/C/I-TXNS/I-TXNS-19.png
+  - 2026-11-05_10-00-44-dadc9a3-c/C/I-TXNS/diagnostics.json
+  - 2026-11-05_10-00-44-dadc9a3-c/C/controls-summary.json
+  - 2026-11-05_10-00-44-dadc9a3-c/C/login/after-login.png
+  - 2026-11-05_10-00-44-dadc9a3-c/SHA256SUMS.txt
+  - 2026-11-05_10-00-44-dadc9a3-c/fixtures.json
+  - 2026-11-05_10-00-44-dadc9a3-c/report.json
+  - 2026-11-05_10-00-44-dadc9a3-c/report.md
+[prepare] 符号链接跳过：0
+[prepare] 汇总：扫描=111 收集=99 排除=12 符号链接跳过=0
+[prepare] 结论：OK（输出目录已就绪，仍需经 scan-artifacts.js 扫描后方可上传）
+
+[prepare-qa-verify] 退出码=0

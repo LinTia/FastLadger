@@ -7,7 +7,8 @@
 # 关键约束（对应任务单 §二）：
 #   1. 干净环境启动，不依赖任何本机状态；实例用临时 SQLite + 随机端口 + 每次新生成的 JWT 密钥；
 #   2. 合成账号与合成数据，不使用生产凭证/生产库；
-#   3. 原始日志、截图、trace、环境信息、commit SHA、退出码、SHA256 全部作为 artifact 上传。
+#   3. 仅上传白名单证据（日志/截图/报告/校验和）；含网络明文的压缩归档一律不上传，
+#      且上传前必须通过 tools/r0/e2e/scripts/scan-artifacts.js 的失败关闭扫描。
 name: R0 E2E
 
 on:
@@ -107,12 +108,28 @@ jobs:
             echo "- 包 C 退出码（报告型，success 不代表无 FAIL）: ${{ steps.c_controls.outcome }}"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: 上传证据（日志/截图/trace/报告/校验和）
-        if: always()
+      # P1 安全整改：先把证据收敛到白名单副本，再扫描；扫描不通过绝不上传。
+      # prepare 用 always()，保证 A/D 门禁失败或 C 报告型 FAIL 时仍能留下报告证据。
+      - name: 准备上传证据（白名单）
+        id: artifact_prepare
+        if: ${{ always() }}
+        run: node tools/r0/e2e/scripts/prepare-upload.js --source artifacts/r0-e2e --dest artifacts/r0-e2e-upload
+
+      # 失败关闭闸门：命中黑名单文件名或疑似凭据即以退出码 2 失败。
+      # prepare 未成功时本 step 被跳过，outcome=skipped，同样不会触发上传。
+      - name: 上传前安全扫描（失败即阻断）
+        id: artifact_scan
+        if: ${{ always() && steps.artifact_prepare.outcome == 'success' }}
+        run: node tools/r0/e2e/scripts/scan-artifacts.js artifacts/r0-e2e-upload
+
+      # 关键：上传只在扫描 step 的 outcome 为 success 时发生。
+      # 原先的 if: always() 会让"扫描失败即退出"的防护完全失效，故必须改为依赖 outcome。
+      - name: 上传证据（日志/截图/报告/校验和）
+        if: ${{ always() && steps.artifact_scan.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
           name: r0-e2e-evidence-${{ github.sha }}
           path: |
-            artifacts/r0-e2e/**
+            artifacts/r0-e2e-upload/**
           retention-days: 30
-          if-no-files-found: warn
+          if-no-files-found: error

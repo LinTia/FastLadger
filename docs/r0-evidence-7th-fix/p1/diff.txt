@@ -1,0 +1,1012 @@
+=== git diff（已跟踪文件：HEAD -> 工作树）===
+warning: in the working copy of '.github/workflows/r0-e2e.yml', LF will be replaced by CRLF the next time Git touches it
+diff --git a/.github/workflows/r0-e2e.yml b/.github/workflows/r0-e2e.yml
+index 782bd3d..1ffda5c 100644
+--- a/.github/workflows/r0-e2e.yml
++++ b/.github/workflows/r0-e2e.yml
+@@ -7,7 +7,8 @@
+ # 关键约束（对应任务单 §二）：
+ #   1. 干净环境启动，不依赖任何本机状态；实例用临时 SQLite + 随机端口 + 每次新生成的 JWT 密钥；
+ #   2. 合成账号与合成数据，不使用生产凭证/生产库；
+-#   3. 原始日志、截图、trace、环境信息、commit SHA、退出码、SHA256 全部作为 artifact 上传。
++#   3. 仅上传白名单证据（日志/截图/报告/校验和）；含网络明文的压缩归档一律不上传，
++#      且上传前必须通过 tools/r0/e2e/scripts/scan-artifacts.js 的失败关闭扫描。
+ name: R0 E2E
+ 
+ on:
+@@ -107,12 +108,28 @@ jobs:
+             echo "- 包 C 退出码（报告型，success 不代表无 FAIL）: ${{ steps.c_controls.outcome }}"
+           } >> "$GITHUB_STEP_SUMMARY"
+ 
+-      - name: 上传证据（日志/截图/trace/报告/校验和）
+-        if: always()
++      # P1 安全整改：先把证据收敛到白名单副本，再扫描；扫描不通过绝不上传。
++      # prepare 用 always()，保证 A/D 门禁失败或 C 报告型 FAIL 时仍能留下报告证据。
++      - name: 准备上传证据（白名单）
++        id: artifact_prepare
++        if: ${{ always() }}
++        run: node tools/r0/e2e/scripts/prepare-upload.js --source artifacts/r0-e2e --dest artifacts/r0-e2e-upload
++
++      # 失败关闭闸门：命中黑名单文件名或疑似凭据即以退出码 2 失败。
++      # prepare 未成功时本 step 被跳过，outcome=skipped，同样不会触发上传。
++      - name: 上传前安全扫描（失败即阻断）
++        id: artifact_scan
++        if: ${{ always() && steps.artifact_prepare.outcome == 'success' }}
++        run: node tools/r0/e2e/scripts/scan-artifacts.js artifacts/r0-e2e-upload
++
++      # 关键：上传只在扫描 step 的 outcome 为 success 时发生。
++      # 原先的 if: always() 会让"扫描失败即退出"的防护完全失效，故必须改为依赖 outcome。
++      - name: 上传证据（日志/截图/报告/校验和）
++        if: ${{ always() && steps.artifact_scan.outcome == 'success' }}
+         uses: actions/upload-artifact@v4
+         with:
+           name: r0-e2e-evidence-${{ github.sha }}
+           path: |
+-            artifacts/r0-e2e/**
++            artifacts/r0-e2e-upload/**
+           retention-days: 30
+-          if-no-files-found: warn
++          if-no-files-found: error
+
+=== 新增未跟踪文件（git diff 不含，逐份用 --no-index 展示）===
+
+--- 新增文件: tools/r0/e2e/scripts/prepare-upload.js ---
+warning: in the working copy of 'tools/r0/e2e/scripts/prepare-upload.js', LF will be replaced by CRLF the next time Git touches it
+diff --git a/tools/r0/e2e/scripts/prepare-upload.js b/tools/r0/e2e/scripts/prepare-upload.js
+new file mode 100644
+index 0000000..53b216a
+--- /dev/null
++++ b/tools/r0/e2e/scripts/prepare-upload.js
+@@ -0,0 +1,283 @@
++#!/usr/bin/env node
++'use strict';
++
++/**
++ * FastLedger R0 E2E —— 上传证据白名单收集器（P1 安全整改）。
++ *
++ * 背景：public 仓库的 CI 曾把 Playwright trace 归档（其中的网络记录含临时实例
++ * 真实鉴权头明文）原样上传为公开 artifact。本脚本在上传前把证据收敛为一份
++ * 「白名单副本」，从源头剔除一切可能携带网络原始记录或数据库内容的载体。
++ *
++ * 设计要点：
++ *   1. 零第三方依赖，仅用 node:fs / node:path，Windows 本地与 Linux CI 均可运行；
++ *   2. 只复制白名单扩展名 *.png / *.md / *.json / *.log / *.txt；
++ *   3. 显式排除 *.zip（含 trace.zip）、*.trace、*.network、*.har、server.log、
++ *      *.db / *.sqlite*，以及文件名含 token|secret|credential 的文件；
++ *      （敏感词规则采用更严格口径：即便扩展名在白名单内也一律排除。）
++ *   4. 每次运行先清空目标目录，避免上一轮残留被再次上传；
++ *   5. 不跟随符号链接，避免目录逃逸；
++ *   6. 日志只输出数量、相对文件名与排除原因，**绝不输出文件内容**。
++ *
++ * 用法：
++ *   node tools/r0/e2e/scripts/prepare-upload.js
++ *   node tools/r0/e2e/scripts/prepare-upload.js --source <dir> --dest <dir>
++ *   node tools/r0/e2e/scripts/prepare-upload.js --help
++ *
++ * 退出码：0 成功 / 1 参数或环境错误。
++ */
++
++const fs = require('node:fs');
++const path = require('node:path');
++
++const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
++const DEFAULT_SOURCE = path.join(REPO_ROOT, 'artifacts', 'r0-e2e');
++const DEFAULT_DEST = path.join(REPO_ROOT, 'artifacts', 'r0-e2e-upload');
++
++/** 唯一允许进入上传目录的扩展名（小写，含点）。 */
++const ALLOWED_EXT = new Set(['.png', '.md', '.json', '.log', '.txt']);
++
++/** 一律拒绝的扩展名：压缩归档、网络原始记录与数据库文件。 */
++const DENIED_EXT = new Set([
++  '.zip', '.trace', '.network', '.har',
++  '.db', '.sqlite', '.sqlite3', '.db-wal', '.db-shm',
++]);
++
++/** 文件名（basename）命中即拒绝，与扩展名无关。 */
++const SENSITIVE_NAME_RE = /(?:token|secret|credential)/i;
++
++/** 明确点名的服务原始日志。 */
++const SERVER_LOG_NAME = 'server.log';
++
++const EXIT_OK = 0;
++const EXIT_ERROR = 1;
++
++/**
++ * 把绝对路径转换为可安全打印的仓库相对路径，不泄露个人绝对路径。
++ * @param {string} abs 绝对路径。
++ * @return {string} 相对路径；仓库外文件只显示 basename。
++ */
++function displayPath(abs) {
++  const rel = path.relative(REPO_ROOT, abs).split(path.sep).join('/');
++  if (rel.startsWith('..')) return `<仓库外:${path.basename(abs)}>`;
++  return rel || '.';
++}
++
++/** 打印用法说明。 */
++function printHelp() {
++  process.stdout.write([
++    '用法：node tools/r0/e2e/scripts/prepare-upload.js [选项]',
++    '',
++    '  --source <dir>  源证据目录，默认 artifacts/r0-e2e',
++    '  --dest   <dir>  白名单输出目录，默认 artifacts/r0-e2e-upload（运行前清空）',
++    '  --help          显示本说明',
++    '',
++    `白名单：${[...ALLOWED_EXT].join(' ')}`,
++    '排除：trace 归档与任意 zip、trace/network/har 原始记录、server.log、',
++    '      db/sqlite 数据库文件、文件名含 token|secret|credential 的文件。',
++    '',
++  ].join('\n'));
++}
++
++/**
++ * 解析命令行参数。
++ * @param {string[]} argv process.argv.slice(2)。
++ * @return {{source: string, dest: string, help: boolean}} 解析结果。
++ * @throws {Error} 参数非法时抛出。
++ */
++function parseArgs(argv) {
++  let source = DEFAULT_SOURCE;
++  let dest = DEFAULT_DEST;
++  let help = false;
++
++  for (let i = 0; i < argv.length; i += 1) {
++    const arg = argv[i];
++    if (arg === '--help' || arg === '-h') {
++      help = true;
++      continue;
++    }
++    if (arg === '--source' || arg === '--dest') {
++      const value = argv[i + 1];
++      if (!value || value.startsWith('--')) throw new Error(`参数 ${arg} 缺少取值`);
++      const resolved = path.resolve(process.cwd(), value);
++      if (arg === '--source') source = resolved;
++      else dest = resolved;
++      i += 1;
++      continue;
++    }
++    throw new Error(`未知参数：${arg}`);
++  }
++  return { source, dest, help };
++}
++
++/**
++ * 判定单个文件是否允许进入上传目录。先判黑名单，再判白名单。
++ * @param {string} rel 相对路径。
++ * @return {{allowed: boolean, reason: string}} 判定结果。
++ */
++function classify(rel) {
++  const base = path.basename(rel);
++  const lower = base.toLowerCase();
++  const ext = path.extname(lower);
++
++  if (ext === '.zip' && lower.includes('trace')) {
++    return { allowed: false, reason: 'Playwright trace 归档（可能含网络请求明文）' };
++  }
++  if (DENIED_EXT.has(ext)) {
++    return { allowed: false, reason: `禁止扩展名 ${ext}` };
++  }
++  if (lower === SERVER_LOG_NAME) {
++    return { allowed: false, reason: 'server.log 服务原始日志' };
++  }
++  if (SENSITIVE_NAME_RE.test(base)) {
++    return { allowed: false, reason: '文件名含 token/secret/credential 敏感词' };
++  }
++  if (!ALLOWED_EXT.has(ext)) {
++    return { allowed: false, reason: `非白名单扩展名 ${ext || '(无扩展名)'}` };
++  }
++  return { allowed: true, reason: '' };
++}
++
++/**
++ * 递归收集文件；符号链接一律跳过，不跟随。
++ * @param {string} dir 目录绝对路径。
++ * @param {{files: string[], links: string[]}} out 输出累加器。
++ * @throws {Error} 目录不可读时抛出。
++ */
++function walk(dir, out) {
++  let entries;
++  try {
++    entries = fs.readdirSync(dir, { withFileTypes: true });
++  } catch (err) {
++    throw new Error(`无法读取目录 ${displayPath(dir)}：${err.message}`);
++  }
++  for (const entry of entries) {
++    const abs = path.join(dir, entry.name);
++    if (entry.isSymbolicLink()) {
++      out.links.push(abs);
++      continue;
++    }
++    if (entry.isDirectory()) {
++      walk(abs, out);
++      continue;
++    }
++    if (entry.isFile()) out.files.push(abs);
++  }
++}
++
++/**
++ * 校验源/目标目录组合，防止误删或递归复制。
++ * @param {string} source 源目录。
++ * @param {string} dest 目标目录。
++ * @throws {Error} 组合非法时抛出。
++ */
++function validatePaths(source, dest) {
++  if (source === dest) throw new Error('源目录与目标目录不能相同');
++  if (dest.startsWith(source + path.sep) || source.startsWith(dest + path.sep)) {
++    throw new Error('源目录与目标目录不能互相嵌套');
++  }
++  if (dest === REPO_ROOT || REPO_ROOT.startsWith(dest + path.sep)) {
++    throw new Error('目标目录不能是仓库根或其上级目录');
++  }
++  if (dest === path.join(REPO_ROOT, 'artifacts')) {
++    throw new Error('目标目录不能是 artifacts 根目录（清空操作会删除全部证据）');
++  }
++}
++
++/**
++ * 程序入口。
++ * @param {string[]} argv process.argv.slice(2)。
++ * @return {number} 退出码。
++ */
++function main(argv) {
++  let options;
++  try {
++    options = parseArgs(argv);
++  } catch (err) {
++    process.stderr.write(`[prepare][ERROR] ${err.message}\n`);
++    return EXIT_ERROR;
++  }
++  if (options.help) {
++    printHelp();
++    return EXIT_OK;
++  }
++
++  const { source, dest } = options;
++  try {
++    validatePaths(source, dest);
++  } catch (err) {
++    process.stderr.write(`[prepare][ERROR] ${err.message}\n`);
++    return EXIT_ERROR;
++  }
++
++  let sourceStat;
++  try {
++    sourceStat = fs.statSync(source);
++  } catch (err) {
++    process.stderr.write(`[prepare][ERROR] 源目录不存在或不可访问：${displayPath(source)}\n`);
++    return EXIT_ERROR;
++  }
++  if (!sourceStat.isDirectory()) {
++    process.stderr.write(`[prepare][ERROR] 源路径不是目录：${displayPath(source)}\n`);
++    return EXIT_ERROR;
++  }
++
++  const tree = { files: [], links: [] };
++  try {
++    walk(source, tree);
++  } catch (err) {
++    process.stderr.write(`[prepare][ERROR] ${err.message}\n`);
++    return EXIT_ERROR;
++  }
++
++  /** @type {{rel: string, reason: string}[]} */
++  const excluded = [];
++  /** @type {string[]} */
++  const collected = [];
++
++  try {
++    // 先清空，保证上传目录只含本轮白名单结果，杜绝上一轮残留。
++    fs.rmSync(dest, { recursive: true, force: true });
++    fs.mkdirSync(dest, { recursive: true });
++
++    for (const abs of tree.files) {
++      const rel = path.relative(source, abs).split(path.sep).join('/');
++      const verdict = classify(rel);
++      if (!verdict.allowed) {
++        excluded.push({ rel, reason: verdict.reason });
++        continue;
++      }
++      const target = path.join(dest, ...rel.split('/'));
++      fs.mkdirSync(path.dirname(target), { recursive: true });
++      fs.copyFileSync(abs, target);
++      collected.push(rel);
++    }
++  } catch (err) {
++    process.stderr.write(`[prepare][ERROR] 生成白名单副本失败：${err.message}\n`);
++    return EXIT_ERROR;
++  }
++
++  collected.sort();
++  excluded.sort((a, b) => a.rel.localeCompare(b.rel));
++
++  const lines = [
++    `[prepare] 源目录：${displayPath(source)}`,
++    `[prepare] 目标目录：${displayPath(dest)}（运行前已清空）`,
++    `[prepare] 白名单：${[...ALLOWED_EXT].join(' ')}`,
++    `[prepare] 排除清单（共 ${excluded.length}，仅文件名与原因，不含内容）：`,
++  ];
++  for (const item of excluded) lines.push(`  - ${item.rel}  [${item.reason}]`);
++  if (excluded.length === 0) lines.push('  （无）');
++  lines.push(`[prepare] 收集清单（共 ${collected.length}，仅文件名，不含内容）：`);
++  for (const rel of collected) lines.push(`  - ${rel}`);
++  if (collected.length === 0) lines.push('  （无）');
++  lines.push(`[prepare] 符号链接跳过：${tree.links.length}`);
++  lines.push(
++    `[prepare] 汇总：扫描=${tree.files.length} 收集=${collected.length} ` +
++    `排除=${excluded.length} 符号链接跳过=${tree.links.length}`,
++  );
++  lines.push('[prepare] 结论：OK（输出目录已就绪，仍需经 scan-artifacts.js 扫描后方可上传）');
++  process.stdout.write(`${lines.join('\n')}\n`);
++  return EXIT_OK;
++}
++
++process.exitCode = main(process.argv.slice(2));
+
+--- 新增文件: tools/r0/e2e/scripts/scan-artifacts.js ---
+warning: in the working copy of 'tools/r0/e2e/scripts/scan-artifacts.js', LF will be replaced by CRLF the next time Git touches it
+diff --git a/tools/r0/e2e/scripts/scan-artifacts.js b/tools/r0/e2e/scripts/scan-artifacts.js
+new file mode 100644
+index 0000000..b6f345c
+--- /dev/null
++++ b/tools/r0/e2e/scripts/scan-artifacts.js
+@@ -0,0 +1,313 @@
++#!/usr/bin/env node
++'use strict';
++
++/**
++ * FastLedger R0 E2E —— 上传前安全扫描器（P1 安全整改，失败关闭）。
++ *
++ * 用途：在 actions/upload-artifact 之前对待上传目录做最后一道闸门。只要存在
++ * 黑名单文件名或疑似凭据文本，立即以退出码 2 失败；workflow 的上传 step 通过
++ * `steps.artifact_scan.outcome == 'success'` 依赖本 step，因此扫描不通过时绝不上传。
++ *
++ * 规则：
++ *   A. 文件名/扩展名黑名单：*.zip（含 trace 归档）、*.trace、*.network、*.har、
++ *      *.db / *.sqlite*、server.log、文件名含 token|secret|credential；符号链接。
++ *   B. 文本内容：JWT 三段式、Bearer 值、鉴权头赋值、Cookie / Set-Cookie 赋值、
++ *      EBK_JWT_SECRET 赋值。
++ *   C. PNG/JPG 等二进制按扩展名或 NUL 字节判定后跳过内容扫描，但 A 类检查照常执行。
++ *
++ * 输出：仅「文件路径 + 命中类型 + 命中数量」与汇总计数；**绝不打印匹配到的值**。
++ * 退出码：0 干净 / 2 发现疑似凭据或黑名单文件（阻断上传）/ 1 参数或环境错误（同样阻断上传）。
++ *
++ * 用法：
++ *   node tools/r0/e2e/scripts/scan-artifacts.js [待扫描目录]
++ *   node tools/r0/e2e/scripts/scan-artifacts.js --dir <dir>
++ *   node tools/r0/e2e/scripts/scan-artifacts.js --help
++ */
++
++const fs = require('node:fs');
++const path = require('node:path');
++
++const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
++const DEFAULT_DIR = path.join(REPO_ROOT, 'artifacts', 'r0-e2e-upload');
++
++const EXIT_CLEAN = 0;
++const EXIT_ERROR = 1;
++const EXIT_BLOCKED = 2;
++
++/** 单文件文本扫描上限；超过即视为环境错误（失败关闭，不静默放过）。 */
++const MAX_TEXT_BYTES = 32 * 1024 * 1024;
++
++/** 命中即阻断的扩展名。 */
++const BLACKLIST_EXT = new Set([
++  '.zip', '.trace', '.network', '.har',
++  '.db', '.sqlite', '.sqlite3', '.db-wal', '.db-shm',
++]);
++
++/** 跳过内容扫描的二进制扩展名（文件名黑名单仍然生效）。 */
++const BINARY_EXT = new Set([
++  '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.ico', '.pdf',
++  '.woff', '.woff2', '.ttf', '.eot', '.mp4', '.webm', '.mp3', '.wav',
++  '.gz', '.7z', '.exe', '.dll', '.so', '.dylib', '.class', '.jar',
++]);
++
++/** 文件名（basename）命中即阻断。 */
++const SENSITIVE_NAME_RE = /(?:token|secret|credential)/i;
++
++/** 明确点名的服务原始日志。 */
++const SERVER_LOG_NAME = 'server.log';
++
++/**
++ * 文本命中规则。每条正则必须带 g 标志；只统计命中数量，不保留匹配值。
++ * @type {{type: string, re: RegExp}[]}
++ */
++const TEXT_RULES = [
++  { type: 'JWT_LITERAL', re: /eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g },
++  { type: 'BEARER_TOKEN', re: /\bBearer\s+[A-Za-z0-9._~+/=-]{12,}/gi },
++  { type: 'AUTH_HEADER', re: /["']?authorization["']?\s*[:=]\s*["']?[^\s"',}]{8,}/gi },
++  { type: 'COOKIE_HEADER', re: /["']?(?:set-)?cookie["']?\s*[:=]\s*["']?[^\r\n"']{8,}/gi },
++  { type: 'EBK_JWT_SECRET_ASSIGN', re: /EBK_JWT_SECRET\s*[:=]\s*["']?[^\s"',}]{4,}/gi },
++];
++
++/**
++ * 把绝对路径转换为可安全打印的仓库相对路径，不泄露个人绝对路径。
++ * @param {string} abs 绝对路径。
++ * @return {string} 相对路径；仓库外文件只显示 basename。
++ */
++function displayPath(abs) {
++  const rel = path.relative(REPO_ROOT, abs).split(path.sep).join('/');
++  if (rel.startsWith('..')) return `<仓库外:${path.basename(abs)}>`;
++  return rel || '.';
++}
++
++/** 打印用法说明。 */
++function printHelp() {
++  process.stdout.write([
++    '用法：node tools/r0/e2e/scripts/scan-artifacts.js [待扫描目录|--dir <dir>] [--help]',
++    '',
++    `默认目录：artifacts/r0-e2e-upload`,
++    '退出码：0 干净 / 2 发现疑似凭据或黑名单文件 / 1 参数或环境错误',
++    '输出：仅文件路径、命中类型与命中数量，不输出任何匹配值。',
++    '',
++  ].join('\n'));
++}
++
++/**
++ * 解析命令行参数。
++ * @param {string[]} argv process.argv.slice(2)。
++ * @return {{dir: string, help: boolean}} 解析结果。
++ * @throws {Error} 参数非法时抛出。
++ */
++function parseArgs(argv) {
++  if (argv.includes('--help') || argv.includes('-h')) {
++    return { dir: DEFAULT_DIR, help: true };
++  }
++  let dir = DEFAULT_DIR;
++  let positionalSeen = false;
++  for (let i = 0; i < argv.length; i += 1) {
++    const arg = argv[i];
++    if (arg === '--dir') {
++      const value = argv[i + 1];
++      if (!value || value.startsWith('--')) throw new Error('参数 --dir 缺少取值');
++      dir = path.resolve(process.cwd(), value);
++      i += 1;
++      continue;
++    }
++    if (arg.startsWith('--')) throw new Error(`未知参数：${arg}`);
++    if (positionalSeen) throw new Error('只能指定一个待扫描目录');
++    dir = path.resolve(process.cwd(), arg);
++    positionalSeen = true;
++  }
++  return { dir, help: false };
++}
++
++/**
++ * 统计某条规则在文本中的命中次数，使用独立正则副本避免 lastIndex 污染。
++ * @param {string} text 待扫描文本。
++ * @param {RegExp} re 带 g 标志的规则。
++ * @return {number} 命中次数。
++ */
++function countMatches(text, re) {
++  const copy = new RegExp(re.source, re.flags);
++  let count = 0;
++  let match;
++  while ((match = copy.exec(text)) !== null) {
++    count += 1;
++    if (copy.lastIndex === match.index) copy.lastIndex += 1;
++  }
++  return count;
++}
++
++/**
++ * 检查文件名是否命中黑名单。
++ * @param {string} rel 相对路径。
++ * @return {string[]} 命中类型列表。
++ */
++function fileNameFindings(rel) {
++  const base = path.basename(rel);
++  const lower = base.toLowerCase();
++  const ext = path.extname(lower);
++  const types = [];
++
++  if (BLACKLIST_EXT.has(ext)) {
++    types.push(ext === '.zip' && lower.includes('trace') ? 'TRACE_ARCHIVE' : 'BLACKLIST_EXT');
++  }
++  if (lower === SERVER_LOG_NAME) types.push('SERVER_LOG');
++  if (SENSITIVE_NAME_RE.test(base)) types.push('SENSITIVE_FILENAME');
++  return types;
++}
++
++/**
++ * 通过 NUL 字节判定二进制内容。
++ * @param {Buffer} buf 文件内容。
++ * @return {boolean} 是否为二进制。
++ */
++function looksBinary(buf) {
++  const limit = Math.min(buf.length, 4096);
++  for (let i = 0; i < limit; i += 1) {
++    if (buf[i] === 0) return true;
++  }
++  return false;
++}
++
++/**
++ * 递归遍历目录；符号链接单独记录，不跟随。
++ * @param {string} dir 目录绝对路径。
++ * @param {{files: string[], symlinks: string[]}} out 输出累加器。
++ * @throws {Error} 目录不可读时抛出。
++ */
++function walk(dir, out) {
++  let entries;
++  try {
++    entries = fs.readdirSync(dir, { withFileTypes: true });
++  } catch (err) {
++    throw new Error(`无法读取目录 ${displayPath(dir)}：${err.message}`);
++  }
++  for (const entry of entries) {
++    const abs = path.join(dir, entry.name);
++    if (entry.isSymbolicLink()) {
++      out.symlinks.push(abs);
++      continue;
++    }
++    if (entry.isDirectory()) {
++      walk(abs, out);
++      continue;
++    }
++    if (entry.isFile()) out.files.push(abs);
++  }
++}
++
++/**
++ * 程序入口。
++ * @param {string[]} argv process.argv.slice(2)。
++ * @return {number} 退出码。
++ */
++function main(argv) {
++  let options;
++  try {
++    options = parseArgs(argv);
++  } catch (err) {
++    process.stderr.write(`[scan][ERROR] ${err.message}\n`);
++    return EXIT_ERROR;
++  }
++  if (options.help) {
++    printHelp();
++    return EXIT_CLEAN;
++  }
++
++  const targetDir = options.dir;
++  let dirStat;
++  try {
++    dirStat = fs.statSync(targetDir);
++  } catch (err) {
++    process.stderr.write(`[scan][ERROR] 待扫描目录不存在或不可访问：${displayPath(targetDir)}\n`);
++    return EXIT_ERROR;
++  }
++  if (!dirStat.isDirectory()) {
++    process.stderr.write(`[scan][ERROR] 待扫描路径不是目录：${displayPath(targetDir)}\n`);
++    return EXIT_ERROR;
++  }
++
++  /** @type {Map<string, {file: string, type: string, count: number}>} */
++  const findings = new Map();
++  /**
++   * 累加一条命中，只记录文件名、类型与数量。
++   * @param {string} file 相对文件路径。
++   * @param {string} type 命中类型。
++   * @param {number} count 命中数量。
++   */
++  function addFinding(file, type, count) {
++    const key = `${file}|${type}`;
++    const prev = findings.get(key);
++    if (prev) prev.count += count;
++    else findings.set(key, { file, type, count });
++  }
++
++  const tree = { files: [], symlinks: [] };
++  let textScanned = 0;
++  let binarySkipped = 0;
++
++  try {
++    walk(targetDir, tree);
++    for (const abs of tree.files) {
++      const rel = path.relative(targetDir, abs).split(path.sep).join('/');
++      for (const type of fileNameFindings(rel)) addFinding(rel, type, 1);
++
++      const ext = path.extname(abs).toLowerCase();
++      if (BINARY_EXT.has(ext)) {
++        binarySkipped += 1;
++        continue;
++      }
++      const stat = fs.statSync(abs);
++      if (stat.size > MAX_TEXT_BYTES) {
++        throw new Error(`文件超过可扫描上限 ${MAX_TEXT_BYTES} 字节：${rel}`);
++      }
++      const buf = fs.readFileSync(abs);
++      if (looksBinary(buf)) {
++        binarySkipped += 1;
++        continue;
++      }
++      const text = buf.toString('utf8');
++      textScanned += 1;
++      for (const rule of TEXT_RULES) {
++        const count = countMatches(text, rule.re);
++        if (count > 0) addFinding(rel, rule.type, count);
++      }
++    }
++    for (const link of tree.symlinks) {
++      const rel = path.relative(targetDir, link).split(path.sep).join('/');
++      addFinding(rel, 'SYMLINK_ENTRY', 1);
++    }
++  } catch (err) {
++    process.stderr.write(`[scan][ERROR] 扫描过程异常：${err.message}\n`);
++    return EXIT_ERROR;
++  }
++
++  const rows = [...findings.values()].sort(
++    (a, b) => a.file.localeCompare(b.file) || a.type.localeCompare(b.type),
++  );
++  const totalHits = rows.reduce((sum, row) => sum + row.count, 0);
++
++  const lines = [
++    `[scan] 待上传目录：${displayPath(targetDir)}`,
++    `[scan] 文件总数=${tree.files.length} 文本已扫描=${textScanned} ` +
++      `二进制跳过内容扫描=${binarySkipped} 符号链接=${tree.symlinks.length}`,
++    `[scan] 命中明细（仅文件路径 + 命中类型 + 命中数量，不输出匹配值）：`,
++  ];
++  for (const row of rows) lines.push(`[HIT] ${row.file} | ${row.type} | ${row.count}`);
++  if (rows.length === 0) lines.push('[HIT] （无） | — | 0');
++  lines.push(`[scan] 命中文件/类型组合=${rows.length} 命中总数=${totalHits}`);
++
++  if (totalHits > 0) {
++    lines.push('[scan] 结论：BLOCKED —— 禁止上传，请先清除上述命中项');
++    process.stdout.write(`${lines.join('\n')}\n`);
++    return EXIT_BLOCKED;
++  }
++  if (tree.files.length === 0) {
++    lines.push('[scan][WARN] 目录为空；上传 step 的 if-no-files-found=error 仍会使 job 失败');
++  }
++  lines.push('[scan] 结论：CLEAN —— 允许上传');
++  process.stdout.write(`${lines.join('\n')}\n`);
++  return EXIT_CLEAN;
++}
++
++process.exitCode = main(process.argv.slice(2));
+
+--- 新增文件: tools/r0/e2e/test-scan-artifacts.js ---
+warning: in the working copy of 'tools/r0/e2e/test-scan-artifacts.js', LF will be replaced by CRLF the next time Git touches it
+diff --git a/tools/r0/e2e/test-scan-artifacts.js b/tools/r0/e2e/test-scan-artifacts.js
+new file mode 100644
+index 0000000..45673f2
+--- /dev/null
++++ b/tools/r0/e2e/test-scan-artifacts.js
+@@ -0,0 +1,200 @@
++'use strict';
++
++/**
++ * FastLedger R0 E2E —— scan-artifacts.js 负向合成测试（P1 安全整改自证）。
++ *
++ * 运行：node --test tools/r0/e2e/test-scan-artifacts.js
++ *
++ * 安全约定：所有「疑似凭据」样例均由运行时字符串拼接生成，并统一带
++ * SYNTHETIC / FAKE 标记；仓库源码中不残留任何可被误判为真实凭据的字面量。
++ * 样例文件写入系统临时目录（os.tmpdir），测试结束即删除，不落入仓库，
++ * 因此 tools/r0/scan-credentials.js --strict 不会把它们计入真实凭证候选。
++ *
++ * 每组都会打印期望与实际退出码。
++ */
++
++const { test } = require('node:test');
++const assert = require('node:assert/strict');
++const { spawnSync } = require('node:child_process');
++const fs = require('node:fs');
++const os = require('node:os');
++const path = require('node:path');
++
++const SCANNER = path.resolve(__dirname, 'scripts', 'scan-artifacts.js');
++const EXIT_CLEAN = 0;
++const EXIT_ERROR = 1;
++const EXIT_BLOCKED = 2;
++
++/**
++ * 生成带 SYNTHETIC/FAKE 标记的运行期合成值。
++ * @param {string} tag 用例标签。
++ * @return {string} 合成值。
++ */
++function syntheticValue(tag) {
++  return ['SYNTHETIC', 'FAKE', tag, '000000000000'].join('');
++}
++
++/**
++ * 运行期拼接出 JWT 三段式形态，仅用于负向测试。
++ * @return {string} 合成三段式样例。
++ */
++function syntheticJwt() {
++  const head = ['ey', 'J', 'SYNTHETIC', 'FAKE', 'HEADER'].join('');
++  const body = ['SYNTHETIC', 'FAKE', 'PAYLOAD', '0001'].join('');
++  const sig = ['SYNTHETIC', 'FAKE', 'SIGNATURE', '0002'].join('');
++  return [head, body, sig].join('.');
++}
++
++/**
++ * 创建位于系统临时目录的用例目录，并注册自动清理。
++ * @param {import('node:test').TestContext} t 测试上下文。
++ * @param {string} label 用例短标签。
++ * @return {string} 临时目录绝对路径。
++ */
++function makeTmp(t, label) {
++  const dir = fs.mkdtempSync(path.join(os.tmpdir(), `r0-p1-${label}-`));
++  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
++  return dir;
++}
++
++/**
++ * 写入一组不含任何敏感形态的干净证据文件（含一张最小 PNG）。
++ * @param {string} dir 用例目录。
++ */
++function writeCleanSet(dir) {
++  fs.writeFileSync(path.join(dir, 'report.md'), '# R0 report\n\n- status: PASS\n', 'utf8');
++  fs.writeFileSync(
++    path.join(dir, 'report.json'),
++    `${JSON.stringify({ suite: 'a', passed: 11, failed: 0 }, null, 2)}\n`,
++    'utf8',
++  );
++  fs.writeFileSync(path.join(dir, 'SHA256SUMS.txt'), '0000  report.md\n', 'utf8');
++  fs.writeFileSync(path.join(dir, 'run.log'), '[info] run finished\n', 'utf8');
++  fs.writeFileSync(
++    path.join(dir, 'shot.png'),
++    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]),
++  );
++}
++
++/**
++ * 以子进程运行扫描器并断言退出码。
++ * @param {string} caseName 用例名。
++ * @param {string} dir 待扫描目录。
++ * @param {number} expected 期望退出码。
++ * @return {{code: number|null, stdout: string, stderr: string}} 运行结果。
++ */
++function runScanner(caseName, dir, expected) {
++  const result = spawnSync(process.execPath, [SCANNER, dir], { encoding: 'utf8' });
++  const code = result.status;
++  console.log(`[负向测试] ${caseName} | 期望退出码=${expected} | 实际退出码=${code}`);
++  assert.equal(code, expected, `${caseName}：退出码不符（stderr=${result.stderr || ''}）`);
++  return { code, stdout: result.stdout || '', stderr: result.stderr || '' };
++}
++
++test('case-01 干净文件集 → 退出码 0', (t) => {
++  const dir = makeTmp(t, 'clean');
++  writeCleanSet(dir);
++  const result = runScanner('case-01 干净文件集', dir, EXIT_CLEAN);
++  assert.match(result.stdout, /\[scan\] 结论：CLEAN/);
++});
++
++test('case-02 合成 JWT 三段式 → 退出码 2', (t) => {
++  const dir = makeTmp(t, 'jwt');
++  writeCleanSet(dir);
++  fs.writeFileSync(path.join(dir, 'run.log'), `[info] sample=${syntheticJwt()}\n`, 'utf8');
++  const result = runScanner('case-02 合成 JWT 三段式', dir, EXIT_BLOCKED);
++  assert.match(result.stdout, /JWT_LITERAL/);
++});
++
++test('case-03 名为 trace.zip 的归档 → 退出码 2', (t) => {
++  const dir = makeTmp(t, 'trace');
++  writeCleanSet(dir);
++  fs.writeFileSync(path.join(dir, 'trace.zip'), Buffer.from([0x50, 0x4b, 0x03, 0x04]));
++  const result = runScanner('case-03 trace.zip 黑名单文件名', dir, EXIT_BLOCKED);
++  assert.match(result.stdout, /TRACE_ARCHIVE/);
++});
++
++test('case-04 Bearer 与鉴权头赋值 → 退出码 2', (t) => {
++  const dir = makeTmp(t, 'headers');
++  writeCleanSet(dir);
++  fs.writeFileSync(
++    path.join(dir, 'headers.log'),
++    `${['Bearer', ' ', syntheticValue('BEARER')].join('')}\n`,
++    'utf8',
++  );
++  fs.writeFileSync(
++    path.join(dir, 'auth.json'),
++    `${JSON.stringify({ note: ['Authorization', ': ', syntheticValue('AUTH')].join('') })}\n`,
++    'utf8',
++  );
++  const result = runScanner('case-04 Bearer / 鉴权头', dir, EXIT_BLOCKED);
++  assert.match(result.stdout, /BEARER_TOKEN/);
++  assert.match(result.stdout, /AUTH_HEADER/);
++});
++
++test('case-05 Cookie 与 Set-Cookie 赋值 → 退出码 2', (t) => {
++  const dir = makeTmp(t, 'cookies');
++  writeCleanSet(dir);
++  fs.writeFileSync(
++    path.join(dir, 'cookies.log'),
++    `${['Set-Cookie', ': session=', syntheticValue('COOKIE')].join('')}\n`,
++    'utf8',
++  );
++  fs.writeFileSync(
++    path.join(dir, 'cookie2.log'),
++    `${['Cookie', ': sid=', syntheticValue('COOKIE2')].join('')}\n`,
++    'utf8',
++  );
++  const result = runScanner('case-05 Cookie / Set-Cookie', dir, EXIT_BLOCKED);
++  assert.match(result.stdout, /COOKIE_HEADER/);
++});
++
++test('case-06 server.log 服务原始日志 → 退出码 2', (t) => {
++  const dir = makeTmp(t, 'serverlog');
++  writeCleanSet(dir);
++  fs.writeFileSync(path.join(dir, 'server.log'), '[info] server started\n', 'utf8');
++  const result = runScanner('case-06 server.log', dir, EXIT_BLOCKED);
++  assert.match(result.stdout, /SERVER_LOG/);
++});
++
++test('case-07 JWT 签名密钥赋值 → 退出码 2', (t) => {
++  const dir = makeTmp(t, 'jwtenv');
++  writeCleanSet(dir);
++  fs.writeFileSync(
++    path.join(dir, 'env-dump.log'),
++    `${['EBK_JWT_SECRET', '=', syntheticValue('SECRET')].join('')}\n`,
++    'utf8',
++  );
++  const result = runScanner('case-07 密钥赋值', dir, EXIT_BLOCKED);
++  assert.match(result.stdout, /EBK_JWT_SECRET_ASSIGN/);
++});
++
++test('case-08 目录不存在（参数/环境错误）→ 退出码 1', (t) => {
++  const parent = makeTmp(t, 'missing');
++  const missing = path.join(parent, 'not-created');
++  const result = runScanner('case-08 目录不存在', missing, EXIT_ERROR);
++  assert.match(result.stderr, /\[scan\]\[ERROR\]/);
++});
++
++test('case-09 二进制内容按设计跳过扫描 → 退出码 0', (t) => {
++  const dir = makeTmp(t, 'binaryskip');
++  writeCleanSet(dir);
++  // 二进制扩展名内的文本形态字节不做内容扫描；文件名黑名单仍照常生效。
++  fs.writeFileSync(
++    path.join(dir, 'embedded.png'),
++    Buffer.from(`[info] sample=${syntheticJwt()}\n`, 'utf8'),
++  );
++  const result = runScanner('case-09 二进制跳过内容扫描', dir, EXIT_CLEAN);
++  assert.doesNotMatch(result.stdout, /JWT_LITERAL/);
++});
++
++test('case-10 二进制文件名含敏感词仍被阻断 → 退出码 2', (t) => {
++  const dir = makeTmp(t, 'binaryname');
++  writeCleanSet(dir);
++  fs.writeFileSync(
++    path.join(dir, ['token', '-shot.png'].join('')),
++    Buffer.from([0x89, 0x50, 0x4e, 0x47]),
++  );
++  const result = runScanner('case-10 二进制文件名黑名单', dir, EXIT_BLOCKED);
++  assert.match(result.stdout, /SENSITIVE_FILENAME/);
++});
+
+--- 新增文件: docs/r0-evidence-7th-fix/p1/workflow-structure-check.js ---
+warning: in the working copy of 'docs/r0-evidence-7th-fix/p1/workflow-structure-check.js', LF will be replaced by CRLF the next time Git touches it
+diff --git a/docs/r0-evidence-7th-fix/p1/workflow-structure-check.js b/docs/r0-evidence-7th-fix/p1/workflow-structure-check.js
+new file mode 100644
+index 0000000..91904cc
+--- /dev/null
++++ b/docs/r0-evidence-7th-fix/p1/workflow-structure-check.js
+@@ -0,0 +1,126 @@
++'use strict';
++
++/**
++ * P1 交付自证：r0-e2e.yml 结构检查（可复现，零第三方依赖）。
++ *
++ * 运行：node docs/r0-evidence-7th-fix/p1/workflow-structure-check.js
++ * 输出：逐条 PASS/FAIL；全部通过时退出 0，否则退出 1。
++ *
++ * 检查重点：上传 step 是否真正依赖扫描 step 的 outcome、白名单 path 是否生效、
++ * 以及 A / D / C / 汇总退出码四个既有 step 是否与 HEAD 逐字一致（禁止改动语义）。
++ */
++
++const fs = require('node:fs');
++const path = require('node:path');
++const { execSync } = require('node:child_process');
++
++const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
++const WF_PATH = path.join(REPO_ROOT, '.github', 'workflows', 'r0-e2e.yml');
++const CI_PATH = path.join(REPO_ROOT, '.github', 'workflows', 'ci.yml');
++const WORKFLOW_DIR = path.join(REPO_ROOT, '.github', 'workflows');
++
++const wf = fs.readFileSync(WF_PATH, 'utf8');
++const ci = fs.readFileSync(CI_PATH, 'utf8');
++const lines = wf.split('\n').map((line) => line.replace(/\r$/, ''));
++
++/** @type {string[]} */
++const out = [];
++let allOk = true;
++
++/**
++ * 记录一条检查结果。
++ * @param {string} label 检查项名称。
++ * @param {boolean} cond 是否通过。
++ * @param {string} detail 补充信息。
++ */
++function check(label, cond, detail) {
++  if (!cond) allOk = false;
++  out.push(`${cond ? '[PASS]' : '[FAIL]'} ${label}${detail ? ` :: ${detail}` : ''}`);
++}
++
++/**
++ * 查找包含指定文本的首个行号（1-based）。
++ * @param {string} needle 待查找文本。
++ * @return {number} 行号，未找到返回 -1。
++ */
++function lineNo(needle) {
++  const index = lines.findIndex((line) => line.includes(needle));
++  return index < 0 ? -1 : index + 1;
++}
++
++const iPrepare = lineNo('id: artifact_prepare');
++const iScan = lineNo('id: artifact_scan');
++const iUpload = lineNo('uses: actions/upload-artifact@v4');
++const iSummary = lineNo('name: 汇总退出码');
++
++check(
++  'step 顺序：汇总 < 准备 < 扫描 < 上传',
++  iSummary > 0 && iSummary < iPrepare && iPrepare < iScan && iScan < iUpload,
++  `行号 汇总=${iSummary} 准备=${iPrepare} 扫描=${iScan} 上传=${iUpload}`,
++);
++
++check(
++  '扫描 step 的 if 依赖 prepare 的 outcome',
++  wf.includes("if: ${{ always() && steps.artifact_prepare.outcome == 'success' }}"),
++);
++check(
++  '上传 step 的 if 依赖 scan 的 outcome',
++  wf.includes("if: ${{ always() && steps.artifact_scan.outcome == 'success' }}"),
++);
++
++// 上传 step 的 uses 行上一行就是它的 if 行；必须不是裸 always()。
++const uploadIfLine = (lines[iUpload - 2] || '').trim();
++check(
++  '上传 step 的 if 行不是裸 always()',
++  uploadIfLine.startsWith('if:') && !uploadIfLine.includes('if: always()'),
++  uploadIfLine,
++);
++
++const iPath = lineNo('path: |');
++const pathValue = (lines[iPath] || '').trim();
++check('上传 path 指向白名单目录', pathValue === 'artifacts/r0-e2e-upload/**', pathValue);
++check('if-no-files-found 改为 error', /if-no-files-found: error/.test(wf));
++check(
++  'workflow 全文无 trace 字样',
++  !/trace/i.test(wf),
++  `trace 出现次数=${(wf.match(/trace/gi) || []).length}`,
++);
++check(
++  'C 报告型 continue-on-error: true 保留且仅一处',
++  (wf.match(/continue-on-error: true/g) || []).length === 1,
++);
++
++// 与 HEAD 逐字比对 A / D / C / 汇总退出码 四个既有 step 的完整文本段。
++const head = execSync('git show HEAD:.github/workflows/r0-e2e.yml', { encoding: 'utf8' });
++/**
++ * 取出「# A 是门禁」到汇总 step 结束之间的文本。
++ * @param {string} text workflow 全文。
++ * @return {string} 门禁语义段落。
++ */
++function gateSegment(text) {
++  const start = text.indexOf('      # A 是门禁');
++  const end = text.indexOf('          } >> "$GITHUB_STEP_SUMMARY"');
++  return text.slice(start, end);
++}
++const headSegment = gateSegment(head);
++const nowSegment = gateSegment(wf);
++check(
++  'A / D / C / 汇总退出码 四个既有 step 与 HEAD 逐字一致',
++  headSegment === nowSegment,
++  `字节数 HEAD=${headSegment.length} 当前=${nowSegment.length}`,
++);
++
++check('ci.yml 无 upload-artifact 步骤', !ci.includes('upload-artifact'));
++check(
++  '.github/workflows 下仅 ci.yml 与 r0-e2e.yml 两个文件',
++  fs.readdirSync(WORKFLOW_DIR).sort().join(',') === 'ci.yml,r0-e2e.yml',
++);
++check(
++  '全仓 workflow 中 upload-artifact 仅 1 处',
++  (wf.match(/uses: actions\/upload-artifact@/g) || []).length === 1,
++);
++
++out.push('');
++out.push(`结构检查总结论：${allOk ? 'PASS' : 'FAIL'}`);
++process.stdout.write(`${out.join('\n')}\n`);
++process.exitCode = allOk ? 0 : 1;
+
+=== 说明 ===
+p1/ 下的日志、退出码、diff/status、报告为交付证据，内容不重复列入本 diff。
