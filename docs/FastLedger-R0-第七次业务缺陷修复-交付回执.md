@@ -195,9 +195,31 @@
 ## 7. 提交与 CI
 
 - 分支：`fix/r0-sixth-runtime-defects`，基准 `dadc9a3b9c567cad2bbad7e47361fb774365b949`。
-- 交付 commit SHA：**见下方回填**。
-- CI run：**见下方回填**（`R0 E2E` 与 `CI` 两个工作流；A 门禁 / D 门禁 / C 报告型）。
-- PR：**待创建 / 见下方回填**，供 ChatGPT 第三方审核；**未经审核不合并 main，也不宣布 R0 通过**。
-- 凭证扫描：`node tools/r0/scan-credentials.js --strict` 退出码 0；未向仓库引入任何 token、密钥或含 JWT 的原始网络日志。
+- 交付 commit SHA（代码/测试/证据主体）：**`0472484b3e57dac4cd05240ac40fb793ad3a2b4d`**。
+- PR：**[#3](https://github.com/LinTia/FastLadger/pull/3)** `fix/r0-sixth-runtime-defects` → `main`，状态 open，**未经 ChatGPT 第三方审核不合并**。
+- 凭证扫描：`node tools/r0/scan-credentials.js --strict` 退出码 0（`真实凭证候选命中：0`）；未向仓库引入任何 token、密钥或含 JWT 的原始网络日志。
 
-> CI_RUN_PLACEHOLDER
+### 7.1 独立 CI 证据（head = `0472484`）
+
+| 工作流 | run | 结论 | 链接 |
+|---|---|---|---|
+| **CI**（build / vet / test / 全仓 `-race` / 容器冒烟） | `42009684372` | **success**（job `127185221646`；step 10 `go test -race（全仓）` success；job `127186865253` docker/healthz success） | https://github.com/LinTia/FastLadger/actions/runs/42009684372 |
+| **R0 E2E**（A 门禁 / D 门禁 / C 报告型） | `42009684399` | **success**（job `127185221832`） | https://github.com/LinTia/FastLadger/actions/runs/42009684399 |
+
+`R0 E2E` 关键 step 逐步结论（step 序号 / 名称 / conclusion）：
+
+| step | 名称 | 结论 |
+|---|---|---|
+| 4 | 构建服务二进制（CGO 真库） | success |
+| 7 / 8 | 分类解析合成测试 / 22 笔审计 | success / success |
+| **9** | **包 A · 11 项状态/权限/同步场景（门禁）** | **success** |
+| **10** | **包 D · 四项业务缺陷回归（门禁，无 `continue-on-error`）** | **success** |
+| 11 | 包 C · 228 条逐控件（报告型，`continue-on-error: true`） | completed success（**不代表 C 无 FAIL**） |
+| 12 / 13 | 汇总退出码 / 上传证据 artifact | success / success |
+
+> **口径提醒（第七次复核已指出）**：C 的 step/job success 只说明脚本执行完毕，**不等于 C 通过**。该 run 中 C 的实际分布仍为 `PASS 163 / FAIL 5 / BLOCKED 59 / N/A 1`，其中 5 条 FAIL 含保持 FAIL 的 `I-ACCT-06`。D 门禁是新加的硬门禁（无 `continue-on-error`），其 success 才是本轮 4 项修复回归通过的 CI 证明。CI 的 `go test ./... -race` 全仓 success 也由 GitHub 原生证明，弥补了本机 `-race` 不可用 / `internal/ws` 被 Application Control 拦截的环境限制。
+
+### 7.2 提交与哈希口径
+
+- 本次回填 CI 链接会产生**第二个仅文档 commit**；`0472484` 是代码/测试/证据主体，也是上表两个 CI run 的 head。第二 commit 会重新触发同样的两个工作流，其 run 可在 PR #3 的 Checks 中查看；**不得**把后一个 run 说成是前一个 commit 的验证。
+- 已知 Windows `core.autocrlf=true` 会导致本机工作树与 LF 仓库内容的 SHA256 不同；`qa/SHA256SUMS.txt` 按本机 LF 工作树口径生成，复现校验请用 `git -c core.autocrlf=false clone`。
