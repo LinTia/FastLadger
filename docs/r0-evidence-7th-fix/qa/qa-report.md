@@ -2,7 +2,7 @@
 
 > 复核人：Edward（QA 工程师，独立复核方）
 > 分支：`fix/r0-sixth-runtime-defects`；基准 main：`dadc9a3b9c567cad2bbad7e47361fb774365b949`；**初次独立复核阶段（09:59–10:02Z）的 HEAD = main**。
-> **阶段说明（重要）**：收尾期间 team-lead 创建了 commit `0472484b3e57dac4cd05240ac40fb793ad3a2b4d`（`fix(r0): 有限范围修复第六次验收 4 项业务缺陷 + 独立回归门禁`，2026-11-05T18:18:00+08:00），此后 **HEAD 已变为 `0472484`、工作树 diff 已清空**。本报告第 2~4 节及 `scope-audit.md` 第 1~7 节的所有 git / diff / 重跑观测，均基于**该 commit 之前**的工作树（当时 HEAD 即 main），属历史观测；按当前仓库复现请改用 `git show 0472484` 或 `git diff dadc9a3..0472484`。详见 6.6。
+> **阶段说明（重要）**：收尾期间 team-lead 依次创建了 commit `0472484`（`fix(r0): 有限范围修复第六次验收 4 项业务缺陷 + 独立回归门禁`）、`782f827`（回填 CI run / PR 链接）、`aa8f07d`（同步 QA 收尾复核报告）。**本报告记录时点：HEAD = `aa8f07d`、`git status` 为空（工作树干净）**；其后若再有文档同步类 commit，不改变本报告的运行时观测与结论。本报告第 2~4 节及 `scope-audit.md` 第 1~7 节的所有 git / diff / 重跑观测，均基于**首个 commit 之前**的工作树（当时 HEAD 即 main），属历史观测；按当前仓库复现请改用 `git show 0472484` 或 `git diff dadc9a3..0472484`。详见 6.6。
 > 复核方式：**重新构建 → 新证据目录 `artifacts/r0-qa-verify` → 重新起干净实例 → 重新跑 A/D/C**；全部结论以 QA 自己跑出的原始日志、`report.json` 与真实退出码为准，不采信工程师自述与 `after/` artifacts。
 > 复核时间：2026-11-05T09:59Z ~ 10:02Z（UTC）
 > 证据根目录：`docs/r0-evidence-7th-fix/qa/`
@@ -109,7 +109,7 @@ go build -o fastledger.exe ./cmd/server
 |---|---|
 | 交易总表有数据 | `01-txns-with-data.png`、`17-txns-wide-viewport.png` |
 | 空态 | `02-txns-empty.png` |
-| 加载失败 | **`05b-txns-load-failure-clear.png`（清晰合格版，team-lead 目检用）**、`05-txns-load-failure.png`（过渡态，标注见 Q-1）、`03-txns-failure-screenshot-mismatch.png`（错配反例，见 Q-1）、`06-txns-skeleton-loading.png`（加载中） |
+| 加载失败 | **`05b-txns-load-failure-clear.png`（清晰合格版，team-lead 已目检通过）**、`05-txns-load-failure.png`（过渡态，标注见 Q-1）、`03-txns-failure-screenshot-mismatch.png`（错配反例，见 Q-1）、`06-txns-skeleton-loading.png`（加载中） |
 | 记一笔分类下拉 | `07-category-expense-dropdown.png`、`08-category-type-switch.png`、`09-category-expense-created.png`、`10-category-transfer.png` |
 | member 成员页 | `11-members-owner-invite.png`（owner 有入口）、`12-members-admin.png`、`13-members-member-no-invite.png`（member 无入口）、`14-members-me-failed-closed.png` |
 | 账户列表 | `15-accounts-list-first-col-hidden.png`（首列被 CSS 隐藏，直观证明 I-ACCT-06）、`16-acct-06-visibility-fail.png` |
@@ -178,10 +178,10 @@ QA 目视确认：页面中央 ⚠️ 图标 + 完整失败提示清晰可读，
 
 | ID | 问题 | 严重度 | 建议 |
 |---|---|---|---|
-| Q-1 | 框架 `step()` 在 `fn()` 结束后才截图，凡 fn 内复位/关弹窗/刷新者截图不反映判定瞬间。**`qa/SHA256SUMS.txt` 硬证据：`01`（有数据）/`03`（加载失败）/`04`（行编辑）三张截图 SHA256 完全相同 `6324b0fa…`**；`I-TXNS-14/18` 截图为关闭/复位后状态；`I-TXNS-19`、`I-ACCT-06-visibility`、`D-ACCT-01` 呈极淡或全白 | 中（证据可读性） | **【未解决 · 按 team-lead 裁决如实登记】** 不改 `step()` 框架。QA 已**二次源码复核确认判定不依赖截图**：`r.status` 在 `fn()` 返回时即确定，截图在其后执行且失败被 `catch` 忽略，仅作 `evidence` 附加；`d-defects.js` L103 与 `txns-controls.js` L117 均用 `r.status`。另已补清晰失败态截图 `05b-txns-load-failure-clear.png`（见 4.2.1）。建议后续把截图移到判定采集点 |
-| Q-2 | `a-scenarios.js` L256 A08 detail 曾含修复前遗留硬编码文案「UI 未隐藏=真实缺陷，已记录」，与本次 `inviteBtn=0` 语义矛盾（不参与判定） | 低（误导性文案） | **【已修复】** 改为「成员管理接口 403 校验通过；UI 入口可见性另由 D 套件 D-MEM-* 覆盖」；`git diff` 确认仅 detail 字符串 1 行，`status` / `apiOk` / `evidence` 未动，`node --check` 通过 |
+| Q-1 | 框架 `step()` 在 `fn()` 结束后才截图，凡 fn 内复位/关弹窗/刷新者截图不反映判定瞬间。**`qa/SHA256SUMS.txt` 硬证据：`01`（有数据）/`03`（加载失败）/`04`（行编辑）三张截图 SHA256 完全相同 `6324b0fa…`**；`I-TXNS-14/18` 截图为关闭/复位后状态；`I-TXNS-19`、`I-ACCT-06-visibility`、`D-ACCT-01` 呈极淡或全白 | 中（证据可读性） | **【未解决 · 按 team-lead 裁决如实登记】** 框架 `step()` 截图时点错配保留为未解决，不改 `step()` 框架。**确认判定本身不依赖截图**：QA 已二次源码复核，`r.status` 在 `fn()` 返回时即确定，截图在其后执行且失败被 `catch` 忽略、仅作 `evidence` 附加（`d-defects.js` L103 与 `txns-controls.js` L117 均直接用 `r.status`）。**已另拍 `05b-txns-load-failure-clear.png` 作为加载失败的可读证据（team-lead 已目检通过：清晰显示「交易加载失败：QA 交付截图注入 500」，无骨架屏、无遮罩）**，见 4.2.1。建议后续把截图移到判定采集点 |
+| Q-2 | `a-scenarios.js` L256 A08 detail 曾含修复前遗留硬编码文案「UI 未隐藏=真实缺陷，已记录」，与本次 `inviteBtn=0` 语义矛盾（不参与判定） | 低（误导性文案） | **【已按 team-lead 指令修正（仅文案，不动断言/判定/触发条件）】** 现文案：`a-scenarios.js` L256 A08 detail =「成员管理接口 403 校验通过；UI 入口可见性另由 D 套件 D-MEM-* 覆盖」。`git diff` 确认仅 detail 字符串 1 行，`status` / `apiOk` / `evidence` 未动，`node --check` 通过 |
 | Q-3 | `trace.zip` 含真实 JWT | **高（安全/脱敏）** | **【保持脱敏口径，不复制】** 已在 4.3 明确不复制任何 trace；本轮新增的脚本 / 日志 / 截图同样经脱敏扫描无凭据字面量。建议框架侧接入 `tools/r0/redaction.js` 对 trace 网络层脱敏后再上传 artifact |
-| Q-4 | `.github/workflows/r0-e2e.yml` L28 job 名原为 `A(11 场景) + C(228 控件) + B(分类审计)`，未含 D | 低（文案） | **【已修复】** 改为 `A(11 场景) + D(缺陷回归) + C(228 控件) + B(分类审计)`；`git diff` 确认仅 `name` 一行，所有 step / id / 触发条件 / `continue-on-error` 未动 |
+| Q-4 | `.github/workflows/r0-e2e.yml` L28 job 名原为 `A(11 场景) + C(228 控件) + B(分类审计)`，未含 D | 低（文案） | **【已按 team-lead 指令修正（仅文案，不动断言/判定/触发条件）】** 现文案：`.github/workflows/r0-e2e.yml` L28 job `name` = `A(11 场景) + D(缺陷回归) + C(228 控件) + B(分类审计)`。`git diff` 确认仅 `name` 一行，所有 step / id / 触发条件 / `continue-on-error` 未动 |
 
 ### 6.3 负向合成验证的局限（详见 `qa/assertion-review.md` 第 2.3 节）
 
@@ -195,8 +195,8 @@ QA 目视确认：页面中央 ⚠️ 图标 + 完整失败提示清晰可读，
 1. **`I-ACCT-06` / 390px 视觉可见性**：`style.css` L331 隐藏首列，用户看不到新增账户名；本轮未获授权改 CSS，**保持 FAIL，待 Owner 裁决**。
 2. **C 的另外 4 条 FAIL + 59 条 BLOCKED**：既有产品缺口/数据前置缺口，非本轮范围。
 3. **`.github/workflows/r0-e2e.yml` 改动边界**：该文件由工程师修改（新增 D 门禁），任务书硬约束字面把 `.github/workflows/` 列入「不得修改」清单，但同任务书又要求审计该 diff，QA 已在 `qa/scope-audit.md` 2.1 如实标注为**需 team-lead 确认的边界项**。后续 team-lead 明确授权 QA 只改 job `name` 一行（Q-4），QA 据此执行且未动任何 step/id/触发条件；**该文件的其余改动仍属工程师产出，边界确认仍请 team-lead 给出**。
-4. **提交状态已变化（详见 6.6）**：初次复核阶段改动全在工作树未提交；收尾期间 team-lead 已创建 commit `0472484` 将大部分改动入库（含 QA 的两处纯文案修正与全部 `qa/` 证据）。**QA 未执行该 commit、未 push、未合并 main**。`qa/qa-report.md`、`qa/scope-audit.md`、`qa/assertion-review.md`、`qa/SHA256SUMS.txt` 共 4 个文件在 commit 之后仍有未暂存更新，需 team-lead 决定是否一并纳入。另：`artifacts/r0-qa-verify/`（含 JWT/临时库）**不得**进入 Public 仓库——QA 已核查 commit `0472484` **未包含** artifacts / trace.zip / server.log / .db，HEAD 树文本文件中亦无 JWT 字面量。
-5. **Q-1 未解决**（按 team-lead 指示登记为「未解决的证据质量问题」，不改 `step()` 框架）；**Q-3 脱敏口径保持**（不复制 trace）；Q-2 / Q-4 已修复。均不阻塞本轮验收。
+4. **提交状态已变化（详见 6.6）**：初次复核阶段改动全在工作树未提交；收尾期间 team-lead 依次创建 `0472484`、`782f827`、`aa8f07d`，已将全部改动（含 QA 的两处纯文案修正与全部 `qa/` 证据，以及其后补记的 4 个 `qa/` 文件）入库，**记录时点 `git status` 为空、HEAD=`aa8f07d`**。**QA 未执行任何 commit / push / 合并 main / `git add`**。另：`artifacts/r0-qa-verify/`（含 JWT/临时库）**不得**进入 Public 仓库——QA 已核查 commit `0472484` **未包含** artifacts / trace.zip / server.log / .db，HEAD 树文本文件中亦无 JWT 字面量。
+5. **Q-1 未解决**（按 team-lead 指示登记为「未解决的证据质量问题」，不改 `step()` 框架；已另拍 `05b` 作可读证据）；**Q-2 / Q-4 已按 team-lead 指令修正（仅文案，不动断言/判定/触发条件）**；**Q-3 保持「trace 含 JWT，未复制」的处置不变**。以上为最终状态，不再列为待办建议；均不阻塞本轮验收。
 
 ### 6.5 team-lead 授权的低风险收尾（本轮追加，不改变任何判定）
 
@@ -225,10 +225,10 @@ subject   fix(r0): 有限范围修复第六次验收 4 项业务缺陷 + 独立�
 
 | 影响 | 说明 |
 |---|---|
-| HEAD | 由 `dadc9a3b9…`（基准 main）变为 `0472484`；`git diff`（工作树）已清空，业务代码 diff 需改用 `git show 0472484` 或 `git diff dadc9a3..0472484` 查看 |
+| HEAD | 由 `dadc9a3b9…`（基准 main）依次变为 `0472484` → `782f827` → `aa8f07d`（**记录时点**）；`git diff`（工作树）已清空，业务代码 diff 需改用 `git show 0472484` 或 `git diff dadc9a3..0472484` 查看 |
 | 已入库 | 工程师的 4 类改动（业务 JS / 测试代码 / workflow D 门禁 / 新证据目录）、QA 的全部 `qa/` 证据、QA 的两处纯文案修正（A08 detail、workflow `name`）、`tools/r0/e2e/scripts/qa-load-failure-shot.js`、`05b-*` 证据 |
 | **commit 中的边界外文件** | `README.md`（+1）、`CHANGELOG.md`（+11）、以及 `docs/r0-evidence-7th-fix/` 下一份中文名复核文档（+203）。**这些由 team-lead 侧加入，QA 未参与、未修改、未审核其内容，不替其背书**。`qa/scope-audit.md` 第 2.2 节「README/CHANGELOG 均未被触碰」是**初次独立复核阶段（commit 之前）**的观测，须按此阶段限定理解 |
-| 仍未暂存（commit 之后的 QA 更新） | `qa/qa-report.md`、`qa/scope-audit.md`、`qa/assertion-review.md`、`qa/SHA256SUMS.txt` 共 **4 个**文件（`git status` 显示 `M`）。**请 team-lead 决定是否一并纳入交付**；QA 不执行 `git add` / commit / push |
+| 已同步入库（原 commit 之后的 QA 更新） | `qa/qa-report.md`、`qa/scope-audit.md`、`qa/assertion-review.md`、`qa/SHA256SUMS.txt` 共 4 个文件，已由 team-lead 在 `aa8f07d`（`docs(R0): 同步 QA 收尾复核报告`）中纳入；**记录时点 `git status --porcelain` 为空（工作树干净）**。QA 全程未执行 `git add` / commit / push |
 | 脱敏复核 | `git show --name-only 0472484` 与 `git ls-tree -r HEAD` 均**无** `artifacts/`、`trace.zip`、`server.log`、`fastledger.db`；`git grep HEAD -- '*.json' '*.log' '*.md' '*.txt'` **未发现 JWT 三段式字面量**。Q-3 的脱敏口径在提交层面同样守住 |
 
 > 本补记只更新仓库状态事实，**不改变**本报告任何 PASS/FAIL 判定、验收结论或 `NoOne` 路由。
@@ -237,8 +237,10 @@ subject   fix(r0): 有限范围修复第六次验收 4 项业务缺陷 + 独立�
 
 ## 7. 复核边界声明（QA 自证）
 
-- **初次独立复核阶段未修改**：`server/web/dist/app.js`（业务代码）、`server/web/dist/style.css`、Go 后端、PRD/WBS、DB/API、历史证据 `docs/r0-evidence-6th/` 及更早、README/CHANGELOG、`.github/workflows/`、以及 `tools/r0/e2e/` 下任何测试代码。
-- **后续按 team-lead 明确授权的低风险收尾（仅文案/证据，见 6.5）**：① `tools/r0/e2e/specs/a-scenarios.js` A08 detail 文案（Q-2）；② `.github/workflows/r0-e2e.yml` job `name` 一行（Q-4）；③ 新增 `tools/r0/e2e/scripts/qa-load-failure-shot.js` 与 `qa/05b-*` 证据。**业务代码、CSS、Go 后端、断言逻辑、status 计算、`step()` 框架、控件清单始终未动**。
-- **未做**：放宽/删除/跳过任何断言、把 FAIL/BLOCKED 改判 PASS、延长 sleep 制造通过、用工程师 artifacts 作为结论、重跑 A/D/C 全套、启动 R1–R7、启动 PWA、合并 main、push、提交 commit。**（以上均指 QA 自身行为；仓库中的 commit `0472484` 由 team-lead 创建，见 6.6）**
-- **只新增**：`docs/r0-evidence-7th-fix/qa/` 下的证据文件（本报告及 6.1 前所列全部文件）。
+> **仅新增 `qa/` 证据 + 两处 team-lead 授权的纯文案修正 + 补拍脚本，未改任何判定逻辑。**
+
+- **具体改动清单**：① 新增 `docs/r0-evidence-7th-fix/qa/` 下全部证据文件（报告、日志、三份 `report.json`、截图、`SHA256SUMS.txt`）；② `tools/r0/e2e/specs/a-scenarios.js` A08 detail 纯文案（Q-2）；③ `.github/workflows/r0-e2e.yml` job `name` 纯文案（Q-4）；④ 补拍脚本 `tools/r0/e2e/scripts/qa-load-failure-shot.js` 及 `qa/05b-*` 产物。
+- **始终未动**：业务代码 `server/web/dist/app.js`、`style.css`、Go 后端、PRD/WBS、DB/API、历史证据 `docs/r0-evidence-6th/` 及更早、断言逻辑、status 计算、`step()` 框架、控件清单，以及任何 A/D/C 判定。
+- **阶段说明**：初次独立复核阶段（commit `0472484` 之前）QA 未修改任何业务/测试/workflow 文件，以保持独立重跑基线可复现；上述改动均发生在 team-lead 后续明确授权的低风险收尾阶段（见 6.5）。
+- **未做**：放宽/删除/跳过任何断言、把 FAIL/BLOCKED 改判 PASS、延长 sleep 制造通过、用工程师 artifacts 作为结论、重跑 A/D/C 全套、启动 R1–R7、启动 PWA、合并 main、push、提交 commit。**（以上均指 QA 自身行为；仓库中的 commit 均由 team-lead 创建，见 6.6）**
 - **可复现性**：`qa/*-qa.log` 记录了完整命令、实例端口、浏览器版本、逐条输出与真实退出码；三份 `report.json` 保留逐条 detail；`qa/SHA256SUMS.txt` 提供完整性校验。
