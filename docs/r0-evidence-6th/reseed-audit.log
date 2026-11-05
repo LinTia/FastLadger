@@ -1,0 +1,30 @@
+SEED_RUNTIME_DIR C:\Users\47006\AppData\Local\Temp\fl-audit-rt-KDO7mf
+SEED_MANIFEST C:\Users\47006\AppData\Local\Temp\fl-audit-rt-KDO7mf\seed-manifest.json
+SEED_PROTO_INJECTION C:\Users\47006\AppData\Local\Temp\fl-audit-rt-KDO7mf\proto-injection.json
+
+t001	meal	餐饮-早餐	->	meal	餐饮-三餐	via=id
+t002	taxi	交通-打车	->	taxi	交通-打车	via=id
+t003	meal	餐饮-午餐	->	meal	餐饮-三餐	via=id
+t004	takeout	餐饮-外卖	->	takeout	餐饮-外卖	via=id
+t005	bus	交通-公交	->	bus	交通-公交地铁	via=id
+t006	salary	收入-工资	->	salary	工资-工资	via=id
+t007	shopping	购物-服饰	->	shopping_clothes	购物-服饰	via=expand-child
+t008	grocery	购物-超市	->	grocery	购物-超市日用	via=id
+t009	travel	旅游-住宿	->	travel_hotel	旅游-住宿	via=expand-child
+t010	travel	旅游-门票	->	travel_ticket	旅游-门票	via=expand-child
+t011	movie	娱乐-电影	->	movie	娱乐-电影演出	via=id
+t012	meal	餐饮-晚餐	->	meal	餐饮-三餐	via=id
+t013	bonus	收入-奖金	->	bonus	奖金-奖金	via=id
+t014	transfer	转账-还款	->	transfer	转账	via=id
+t015	grocery	购物-超市	->	grocery	购物-超市日用	via=id
+t016	meal	餐饮-午餐	->	meal	餐饮-三餐	via=id
+t017	shopping	购物-数码	->	shopping_digital	购物-数码家电	via=expand-child
+t018	taxi	交通-打车	->	taxi	交通-打车	via=id
+t019	rent	居家-房租	->	rent	居家-房租	via=id
+t020	utility	居家-水电燃气	->	utility	居家-水电燃气	via=id
+t021	meal	餐饮-聚餐	->	dinner	餐饮-聚餐	via=manual-override
+t022	other_income	收入-其他	->	other_income	其他收入-其他	via=id
+
+via 分布：{"id":17,"expand-child":4,"manual-override":1}（共 22 笔）
+冲突记录：[{"txId":"t007","kind":"id-vs-name","resolution":"expand-child","parentId":"cat_shopping","childId":"shopping_clothes","display":"购物-服饰"},{"txId":"t009","kind":"id-vs-name","resolution":"expand-child","parentId":"cat_travel","childId":"travel_hotel","display":"旅游-住宿"},{"txId":"t010","kind":"id-vs-name","resolution":"expand-child","parentId":"cat_travel","childId":"travel_ticket","display":"旅游-门票"},{"txId":"t017","kind":"id-vs-name","resolution":"expand-child","parentId":"cat_shopping","childId":"shopping_digital","display":"购物-数码"}]
+AUDIT_OK 与基线一致（id 17 / expand-child 4 / manual-override 1 / 父类兜底 0）

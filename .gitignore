@@ -10,3 +10,7 @@
 
 # 容器环境变量（含 JWT 签名密钥）——严禁入库
 deploy/.env
+
+# R0 E2E：依赖与本地证据产物（证据由 CI artifact 上传，不入库）
+tools/r0/e2e/node_modules/
+artifacts/

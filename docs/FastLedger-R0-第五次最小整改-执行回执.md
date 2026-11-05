@@ -285,6 +285,8 @@ Owner 待办（WorkBuddy 不代做）：
 
 ---
 
+> **后续（2026-11-05 第六次整改）**：B 的分类解析已抽成 `tools/r0/lib/resolve-category.js` 并加 14 条合成测试（冲突/歧义/失败关闭）；A/C 已改为 Playwright 自动化 + 独立 CI。**本回执的 B/D 判定与 §5.4 的 3/5/5 结论不变**，最新状态见 `docs/FastLedger-R0-第六次整改-A-C自动化交付回执.md`。
+
 ## 9. 结论
 
 - **R0 仍 BLOCK**：A/C 未通过；B/D 仅 PARTIAL。

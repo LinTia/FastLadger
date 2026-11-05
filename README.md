@@ -7,7 +7,7 @@
 ## 当前状态（2026-10-31 历史快照，部分已过时）
 
 > 下表是 2026-10-31 的历史快照。schema 版本、测试基线、阶段进度以 `docs/` 最新交付文档、`CHANGELOG.md` 与服务器实测为准；**R0（基准冻结与差异盘点）当前未通过 / 阻塞**，见 [R0 报告](docs/FastLedger-R0-基准冻结与差异盘点.md)。本表不作为 R0 验收依据。
-> **截至 [1.79] 的 R0 收尾状态（第五次整改 + CI 正式化，第三方复核前）**：四包统一为 **A = BLOCKED / B = PARTIAL / C = BLOCKED / D = PARTIAL**（原第四次回执把 B/D 写成 PASS，属过宽，已改判）。B 已修复 4 笔交易误挂父类的分类映射并重采 104 张同数据集成对图，但仅 owner 一个角色、状态维度（loading/empty/error/permission/offline/conflict）与 `invest`/`members` 数据仍未覆盖；C 的 228 条逐控件运行时未执行；D 的验证口径已交给 **GitHub 自带 CI**——`-race` 扩到全仓后，构建/gofmt/vet/全量单测/全仓 race/容器冒烟均由 GitHub 原生执行（run `41983447389`，head `de2fb26`，10 包 ok、0 FAIL、0 DATA RACE），但 13 条路由仍覆盖 3 / 部分 5 / 未覆盖 5，故 D 保持 PARTIAL。RV-05（旧 SHA `259bd11` 仍可匿名读取、仓库仍 Public）为 **Owner ACTION REQUIRED**。**R0 继续 BLOCK，不授权 R1–R7；CI 全绿 ≠ R0 通过。** 详见 [第五次最小整改执行回执](docs/FastLedger-R0-第五次最小整改-执行回执.md)、[CI 能力边界](docs/r0-evidence-5th/ci-coverage-matrix.md)、[R0 主报告](docs/FastLedger-R0-基准冻结与差异盘点.md)。
+> **截至 [1.80] 的 R0 收尾状态（第六次整改：A/C 自动化，第三方复核前）**：**A = 待 CI 复核**（11 项已全部脚本化，本地 11/11 PASS；门禁要求独立 CI 跑通才可改判）；**B = PARTIAL**（分类解析改为「冲突/歧义/失败关闭」+14 条合成测试，22 笔审计 AUDIT_OK；截图覆盖缺口未变）；**C = 已逐条执行**（228 条：PASS 144 / FAIL 6 / BLOCKED 77 / N/A 1，逐条带截图与原因）；**D = PARTIAL**（3/5/5 维持，未凑覆盖率）。本轮新发现缺陷：**交易总表整页空白**（`renderTxns` 未 `view.append(card)`）、记一笔分类未按类型过滤、member 仍见邀请按钮、新增账户列表疑似未刷新。RV-05 仍 **Owner ACTION REQUIRED**。**R0 继续 BLOCK，不授权 R1–R7。** 详见 [第六次整改回执](docs/FastLedger-R0-第六次整改-A-C自动化交付回执.md)。
 
 | 项 | 状态 |
 |---|---|
@@ -48,6 +48,8 @@
 | [`docs/FastLedger-R0-第四次证据补齐-执行回执.md`](docs/FastLedger-R0-第四次证据补齐-执行回执.md) | **R0 第四次证据补齐 · 执行回执（历史记录，已被第五次复核纠偏）** | 原文写 B/D 为 PASS，**第五次复核改判 B = PARTIAL、D = PARTIAL**（见文件开头「第三方独立复核纠偏」小节）；A/C 仍 BLOCKED；历史执行事实保留 |
 | [`docs/FastLedger-R0-第五次最小整改-执行回执.md`](docs/FastLedger-R0-第五次最小整改-执行回执.md) | **R0 第五次最小整改 · 执行回执** | 逐项回执：A BLOCKED / B PARTIAL / C BLOCKED / D PARTIAL；分类映射修复前后、104 PNG 校验、角色/状态覆盖、CI 元数据更正、未覆盖路由处置、RV-05 Owner 待办与文档同步清单 |
 | [`docs/r0-evidence-5th/`](docs/r0-evidence-5th/) | **R0 第五次整改证据** | `seed-mapping-before/after.json`（22 笔分类映射）、`checksum-verification.txt`（104 PNG 逐文件校验）、`api-route-coverage.md`（13 条路由）、`ci-metadata-correction.md`（run/job/耗时与四类 SHA）、`ci-coverage-matrix.md`（CI 能/不能证明什么）、`ci-run-de2fb26/`（全仓 `-race` 的 GitHub 原生 run）、`ci-run-22fd310/`（第五次整改提交的 run） |
+| [`docs/FastLedger-R0-第六次整改-A-C自动化交付回执.md`](docs/FastLedger-R0-第六次整改-A-C自动化交付回执.md) | **R0 第六次整改 · A/C 自动化交付回执** | B 分类解析硬化（14 条合成测试 + 22 笔审计）；A 11/11 本地 PASS（待 CI 复核）；C 228 条 144/6/77/1；4 条新发现缺陷；CI 只需 Owner 三件手机小事 |
+| [`docs/r0-evidence-6th/`](docs/r0-evidence-6th/) | **R0 第六次整改证据** | `report.json/md`（239 条）、`controls-summary.json`、`unit-resolve-category.log`、`reseed-audit.log`、`screenshots/`、`SHA256SUMS.txt` |
 | [`docs/FastLedger-R0-独立补漏与复核记录.md`](docs/FastLedger-R0-独立补漏与复核记录.md) | **R0 独立补漏与复核记录** | 修正误判、补充 R0-E-20~39、复核 R0 退出条件与 D-1~D-8；静态复核 + 二次整改复核，R0 尚未通过 |
 | [`docs/FastLedger-R0-第三次最小整改任务单-RV-02-RV-05-RV-06.md`](docs/FastLedger-R0-第三次最小整改任务单-RV-02-RV-05-RV-06.md) | **R0 第三次最小整改任务单** | 第三方审阅任务单；[1.68] 已按此执行并推送，待第三方独立复核；Git 历史重写仍须 Owner 授权 |
 | [`docs/FastLedger-R0-独立复核补充-RV-05至06.md`](docs/FastLedger-R0-独立复核补充-RV-05至06.md) | **独立复核补充 RV-05~06** | 按多 AI 对齐规范 13 字段登记凭证安全事件与独立复现问题；状态拆分、证据与 Owner 待决策项 |

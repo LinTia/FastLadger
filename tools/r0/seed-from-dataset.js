@@ -12,6 +12,17 @@
  *      回填进原型侧 localStorage 注入包（见 protoInjection）；
  *   4. 实现侧不存在的字段（如 merchant 商户）不伪造，登记到 fieldDiffs。
  *
+ * 分类解析优先级（**与 tools/r0/lib/resolve-category.js 头部注释保持一致，改一处必须同步另一处**）：
+ *   1. 精确 ID 命中（id）；
+ *   2. 规范化 ID：补 `cat_` 前缀后命中（id-normalized）；
+ *   3. 展示名精确命中子类路径「父-子」（name-path，仅名称唯一时）；
+ *   4. 同父类下「唯一前缀」匹配（name-prefix，>1 候选即失败关闭）；
+ *   5. 展示名本身就是大类名 → 用大类（parent-fallback，不是猜测）；
+ *   6. 其余一律失败关闭（抛 CategoryResolutionError），不降级、不择优。
+ *   冲突规则：ID 命中父类但展示名明确到其子类 → 子类胜出（expand-child）；
+ *            ID 与展示名指向不同叶子 → CATEGORY_CONFLICT；
+ *            同一父类下重复名 / 多前缀候选 → NAME_AMBIGUOUS / PREFIX_AMBIGUOUS。
+ *
  * 用法：
  *   R0_BASE=http://127.0.0.1:8091 R0_USER=admin R0_PW=*** node tools/r0/seed-from-dataset.js
  * 输出：$R0_RUNTIME_DIR/seed-manifest.json 与 proto-injection.json（默认 /tmp 下，不入库）
@@ -22,12 +33,14 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { buildCategoryIndex, resolveCategory, CategoryResolutionError } = require('./lib/resolve-category');
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const BASE = (process.env.R0_BASE || 'http://127.0.0.1:8091').replace(/\/$/, '');
 const USER = process.env.R0_USER || 'admin';
 const PW = process.env.R0_PW || '';
 const DATASET = path.resolve(process.env.R0_DATASET || path.join(__dirname, 'prototype-dataset.json'));
+const OVERRIDES_PATH = path.resolve(process.env.R0_OVERRIDES || path.join(__dirname, 'category-overrides.json'));
 const RUNTIME_DIR = path.resolve(process.env.R0_RUNTIME_DIR || path.join(os.tmpdir(), 'fastledger-r0-pairs-runtime'));
 const BOOK_NAME = process.env.R0_BOOK_NAME || 'R0 同数据账本';
 
@@ -132,72 +145,54 @@ const toCents = (yuan) => Math.round(Number(yuan) * 100);
   const txMap = {};
   const categoryFallbacks = [];
   const categoryAudit = [];
-  // 原型数据本身存在悬空分类 ID（如 t007 的 `shopping`，正确目标是「购物-服饰」=shopping_clothes）。
-  // 解析优先级（稳定 ID / 明确路径优先，父类仅作最后兜底）：
-  //   1) 原型分类 ID 精确命中；
-  //   2) 交易自带的展示名「父-子」按分类树路径命中子类（或大类名命中大类）——这一层才是修复点：
-  //      之前把「补 cat_ 前缀」放在名称路径之前，导致 4 笔交易被错误映射到父类；
-  //   3) 规范化 ID（补 `cat_` 前缀）；
-  //   4) 最后才按大类名降级，且必须登记。
-  const catById = new Map(categories.map((c) => [c.id, c]));
-  const topByName = new Map(categories.filter((c) => c.parentId === null).map((c) => [c.name, c.id]));
-  const childByPath = new Map();
-  const childrenByParentName = new Map();
-  for (const c of categories.filter((x) => x.parentId !== null)) {
-    const parent = catById.get(c.parentId);
-    if (!parent) continue;
-    childByPath.set(`${parent.name}-${c.name}`, c.id);
-    if (!childrenByParentName.has(parent.name)) childrenByParentName.set(parent.name, []);
-    childrenByParentName.get(parent.name).push(c);
+  const categoryConflicts = [];
+  // 解析规则的唯一事实来源：tools/r0/lib/resolve-category.js（顶部注释列全优先级）。
+  // 与旧实现的差别：
+  //   · ID 命中父类、展示名明确到子类 → 子类胜出（expand-child），父类 ID 不再静默覆盖；
+  //   · 重复名称 / 多前缀候选 / ID 与展示名指向不同叶子 → 失败关闭（抛错），不再降级或择优。
+  const catIndex = buildCategoryIndex(categories);
+  // 显式覆盖：只用于"ID 与展示名互相矛盾"的情形，条目必须带 reason/decidedBy/decidedAt
+  const overrideList = fs.existsSync(OVERRIDES_PATH)
+    ? (JSON.parse(fs.readFileSync(OVERRIDES_PATH, 'utf8')).overrides || [])
+    : [];
+  for (const o of overrideList) {
+    if (!o.txId || !o.categoryId || !o.reason || !o.decidedBy || !o.decidedAt) {
+      throw new CategoryResolutionError('OVERRIDE_INVALID', `覆盖条目缺少必填字段：${JSON.stringify(o)}`, { entry: o });
+    }
   }
-  /**
-   * 展示名与分类实名不完全一致的兜底（原型自身数据瑕疵）：
-   * 例：t017 展示「购物-数码」，而子类实名是「数码家电」——按"同父类下唯一前缀匹配"命中。
-   * 只有唯一候选才算命中；多候选一律不猜，交由后续降级并登记。
-   */
-  function matchByDisplayPrefix(display) {
-    const parts = display.split('-');
-    if (parts.length !== 2) return '';
-    const [parentName, childPart] = parts;
-    const kids = childrenByParentName.get(parentName) || [];
-    const hits = kids.filter((c) => c.name.startsWith(childPart) || childPart.startsWith(c.name));
-    return hits.length === 1 ? hits[0].id : '';
-  }
-  function resolveCategory(t) {
-    if (categoryMap[t.categoryId]) {
-      return { protoId: t.categoryId, implId: categoryMap[t.categoryId], via: 'id' };
+  const overrides = new Map(overrideList.map((o) => [o.txId, o]));
+  const appliedOverrides = [];
+  const catById = catIndex.byId;
+  const VIA_REASON = {
+    "id": "精确 ID 命中",
+    "id-normalized": "补 cat_ 前缀后命中",
+    "name-path": "按分类名路径「父-子」命中",
+    "name-prefix": "按同父类唯一前缀命中",
+    "expand-child": "ID 为父类但展示名到子类，展开到子类",
+    "parent-fallback": "展示名本身即大类名，用大类",
+    "manual-override": "ID 与展示名互相矛盾，按 category-overrides.json 的显式决定",
+  };
+  function resolveForTx(t) {
+    const r = resolveCategory(t, catIndex, overrides);
+    const implId = categoryMap[r.protoId] || 0;
+    if (!implId) {
+      throw new CategoryResolutionError("IMPL_CATEGORY_MISSING", `交易 ${t.id}：原型分类「${r.protoId}」在实现侧未建立`, { txId: t.id, protoId: r.protoId });
     }
-    const display = String(t.categoryName || '');
-    const pathHit = childByPath.get(display) || topByName.get(display);
-    if (pathHit && categoryMap[pathHit]) {
-      categoryFallbacks.push({ txId: t.id, protoCategoryId: t.categoryId, used: pathHit, reason: `按分类名路径「${display}」命中` });
-      return { protoId: pathHit, implId: categoryMap[pathHit], via: 'name-path' };
+    for (const note of r.notes) {
+      if (note.kind === "id-vs-name") categoryConflicts.push({ txId: t.id, ...note });
+      if (note.kind === "override") appliedOverrides.push({ txId: t.id, ...note });
     }
-    const prefixHit = matchByDisplayPrefix(display);
-    if (prefixHit && categoryMap[prefixHit]) {
-      categoryFallbacks.push({ txId: t.id, protoCategoryId: t.categoryId, used: prefixHit, reason: `按分类名「${display}」唯一前缀匹配` });
-      return { protoId: prefixHit, implId: categoryMap[prefixHit], via: 'name-prefix' };
+    if (r.via !== "id") {
+      categoryFallbacks.push({ txId: t.id, protoCategoryId: t.categoryId, used: r.protoId, reason: VIA_REASON[r.via] || r.via });
     }
-    const prefixed = `cat_${t.categoryId}`;
-    if (categoryMap[prefixed]) {
-      categoryFallbacks.push({ txId: t.id, protoCategoryId: t.categoryId, used: prefixed, reason: '补 cat_ 前缀' });
-      return { protoId: prefixed, implId: categoryMap[prefixed], via: 'id-normalized' };
-    }
-    const topName = display.split('-')[0];
-    const topId = topByName.get(topName);
-    if (topId && categoryMap[topId]) {
-      categoryFallbacks.push({ txId: t.id, protoCategoryId: t.categoryId, used: topId, reason: `降级到父类「${topName}」（无匹配子类）` });
-      return { protoId: topId, implId: categoryMap[topId], via: 'parent-fallback' };
-    }
-    return { protoId: '', implId: 0, via: 'unresolved' };
+    return { protoId: r.protoId, implId, via: r.via };
   }
 
   for (const t of transactions) {
     const accountId = accountMap[t.accountId];
-    const resolved = resolveCategory(t);
+    const resolved = resolveForTx(t);
     const categoryId = resolved.implId;
     if (!accountId) throw new Error(`交易 ${t.id} 的账户 ${t.accountId} 未建立`);
-    if (!categoryId) throw new Error(`交易 ${t.id} 的分类 ${t.categoryId} 既不存在也无法兜底`);
     const res = await call(`/api/v1/books/${bookId}/transactions`, 'POST', {
       clientUuid: uuid(),
       txType: t.type === 'income' ? 1 : 2, // 原型的「转账」在此数据集里是一个支出分类，不是两账户转账
@@ -278,6 +273,8 @@ const toCents = (yuan) => Math.round(Number(yuan) * 100);
     firstTxId: txMap[transactions[0].id] || 0,
     txMap,
     categoryFallbacks,
+    categoryConflicts,
+    categoryOverridesApplied: appliedOverrides,
     categoryAudit,
     balances: { unit: '分', byImplAccountId: balanceByImplId, protoAccountsAfterAlignment: protoAccounts.map((a) => ({ id: a.id, name: a.name, balance: a.balance })) },
     protoInjectionPath,

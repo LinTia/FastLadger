@@ -1,0 +1,14 @@
+{
+  "name": "fastledger-r0-e2e",
+  "private": true,
+  "version": "0.0.1",
+  "description": "R0 自动化验收：A（11 项状态/权限/同步场景）+ C（228 条控件）",
+  "scripts": {
+    "a": "node run.js --suite a",
+    "c": "node run.js --suite c",
+    "all": "node run.js --suite all"
+  },
+  "dependencies": {
+    "playwright-core": "^1.64.1"
+  }
+}

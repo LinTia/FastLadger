@@ -2,6 +2,19 @@
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.80] - 2026-11-05
+
+### R0 第六次整改：A/C 改为自动化、B 分类解析硬化（新增 4 条可复现缺陷）
+
+- **B（补充整改）**：新增 `tools/r0/lib/resolve-category.js`（纯函数，可单测）——ID 命中父类但展示名到子类 → 子类胜出（`expand-child`）；ID 与展示名指向不同叶子 / 重复名称 / 多前缀候选 / 无法定位 → **一律失败关闭**（`CATEGORY_CONFLICT` / `NAME_AMBIGUOUS` / `PREFIX_AMBIGUOUS` / `CATEGORY_CHILD_UNRESOLVED` / `CATEGORY_UNRESOLVED`），不再"猜"或静默降级。新增 `test-resolve-category.js`：**14 tests / 14 pass**。新增 `category-overrides.json`（必须含 reason/decidedBy/decidedAt），用于原型数据自相矛盾时的人工判定。
+- **B 审计重跑**：`reseed-audit.js` → **AUDIT_OK**：`id 17 / expand-child 4 / manual-override 1 / 父类兜底 0`（22 笔）。t007/t009/t010/t017 落点与第五次完全一致（仅命中路径归类更准）；**t021 由「三餐」改判「聚餐」**（展示名为准），报表口径随之变化，**新旧数字不可混用**。
+- **A（11 项）**：从"文档步骤"改为 **Playwright 自动化**（`tools/r0/e2e`）：临时 SQLite + 随机端口 + 每次新 JWT 密钥；admin/member 走真实邀请码兑换；覆盖 pending、网络拒绝、503、恢复、慢网、有数据、空数据、权限不足、多角色、离线恢复、同步冲突。**本地 11/11 PASS**；按门禁口径**须独立 CI 跑通才可申请改判**，故未写 PASS。
+- **C（228 条）**：新增 `extract-controls.js` 把 §3.1 解析为 `controls.json`（228 条 + 文档 SHA256），16 个页面分组真实交互，逐条输出 **PASS 144 / FAIL 6 / BLOCKED 77 / N/A 1**（不整页 PASS，不用静态定位充数；BLOCKED 逐条写明技术原因）。
+- **新发现缺陷（已复现）**：① **交易总表整页空白**——`server/web/dist/app.js` `renderTxns()`（L337–L527）构造 `card` 后**从未 `view.append(card)`**，连带 18 条控件不可用；② 记一笔分类未按 `txType` 过滤（`app.js:535`），支出下首项是「工资」，保存被 400 拒绝；③ member 仍显示「邀请成员」按钮（服务端 403 正确）；④ 新增账户后页面疑似未刷新（API 可见、UI 不可见，待 QA 复现）。
+- **CI**：新增 `.github/workflows/r0-e2e.yml`——干净环境构建服务 → 装 Playwright/chromium → B 单测 + 22 笔审计 → A（门禁）→ C（报告型，`continue-on-error`）→ 上传 `artifacts/r0-e2e/**`。
+- **证据**：`docs/r0-evidence-6th/`（report.json/md、controls-summary、unit 日志、审计日志、截图、`SHA256SUMS.txt` 15 项全 OK）；`tools/r0/e2e/node_modules` 与本地 `artifacts/` 已 gitignore。
+- **范围**：未改业务代码/PRD/WBS/API/DB；未启动 R1–R7；PWA 未实施；RV-05 未触碰。**R0 仍 BLOCK，不授权 R1。**
+
 ## [1.79] - 2026-11-05
 
 ### R0 验证口径正式交给 GitHub 自带 CI（`-race` 扩到全仓）；D 仍判 PARTIAL

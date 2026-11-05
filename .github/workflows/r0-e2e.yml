@@ -1,0 +1,107 @@
+# R0 独立自动化复验（A 的 11 项场景 + C 的 228 条控件 + B 的分类映射回归）
+#
+# 与 ci.yml 的分工：
+#   · ci.yml      —— "退出码即结论"的构建/静态检查/单测/全仓 race/容器冒烟；
+#   · r0-e2e.yml  —— 需要真实浏览器与服务进程的运行时验收（本文件）。
+#
+# 关键约束（对应任务单 §二）：
+#   1. 干净环境启动，不依赖任何本机状态；实例用临时 SQLite + 随机端口 + 每次新生成的 JWT 密钥；
+#   2. 合成账号与合成数据，不使用生产凭证/生产库；
+#   3. 原始日志、截图、trace、环境信息、commit SHA、退出码、SHA256 全部作为 artifact 上传。
+name: R0 E2E
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: r0-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    name: A(11 场景) + C(228 控件) + B(分类审计)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true
+          cache-dependency-path: server/go.sum
+
+      - name: 构建服务二进制（CGO 真库）
+        working-directory: server
+        run: |
+          go version
+          gcc --version | head -1
+          go build -o fastledger ./cmd/server
+          ls -l fastledger
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: 安装 Playwright（含 chromium）
+        working-directory: tools/r0/e2e
+        run: |
+          npm ci
+          npm i --no-save playwright@1.64.1
+          npx playwright install --with-deps chromium
+          node -e "console.log('playwright ok:', require('playwright/package.json').version)"
+
+      - name: 分类解析合成测试（B 的补充整改）
+        run: node --test tools/r0/test-resolve-category.js
+
+      - name: 分类映射回归审计（B · 22 笔）
+        env:
+          R0_SERVER_BIN: ${{ github.workspace }}/server/fastledger
+        run: node tools/r0/e2e/scripts/reseed-audit.js
+
+      # A 是门禁：任一项 FAIL 或 BLOCKED 都让 job 失败
+      - name: 包 A · 11 项状态/权限/同步场景
+        id: a_suite
+        working-directory: tools/r0/e2e
+        env:
+          R0_SERVER_BIN: ${{ github.workspace }}/server/fastledger
+          R0_ARTIFACT_DIR: ${{ github.workspace }}/artifacts/r0-e2e
+        run: node run.js --suite a
+
+      # C 是报告型：允许存在已知产品缺口（PASS/FAIL 分布本身就是结论），
+      # 因此单独一步且 continue-on-error，避免"产品有缺口 =流水线红"掩盖其它信号。
+      - name: 包 C · 228 条逐控件运行时验收（报告型）
+        id: c_controls
+        continue-on-error: true
+        working-directory: tools/r0/e2e
+        env:
+          R0_SERVER_BIN: ${{ github.workspace }}/server/fastledger
+          R0_ARTIFACT_DIR: ${{ github.workspace }}/artifacts/r0-e2e
+        run: node run.js --suite c
+
+      - name: 汇总退出码
+        if: always()
+        run: |
+          {
+            echo "## R0 E2E 结果"
+            echo ""
+            echo "- commit: ${{ github.sha }}"
+            echo "- 包 A 退出码: ${{ steps.a_suite.outcome }}"
+            echo "- 包 C 退出码: ${{ steps.c_controls.outcome }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 上传证据（日志/截图/trace/报告/校验和）
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r0-e2e-evidence-${{ github.sha }}
+          path: |
+            artifacts/r0-e2e/**
+          retention-days: 30
+          if-no-files-found: warn

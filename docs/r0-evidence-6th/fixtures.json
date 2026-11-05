@@ -1,0 +1,52 @@
+{
+  "users": {
+    "owner": {
+      "username": "owner"
+    },
+    "admin": {
+      "username": "admin1"
+    },
+    "member": {
+      "username": "member1"
+    }
+  },
+  "books": {
+    "main": {
+      "id": 1,
+      "name": "E2E 主账本"
+    },
+    "empty": {
+      "id": 2,
+      "name": "E2E 空账本"
+    }
+  },
+  "ids": {
+    "accounts": [
+      {
+        "id": 1,
+        "name": "现金",
+        "category": 1,
+        "balance": 798766
+      },
+      {
+        "id": 2,
+        "name": "储蓄卡",
+        "category": 2,
+        "balance": -5000
+      },
+      {
+        "id": 3,
+        "name": "信用卡",
+        "category": 10,
+        "balance": 0
+      }
+    ],
+    "expenseCatId": 2,
+    "txIds": [
+      1,
+      2,
+      3
+    ],
+    "deletedTxId": 4
+  }
+}

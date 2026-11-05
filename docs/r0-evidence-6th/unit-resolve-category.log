@@ -1,0 +1,94 @@
+TAP version 13
+# Subtest: 边界1：ID 命中父类，展示名明确指向子类 → 子类胜出（expand-child），不得静默用父类
+ok 1 - 边界1：ID 命中父类，展示名明确指向子类 → 子类胜出（expand-child），不得静默用父类
+  ---
+  duration_ms: 0.7553
+  type: 'test'
+  ...
+# Subtest: 边界1b：ID 命中父类且展示名就是父类名 → 用父类（这不是猜测）
+ok 2 - 边界1b：ID 命中父类且展示名就是父类名 → 用父类（这不是猜测）
+  ---
+  duration_ms: 0.1916
+  type: 'test'
+  ...
+# Subtest: 边界2：同级重复名称 → NAME_AMBIGUOUS，不得后者覆盖前者
+ok 3 - 边界2：同级重复名称 → NAME_AMBIGUOUS，不得后者覆盖前者
+  ---
+  duration_ms: 0.1201
+  type: 'test'
+  ...
+# Subtest: 边界2b：同一父类下同名子类 → NAME_AMBIGUOUS 失败关闭
+ok 4 - 边界2b：同一父类下同名子类 → NAME_AMBIGUOUS 失败关闭
+  ---
+  duration_ms: 0.1518
+  type: 'test'
+  ...
+# Subtest: 边界2c：大类重名 → NAME_AMBIGUOUS 失败关闭
+ok 5 - 边界2c：大类重名 → NAME_AMBIGUOUS 失败关闭
+  ---
+  duration_ms: 0.1255
+  type: 'test'
+  ...
+# Subtest: 边界3：多个前缀候选 → PREFIX_AMBIGUOUS，不得取第一个
+ok 6 - 边界3：多个前缀候选 → PREFIX_AMBIGUOUS，不得取第一个
+  ---
+  duration_ms: 0.0891
+  type: 'test'
+  ...
+# Subtest: 边界3b：唯一前缀（t017 真实形态「购物-数码」→「数码家电」）→ name-prefix 命中
+ok 7 - 边界3b：唯一前缀（t017 真实形态「购物-数码」→「数码家电」）→ name-prefix 命中
+  ---
+  duration_ms: 0.1599
+  type: 'test'
+  ...
+# Subtest: 边界4：ID 与展示名指向不同叶子 → CATEGORY_CONFLICT，不得择优
+ok 8 - 边界4：ID 与展示名指向不同叶子 → CATEGORY_CONFLICT，不得择优
+  ---
+  duration_ms: 0.0865
+  type: 'test'
+  ...
+# Subtest: 边界5：展示名到子类但只解析到父类 → CATEGORY_CHILD_UNRESOLVED（不降级父类）
+ok 9 - 边界5：展示名到子类但只解析到父类 → CATEGORY_CHILD_UNRESOLVED（不降级父类）
+  ---
+  duration_ms: 0.2084
+  type: 'test'
+  ...
+# Subtest: 边界6：完全无法定位 → CATEGORY_UNRESOLVED，绝不返回父类猜测
+ok 10 - 边界6：完全无法定位 → CATEGORY_UNRESOLVED，绝不返回父类猜测
+  ---
+  duration_ms: 0.2304
+  type: 'test'
+  ...
+# Subtest: 边界7：精确叶子 ID + 同名展示 → id 胜出且无冲突记录
+ok 11 - 边界7：精确叶子 ID + 同名展示 → id 胜出且无冲突记录
+  ---
+  duration_ms: 0.1018
+  type: 'test'
+  ...
+# Subtest: 边界9：冲突 + 显式覆盖 → manual-override（不是猜，是可追溯决定）
+ok 12 - 边界9：冲突 + 显式覆盖 → manual-override（不是猜，是可追溯决定）
+  ---
+  duration_ms: 0.0654
+  type: 'test'
+  ...
+# Subtest: 边界9b：覆盖值指向不存在的分类 → 仍然失败关闭（覆盖不能绕过校验）
+ok 13 - 边界9b：覆盖值指向不存在的分类 → 仍然失败关闭（覆盖不能绕过校验）
+  ---
+  duration_ms: 0.055
+  type: 'test'
+  ...
+# Subtest: 边界8：悬空 ID + 大类名展示 → parent-fallback 仅在展示名即大类时生效
+ok 14 - 边界8：悬空 ID + 大类名展示 → parent-fallback 仅在展示名即大类时生效
+  ---
+  duration_ms: 0.0357
+  type: 'test'
+  ...
+1..14
+# tests 14
+# suites 0
+# pass 14
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 94.7174

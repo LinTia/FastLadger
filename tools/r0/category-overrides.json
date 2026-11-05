@@ -1,0 +1,13 @@
+{
+  "$schema": "r0/category-overrides@1",
+  "$comment": "仅供 tools/r0/seed-from-dataset.js 使用：当原型数据的 categoryId 与 categoryName 互相矛盾（且都不是父类）时，解析器会失败关闭；这里记录人工判定，使 B 的同数据对照仍然可跑、且决定可审计。新增条目必须写 reason/decidedBy/decidedAt，禁止无理由覆盖。",
+  "overrides": [
+    {
+      "txId": "t021",
+      "categoryId": "dinner",
+      "reason": "原型数据矛盾：categoryId=meal（三餐）但展示名「餐饮-聚餐」=dinner。B 的判据是「两侧可见结果一致」，以用户可见的展示名为准，故取 dinner。",
+      "decidedBy": "WorkBuddy（R0 第六次整改，分类解析补充整改）",
+      "decidedAt": "2026-11-05"
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "tally": {
+    "PASS": 144,
+    "FAIL": 6,
+    "BLOCKED": 77,
+    "N/A": 1
+  },
+  "total": 228,
+  "source": "docs/FastLedger-R0-基准冻结与差异盘点.md §3.1",
+  "sourceSha256": "c9f275d44feeeaa9668e02fb6797e7f1cb76b91688e3b241cc83033dd3231316"
+}
