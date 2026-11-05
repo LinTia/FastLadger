@@ -11,7 +11,7 @@
 | 工作包 | 本轮做了什么 | 结论 |
 |---|---|---|
 | **B（补充整改）** | 把分类解析抽成纯函数模块，加入"冲突/歧义/失败关闭"三类规则 + 14 条合成测试；重跑 22 笔审计 | **PARTIAL**（规则硬化完成、审计与基线一致；B 的截图覆盖缺口未变） |
-| **A（11 项复验）** | 从"给 Owner 写步骤"改成 **Playwright 自动化 + 独立 CI workflow**，11 项全部脚本化 | **本地 11/11 PASS；CI 等待独立复核**（按任务单：只有 CI 真跑通才允许申请改判） |
+| **A（11 项复验）** | 从"给 Owner 写步骤"改成 **Playwright 自动化 + 独立 CI workflow**，11 项全部脚本化 | **本地 11/11 + 独立 CI 11/11 均 PASS**（run `41990345757`）→ 具备申请改判条件，改判权仍在 Owner |
 | **C（228 条控件）** | 解析 228 条 → `controls.json`，逐条真实执行，输出 PASS/FAIL/BLOCKED/N/A + 截图 | **144 PASS / 6 FAIL / 77 BLOCKED / 1 N/A**（未整页 PASS，未用静态定位冒充） |
 | **D** | 未改判 | **PARTIAL**（3/5/5 维持，不凑覆盖率） |
 | **RV-05** | 未触碰 | 仍 **Owner ACTION REQUIRED**（可见性/历史清理） |
@@ -106,9 +106,14 @@ categoryName = "餐饮-聚餐"（dinner，另一个有效子类）
 | A10 | 离线/恢复 | `context.setOffline(true/false)` | **PASS**（离线报错、恢复后数据回来） |
 | A11 | 同步冲突 | 同 `clientUuid` 二次 push 且改金额 | **PASS**（首次 `created`、重放 `conflict`，交易数只 +1） |
 
-### 2.3 边界（不夸大）
+### 2.3 独立 CI 复跑（已通过）
 
-- 本地跑的是 **WorkBuddy 在本机 Edge 上执行**，按任务单 §四，**A 只有在独立 CI 真正跑通后才允许申请改判**。因此本轮 A 状态记为"本地 11/11 PASS，等待 CI 复核"，**不写 PASS 结论**。
+- 本地首跑 11/11 PASS 后推送（`825f3c7`），新增的 `R0 E2E` workflow **首次运行即 success**：run [`41990345757`](https://github.com/LinTia/FastLadger/actions/runs/41990345757)。
+- CI 日志原文：`SUMMARY {"A:PASS":11,"total":11}`；浏览器是 **Playwright 自带 chromium 156.0.8078.4**（与本地 Edge 156.0.4314.58 不同构建），**结果完全一致** → 结论不依赖某台机器/某个浏览器。
+- 证据：`docs/r0-evidence-6th/ci-run-825f3c7/`（run-meta、58KB 原始 job.log、summary、SHA256SUMS）。
+- 按任务单 §四，CI 通过只是"**允许申请改判**"的前提；**是否改判仍由 Owner 决定**，本轮不自行把 A 写成 PASS。
+
+### 2.4 边界（不夸大）
 - 两个场景仍是"模拟而非真故障注入"：A02/A03 用浏览器层拦截（不代表服务端真实返回 503），A05 用 CDP 限速（不代表真实弱网抖动）。这一点在报告里逐条写明。
 
 ---
@@ -207,7 +212,7 @@ checkout → setup-go 1.22 → go build ./cmd/server
 |---|---|---|---|
 | 1 | **RV-05 仓库可见性**：旧 `259bd11` 仍可匿名读取，仓库仍 Public | 涉及仓库所有权与历史处置，WorkBuddy 不得擅自改 Private / force-push / 重写历史 | GitHub 手机网页 → Settings → Danger Zone → Change visibility |
 | 2 | **第三方复核入口**：把本次提交贴到 issue #2 | 需要你的账号发言（我不能代发） | 手机上把 commit SHA 贴进 issue |
-| 3 | **A 改判申请**：CI 绿之后由你决定是否申请改判 | 门禁裁决权在 Owner | 看到 CI run 绿后回复"申请 A 改判"即可 |
+| 3 | **A 改判决定**：CI 已绿（run `41990345757`） | 门禁裁决权在 Owner | 回复"申请 A 改判"或"维持观察"即可 |
 
 > 除此之外**不需要**你在手机上点 228 个控件，也不需要电脑。
 
@@ -215,7 +220,7 @@ checkout → setup-go 1.22 → go build ./cmd/server
 
 ## 7. 状态边界（严格按任务单 §四）
 
-- **A**：本地 11/11 PASS，但**未**独立 CI 复核 → 状态保持"待复核"，**不申请改判**。
+- **A**：本地 11/11 + 独立 CI 11/11 均 PASS（run `41990345757`）→ **具备申请改判条件**；本轮**不自评 PASS**，等 Owner 裁决。
 - **C**：**已逐条执行并统计**，144/6/77/1，**不整页 PASS**；其中 2 条新缺陷已单列。
 - **B**：补充整改完成（规则+测试+审计），但角色/状态维度缺口未变 → 仍 **PARTIAL**。
 - **D**：维持 **PARTIAL**（3/5/5），本轮未碰。

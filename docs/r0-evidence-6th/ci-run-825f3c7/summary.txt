@@ -1,0 +1,15 @@
+# CI run 41990345757（R0 E2E workflow）关键证明行 —— 自 job.log 原文摘录，未改写
+# head_sha=825f3c74834904d0fde6c3f980b48806be5b2404  conclusion=success
+# 来源: https://github.com/LinTia/FastLadger/actions/runs/41990345757
+
+# tests 14
+# pass 14
+# fail 0
+AUDIT_OK 与基线一致（id 17 / expand-child 4 / manual-override 1 / 父类兜底 0）
+SERVER up http://127.0.0.1:35467 schema=8
+BROWSER playwright channel=(bundled) version=156.0.8078.4
+SUMMARY {"A:PASS":11,"total":11}
+SERVER up http://127.0.0.1:36181 schema=8
+BROWSER playwright channel=(bundled) version=156.0.8078.4
+C 汇总：{"PASS":144,"FAIL":6,"BLOCKED":77,"N/A":1}
+SUMMARY {"C:PASS":144,"C:FAIL":6,"C:BLOCKED":77,"C:N/A":1,"total":228}

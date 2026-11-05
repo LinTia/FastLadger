@@ -12,7 +12,8 @@
 - **C（228 条）**：新增 `extract-controls.js` 把 §3.1 解析为 `controls.json`（228 条 + 文档 SHA256），16 个页面分组真实交互，逐条输出 **PASS 144 / FAIL 6 / BLOCKED 77 / N/A 1**（不整页 PASS，不用静态定位充数；BLOCKED 逐条写明技术原因）。
 - **新发现缺陷（已复现）**：① **交易总表整页空白**——`server/web/dist/app.js` `renderTxns()`（L337–L527）构造 `card` 后**从未 `view.append(card)`**，连带 18 条控件不可用；② 记一笔分类未按 `txType` 过滤（`app.js:535`），支出下首项是「工资」，保存被 400 拒绝；③ member 仍显示「邀请成员」按钮（服务端 403 正确）；④ 新增账户后页面疑似未刷新（API 可见、UI 不可见，待 QA 复现）。
 - **CI**：新增 `.github/workflows/r0-e2e.yml`——干净环境构建服务 → 装 Playwright/chromium → B 单测 + 22 笔审计 → A（门禁）→ C（报告型，`continue-on-error`）→ 上传 `artifacts/r0-e2e/**`。
-- **证据**：`docs/r0-evidence-6th/`（report.json/md、controls-summary、unit 日志、审计日志、截图、`SHA256SUMS.txt` 15 项全 OK）；`tools/r0/e2e/node_modules` 与本地 `artifacts/` 已 gitignore。
+- **独立 CI 已跑通**：`R0 E2E` workflow 首次运行 success —— run [`41990345757`](https://github.com/LinTia/FastLadger/actions/runs/41990345757)（head `825f3c7`）：B 单测 14/14、AUDIT_OK、**A 11/11**、**C 144/6/77/1**，与本地逐条一致（CI 用 chromium 156.0.8078.4，本地用 Edge 156.0.4314.58）。按门禁口径 A 仅"具备申请改判条件"，最终改判权在 Owner。
+- **证据**：`docs/r0-evidence-6th/`（report.json/md、controls-summary、unit 日志、审计日志、截图、`ci-run-825f3c7/`、`SHA256SUMS.txt`）；`tools/r0/e2e/node_modules` 与本地 `artifacts/` 已 gitignore。
 - **范围**：未改业务代码/PRD/WBS/API/DB；未启动 R1–R7；PWA 未实施；RV-05 未触碰。**R0 仍 BLOCK，不授权 R1。**
 
 ## [1.79] - 2026-11-05

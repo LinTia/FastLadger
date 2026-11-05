@@ -14,7 +14,8 @@
 | `unit-resolve-category.log` | 分类解析 14 条合成测试原始输出 | `node --test tools/r0/test-resolve-category.js` |
 | `reseed-audit.log` | 22 笔分类映射 + 审计结论 | `node tools/r0/e2e/scripts/reseed-audit.js` |
 | `screenshots/` | A 关键态与 C 失败项截图（含交易总表空白页） | 与 report.json 的 evidence 字段对应 |
-| `SHA256SUMS.txt` | 15 个文件的校验和 | `sha256sum -c SHA256SUMS.txt` |
+| `ci-run-825f3c7/` | **独立 CI 首次运行证据**（run `41990345757`）：run-meta、58KB 原始 job.log、关键行摘录、README、校验和 | `gh run view 41990345757 --repo LinTia/FastLadger` |
+| `SHA256SUMS.txt` | 本目录（不含 CI 子目录）15 个文件的校验和 | `sha256sum -c SHA256SUMS.txt` |
 
 ## 本地执行环境（本次证据）
 
@@ -28,7 +29,7 @@
 
 ## 与 CI 证据的关系
 
-本地证据用于**快速迭代与缺陷定位**；按任务单 §四，**A 的改判必须以独立 CI 跑通为准**。
+本地证据用于**快速迭代与缺陷定位**；按任务单 §四，**A 的改判必须以独立 CI 跑通为准**——该条件已满足：`R0 E2E` 首次运行 run `41990345757` = success，A 11/11、C 144/6/77/1，与本地逐条一致。
 CI 证据在 GitHub Actions 的 `r0-e2e-evidence-<sha>` artifact 中（含 trace.zip 与全部截图），本目录只放可入库的精简集。
 
 ## 已知边界

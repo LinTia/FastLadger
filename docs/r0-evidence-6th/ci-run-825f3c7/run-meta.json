@@ -1,0 +1,104 @@
+{
+  "retrievedAt": "2026-11-05T07:56:59.473Z",
+  "workflow": "R0 E2E",
+  "workflowPath": ".github/workflows/r0-e2e.yml",
+  "runId": 41990345757,
+  "runAttempt": 1,
+  "event": "push",
+  "headSha": "825f3c74834904d0fde6c3f980b48806be5b2404",
+  "headBranch": "main",
+  "status": "completed",
+  "conclusion": "success",
+  "createdAt": "2026-11-05T07:53:00Z",
+  "updatedAt": "2026-11-05T07:55:19Z",
+  "htmlUrl": "https://github.com/LinTia/FastLadger/actions/runs/41990345757",
+  "jobs": [
+    {
+      "id": 127120823899,
+      "name": "A(11 场景) + C(228 控件) + B(分类审计)",
+      "conclusion": "success",
+      "steps": [
+        {
+          "number": 1,
+          "name": "Set up job",
+          "conclusion": "success"
+        },
+        {
+          "number": 2,
+          "name": "Run actions/checkout@v4",
+          "conclusion": "success"
+        },
+        {
+          "number": 3,
+          "name": "Run actions/setup-go@v5",
+          "conclusion": "success"
+        },
+        {
+          "number": 4,
+          "name": "构建服务二进制（CGO 真库）",
+          "conclusion": "success"
+        },
+        {
+          "number": 5,
+          "name": "Run actions/setup-node@v4",
+          "conclusion": "success"
+        },
+        {
+          "number": 6,
+          "name": "安装 Playwright（含 chromium）",
+          "conclusion": "success"
+        },
+        {
+          "number": 7,
+          "name": "分类解析合成测试（B 的补充整改）",
+          "conclusion": "success"
+        },
+        {
+          "number": 8,
+          "name": "分类映射回归审计（B · 22 笔）",
+          "conclusion": "success"
+        },
+        {
+          "number": 9,
+          "name": "包 A · 11 项状态/权限/同步场景",
+          "conclusion": "success"
+        },
+        {
+          "number": 10,
+          "name": "包 C · 228 条逐控件运行时验收（报告型）",
+          "conclusion": "success"
+        },
+        {
+          "number": 11,
+          "name": "汇总退出码",
+          "conclusion": "success"
+        },
+        {
+          "number": 12,
+          "name": "上传证据（日志/截图/trace/报告/校验和）",
+          "conclusion": "success"
+        },
+        {
+          "number": 22,
+          "name": "Post Run actions/setup-node@v4",
+          "conclusion": "success"
+        },
+        {
+          "number": 23,
+          "name": "Post Run actions/setup-go@v5",
+          "conclusion": "success"
+        },
+        {
+          "number": 24,
+          "name": "Post Run actions/checkout@v4",
+          "conclusion": "success"
+        },
+        {
+          "number": 25,
+          "name": "Complete job",
+          "conclusion": "success"
+        }
+      ]
+    }
+  ]
+}
