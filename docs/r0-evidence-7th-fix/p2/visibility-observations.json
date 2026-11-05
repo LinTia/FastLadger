@@ -1,0 +1,28 @@
+{
+  "id": "OBS-ACCT-VIS-390",
+  "registry": "outside-228-controls",
+  "bookId": 1,
+  "name": "E2E 账户 1793884580485",
+  "viewport": {
+    "width": 390,
+    "height": 844
+  },
+  "postStatus": 200,
+  "rowsBefore": 3,
+  "rowsAfterExpected": 4,
+  "redrawn": true,
+  "inDom": true,
+  "inApi": true,
+  "dup": 1,
+  "domNames": [
+    "现金",
+    "E2E 账户 1793884580485",
+    "储蓄卡",
+    "信用卡"
+  ],
+  "visibleInnerText": false,
+  "firstTdDisplay": "none",
+  "acctErr": "",
+  "toast": "✓ 账户已创建",
+  "conclusion": "390px 视口下账户名称列被 style.css L331 隐藏，视觉可见性未闭环，仍 FAIL，待 Owner 裁决；本轮不改 CSS（清单外独立登记，不占 I-ACCT-06，不改变 228 条清单）"
+}

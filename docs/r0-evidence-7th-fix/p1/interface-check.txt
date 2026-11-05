@@ -1,0 +1,35 @@
+[1] workflow 引用的脚本存在性：
+  OK  tools/r0/e2e/scripts/prepare-upload.js
+  OK  tools/r0/e2e/scripts/scan-artifacts.js
+  OK  tools/r0/e2e/test-scan-artifacts.js
+[2] prepare-upload.js --help（退出码见末行）:
+用法：node tools/r0/e2e/scripts/prepare-upload.js [选项]
+
+  --source <dir>  源证据目录，默认 artifacts/r0-e2e
+  --dest   <dir>  白名单输出目录，默认 artifacts/r0-e2e-upload（运行前清空）
+  --help          显示本说明
+
+白名单：.png .md .json .log .txt
+排除：trace 归档与任意 zip、trace/network/har 原始记录、server.log、
+      db/sqlite 数据库文件、文件名含 token|secret|credential 的文件。
+  prepare --help 退出码=0
+[3] scan-artifacts.js --help:
+用法：node tools/r0/e2e/scripts/scan-artifacts.js [待扫描目录|--dir <dir>] [--help]
+
+默认目录：artifacts/r0-e2e-upload
+退出码：0 干净 / 2 发现疑似凭据或黑名单文件 / 1 参数或环境错误
+输出：仅文件路径、命中类型与命中数量，不输出任何匹配值。
+  scan --help 退出码=0
+[4] 脚本语法检查:
+  OK  tools/r0/e2e/scripts/prepare-upload.js
+  OK  tools/r0/e2e/scripts/scan-artifacts.js
+  OK  tools/r0/e2e/test-scan-artifacts.js
+  OK  docs/r0-evidence-7th-fix/p1/workflow-structure-check.js
+[5] 默认目录一致性（workflow path 与脚本默认值）:
+.github/workflows/r0-e2e.yml:116:        run: node tools/r0/e2e/scripts/prepare-upload.js --source artifacts/r0-e2e --dest artifacts/r0-e2e-upload
+.github/workflows/r0-e2e.yml:123:        run: node tools/r0/e2e/scripts/scan-artifacts.js artifacts/r0-e2e-upload
+.github/workflows/r0-e2e.yml:133:            artifacts/r0-e2e-upload/**
+tools/r0/e2e/scripts/prepare-upload.js:34:const DEFAULT_DEST = path.join(REPO_ROOT, 'artifacts', 'r0-e2e-upload');
+tools/r0/e2e/scripts/prepare-upload.js:71:    '  --dest   <dir>  白名单输出目录，默认 artifacts/r0-e2e-upload（运行前清空）',
+tools/r0/e2e/scripts/scan-artifacts.js:31:const DEFAULT_DIR = path.join(REPO_ROOT, 'artifacts', 'r0-e2e-upload');
+tools/r0/e2e/scripts/scan-artifacts.js:87:    `默认目录：artifacts/r0-e2e-upload`,

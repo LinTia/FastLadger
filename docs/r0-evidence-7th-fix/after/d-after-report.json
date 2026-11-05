@@ -1,0 +1,448 @@
+{
+  "suite": "d",
+  "startedAt": "2026-11-05T09:56:28.269Z",
+  "env": {
+    "capturedAt": "2026-11-05T09:56:29.328Z",
+    "node": "v22.22.2",
+    "platform": "win32 x64",
+    "os": "Windows_NT 10.0.26200",
+    "cpus": 16,
+    "memoryMB": 31862,
+    "cwd": "C:\\Users\\47006\\WorkBuddy\\fastledger\\repo_tmp\\tools\\r0\\e2e",
+    "gitSha": "dadc9a3b9c567cad2bbad7e47361fb774365b949",
+    "ci": {
+      "githubActions": false,
+      "runId": null,
+      "runAttempt": null,
+      "workflow": null,
+      "job": null,
+      "serverUrl": null,
+      "repository": null,
+      "ref": null
+    },
+    "browser": {
+      "version": "156.0.4314.58",
+      "engine": "playwright-core",
+      "channel": "msedge"
+    },
+    "server": {
+      "binary": "fastledger.exe",
+      "health": {
+        "instanceId": "45b83cc47d28454c82be0f36d18d4f36",
+        "restoreEpoch": 1,
+        "schemaVersion": 8,
+        "status": "up"
+      }
+    }
+  },
+  "server": {
+    "base": "http://127.0.0.1:63447",
+    "port": 63447,
+    "dataDir": "C:\\Users\\47006\\AppData\\Local\\Temp\\fl-e2e-EGl911",
+    "health": {
+      "instanceId": "45b83cc47d28454c82be0f36d18d4f36",
+      "restoreEpoch": 1,
+      "schemaVersion": 8,
+      "status": "up"
+    },
+    "binary": "C:/Users/47006/WorkBuddy/fastledger/repo_tmp/server/fastledger.exe"
+  },
+  "results": [
+    {
+      "suite": "D",
+      "id": "D-TXNS-01",
+      "name": "交易总表：有数据列表实际显示（行数 + 备注文本）",
+      "status": "PASS",
+      "detail": "#view.childElementCount=1，标题=「E2E 主账本 · 交易」，筛选下拉=3 个，tbody 3 行，备注列=[\"工资\",\"打车\",\"早餐\"]；API 交易数=3",
+      "evidence": [
+        "D/txns/D-TXNS-01.png"
+      ]
+    },
+    {
+      "suite": "D",
+      "id": "D-TXNS-02",
+      "name": "交易总表：空数据显示空态",
+      "status": "PASS",
+      "detail": "空账本：#view.childElementCount=1，空态=「🧾没有符合条件的交易——换个筛选条件，或记一笔。」，tbody 1 行；API 交易数=0",
+      "evidence": [
+        "D/txns/D-TXNS-02.png"
+      ]
+    },
+    {
+      "suite": "D",
+      "id": "D-TXNS-03",
+      "name": "交易总表：请求失败（route 500）有可见错误反馈且不是永久骨架屏",
+      "status": "PASS",
+      "detail": "注入 500 → #view 可见文本=「E2E 主账本 · 交易 全部类型 收入 支出 转账 全部账户 现金 储蓄卡 信用卡 全部分类 工资 奖金 其他收入 月薪 加班费 年终奖 红包 利息 餐饮 交通 购物 居住 娱乐 医疗 早餐 午餐 晚餐 外卖 公交地铁 打车 加油 日用品 服饰 数码 房租 水电燃气 电影 旅行 门诊 药品 查询 重置 全选本页 删除选中 ＋ 记一笔 ⚠️  交易加载失败：」；aria-busy 残留=0，.skel 残留=0（非永久骨架屏）；toast=「✕ D套件注入500」",
+      "evidence": [
+        "D/txns/D-TXNS-03.png"
+      ]
+    },
+    {
+      "suite": "D",
+      "id": "D-TXNS-04",
+      "name": "交易总表：行「编辑」可用",
+      "status": "PASS",
+      "detail": "行「编辑」按钮数=3 → #editDlg.open=true，eType=「收入」与行类型「收入」一致，eAmount=「8,000.00」",
+      "evidence": [
+        "D/txns/D-TXNS-04.png"
+      ]
+    },
+    {
+      "suite": "D",
+      "id": "I-TXNS-01",
+      "name": "[D 重跑] I-TXNS-01 · 交易总表控件",
+      "status": "PASS",
+      "detail": "关键词「工资」→ HTTP 200，命中 1 行，备注=「工资」；全部含关键词",
+      "evidence": [
+        "D/I-TXNS/I-TXNS-01.png"
+      ]
+    },
+    {
+      "suite": "D",
+      "id": "I-TXNS-02",
+      "name": "[D 重跑] I-TXNS-02 · 交易总表控件",
+      "status": "PASS",
+      "detail": "选「收入」→ HTTP 200 url 含 type=1；1 行类型全部为「收入」",
+      "evidence": [
+        "D/I-TXNS/I-TXNS-02.png"
+      ]
+    },
+    {
+      "suite": "D",
+      "id": "I-TXNS-03",
+      "name": "[D 重跑] I-TXNS-03 · 交易总表控件",
+      "status": "PASS",
+      "detail": "选账户「现金」(id=1) → HTTP 200；2 行账户列=[\"现金\",\"现金\"] 全部命中",
+      "evidence": [
+        "D/I-TXNS/I-TXNS-03.png"
+      ]
+    },
+    {
+      "suite": "D",
+      "id": "I-TXNS-04",
+      "name": "[D 重跑] I-TXNS-04 · 交易总表控件",
+      "status": "PASS",
+      "detail": "选分类「月薪」(id=24) → HTTP 200；1 行分类列=[\"月薪\"]",
+      "evidence": [
+        "D/I-TXNS/I-TXNS-04.png"
+      ]
+    },
+    {
+      "suite": "D",
+      "id": "I-TXNS-05",
+      "name": "[D 重跑] I-TXNS-05 · 交易总表控件",
+      "status": "PASS",
+      "detail": "开始日期 2000-01-01 → HTTP 200，url 含 minTime=；返回 3 行",
+      "evidence": [
+        "D/I-TXNS/I-TXNS-05.png"
+      ]
+    },
+    {
+      "suite": "D",
+      "id": "I-TXNS-06",
+      "name": "[D 重跑] I-TXNS-06 · 交易总表控件",
+      "status": "PASS",
+      "detail": "结束日期 2099-12-31 → HTTP 200，url 含 maxTime=；返回 3 行",
+      "evidence": [
+        "D/I-TXNS/I-TXNS-06.png"
+      ]
+    },
+    {
+      "suite": "D",
+      "id": "I-TXNS-07",
+      "name": "[D 重跑] I-TXNS-07 · 交易总表控件",
+      "status": "PASS",
+      "detail": "点击「查询」→ GET v1/books/1/transactions?page=1&count=50 → HTTP 200；重绘后 tbody 3 行",
+      "evidence": [
+        "D/I-TXNS/I-TXNS-07.png"
+      ]
+    },
+    {
+      "suite": "D",
+      "id": "I-TXNS-08",
+      "name": "[D 重跑] I-TXNS-08 · 交易总表控件",
+      "status": "PASS",
+      "detail": "点击「重置」→ HTTP 200，url 不含 keyword；筛选值回默认 kw=「」selects=[\"0\",\"0\",\"0\"] dates=[\"\",\"\"]",
+      "evidence": [
+        "D/I-TXNS/I-TXNS-08.png"
+      ]
+    },
+    {
+      "suite": "D",
+      "id": "I-TXNS-09",
+      "name": "[D 重跑] I-TXNS-09 · 交易总表控件",
+      "status": "PASS",
+      "detail": "关键词框按 Enter → HTTP 200，url 含 keyword=；返回 1 行",
+      "evidence": [
+        "D/I-TXNS/I-TXNS-09.png"
+      ]
+    },
+    {
+      "suite": "D",
+      "id": "I-TXNS-10",
+      "name": "[D 重跑] I-TXNS-10 · 交易总表控件",
+      "status": "PASS",
+      "detail": "勾选「全选本页」→ 3 行全部 checked；提示=「已选 3 项」；删除选中 disabled=false",
+      "evidence": [
+        "D/I-TXNS/I-TXNS-10.png"
+      ]
+    },
+    {
+      "suite": "D",
+      "id": "I-TXNS-11",
+      "name": "[D 重跑] I-TXNS-11 · 交易总表控件",
+      "status": "PASS",
+      "detail": "全选 3 项后取消首行 → checked=2，提示=「已选 2 项」（真实 change 事件驱动既有 handler）",
+      "evidence": [
+        "D/I-TXNS/I-TXNS-11.png"
+      ]
+    },
+    {
+      "suite": "D",
+      "id": "I-TXNS-12",
+      "name": "[D 重跑] I-TXNS-12 · 交易总表控件",
+      "status": "PASS",
+      "detail": "勾选专用交易 5 → 真实 DELETE 请求已发出；API 列表已无该笔=true，回收站含该笔=true",
+      "evidence": [
+        "D/I-TXNS/I-TXNS-12.png"
+      ]
+    },
+    {
+      "suite": "D",
+      "id": "I-TXNS-13",
+      "name": "[D 重跑] I-TXNS-13 · 交易总表控件",
+      "status": "PASS",
+      "detail": "确认框点「取消」→ DELETE 请求数=0，交易数 3→3（未删除）",
+      "evidence": [
+        "D/I-TXNS/I-TXNS-13.png"
+      ]
+    },
+    {
+      "suite": "D",
+      "id": "I-TXNS-14",
+      "name": "[D 重跑] I-TXNS-14 · 交易总表控件",
+      "status": "PASS",
+      "detail": "点击「＋ 记一笔」→ #formDlg.open=true，分类下拉 22 项；取消后关闭=true",
+      "evidence": [
+        "D/I-TXNS/I-TXNS-14.png"
+      ]
+    },
+    {
+      "suite": "D",
+      "id": "I-TXNS-15",
+      "name": "[D 重跑] I-TXNS-15 · 交易总表控件",
+      "status": "PASS",
+      "detail": "行「编辑」→ #editDlg.open=true，eType=「收入」与行类型「收入」一致，eAmount=「8,000.00」；取消后关闭=true",
+      "evidence": [
+        "D/I-TXNS/I-TXNS-15.png"
+      ]
+    },
+    {
+      "suite": "D",
+      "id": "I-TXNS-16",
+      "name": "[D 重跑] I-TXNS-16 · 交易总表控件",
+      "status": "PASS",
+      "detail": "分页条=「上一页 共 3 条 · 第 1 页 下一页」API total=3 count=50；上一页 disabled=true，下一页 disabled=true（期望 true）；未点击（数据不足一页，按设计禁用）",
+      "evidence": [
+        "D/I-TXNS/I-TXNS-16.png"
+      ]
+    },
+    {
+      "suite": "D",
+      "id": "I-TXNS-17",
+      "name": "[D 重跑] I-TXNS-17 · 交易总表控件",
+      "status": "PASS",
+      "detail": "慢网络下观测到骨架屏 aria-busy=true、.skel 5 条；响应后骨架屏残留=0，tbody 3 行（截图 I-TXNS-17-skeleton 为加载态）",
+      "evidence": [
+        "D/I-TXNS/I-TXNS-17.png",
+        "D/I-TXNS/I-TXNS-17-skeleton.png"
+      ]
+    },
+    {
+      "suite": "D",
+      "id": "I-TXNS-18",
+      "name": "[D 重跑] I-TXNS-18 · 交易总表控件",
+      "status": "PASS",
+      "detail": "无匹配结果 → HTTP 200；空态=「🧾  没有符合条件的交易——换个筛选条件，或记一笔。」；tbody 1 行",
+      "evidence": [
+        "D/I-TXNS/I-TXNS-18.png"
+      ]
+    },
+    {
+      "suite": "D",
+      "id": "I-TXNS-19",
+      "name": "[D 重跑] I-TXNS-19 · 交易总表控件",
+      "status": "PASS",
+      "detail": "注入 HTTP 500 → 页面可见反馈=「交易加载失败：E2E 注入的服务器错误（可重新查询或刷新页面）」；骨架屏残留 aria-busy=0（非永久）；toast=「✕ E2E 注入的服务器错误」",
+      "evidence": [
+        "D/I-TXNS/I-TXNS-19.png"
+      ]
+    },
+    {
+      "suite": "D",
+      "id": "D-CAT-01",
+      "name": "支出类型下拉只含支出分类",
+      "status": "PASS",
+      "detail": "支出下拉 22 项，与 API catType=2 的 22 项完全一致；混入收入类=0；首项=「餐饮」(1)",
+      "evidence": [
+        "D/category/D-CAT-01.png"
+      ]
+    },
+    {
+      "suite": "D",
+      "id": "D-CAT-02",
+      "name": "收入类型下拉只含收入分类",
+      "status": "PASS",
+      "detail": "收入下拉 8 项，与 API catType=1 的 8 项完全一致；混入支出类=0",
+      "evidence": [
+        "D/category/D-CAT-02.png"
+      ]
+    },
+    {
+      "suite": "D",
+      "id": "D-CAT-03",
+      "name": "类型切换后已选分类被正确重置、转账隐藏分类行",
+      "status": "PASS",
+      "detail": "支出选中 22 → 切收入重置为 23(收入类) → 切回支出重置为 1(支出类)；转账 #fCatRow.hidden=true #fToRow.hidden=false",
+      "evidence": [
+        "D/category/D-CAT-03.png"
+      ]
+    },
+    {
+      "suite": "D",
+      "id": "D-CAT-04",
+      "name": "支出类型直接创建交易成功（2xx）且 API 回读 txType/categoryId 一致",
+      "status": "PASS",
+      "detail": "POST=200 请求体 txType=2 categoryId=1(支出类)；API 回读命中备注「D-支出分类回归-1793872611400」，txType=2 categoryId=1",
+      "evidence": [
+        "D/category/D-CAT-04.png"
+      ]
+    },
+    {
+      "suite": "D",
+      "id": "D-CAT-05",
+      "name": "支出交易刷新页面后仍存在",
+      "status": "PASS",
+      "detail": "刷新后 API 回读仍含「D-支出分类回归-1793872611400」=true，交易总表备注列含该文本=true；备注列=[\"工资\",\"打车\",\"早餐\",\"D-支出分类回归-1793872611400\"]",
+      "evidence": [
+        "D/category/D-CAT-05.png"
+      ]
+    },
+    {
+      "suite": "D",
+      "id": "D-CAT-06",
+      "name": "转账时分类行隐藏且提交 categoryId:0 语义不变",
+      "status": "PASS",
+      "detail": "#fCatRow.hidden=true；POST=200 请求体 txType=3 categoryId=0 toAccountId=2；API 回读命中转账=true",
+      "evidence": [
+        "D/category/D-CAT-06.png"
+      ]
+    },
+    {
+      "suite": "D",
+      "id": "D-MEM-01",
+      "name": "owner 能看到并使用「邀请成员」入口",
+      "status": "PASS",
+      "detail": "role=owner：按钮数=1，点击后 #investDlg 可见=true，成员列表 3 行",
+      "evidence": [
+        "D/members/D-MEM-01.png"
+      ]
+    },
+    {
+      "suite": "D",
+      "id": "D-MEM-02",
+      "name": "admin 能看到并使用「邀请成员」入口",
+      "status": "PASS",
+      "detail": "role=admin：按钮数=1，点击后 #investDlg 可见=true，成员列表 3 行",
+      "evidence": [
+        "D/members/D-MEM-02.png"
+      ]
+    },
+    {
+      "suite": "D",
+      "id": "D-MEM-03",
+      "name": "member 看不到「邀请成员」入口",
+      "status": "PASS",
+      "detail": "member：按钮数=0；#view 文本含「邀请成员」=false；body 文本含=false",
+      "evidence": [
+        "D/members/D-MEM-03.png"
+      ]
+    },
+    {
+      "suite": "D",
+      "id": "D-MEM-04",
+      "name": "member 直接 POST invite 仍被服务端 403",
+      "status": "PASS",
+      "detail": "member 直接 POST /books/1/members/invite → HTTP 403（后端 403 校验保留）",
+      "evidence": [
+        "D/members/D-MEM-04.png"
+      ]
+    },
+    {
+      "suite": "D",
+      "id": "D-MEM-05",
+      "name": "成员列表/角色展示不受影响",
+      "status": "PASS",
+      "detail": "成员列表 3 行（API 3 条），角色列=[\"所有者\",\"管理员\",\"普通成员\"]；移除按钮=2 个",
+      "evidence": [
+        "D/members/D-MEM-05.png"
+      ]
+    },
+    {
+      "suite": "D",
+      "id": "D-MEM-06",
+      "name": "/users/me 失败时失败关闭（owner 也不显示邀请按钮）",
+      "status": "PASS",
+      "detail": "/users/me=500 → owner 页面邀请按钮数=0，#view 无该文本；成员列表仍渲染 3 行（失败关闭）",
+      "evidence": [
+        "D/members/D-MEM-06.png"
+      ]
+    },
+    {
+      "suite": "D",
+      "id": "D-ACCT-01",
+      "name": "新增账户：POST 响应 + 重绘后确定性 DOM 信号，提交后数据进入列表（DOM 渲染一致性，不含视觉可见性）",
+      "status": "PASS",
+      "detail": "POST=200，tbody 3→4（重绘=true），DOM 首列 textContent 命中=true，API 回读命中=true；DOM 首列=[\"现金\",\"D-账户回归-1793872615903\",\"储蓄卡\",\"信用卡\"]；visibleInnerText=false；firstTdDisplay=none；【本组只断言 DOM 渲染一致性，不含视觉可见性；390px 视口下账户名称列被 style.css L331 隐藏，视觉可见性验收项未闭环，待 Owner 裁决，本轮不改 CSS】",
+      "evidence": [
+        "D/account/D-ACCT-01.png"
+      ]
+    },
+    {
+      "suite": "D",
+      "id": "D-ACCT-02",
+      "name": "新增账户：刷新页面后数据仍存在（DOM 渲染一致性，不含视觉可见性）",
+      "status": "PASS",
+      "detail": "刷新后 DOM 首列 4 项含「D-账户回归-1793872615903」，API 4 项含「D-账户回归-1793872615903」；visibleInnerText=false；firstTdDisplay=none；【本组只断言 DOM 渲染一致性，不含视觉可见性；390px 视口下账户名称列被 style.css L331 隐藏，视觉可见性验收项未闭环，待 Owner 裁决，本轮不改 CSS】",
+      "evidence": [
+        "D/account/D-ACCT-02.png"
+      ]
+    },
+    {
+      "suite": "D",
+      "id": "D-ACCT-03",
+      "name": "新增账户：账户总数只 +1（无重复）（DOM 渲染一致性，不含视觉可见性）",
+      "status": "PASS",
+      "detail": "账户总数 3→4（+1）；「D-账户回归-1793872615903」在 API 出现 1 次、DOM 首列出现 1 次；DOM 行数=4；visibleInnerText=false；firstTdDisplay=none；【本组只断言 DOM 渲染一致性，不含视觉可见性；390px 视口下账户名称列被 style.css L331 隐藏，视觉可见性验收项未闭环，待 Owner 裁决，本轮不改 CSS】",
+      "evidence": [
+        "D/account/D-ACCT-03.png"
+      ]
+    },
+    {
+      "suite": "D",
+      "id": "D-ACCT-04",
+      "name": "新增账户：API 回读与 DOM 首列文本全量一致（DOM 渲染一致性，不含视觉可见性）",
+      "status": "PASS",
+      "detail": "DOM 首列=[\"现金\",\"D-账户回归-1793872615903\",\"储蓄卡\",\"信用卡\"] 与 API 名称集合=[\"现金\",\"D-账户回归-1793872615903\",\"储蓄卡\",\"信用卡\"] 完全一致（390px 视口下 style.css L331 隐藏 td:nth-child(1)，故用 textContent 而非 innerText；该 CSS 缺陷不在本次授权范围，未修改）；visibleInnerText=false；firstTdDisplay=none；【本组只断言 DOM 渲染一致性，不含视觉可见性；390px 视口下账户名称列被 style.css L331 隐藏，视觉可见性验收项未闭环，待 Owner 裁决，本轮不改 CSS】",
+      "evidence": [
+        "D/account/D-ACCT-04.png"
+      ]
+    }
+  ],
+  "summary": {
+    "D:PASS": 39,
+    "total": 39
+  },
+  "finishedAt": "2026-11-05T09:56:56.804Z"
+}

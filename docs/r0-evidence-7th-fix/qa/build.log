@@ -1,0 +1,7 @@
+=== QA 独立重新构建 ===
+=== 时间: 2026-11-05T09:59:00Z ===
+=== PWD: /c/Users/47006/WorkBuddy/fastledger/repo_tmp/server ===
+=== go version: go version go1.22.5 windows/amd64 ===
+=== CGO_ENABLED=C:/Users/47006/WorkBuddy/fastledger/.tools/w64devkit/w64devkit/bin/gcc.exe -B C:/Users/47006/WorkBuddy/fastledger/.tools/w64devkit/w64devkit/bin/ ===
+--- go build output ---
+=== EXIT_CODE=0 ===

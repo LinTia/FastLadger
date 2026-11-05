@@ -1,0 +1,11 @@
+[prepare] 源目录：<仓库外:src-utf16>
+[prepare] 目标目录：<仓库外:e2e-08-dest>（运行前已清空）
+[prepare] 白名单：.png .md .json .log .txt
+[prepare] 排除清单（共 0，仅文件名与原因，不含内容）：
+  （无）
+[prepare] 收集清单（共 2，仅文件名，不含内容）：
+  - report.md
+  - run.log
+[prepare] 符号链接跳过：0
+[prepare] 汇总：扫描=2 收集=2 排除=0 符号链接跳过=0
+[prepare] 结论：OK（输出目录已就绪，仍需经 scan-artifacts.js 扫描后方可上传）

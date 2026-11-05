@@ -1,0 +1,17 @@
+SERVER up http://127.0.0.1:53768 schema=8
+BROWSER playwright-core channel=msedge version=156.0.4314.58
+C 汇总：{"PASS":144,"FAIL":6,"BLOCKED":77,"N/A":1}
+
+SUMMARY {"C:PASS":144,"C:FAIL":6,"C:BLOCKED":77,"C:N/A":1,"total":228}
+ARTIFACTS C:\Users\47006\WorkBuddy\fastledger\repo_tmp\artifacts\r0-fix-baseline\2026-11-05_09-13-30-dadc9a3-c
+CHECKSUMS 9 files
+
+失败明细：
+  I-LOGIN-04 FAIL 浏览器中不存在「明文切换」控件（主报告登记缺失 R0-E-39）；DOM 无 eye/toggle 类元素
+  I-LOGIN-11 FAIL 产品侧未实现（主报告已登记：R0-E-38）；本轮确认浏览器中不存在该控件
+  I-LOGIN-12 FAIL 产品侧未实现（主报告已登记：R0-E-38）；本轮确认浏览器中不存在该控件
+  I-HOME-01 FAIL 本页无账本切换控件（主报告登记缺失 R0-E-01），顶部仅标题
+  I-TXNS-01 FAIL 交易总表 #view 渲染为空——运行时确认该页不可用（需排查 renderTxns）
+  I-ACCT-06 FAIL 创建后 API 可见=true 页面可见=false（疑似列表未刷新，需 QA 复现确认）；#acctErr=「」toast=「✓ 账户已创建」
+
+=== EXIT_CODE=1 ===

@@ -1,0 +1,82 @@
+TAP version 13
+# [负向测试] case-01 干净文件集 | 期望退出码=0 | 实际退出码=0
+# [负向测试] case-02 合成 JWT 三段式 | 期望退出码=2 | 实际退出码=2
+# [负向测试] case-03 trace.zip 黑名单文件名 | 期望退出码=2 | 实际退出码=2
+# [负向测试] case-04 Bearer / 鉴权头 | 期望退出码=2 | 实际退出码=2
+# [负向测试] case-05 Cookie / Set-Cookie | 期望退出码=2 | 实际退出码=2
+# [负向测试] case-06 server.log | 期望退出码=2 | 实际退出码=2
+# [负向测试] case-07 密钥赋值 | 期望退出码=2 | 实际退出码=2
+# [负向测试] case-08 目录不存在 | 期望退出码=1 | 实际退出码=1
+# [负向测试] case-09 二进制跳过内容扫描 | 期望退出码=0 | 实际退出码=0
+# [负向测试] case-10 二进制文件名黑名单 | 期望退出码=2 | 实际退出码=2
+# Subtest: case-01 干净文件集 → 退出码 0
+ok 1 - case-01 干净文件集 → 退出码 0
+  ---
+  duration_ms: 77.4748
+  type: 'test'
+  ...
+# Subtest: case-02 合成 JWT 三段式 → 退出码 2
+ok 2 - case-02 合成 JWT 三段式 → 退出码 2
+  ---
+  duration_ms: 74.5992
+  type: 'test'
+  ...
+# Subtest: case-03 名为 trace.zip 的归档 → 退出码 2
+ok 3 - case-03 名为 trace.zip 的归档 → 退出码 2
+  ---
+  duration_ms: 71.6757
+  type: 'test'
+  ...
+# Subtest: case-04 Bearer 与鉴权头赋值 → 退出码 2
+ok 4 - case-04 Bearer 与鉴权头赋值 → 退出码 2
+  ---
+  duration_ms: 77.7096
+  type: 'test'
+  ...
+# Subtest: case-05 Cookie 与 Set-Cookie 赋值 → 退出码 2
+ok 5 - case-05 Cookie 与 Set-Cookie 赋值 → 退出码 2
+  ---
+  duration_ms: 75.8892
+  type: 'test'
+  ...
+# Subtest: case-06 server.log 服务原始日志 → 退出码 2
+ok 6 - case-06 server.log 服务原始日志 → 退出码 2
+  ---
+  duration_ms: 70.9402
+  type: 'test'
+  ...
+# Subtest: case-07 JWT 签名密钥赋值 → 退出码 2
+ok 7 - case-07 JWT 签名密钥赋值 → 退出码 2
+  ---
+  duration_ms: 70.8534
+  type: 'test'
+  ...
+# Subtest: case-08 目录不存在（参数/环境错误）→ 退出码 1
+ok 8 - case-08 目录不存在（参数/环境错误）→ 退出码 1
+  ---
+  duration_ms: 65.259
+  type: 'test'
+  ...
+# Subtest: case-09 二进制内容按设计跳过扫描 → 退出码 0
+ok 9 - case-09 二进制内容按设计跳过扫描 → 退出码 0
+  ---
+  duration_ms: 74.5151
+  type: 'test'
+  ...
+# Subtest: case-10 二进制文件名含敏感词仍被阻断 → 退出码 2
+ok 10 - case-10 二进制文件名含敏感词仍被阻断 → 退出码 2
+  ---
+  duration_ms: 72.3114
+  type: 'test'
+  ...
+1..10
+# tests 10
+# suites 0
+# pass 10
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 811.6362
+
+[negative-tests] 退出码=0

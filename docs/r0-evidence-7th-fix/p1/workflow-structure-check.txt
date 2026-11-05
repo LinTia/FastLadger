@@ -1,0 +1,16 @@
+[PASS] step 顺序：汇总 < 准备 < 扫描 < 上传 :: 行号 汇总=99 准备=114 扫描=121 上传=129
+[PASS] 扫描 step 的 if 依赖 prepare 的 outcome
+[PASS] 上传 step 的 if 依赖 scan 的 outcome
+[PASS] 上传 step 的 if 行不是裸 always() :: if: ${{ always() && steps.artifact_scan.outcome == 'success' }}
+[PASS] 上传 path 指向白名单目录 :: artifacts/r0-e2e-upload/**
+[PASS] if-no-files-found 改为 error
+[PASS] workflow 全文无 trace 字样 :: trace 出现次数=0
+[PASS] C 报告型 continue-on-error: true 保留且仅一处
+[PASS] A / D / C / 汇总退出码 四个既有 step 与 HEAD 逐字一致 :: 字节数 HEAD=1490 当前=1490
+[PASS] ci.yml 无 upload-artifact 步骤
+[PASS] .github/workflows 下仅 ci.yml 与 r0-e2e.yml 两个文件
+[PASS] 全仓 workflow 中 upload-artifact 仅 1 处
+
+结构检查总结论：PASS
+
+[workflow-structure-check] 退出码=0

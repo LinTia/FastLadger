@@ -1,0 +1,8 @@
+[scan] 待上传目录：artifacts/r0-e2e-upload
+[scan] 文件总数=100 文本已扫描=20 二进制跳过内容扫描=80 符号链接=0
+[scan] 命中明细（仅文件路径 + 命中类型 + 命中数量，不输出匹配值）：
+[HIT] p1-synthetic-sample.txt | JWT_LITERAL | 1
+[scan] 命中文件/类型组合=1 命中总数=1
+[scan] 结论：BLOCKED —— 禁止上传，请先清除上述命中项
+
+[scan-dirty-synthetic] 退出码=2

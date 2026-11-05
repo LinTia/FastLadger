@@ -1,0 +1,9 @@
+negative-tests                       退出码=0
+prepare-qa-verify                    退出码=0
+scan-clean-qa-verify                 退出码=0
+scan-dirty-synthetic                 退出码=2
+scan-clean-after-remove              退出码=0
+prepare-default                      退出码=0
+scan-clean-default                   退出码=0
+strict-scan                          退出码=0
+workflow-structure-check             退出码=0

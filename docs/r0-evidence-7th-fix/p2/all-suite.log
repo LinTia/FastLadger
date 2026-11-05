@@ -1,0 +1,42 @@
+=== 命令: R0_SERVER_BIN=/c/Users/47006/WorkBuddy/fastledger/repo_tmp/server/fastledger.exe R0_BROWSER_CHANNEL=msedge R0_ARTIFACT_DIR=/c/Users/47006/WorkBuddy/fastledger/repo_tmp/artifacts/r0-p2-all node run.js --suite all ===
+=== 时间(UTC): 2026-11-05T13:20:25Z ===
+=== 预期：all = A + D + C（执行顺序 a → d → c）；B 由 .github/workflows/r0-e2e.yml 独立 step 执行，不在本运行器 suite 体系内 ===
+=== 以下为完整 stdout/stderr（P2 最终代码） ===
+SERVER up http://127.0.0.1:52176 schema=8
+BROWSER playwright-core channel=msedge version=156.0.4314.58
+PASS    A01 pending：提交中按钮进入禁用 + 文案「登录中…」 (2145ms)
+        请求被延迟=true；pending 态={"text":"登录中…","disabled":true}；登录后 token 已写入=true
+PASS    A02 网络拒绝：请求 abort → 错误提示可见且留在登录页 (580ms)
+        toast=「✕ Failed to fetch」；仍在登录页=true；写入 token=false
+PASS    A03 HTTP 503：服务端 503 → 展示错误信息，不伪造成功 (603ms)
+        toast=「✕ 服务暂时不可用」；是否误写 token=false
+PASS    A04 恢复：一次失败后重试成功并可进入账本 (1319ms)
+        首次失败 toast=「✕ Failed to fetch」；重试后是否登录=true；token 已写入=true；hash=#books
+PASS    A05 慢速网络：800ms 延迟下 pending 仍可见，最终成功 (3593ms)
+        总耗时=1032ms（含 800ms 链路延迟）；中途按钮文案=「登录中…」
+PASS    A06 有数据：首页展示真实金额与交易条目 (1849ms)
+        页面含 ¥=true；含种子交易=true；API 交易数=3
+PASS    A07 空数据：空账本显示空态且不串数据 (1535ms)
+        API 交易数=0；页面残留他账本数据=[]；页面含「暂无」=false
+PASS    A08 权限不足：member 调管理接口被 403 拒绝且不泄露 (1557ms)
+        DELETE /books → 403；POST /members/invite → 403；成员页「邀请成员」按钮数=0（成员管理接口 403 校验通过；UI 入口可见性另由 D 套件 D-MEM-* 覆盖）；页面文本长度=164
+PASS    A09 多角色：owner/admin/member 三种会话看到不同能力 (4043ms)
+        owner: 成员数=3 邀请按钮=1；admin: 成员数=3 邀请按钮=1；member: 成员数=3 邀请按钮=0
+PASS    A10 离线 / 恢复：离线时报错，恢复网络后重试成功 (3966ms)
+        离线时 toast=「✕ Failed to fetch」视图文本长度=162；恢复后含金额=true 含种子=true
+PASS    A11 同步冲突：同一 clientUuid 重放不重复落账 (9ms)
+        首次 status=created，重放（金额改为 9999）status=conflict；交易数 3→4（应 +1）
+A 汇总：{"PASS":11}
+D 汇总：{"PASS":39}
+C 汇总：{"PASS":164,"FAIL":4,"BLOCKED":59,"N/A":1}
+
+SUMMARY {"A:PASS":11,"D:PASS":39,"C:PASS":164,"C:FAIL":4,"C:BLOCKED":59,"C:N/A":1,"total":278}
+ARTIFACTS C:\Users\47006\WorkBuddy\fastledger\repo_tmp\artifacts\r0-p2-all\2026-11-05_13-20-26-0c62f50-all
+CHECKSUMS 104 files
+
+失败明细：
+  I-LOGIN-04 FAIL 浏览器中不存在「明文切换」控件（主报告登记缺失 R0-E-39）；DOM 无 eye/toggle 类元素
+  I-LOGIN-11 FAIL 产品侧未实现（主报告已登记：R0-E-38）；本轮确认浏览器中不存在该控件
+  I-LOGIN-12 FAIL 产品侧未实现（主报告已登记：R0-E-38）；本轮确认浏览器中不存在该控件
+  I-HOME-01 FAIL 本页无账本切换控件（主报告登记缺失 R0-E-01），顶部仅标题
+=== 真实退出码: 1 ===

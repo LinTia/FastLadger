@@ -1,0 +1,2299 @@
+{
+  "startedAt": "2026-11-05T09:16:27.306Z",
+  "gitSha": "dadc9a3b9c567cad2bbad7e47361fb774365b949",
+  "branch": "fix/r0-sixth-runtime-defects",
+  "iterations": [
+    {
+      "index": 1,
+      "name": "复现账户-1-1793870188428",
+      "startedAt": "2026-11-05T09:16:28.679Z",
+      "routeAfterGoto": "/#b/1/accounts",
+      "before": {
+        "viewChildren": 1,
+        "rowCount": 3,
+        "viewInnerText": "账户对账\n＋ 新增账户\n\n各账户当前余额（负债账户为欠款）。\n\n类型\t余额\t操作\n现金\t¥7,987.66\t\n编辑\n删除\n\n活期储蓄\t¥-50.00\t\n编辑\n删除\n\n信用卡\t¥0.00\t\n编辑\n删除",
+        "viewTextContent": "账户对账＋ 新增账户各账户当前余额（负债账户为欠款）。账户类型余额操作现金现金¥7,987.66编辑删除储蓄卡活期储蓄¥-50.00编辑删除信用卡信用卡¥0.00编辑删除",
+        "bodyInnerText": "账户对账\n＋ 新增账户\n\n各账户当前余额（负债账户为欠款）。\n\n类型\t余额\t操作\n现金\t¥7,987.66\t\n编辑\n删除\n\n活期储蓄\t¥-50.00\t\n编辑\n删除\n\n信用卡\t¥0.00\t\n编辑\n删除\n🏠\n首页\n🧾\n账单\n＋\n📊\n报表\n👤\n我的",
+        "bodyHasName": false,
+        "viewInnerTextHasName": false,
+        "viewTextContentHasName": false,
+        "tdCount": 12,
+        "tds": [
+          {
+            "text": "现金",
+            "visible": false,
+            "display": "none",
+            "visibility": "visible"
+          },
+          {
+            "text": "现金",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "¥7,987.66",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "编辑\n删除",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "储蓄卡",
+            "visible": false,
+            "display": "none",
+            "visibility": "visible"
+          },
+          {
+            "text": "活期储蓄",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "¥-50.00",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "编辑\n删除",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "信用卡",
+            "visible": false,
+            "display": "none",
+            "visibility": "visible"
+          },
+          {
+            "text": "信用卡",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "¥0.00",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "编辑\n删除",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          }
+        ],
+        "leafMatchCount": 0,
+        "hiddenLeafMatchCount": 0,
+        "acctDlgOpen": false,
+        "acctErr": "",
+        "toast": "",
+        "mutations": []
+      },
+      "addBtnCount": 1,
+      "dlgOpenAfterClick": true,
+      "post": {
+        "status": 200,
+        "url": "/api/v1/books/1/accounts",
+        "body": "{\"code\":0,\"data\":{\"id\":7,\"bookId\":1,\"name\":\"复现账户-1-1793870188428\",\"category\":1,\"currency\":\"CNY\",\"balance\":0,\"parentId\":0,\"syncVersion\":7,\"deleted\":false,\"createdAt\":1793870189,\"updatedAt\":1793870189},\"msg\":\"ok\"}"
+      },
+      "api": {
+        "count": 4,
+        "hasName": true,
+        "names": [
+          "现金",
+          "复现账户-1-1793870188428",
+          "储蓄卡",
+          "信用卡"
+        ]
+      },
+      "redrawSeen": true,
+      "nameAppearedWithin6s": false,
+      "afterSubmit": {
+        "viewChildren": 1,
+        "rowCount": 4,
+        "viewInnerText": "账户对账\n＋ 新增账户\n\n各账户当前余额（负债账户为欠款）。\n\n类型\t余额\t操作\n现金\t¥7,987.66\t\n编辑\n删除\n\n现金\t¥0.00\t\n编辑\n删除\n\n活期储蓄\t¥-50.00\t\n编辑\n删除\n\n信用卡\t¥0.00\t\n编辑\n删除",
+        "viewTextContent": "账户对账＋ 新增账户各账户当前余额（负债账户为欠款）。账户类型余额操作现金现金¥7,987.66编辑删除复现账户-1-1793870188428现金¥0.00编辑删除储蓄卡活期储蓄¥-50.00编辑删除信用卡信用卡¥0.00编辑删除",
+        "bodyInnerText": "账户对账\n＋ 新增账户\n\n各账户当前余额（负债账户为欠款）。\n\n类型\t余额\t操作\n现金\t¥7,987.66\t\n编辑\n删除\n\n现金\t¥0.00\t\n编辑\n删除\n\n活期储蓄\t¥-50.00\t\n编辑\n删除\n\n信用卡\t¥0.00\t\n编辑\n删除\n🏠\n首页\n🧾\n账单\n＋\n📊\n报表\n👤\n我的",
+        "bodyHasName": false,
+        "viewInnerTextHasName": false,
+        "viewTextContentHasName": true,
+        "tdCount": 16,
+        "tds": [
+          {
+            "text": "现金",
+            "visible": false,
+            "display": "none",
+            "visibility": "visible"
+          },
+          {
+            "text": "现金",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "¥7,987.66",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "编辑\n删除",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "复现账户-1-1793870188428",
+            "visible": false,
+            "display": "none",
+            "visibility": "visible"
+          },
+          {
+            "text": "现金",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "¥0.00",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "编辑\n删除",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "储蓄卡",
+            "visible": false,
+            "display": "none",
+            "visibility": "visible"
+          },
+          {
+            "text": "活期储蓄",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "¥-50.00",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "编辑\n删除",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "信用卡",
+            "visible": false,
+            "display": "none",
+            "visibility": "visible"
+          },
+          {
+            "text": "信用卡",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "¥0.00",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "编辑\n删除",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          }
+        ],
+        "leafMatchCount": 1,
+        "hiddenLeafMatchCount": 1,
+        "acctDlgOpen": false,
+        "acctErr": "",
+        "toast": "✓ 账户已创建",
+        "mutations": [
+          {
+            "at": "2026-11-05T09:16:29.558Z",
+            "children": 1,
+            "rows": 4,
+            "textHasName": true,
+            "innerTextHasName": false,
+            "snippet": "账户对账\n＋ 新增账户\n\n各账户当前余额（负债账户为欠款）。\n\n类型\t余额\t操作\n现金\t¥7,987.66\t\n编辑\n删除\n\n现金\t¥0.00\t\n编辑\n删除\n\n活期储蓄\t¥-50.00\t\n编辑\n删除\n\n信用卡\t¥0.00\t\n编辑\n删除"
+          }
+        ]
+      },
+      "routeAfterReload": "/#b/1/accounts",
+      "afterReload": {
+        "viewChildren": 1,
+        "rowCount": 4,
+        "viewInnerText": "账户对账\n＋ 新增账户\n\n各账户当前余额（负债账户为欠款）。\n\n类型\t余额\t操作\n现金\t¥7,987.66\t\n编辑\n删除\n\n现金\t¥0.00\t\n编辑\n删除\n\n活期储蓄\t¥-50.00\t\n编辑\n删除\n\n信用卡\t¥0.00\t\n编辑\n删除",
+        "viewTextContent": "账户对账＋ 新增账户各账户当前余额（负债账户为欠款）。账户类型余额操作现金现金¥7,987.66编辑删除复现账户-1-1793870188428现金¥0.00编辑删除储蓄卡活期储蓄¥-50.00编辑删除信用卡信用卡¥0.00编辑删除",
+        "bodyInnerText": "账户对账\n＋ 新增账户\n\n各账户当前余额（负债账户为欠款）。\n\n类型\t余额\t操作\n现金\t¥7,987.66\t\n编辑\n删除\n\n现金\t¥0.00\t\n编辑\n删除\n\n活期储蓄\t¥-50.00\t\n编辑\n删除\n\n信用卡\t¥0.00\t\n编辑\n删除\n🏠\n首页\n🧾\n账单\n＋\n📊\n报表\n👤\n我的",
+        "bodyHasName": false,
+        "viewInnerTextHasName": false,
+        "viewTextContentHasName": true,
+        "tdCount": 16,
+        "tds": [
+          {
+            "text": "现金",
+            "visible": false,
+            "display": "none",
+            "visibility": "visible"
+          },
+          {
+            "text": "现金",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "¥7,987.66",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "编辑\n删除",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "复现账户-1-1793870188428",
+            "visible": false,
+            "display": "none",
+            "visibility": "visible"
+          },
+          {
+            "text": "现金",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "¥0.00",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "编辑\n删除",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "储蓄卡",
+            "visible": false,
+            "display": "none",
+            "visibility": "visible"
+          },
+          {
+            "text": "活期储蓄",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "¥-50.00",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "编辑\n删除",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "信用卡",
+            "visible": false,
+            "display": "none",
+            "visibility": "visible"
+          },
+          {
+            "text": "信用卡",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "¥0.00",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "编辑\n删除",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          }
+        ],
+        "leafMatchCount": 1,
+        "hiddenLeafMatchCount": 1,
+        "acctDlgOpen": false,
+        "acctErr": "",
+        "toast": "✓ 账户已创建",
+        "mutations": [
+          {
+            "at": "2026-11-05T09:16:29.558Z",
+            "children": 1,
+            "rows": 4,
+            "textHasName": true,
+            "innerTextHasName": false,
+            "snippet": "账户对账\n＋ 新增账户\n\n各账户当前余额（负债账户为欠款）。\n\n类型\t余额\t操作\n现金\t¥7,987.66\t\n编辑\n删除\n\n现金\t¥0.00\t\n编辑\n删除\n\n活期储蓄\t¥-50.00\t\n编辑\n删除\n\n信用卡\t¥0.00\t\n编辑\n删除"
+          }
+        ]
+      },
+      "classification": "DOM 有但不可见/文本被隐藏",
+      "refreshNote": "刷新后仍不可见",
+      "console": [],
+      "network": [
+        {
+          "at": "2026-11-05T09:16:28.760Z",
+          "kind": "response",
+          "method": "GET",
+          "url": "/api/v1/books/1/accounts",
+          "status": 200
+        },
+        {
+          "at": "2026-11-05T09:16:28.760Z",
+          "kind": "response",
+          "method": "GET",
+          "url": "/api/v1/books/1/categories",
+          "status": 200
+        },
+        {
+          "at": "2026-11-05T09:16:28.761Z",
+          "kind": "response",
+          "method": "GET",
+          "url": "/api/v1/books",
+          "status": 200
+        },
+        {
+          "at": "2026-11-05T09:16:29.553Z",
+          "kind": "response",
+          "method": "POST",
+          "url": "/api/v1/books/1/accounts",
+          "status": 200
+        },
+        {
+          "at": "2026-11-05T09:16:29.557Z",
+          "kind": "response",
+          "method": "GET",
+          "url": "/api/v1/books/1/accounts",
+          "status": 200
+        },
+        {
+          "at": "2026-11-05T09:16:29.557Z",
+          "kind": "response",
+          "method": "GET",
+          "url": "/api/v1/books/1/categories",
+          "status": 200
+        },
+        {
+          "at": "2026-11-05T09:16:29.559Z",
+          "kind": "response",
+          "method": "GET",
+          "url": "/api/v1/books",
+          "status": 200
+        }
+      ],
+      "finishedAt": "2026-11-05T09:16:35.572Z"
+    },
+    {
+      "index": 2,
+      "name": "复现账户-2-1793870195582",
+      "startedAt": "2026-11-05T09:16:35.773Z",
+      "routeAfterGoto": "/#b/1/accounts",
+      "before": {
+        "viewChildren": 1,
+        "rowCount": 4,
+        "viewInnerText": "账户对账\n＋ 新增账户\n\n各账户当前余额（负债账户为欠款）。\n\n类型\t余额\t操作\n现金\t¥7,987.66\t\n编辑\n删除\n\n现金\t¥0.00\t\n编辑\n删除\n\n活期储蓄\t¥-50.00\t\n编辑\n删除\n\n信用卡\t¥0.00\t\n编辑\n删除",
+        "viewTextContent": "账户对账＋ 新增账户各账户当前余额（负债账户为欠款）。账户类型余额操作现金现金¥7,987.66编辑删除复现账户-1-1793870188428现金¥0.00编辑删除储蓄卡活期储蓄¥-50.00编辑删除信用卡信用卡¥0.00编辑删除",
+        "bodyInnerText": "账户对账\n＋ 新增账户\n\n各账户当前余额（负债账户为欠款）。\n\n类型\t余额\t操作\n现金\t¥7,987.66\t\n编辑\n删除\n\n现金\t¥0.00\t\n编辑\n删除\n\n活期储蓄\t¥-50.00\t\n编辑\n删除\n\n信用卡\t¥0.00\t\n编辑\n删除\n🏠\n首页\n🧾\n账单\n＋\n📊\n报表\n👤\n我的",
+        "bodyHasName": false,
+        "viewInnerTextHasName": false,
+        "viewTextContentHasName": false,
+        "tdCount": 16,
+        "tds": [
+          {
+            "text": "现金",
+            "visible": false,
+            "display": "none",
+            "visibility": "visible"
+          },
+          {
+            "text": "现金",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "¥7,987.66",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "编辑\n删除",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "复现账户-1-1793870188428",
+            "visible": false,
+            "display": "none",
+            "visibility": "visible"
+          },
+          {
+            "text": "现金",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "¥0.00",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "编辑\n删除",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "储蓄卡",
+            "visible": false,
+            "display": "none",
+            "visibility": "visible"
+          },
+          {
+            "text": "活期储蓄",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "¥-50.00",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "编辑\n删除",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "信用卡",
+            "visible": false,
+            "display": "none",
+            "visibility": "visible"
+          },
+          {
+            "text": "信用卡",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "¥0.00",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "编辑\n删除",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          }
+        ],
+        "leafMatchCount": 0,
+        "hiddenLeafMatchCount": 0,
+        "acctDlgOpen": false,
+        "acctErr": "",
+        "toast": "",
+        "mutations": []
+      },
+      "addBtnCount": 1,
+      "dlgOpenAfterClick": true,
+      "post": {
+        "status": 200,
+        "url": "/api/v1/books/1/accounts",
+        "body": "{\"code\":0,\"data\":{\"id\":8,\"bookId\":1,\"name\":\"复现账户-2-1793870195582\",\"category\":1,\"currency\":\"CNY\",\"balance\":0,\"parentId\":0,\"syncVersion\":8,\"deleted\":false,\"createdAt\":1793870196,\"updatedAt\":1793870196},\"msg\":\"ok\"}"
+      },
+      "api": {
+        "count": 5,
+        "hasName": true,
+        "names": [
+          "现金",
+          "复现账户-1-1793870188428",
+          "复现账户-2-1793870195582",
+          "储蓄卡",
+          "信用卡"
+        ]
+      },
+      "redrawSeen": true,
+      "nameAppearedWithin6s": false,
+      "afterSubmit": {
+        "viewChildren": 1,
+        "rowCount": 5,
+        "viewInnerText": "账户对账\n＋ 新增账户\n\n各账户当前余额（负债账户为欠款）。\n\n类型\t余额\t操作\n现金\t¥7,987.66\t\n编辑\n删除\n\n现金\t¥0.00\t\n编辑\n删除\n\n现金\t¥0.00\t\n编辑\n删除\n\n活期储蓄\t¥-50.00\t\n编辑\n删除\n\n信用卡\t¥0.00\t\n编辑\n删除",
+        "viewTextContent": "账户对账＋ 新增账户各账户当前余额（负债账户为欠款）。账户类型余额操作现金现金¥7,987.66编辑删除复现账户-1-1793870188428现金¥0.00编辑删除复现账户-2-1793870195582现金¥0.00编辑删除储蓄卡活期储蓄¥-50.00编辑删除信用卡信用卡¥0.00编辑删除",
+        "bodyInnerText": "账户对账\n＋ 新增账户\n\n各账户当前余额（负债账户为欠款）。\n\n类型\t余额\t操作\n现金\t¥7,987.66\t\n编辑\n删除\n\n现金\t¥0.00\t\n编辑\n删除\n\n现金\t¥0.00\t\n编辑\n删除\n\n活期储蓄\t¥-50.00\t\n编辑\n删除\n\n信用卡\t¥0.00\t\n编辑\n删除\n🏠\n首页\n🧾\n账单\n＋\n📊\n报表\n👤\n我的",
+        "bodyHasName": false,
+        "viewInnerTextHasName": false,
+        "viewTextContentHasName": true,
+        "tdCount": 20,
+        "tds": [
+          {
+            "text": "现金",
+            "visible": false,
+            "display": "none",
+            "visibility": "visible"
+          },
+          {
+            "text": "现金",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "¥7,987.66",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "编辑\n删除",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "复现账户-1-1793870188428",
+            "visible": false,
+            "display": "none",
+            "visibility": "visible"
+          },
+          {
+            "text": "现金",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "¥0.00",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "编辑\n删除",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "复现账户-2-1793870195582",
+            "visible": false,
+            "display": "none",
+            "visibility": "visible"
+          },
+          {
+            "text": "现金",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "¥0.00",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "编辑\n删除",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "储蓄卡",
+            "visible": false,
+            "display": "none",
+            "visibility": "visible"
+          },
+          {
+            "text": "活期储蓄",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "¥-50.00",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "编辑\n删除",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "信用卡",
+            "visible": false,
+            "display": "none",
+            "visibility": "visible"
+          },
+          {
+            "text": "信用卡",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "¥0.00",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "编辑\n删除",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          }
+        ],
+        "leafMatchCount": 1,
+        "hiddenLeafMatchCount": 1,
+        "acctDlgOpen": false,
+        "acctErr": "",
+        "toast": "✓ 账户已创建",
+        "mutations": [
+          {
+            "at": "2026-11-05T09:16:36.571Z",
+            "children": 1,
+            "rows": 5,
+            "textHasName": true,
+            "innerTextHasName": false,
+            "snippet": "账户对账\n＋ 新增账户\n\n各账户当前余额（负债账户为欠款）。\n\n类型\t余额\t操作\n现金\t¥7,987.66\t\n编辑\n删除\n\n现金\t¥0.00\t\n编辑\n删除\n\n现金\t¥0.00\t\n编辑\n删除\n\n活期储蓄\t¥-50.00\t\n编辑\n删除\n\n信用卡\t¥0.00\t\n编辑\n删除"
+          }
+        ]
+      },
+      "routeAfterReload": "/#b/1/accounts",
+      "afterReload": {
+        "viewChildren": 1,
+        "rowCount": 5,
+        "viewInnerText": "账户对账\n＋ 新增账户\n\n各账户当前余额（负债账户为欠款）。\n\n类型\t余额\t操作\n现金\t¥7,987.66\t\n编辑\n删除\n\n现金\t¥0.00\t\n编辑\n删除\n\n现金\t¥0.00\t\n编辑\n删除\n\n活期储蓄\t¥-50.00\t\n编辑\n删除\n\n信用卡\t¥0.00\t\n编辑\n删除",
+        "viewTextContent": "账户对账＋ 新增账户各账户当前余额（负债账户为欠款）。账户类型余额操作现金现金¥7,987.66编辑删除复现账户-1-1793870188428现金¥0.00编辑删除复现账户-2-1793870195582现金¥0.00编辑删除储蓄卡活期储蓄¥-50.00编辑删除信用卡信用卡¥0.00编辑删除",
+        "bodyInnerText": "账户对账\n＋ 新增账户\n\n各账户当前余额（负债账户为欠款）。\n\n类型\t余额\t操作\n现金\t¥7,987.66\t\n编辑\n删除\n\n现金\t¥0.00\t\n编辑\n删除\n\n现金\t¥0.00\t\n编辑\n删除\n\n活期储蓄\t¥-50.00\t\n编辑\n删除\n\n信用卡\t¥0.00\t\n编辑\n删除\n🏠\n首页\n🧾\n账单\n＋\n📊\n报表\n👤\n我的",
+        "bodyHasName": false,
+        "viewInnerTextHasName": false,
+        "viewTextContentHasName": true,
+        "tdCount": 20,
+        "tds": [
+          {
+            "text": "现金",
+            "visible": false,
+            "display": "none",
+            "visibility": "visible"
+          },
+          {
+            "text": "现金",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "¥7,987.66",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "编辑\n删除",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "复现账户-1-1793870188428",
+            "visible": false,
+            "display": "none",
+            "visibility": "visible"
+          },
+          {
+            "text": "现金",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "¥0.00",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "编辑\n删除",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "复现账户-2-1793870195582",
+            "visible": false,
+            "display": "none",
+            "visibility": "visible"
+          },
+          {
+            "text": "现金",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "¥0.00",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "编辑\n删除",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "储蓄卡",
+            "visible": false,
+            "display": "none",
+            "visibility": "visible"
+          },
+          {
+            "text": "活期储蓄",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "¥-50.00",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "编辑\n删除",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "信用卡",
+            "visible": false,
+            "display": "none",
+            "visibility": "visible"
+          },
+          {
+            "text": "信用卡",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "¥0.00",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "编辑\n删除",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          }
+        ],
+        "leafMatchCount": 1,
+        "hiddenLeafMatchCount": 1,
+        "acctDlgOpen": false,
+        "acctErr": "",
+        "toast": "✓ 账户已创建",
+        "mutations": [
+          {
+            "at": "2026-11-05T09:16:36.571Z",
+            "children": 1,
+            "rows": 5,
+            "textHasName": true,
+            "innerTextHasName": false,
+            "snippet": "账户对账\n＋ 新增账户\n\n各账户当前余额（负债账户为欠款）。\n\n类型\t余额\t操作\n现金\t¥7,987.66\t\n编辑\n删除\n\n现金\t¥0.00\t\n编辑\n删除\n\n现金\t¥0.00\t\n编辑\n删除\n\n活期储蓄\t¥-50.00\t\n编辑\n删除\n\n信用卡\t¥0.00\t\n编辑\n删除"
+          }
+        ]
+      },
+      "classification": "DOM 有但不可见/文本被隐藏",
+      "refreshNote": "刷新后仍不可见",
+      "console": [],
+      "network": [
+        {
+          "at": "2026-11-05T09:16:35.816Z",
+          "kind": "response",
+          "method": "GET",
+          "url": "/api/v1/books/1/accounts",
+          "status": 200
+        },
+        {
+          "at": "2026-11-05T09:16:35.816Z",
+          "kind": "response",
+          "method": "GET",
+          "url": "/api/v1/books/1/categories",
+          "status": 200
+        },
+        {
+          "at": "2026-11-05T09:16:35.816Z",
+          "kind": "response",
+          "method": "GET",
+          "url": "/api/v1/books",
+          "status": 200
+        },
+        {
+          "at": "2026-11-05T09:16:36.567Z",
+          "kind": "response",
+          "method": "POST",
+          "url": "/api/v1/books/1/accounts",
+          "status": 200
+        },
+        {
+          "at": "2026-11-05T09:16:36.570Z",
+          "kind": "response",
+          "method": "GET",
+          "url": "/api/v1/books/1/accounts",
+          "status": 200
+        },
+        {
+          "at": "2026-11-05T09:16:36.570Z",
+          "kind": "response",
+          "method": "GET",
+          "url": "/api/v1/books/1/categories",
+          "status": 200
+        },
+        {
+          "at": "2026-11-05T09:16:36.571Z",
+          "kind": "response",
+          "method": "GET",
+          "url": "/api/v1/books",
+          "status": 200
+        }
+      ],
+      "finishedAt": "2026-11-05T09:16:42.595Z"
+    },
+    {
+      "index": 3,
+      "name": "复现账户-3-1793870202603",
+      "startedAt": "2026-11-05T09:16:42.808Z",
+      "routeAfterGoto": "/#b/1/accounts",
+      "before": {
+        "viewChildren": 1,
+        "rowCount": 5,
+        "viewInnerText": "账户对账\n＋ 新增账户\n\n各账户当前余额（负债账户为欠款）。\n\n类型\t余额\t操作\n现金\t¥7,987.66\t\n编辑\n删除\n\n现金\t¥0.00\t\n编辑\n删除\n\n现金\t¥0.00\t\n编辑\n删除\n\n活期储蓄\t¥-50.00\t\n编辑\n删除\n\n信用卡\t¥0.00\t\n编辑\n删除",
+        "viewTextContent": "账户对账＋ 新增账户各账户当前余额（负债账户为欠款）。账户类型余额操作现金现金¥7,987.66编辑删除复现账户-1-1793870188428现金¥0.00编辑删除复现账户-2-1793870195582现金¥0.00编辑删除储蓄卡活期储蓄¥-50.00编辑删除信用卡信用卡¥0.00编辑删除",
+        "bodyInnerText": "账户对账\n＋ 新增账户\n\n各账户当前余额（负债账户为欠款）。\n\n类型\t余额\t操作\n现金\t¥7,987.66\t\n编辑\n删除\n\n现金\t¥0.00\t\n编辑\n删除\n\n现金\t¥0.00\t\n编辑\n删除\n\n活期储蓄\t¥-50.00\t\n编辑\n删除\n\n信用卡\t¥0.00\t\n编辑\n删除\n🏠\n首页\n🧾\n账单\n＋\n📊\n报表\n👤\n我的",
+        "bodyHasName": false,
+        "viewInnerTextHasName": false,
+        "viewTextContentHasName": false,
+        "tdCount": 20,
+        "tds": [
+          {
+            "text": "现金",
+            "visible": false,
+            "display": "none",
+            "visibility": "visible"
+          },
+          {
+            "text": "现金",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "¥7,987.66",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "编辑\n删除",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "复现账户-1-1793870188428",
+            "visible": false,
+            "display": "none",
+            "visibility": "visible"
+          },
+          {
+            "text": "现金",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "¥0.00",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "编辑\n删除",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "复现账户-2-1793870195582",
+            "visible": false,
+            "display": "none",
+            "visibility": "visible"
+          },
+          {
+            "text": "现金",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "¥0.00",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "编辑\n删除",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "储蓄卡",
+            "visible": false,
+            "display": "none",
+            "visibility": "visible"
+          },
+          {
+            "text": "活期储蓄",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "¥-50.00",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "编辑\n删除",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "信用卡",
+            "visible": false,
+            "display": "none",
+            "visibility": "visible"
+          },
+          {
+            "text": "信用卡",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "¥0.00",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "编辑\n删除",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          }
+        ],
+        "leafMatchCount": 0,
+        "hiddenLeafMatchCount": 0,
+        "acctDlgOpen": false,
+        "acctErr": "",
+        "toast": "",
+        "mutations": []
+      },
+      "addBtnCount": 1,
+      "dlgOpenAfterClick": true,
+      "post": {
+        "status": 200,
+        "url": "/api/v1/books/1/accounts",
+        "body": "{\"code\":0,\"data\":{\"id\":9,\"bookId\":1,\"name\":\"复现账户-3-1793870202603\",\"category\":1,\"currency\":\"CNY\",\"balance\":0,\"parentId\":0,\"syncVersion\":9,\"deleted\":false,\"createdAt\":1793870203,\"updatedAt\":1793870203},\"msg\":\"ok\"}"
+      },
+      "api": {
+        "count": 6,
+        "hasName": true,
+        "names": [
+          "现金",
+          "复现账户-1-1793870188428",
+          "复现账户-2-1793870195582",
+          "复现账户-3-1793870202603",
+          "储蓄卡",
+          "信用卡"
+        ]
+      },
+      "redrawSeen": true,
+      "nameAppearedWithin6s": false,
+      "afterSubmit": {
+        "viewChildren": 1,
+        "rowCount": 6,
+        "viewInnerText": "账户对账\n＋ 新增账户\n\n各账户当前余额（负债账户为欠款）。\n\n类型\t余额\t操作\n现金\t¥7,987.66\t\n编辑\n删除\n\n现金\t¥0.00\t\n编辑\n删除\n\n现金\t¥0.00\t\n编辑\n删除\n\n现金\t¥0.00\t\n编辑\n删除\n\n活期储蓄\t¥-50.00\t\n编辑\n删除\n\n信用卡\t¥0.00\t\n编辑\n删除",
+        "viewTextContent": "账户对账＋ 新增账户各账户当前余额（负债账户为欠款）。账户类型余额操作现金现金¥7,987.66编辑删除复现账户-1-1793870188428现金¥0.00编辑删除复现账户-2-1793870195582现金¥0.00编辑删除复现账户-3-1793870202603现金¥0.00编辑删除储蓄卡活期储蓄¥-50.00编辑删除信用卡信用卡¥0.00编辑删除",
+        "bodyInnerText": "账户对账\n＋ 新增账户\n\n各账户当前余额（负债账户为欠款）。\n\n类型\t余额\t操作\n现金\t¥7,987.66\t\n编辑\n删除\n\n现金\t¥0.00\t\n编辑\n删除\n\n现金\t¥0.00\t\n编辑\n删除\n\n现金\t¥0.00\t\n编辑\n删除\n\n活期储蓄\t¥-50.00\t\n编辑\n删除\n\n信用卡\t¥0.00\t\n编辑\n删除\n🏠\n首页\n🧾\n账单\n＋\n📊\n报表\n👤\n我的",
+        "bodyHasName": false,
+        "viewInnerTextHasName": false,
+        "viewTextContentHasName": true,
+        "tdCount": 24,
+        "tds": [
+          {
+            "text": "现金",
+            "visible": false,
+            "display": "none",
+            "visibility": "visible"
+          },
+          {
+            "text": "现金",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "¥7,987.66",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "编辑\n删除",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "复现账户-1-1793870188428",
+            "visible": false,
+            "display": "none",
+            "visibility": "visible"
+          },
+          {
+            "text": "现金",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "¥0.00",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "编辑\n删除",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "复现账户-2-1793870195582",
+            "visible": false,
+            "display": "none",
+            "visibility": "visible"
+          },
+          {
+            "text": "现金",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "¥0.00",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "编辑\n删除",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "复现账户-3-1793870202603",
+            "visible": false,
+            "display": "none",
+            "visibility": "visible"
+          },
+          {
+            "text": "现金",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "¥0.00",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "编辑\n删除",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "储蓄卡",
+            "visible": false,
+            "display": "none",
+            "visibility": "visible"
+          },
+          {
+            "text": "活期储蓄",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "¥-50.00",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "编辑\n删除",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "信用卡",
+            "visible": false,
+            "display": "none",
+            "visibility": "visible"
+          },
+          {
+            "text": "信用卡",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "¥0.00",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "编辑\n删除",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          }
+        ],
+        "leafMatchCount": 1,
+        "hiddenLeafMatchCount": 1,
+        "acctDlgOpen": false,
+        "acctErr": "",
+        "toast": "✓ 账户已创建",
+        "mutations": [
+          {
+            "at": "2026-11-05T09:16:43.614Z",
+            "children": 1,
+            "rows": 6,
+            "textHasName": true,
+            "innerTextHasName": false,
+            "snippet": "账户对账\n＋ 新增账户\n\n各账户当前余额（负债账户为欠款）。\n\n类型\t余额\t操作\n现金\t¥7,987.66\t\n编辑\n删除\n\n现金\t¥0.00\t\n编辑\n删除\n\n现金\t¥0.00\t\n编辑\n删除\n\n现金\t¥0.00\t\n编辑\n删除\n\n活期储蓄\t¥-50.00\t\n编辑\n删除\n\n信用卡\t¥0.00\t\n编辑\n删除"
+          }
+        ]
+      },
+      "routeAfterReload": "/#b/1/accounts",
+      "afterReload": {
+        "viewChildren": 1,
+        "rowCount": 6,
+        "viewInnerText": "账户对账\n＋ 新增账户\n\n各账户当前余额（负债账户为欠款）。\n\n类型\t余额\t操作\n现金\t¥7,987.66\t\n编辑\n删除\n\n现金\t¥0.00\t\n编辑\n删除\n\n现金\t¥0.00\t\n编辑\n删除\n\n现金\t¥0.00\t\n编辑\n删除\n\n活期储蓄\t¥-50.00\t\n编辑\n删除\n\n信用卡\t¥0.00\t\n编辑\n删除",
+        "viewTextContent": "账户对账＋ 新增账户各账户当前余额（负债账户为欠款）。账户类型余额操作现金现金¥7,987.66编辑删除复现账户-1-1793870188428现金¥0.00编辑删除复现账户-2-1793870195582现金¥0.00编辑删除复现账户-3-1793870202603现金¥0.00编辑删除储蓄卡活期储蓄¥-50.00编辑删除信用卡信用卡¥0.00编辑删除",
+        "bodyInnerText": "账户对账\n＋ 新增账户\n\n各账户当前余额（负债账户为欠款）。\n\n类型\t余额\t操作\n现金\t¥7,987.66\t\n编辑\n删除\n\n现金\t¥0.00\t\n编辑\n删除\n\n现金\t¥0.00\t\n编辑\n删除\n\n现金\t¥0.00\t\n编辑\n删除\n\n活期储蓄\t¥-50.00\t\n编辑\n删除\n\n信用卡\t¥0.00\t\n编辑\n删除\n🏠\n首页\n🧾\n账单\n＋\n📊\n报表\n👤\n我的",
+        "bodyHasName": false,
+        "viewInnerTextHasName": false,
+        "viewTextContentHasName": true,
+        "tdCount": 24,
+        "tds": [
+          {
+            "text": "现金",
+            "visible": false,
+            "display": "none",
+            "visibility": "visible"
+          },
+          {
+            "text": "现金",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "¥7,987.66",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "编辑\n删除",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "复现账户-1-1793870188428",
+            "visible": false,
+            "display": "none",
+            "visibility": "visible"
+          },
+          {
+            "text": "现金",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "¥0.00",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "编辑\n删除",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "复现账户-2-1793870195582",
+            "visible": false,
+            "display": "none",
+            "visibility": "visible"
+          },
+          {
+            "text": "现金",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "¥0.00",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "编辑\n删除",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "复现账户-3-1793870202603",
+            "visible": false,
+            "display": "none",
+            "visibility": "visible"
+          },
+          {
+            "text": "现金",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "¥0.00",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "编辑\n删除",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "储蓄卡",
+            "visible": false,
+            "display": "none",
+            "visibility": "visible"
+          },
+          {
+            "text": "活期储蓄",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "¥-50.00",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "编辑\n删除",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "信用卡",
+            "visible": false,
+            "display": "none",
+            "visibility": "visible"
+          },
+          {
+            "text": "信用卡",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "¥0.00",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          },
+          {
+            "text": "编辑\n删除",
+            "visible": true,
+            "display": "table-cell",
+            "visibility": "visible"
+          }
+        ],
+        "leafMatchCount": 1,
+        "hiddenLeafMatchCount": 1,
+        "acctDlgOpen": false,
+        "acctErr": "",
+        "toast": "✓ 账户已创建",
+        "mutations": [
+          {
+            "at": "2026-11-05T09:16:43.614Z",
+            "children": 1,
+            "rows": 6,
+            "textHasName": true,
+            "innerTextHasName": false,
+            "snippet": "账户对账\n＋ 新增账户\n\n各账户当前余额（负债账户为欠款）。\n\n类型\t余额\t操作\n现金\t¥7,987.66\t\n编辑\n删除\n\n现金\t¥0.00\t\n编辑\n删除\n\n现金\t¥0.00\t\n编辑\n删除\n\n现金\t¥0.00\t\n编辑\n删除\n\n活期储蓄\t¥-50.00\t\n编辑\n删除\n\n信用卡\t¥0.00\t\n编辑\n删除"
+          }
+        ]
+      },
+      "classification": "DOM 有但不可见/文本被隐藏",
+      "refreshNote": "刷新后仍不可见",
+      "console": [],
+      "network": [
+        {
+          "at": "2026-11-05T09:16:42.853Z",
+          "kind": "response",
+          "method": "GET",
+          "url": "/api/v1/books/1/accounts",
+          "status": 200
+        },
+        {
+          "at": "2026-11-05T09:16:42.853Z",
+          "kind": "response",
+          "method": "GET",
+          "url": "/api/v1/books/1/categories",
+          "status": 200
+        },
+        {
+          "at": "2026-11-05T09:16:42.854Z",
+          "kind": "response",
+          "method": "GET",
+          "url": "/api/v1/books",
+          "status": 200
+        },
+        {
+          "at": "2026-11-05T09:16:43.610Z",
+          "kind": "response",
+          "method": "POST",
+          "url": "/api/v1/books/1/accounts",
+          "status": 200
+        },
+        {
+          "at": "2026-11-05T09:16:43.613Z",
+          "kind": "response",
+          "method": "GET",
+          "url": "/api/v1/books/1/accounts",
+          "status": 200
+        },
+        {
+          "at": "2026-11-05T09:16:43.613Z",
+          "kind": "response",
+          "method": "GET",
+          "url": "/api/v1/books/1/categories",
+          "status": 200
+        },
+        {
+          "at": "2026-11-05T09:16:43.614Z",
+          "kind": "response",
+          "method": "GET",
+          "url": "/api/v1/books",
+          "status": 200
+        }
+      ],
+      "finishedAt": "2026-11-05T09:16:49.634Z"
+    }
+  ],
+  "serverBase": "http://127.0.0.1:56232",
+  "binary": "C:/Users/47006/WorkBuddy/fastledger/repo_tmp/server/fastledger.exe",
+  "browser": {
+    "from": "playwright-core",
+    "version": "156.0.4314.58",
+    "channel": "msedge"
+  },
+  "observations": {
+    "startedAt": "2026-11-05T09:16:49.644Z",
+    "txns": {
+      "viewChildren": 0,
+      "rowCount": 0,
+      "viewInnerText": "",
+      "viewTextContent": "",
+      "bodyInnerText": "🏠\n首页\n🧾\n账单\n＋\n📊\n报表\n👤\n我的",
+      "bodyHasName": false,
+      "viewInnerTextHasName": false,
+      "viewTextContentHasName": false,
+      "tdCount": 0,
+      "tds": [],
+      "leafMatchCount": 0,
+      "hiddenLeafMatchCount": 0,
+      "acctDlgOpen": false,
+      "acctErr": "",
+      "toast": "",
+      "mutations": [],
+      "console": [],
+      "network": [
+        {
+          "at": "2026-11-05T09:16:49.886Z",
+          "kind": "response",
+          "method": "GET",
+          "url": "/api/v1/books/1/accounts",
+          "status": 200
+        },
+        {
+          "at": "2026-11-05T09:16:49.886Z",
+          "kind": "response",
+          "method": "GET",
+          "url": "/api/v1/books/1/categories",
+          "status": 200
+        },
+        {
+          "at": "2026-11-05T09:16:49.888Z",
+          "kind": "response",
+          "method": "GET",
+          "url": "/api/v1/books",
+          "status": 200
+        },
+        {
+          "at": "2026-11-05T09:16:49.890Z",
+          "kind": "response",
+          "method": "GET",
+          "url": "/api/v1/books/1/transactions?page=1&count=50",
+          "status": 200
+        }
+      ]
+    },
+    "addForm": {
+      "dlgOpen": true,
+      "expense": {
+        "count": 30,
+        "value": "23",
+        "options": [
+          {
+            "text": "工资",
+            "value": "23"
+          },
+          {
+            "text": "奖金",
+            "value": "26"
+          },
+          {
+            "text": "其他收入",
+            "value": "28"
+          },
+          {
+            "text": "月薪",
+            "value": "24"
+          },
+          {
+            "text": "加班费",
+            "value": "25"
+          },
+          {
+            "text": "年终奖",
+            "value": "27"
+          },
+          {
+            "text": "红包",
+            "value": "29"
+          },
+          {
+            "text": "利息",
+            "value": "30"
+          },
+          {
+            "text": "餐饮",
+            "value": "1"
+          },
+          {
+            "text": "交通",
+            "value": "6"
+          },
+          {
+            "text": "购物",
+            "value": "10"
+          },
+          {
+            "text": "居住",
+            "value": "14"
+          },
+          {
+            "text": "娱乐",
+            "value": "17"
+          },
+          {
+            "text": "医疗",
+            "value": "20"
+          },
+          {
+            "text": "早餐",
+            "value": "2"
+          },
+          {
+            "text": "午餐",
+            "value": "3"
+          },
+          {
+            "text": "晚餐",
+            "value": "4"
+          },
+          {
+            "text": "外卖",
+            "value": "5"
+          },
+          {
+            "text": "公交地铁",
+            "value": "7"
+          },
+          {
+            "text": "打车",
+            "value": "8"
+          },
+          {
+            "text": "加油",
+            "value": "9"
+          },
+          {
+            "text": "日用品",
+            "value": "11"
+          },
+          {
+            "text": "服饰",
+            "value": "12"
+          },
+          {
+            "text": "数码",
+            "value": "13"
+          },
+          {
+            "text": "房租",
+            "value": "15"
+          },
+          {
+            "text": "水电燃气",
+            "value": "16"
+          },
+          {
+            "text": "电影",
+            "value": "18"
+          },
+          {
+            "text": "旅行",
+            "value": "19"
+          },
+          {
+            "text": "门诊",
+            "value": "21"
+          },
+          {
+            "text": "药品",
+            "value": "22"
+          }
+        ]
+      },
+      "expenseCatRowHidden": false,
+      "income": {
+        "count": 30,
+        "value": "23",
+        "options": [
+          {
+            "text": "工资",
+            "value": "23"
+          },
+          {
+            "text": "奖金",
+            "value": "26"
+          },
+          {
+            "text": "其他收入",
+            "value": "28"
+          },
+          {
+            "text": "月薪",
+            "value": "24"
+          },
+          {
+            "text": "加班费",
+            "value": "25"
+          },
+          {
+            "text": "年终奖",
+            "value": "27"
+          },
+          {
+            "text": "红包",
+            "value": "29"
+          },
+          {
+            "text": "利息",
+            "value": "30"
+          },
+          {
+            "text": "餐饮",
+            "value": "1"
+          },
+          {
+            "text": "交通",
+            "value": "6"
+          },
+          {
+            "text": "购物",
+            "value": "10"
+          },
+          {
+            "text": "居住",
+            "value": "14"
+          },
+          {
+            "text": "娱乐",
+            "value": "17"
+          },
+          {
+            "text": "医疗",
+            "value": "20"
+          },
+          {
+            "text": "早餐",
+            "value": "2"
+          },
+          {
+            "text": "午餐",
+            "value": "3"
+          },
+          {
+            "text": "晚餐",
+            "value": "4"
+          },
+          {
+            "text": "外卖",
+            "value": "5"
+          },
+          {
+            "text": "公交地铁",
+            "value": "7"
+          },
+          {
+            "text": "打车",
+            "value": "8"
+          },
+          {
+            "text": "加油",
+            "value": "9"
+          },
+          {
+            "text": "日用品",
+            "value": "11"
+          },
+          {
+            "text": "服饰",
+            "value": "12"
+          },
+          {
+            "text": "数码",
+            "value": "13"
+          },
+          {
+            "text": "房租",
+            "value": "15"
+          },
+          {
+            "text": "水电燃气",
+            "value": "16"
+          },
+          {
+            "text": "电影",
+            "value": "18"
+          },
+          {
+            "text": "旅行",
+            "value": "19"
+          },
+          {
+            "text": "门诊",
+            "value": "21"
+          },
+          {
+            "text": "药品",
+            "value": "22"
+          }
+        ]
+      },
+      "transfer": {
+        "count": 30,
+        "value": "23",
+        "options": [
+          {
+            "text": "工资",
+            "value": "23"
+          },
+          {
+            "text": "奖金",
+            "value": "26"
+          },
+          {
+            "text": "其他收入",
+            "value": "28"
+          },
+          {
+            "text": "月薪",
+            "value": "24"
+          },
+          {
+            "text": "加班费",
+            "value": "25"
+          },
+          {
+            "text": "年终奖",
+            "value": "27"
+          },
+          {
+            "text": "红包",
+            "value": "29"
+          },
+          {
+            "text": "利息",
+            "value": "30"
+          },
+          {
+            "text": "餐饮",
+            "value": "1"
+          },
+          {
+            "text": "交通",
+            "value": "6"
+          },
+          {
+            "text": "购物",
+            "value": "10"
+          },
+          {
+            "text": "居住",
+            "value": "14"
+          },
+          {
+            "text": "娱乐",
+            "value": "17"
+          },
+          {
+            "text": "医疗",
+            "value": "20"
+          },
+          {
+            "text": "早餐",
+            "value": "2"
+          },
+          {
+            "text": "午餐",
+            "value": "3"
+          },
+          {
+            "text": "晚餐",
+            "value": "4"
+          },
+          {
+            "text": "外卖",
+            "value": "5"
+          },
+          {
+            "text": "公交地铁",
+            "value": "7"
+          },
+          {
+            "text": "打车",
+            "value": "8"
+          },
+          {
+            "text": "加油",
+            "value": "9"
+          },
+          {
+            "text": "日用品",
+            "value": "11"
+          },
+          {
+            "text": "服饰",
+            "value": "12"
+          },
+          {
+            "text": "数码",
+            "value": "13"
+          },
+          {
+            "text": "房租",
+            "value": "15"
+          },
+          {
+            "text": "水电燃气",
+            "value": "16"
+          },
+          {
+            "text": "电影",
+            "value": "18"
+          },
+          {
+            "text": "旅行",
+            "value": "19"
+          },
+          {
+            "text": "门诊",
+            "value": "21"
+          },
+          {
+            "text": "药品",
+            "value": "22"
+          }
+        ]
+      },
+      "transferCatRowHidden": true,
+      "transferToRowHidden": false,
+      "expenseAgain": {
+        "count": 30,
+        "value": "23",
+        "options": [
+          {
+            "text": "工资",
+            "value": "23"
+          },
+          {
+            "text": "奖金",
+            "value": "26"
+          },
+          {
+            "text": "其他收入",
+            "value": "28"
+          },
+          {
+            "text": "月薪",
+            "value": "24"
+          },
+          {
+            "text": "加班费",
+            "value": "25"
+          },
+          {
+            "text": "年终奖",
+            "value": "27"
+          },
+          {
+            "text": "红包",
+            "value": "29"
+          },
+          {
+            "text": "利息",
+            "value": "30"
+          },
+          {
+            "text": "餐饮",
+            "value": "1"
+          },
+          {
+            "text": "交通",
+            "value": "6"
+          },
+          {
+            "text": "购物",
+            "value": "10"
+          },
+          {
+            "text": "居住",
+            "value": "14"
+          },
+          {
+            "text": "娱乐",
+            "value": "17"
+          },
+          {
+            "text": "医疗",
+            "value": "20"
+          },
+          {
+            "text": "早餐",
+            "value": "2"
+          },
+          {
+            "text": "午餐",
+            "value": "3"
+          },
+          {
+            "text": "晚餐",
+            "value": "4"
+          },
+          {
+            "text": "外卖",
+            "value": "5"
+          },
+          {
+            "text": "公交地铁",
+            "value": "7"
+          },
+          {
+            "text": "打车",
+            "value": "8"
+          },
+          {
+            "text": "加油",
+            "value": "9"
+          },
+          {
+            "text": "日用品",
+            "value": "11"
+          },
+          {
+            "text": "服饰",
+            "value": "12"
+          },
+          {
+            "text": "数码",
+            "value": "13"
+          },
+          {
+            "text": "房租",
+            "value": "15"
+          },
+          {
+            "text": "水电燃气",
+            "value": "16"
+          },
+          {
+            "text": "电影",
+            "value": "18"
+          },
+          {
+            "text": "旅行",
+            "value": "19"
+          },
+          {
+            "text": "门诊",
+            "value": "21"
+          },
+          {
+            "text": "药品",
+            "value": "22"
+          }
+        ]
+      },
+      "apiCategories": [
+        {
+          "id": 23,
+          "name": "工资",
+          "catType": 1,
+          "parentId": 0
+        },
+        {
+          "id": 26,
+          "name": "奖金",
+          "catType": 1,
+          "parentId": 0
+        },
+        {
+          "id": 28,
+          "name": "其他收入",
+          "catType": 1,
+          "parentId": 0
+        },
+        {
+          "id": 24,
+          "name": "月薪",
+          "catType": 1,
+          "parentId": 23
+        },
+        {
+          "id": 25,
+          "name": "加班费",
+          "catType": 1,
+          "parentId": 23
+        },
+        {
+          "id": 27,
+          "name": "年终奖",
+          "catType": 1,
+          "parentId": 26
+        },
+        {
+          "id": 29,
+          "name": "红包",
+          "catType": 1,
+          "parentId": 28
+        },
+        {
+          "id": 30,
+          "name": "利息",
+          "catType": 1,
+          "parentId": 28
+        },
+        {
+          "id": 1,
+          "name": "餐饮",
+          "catType": 2,
+          "parentId": 0
+        },
+        {
+          "id": 6,
+          "name": "交通",
+          "catType": 2,
+          "parentId": 0
+        },
+        {
+          "id": 10,
+          "name": "购物",
+          "catType": 2,
+          "parentId": 0
+        },
+        {
+          "id": 14,
+          "name": "居住",
+          "catType": 2,
+          "parentId": 0
+        },
+        {
+          "id": 17,
+          "name": "娱乐",
+          "catType": 2,
+          "parentId": 0
+        },
+        {
+          "id": 20,
+          "name": "医疗",
+          "catType": 2,
+          "parentId": 0
+        },
+        {
+          "id": 2,
+          "name": "早餐",
+          "catType": 2,
+          "parentId": 1
+        },
+        {
+          "id": 3,
+          "name": "午餐",
+          "catType": 2,
+          "parentId": 1
+        },
+        {
+          "id": 4,
+          "name": "晚餐",
+          "catType": 2,
+          "parentId": 1
+        },
+        {
+          "id": 5,
+          "name": "外卖",
+          "catType": 2,
+          "parentId": 1
+        },
+        {
+          "id": 7,
+          "name": "公交地铁",
+          "catType": 2,
+          "parentId": 6
+        },
+        {
+          "id": 8,
+          "name": "打车",
+          "catType": 2,
+          "parentId": 6
+        },
+        {
+          "id": 9,
+          "name": "加油",
+          "catType": 2,
+          "parentId": 6
+        },
+        {
+          "id": 11,
+          "name": "日用品",
+          "catType": 2,
+          "parentId": 10
+        },
+        {
+          "id": 12,
+          "name": "服饰",
+          "catType": 2,
+          "parentId": 10
+        },
+        {
+          "id": 13,
+          "name": "数码",
+          "catType": 2,
+          "parentId": 10
+        },
+        {
+          "id": 15,
+          "name": "房租",
+          "catType": 2,
+          "parentId": 14
+        },
+        {
+          "id": 16,
+          "name": "水电燃气",
+          "catType": 2,
+          "parentId": 14
+        },
+        {
+          "id": 18,
+          "name": "电影",
+          "catType": 2,
+          "parentId": 17
+        },
+        {
+          "id": 19,
+          "name": "旅行",
+          "catType": 2,
+          "parentId": 17
+        },
+        {
+          "id": 21,
+          "name": "门诊",
+          "catType": 2,
+          "parentId": 20
+        },
+        {
+          "id": 22,
+          "name": "药品",
+          "catType": 2,
+          "parentId": 20
+        }
+      ]
+    },
+    "members": {
+      "inviteBtnCount": 1,
+      "viewInnerText": "家庭成员\n邀请成员\n\n角色决定写权限：管理员可管理账户/分类与他人的交易；普通成员只能记录和查看自己权限范围内的账目。\n\nE2E 主账本\n3 名成员\n家庭账本 类型\n2026-11-05 创建于\n角色\t可见性\t\n所有者\t已开启账本可见\t\n\n管理员\t已开启账本可见\t\n降级为成员\n移除成员\n\n普通成员\t已开启账本可见\t\n设为管理员\n移除成员",
+      "viewHasInviteText": true,
+      "memberRowCount": 3,
+      "roles": [
+        "所有者",
+        "管理员",
+        "普通成员"
+      ],
+      "console": [],
+      "network": [
+        {
+          "at": "2026-11-05T09:16:51.475Z",
+          "kind": "response",
+          "method": "GET",
+          "url": "/api/v1/books/1/accounts",
+          "status": 200
+        },
+        {
+          "at": "2026-11-05T09:16:51.476Z",
+          "kind": "response",
+          "method": "GET",
+          "url": "/api/v1/books/1/categories",
+          "status": 200
+        },
+        {
+          "at": "2026-11-05T09:16:51.476Z",
+          "kind": "response",
+          "method": "GET",
+          "url": "/api/v1/books",
+          "status": 200
+        },
+        {
+          "at": "2026-11-05T09:16:51.479Z",
+          "kind": "response",
+          "method": "GET",
+          "url": "/api/v1/books/1/members",
+          "status": 200
+        },
+        {
+          "at": "2026-11-05T09:16:51.479Z",
+          "kind": "response",
+          "method": "GET",
+          "url": "/api/v1/users/me",
+          "status": 200
+        }
+      ],
+      "directInviteStatus": 403
+    },
+    "membersByRole": {
+      "owner": {
+        "inviteBtnCount": 1,
+        "memberRowCount": 3
+      },
+      "admin": {
+        "inviteBtnCount": 1,
+        "memberRowCount": 3
+      }
+    },
+    "finishedAt": "2026-11-05T09:16:53.533Z"
+  },
+  "finishedAt": "2026-11-05T09:17:01.838Z"
+}

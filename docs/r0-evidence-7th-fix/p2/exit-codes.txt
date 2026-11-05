@@ -1,0 +1,16 @@
+=== P2 命令清单与真实退出码（生成时间 2026-11-05T13:24:51Z） ===
+=== 运行类命令的退出码同时写在对应日志末尾「=== 真实退出码: N ===」，可交叉核对 ===
+
+node --check tools/r0/e2e/specs/c-controls.js                          -> 0
+node --check tools/r0/e2e/run.js                                        -> 0
+node tools/r0/scan-credentials.js --strict                            -> 0
+
+=== 以下为已执行并保存在日志中的运行记录 ===
+source .tools/genv.sh && go build -o fastledger.exe ./cmd/server        -> 0  （server/fastledger.exe，32,184,726 bytes）
+node run.js --suite c   (R0_ARTIFACT_DIR=artifacts/r0-p2-c)             -> 1  （C 报告型有既有 FAIL；见 c-after-p2.log 末尾）
+node run.js --suite all (R0_ARTIFACT_DIR=artifacts/r0-p2-all)           -> 1  （C 报告型有既有 FAIL；见 all-suite.log 末尾）
+
+=== 退出码语义 ===
+0 = 无 FAIL 且 A 无 BLOCKED；1 = 有 FAIL 或 A 有 BLOCKED；2 = 环境错误
+C 为报告型且有既有 4 条 FAIL（I-LOGIN-04 / I-LOGIN-11 / I-LOGIN-12 / I-HOME-01），
+故 --suite c 与 --suite all 均 exit 1，属预期，不代表 D 失败（本次 D 汇总 39 PASS / 0 FAIL）。

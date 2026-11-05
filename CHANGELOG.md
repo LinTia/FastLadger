@@ -2,6 +2,17 @@
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.82] - 2026-11-05（独立分支 `fix/r0-sixth-runtime-defects`，待第三方审核，未合并 main）
+
+### R0 第六次自动化验收 4 项已确认业务缺陷 · 有限范围修复
+
+- 授权性质：**有限范围缺陷修复**，不进入下一开发阶段；R0 仍 BLOCK，不授权 R1–R7，不启动 PWA。开工基准 `dadc9a3b`，main 零改动，全部工作在独立分支。
+- 业务代码只改 `server/web/dist/app.js` 4 处：`renderTxns()` 补 `view.append(card)` 并补请求失败的静态失败态；`openTxForm()` 分类按 `txType` 过滤 + 切换重置 + `categoryId` 校验；`renderMembers()` 按当前用户在本账本角色门控邀请入口（`/users/me` 失败关闭，后端 403 原样保留）。**不改 PRD / 业务规则 / DB / API 契约 / 产品范围**。
+- 第 4 项「新增账户列表刷新」经 3 次稳定复现确认**业务 JS 无缺陷**：根因是旧 E2E 用 `innerText` 判定 + `style.css` L331 窄屏隐藏账户表首列。`style.css` 未获授权、未修改；`I-ACCT-06` **保持 FAIL**（可见性未闭环，待 Owner 裁决），不得改判 PASS。
+- 新增自动化：`--suite d` 缺陷回归门禁 39 条、`txns-controls.js` 使 I-TXNS-01..19 由「01 FAIL + 18 条硬编码 BLOCKED」改为真实逐条执行；`.github/workflows/r0-e2e.yml` 新增 D 门禁 step（A/C 语义不变）。修复前基线、3 次账户复现、负向合成验证证据齐备。
+- 独立复核：本地 A 11/11(0)、D 39/39(0)、C `PASS 163 / FAIL 5 / BLOCKED 59 / N/A 1`(1)；QA 重新构建 + 新临时实例重跑，结果逐项一致。228 条中受影响 **19 条全部转 PASS**，其余 209 条状态不变。
+- 详见 [第七次业务缺陷修复交付回执](docs/FastLedger-R0-第七次业务缺陷修复-交付回执.md) 与 `docs/r0-evidence-7th-fix/`。**第五项缺陷未获 Owner 单独确认，只登记不修改**（两个候选见回执 §5）。未经第三方审核不合并 main、不宣布 R0 通过。
+
 ## [1.81] - 2026-11-05
 
 ### R0 第七次测试质量纠偏任务单（A05 断言、C PASS 证据、清单漂移、t021 Owner 裁决）

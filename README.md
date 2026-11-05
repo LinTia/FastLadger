@@ -8,6 +8,7 @@
 
 > 下表是 2026-10-31 的历史快照。schema 版本、测试基线、阶段进度以 `docs/` 最新交付文档、`CHANGELOG.md` 与服务器实测为准；**R0（基准冻结与差异盘点）当前未通过 / 阻塞**，见 [R0 报告](docs/FastLedger-R0-基准冻结与差异盘点.md)。本表不作为 R0 验收依据。
 > **截至 [1.81] 的 R0 收尾状态（第六次自动化交付经第七次独立复核）**：**A = PARTIAL**（独立 CI run `41990345757` 的 11/11 脚本均报告 PASS，但 A05 的 PASS 条件只检查耗时、没有断言 pending 文案/disabled，需修正后重跑）；**B = PARTIAL**（分类解析硬化有效，但 t021 的 `meal → dinner` override 由 WorkBuddy 自行署名，尚待 Owner 裁决）；**C = PARTIAL**（228 条：PASS 144 / FAIL 6 / BLOCKED 77 / N/A 1；发现至少 15 条硬编码 PASS 缺少直接断言或可追溯证据引用，需纠偏）；**D = PARTIAL**（13 路由覆盖 3/5/5 维持）。第六次发现的交易总表空白、记一笔分类未按类型过滤、member 邀请按钮未隐藏、新增账户列表疑似未刷新，均先登记修复提案，未授权改业务代码。RV-05 仍 **Owner ACTION REQUIRED**。**R0 继续 BLOCK，不授权 R1–R7。** 详见 [第六次整改回执](docs/FastLedger-R0-第六次整改-A-C自动化交付回执.md) 与 [第七次测试质量纠偏任务单](docs/FastLedger-R0-第七次测试质量纠偏任务单.md)。
+> **[1.82] 增量（独立分支 `fix/r0-sixth-runtime-defects`，未经第三方审核、未合并 main）**：Owner 有限范围授权修复第六次验收的 4 项已确认业务缺陷。业务代码仅改 `server/web/dist/app.js` 4 处；新增 `--suite d` 回归门禁 39 条与 I-TXNS-01..19 真实逐条执行。本地与 QA 独立重跑一致：A 11/11、D 39/39、C `PASS 163 / FAIL 5 / BLOCKED 59 / N/A 1`；228 条中受影响 19 条全部转 PASS。**第 4 项确认业务 JS 无缺陷**，`style.css` L331 窄屏隐藏账户表首列导致可见性未闭环，`I-ACCT-06` 保持 FAIL、待 Owner 裁决；**第五项缺陷未获单独确认，只登记不修改**。本增量**不改变上一段 [1.81] 的 A/B/C/D 状态结论**，R0 仍 BLOCK，不授权 R1–R7/PWA。详见 [第七次业务缺陷修复交付回执](docs/FastLedger-R0-第七次业务缺陷修复-交付回执.md) 与 [`docs/r0-evidence-7th-fix/`](docs/r0-evidence-7th-fix/)。
 
 | 项 | 状态 |
 |---|---|

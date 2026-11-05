@@ -1,0 +1,27 @@
+=== QA 补充证据：清晰「交易加载失败」截图（不重跑全套、不改任何判定）===
+开始(UTC): 2026-11-05T10:14:37.658Z
+视口: {"width":390,"height":844}；注入消息: QA 交付截图注入 500
+实例: http://127.0.0.1:52156（临时 SQLite，随机端口，每次新生成 JWT 密钥；与既有 artifacts 隔离）
+浏览器: playwright-core channel=msedge version=156.0.4314.58
+观测: {
+  "viewport": {
+    "width": 390,
+    "height": 844
+  },
+  "errLine": "交易加载失败：QA 交付截图注入 500（可重新查询或刷新页面）",
+  "injectMsgVisible": true,
+  "ariaBusyCount": 0,
+  "skeletonBars": 0,
+  "dialogsOpen": 0,
+  "emptyBoxCount": 1,
+  "emptyText": "交易加载失败：QA 交付截图注入 500（可重新查询或刷新页面）",
+  "emptyHeight": 152.5,
+  "viewOpacity": "1",
+  "paragraphOpacity": "1",
+  "toast": "✕ QA 交付截图注入 500"
+}
+截图前置自检: PASS（允许产出截图）
+截图已保存: docs\r0-evidence-7th-fix\qa\screenshots\05b-txns-load-failure-clear.png（42537 bytes）
+截图参数: page.screenshot({ fullPage:false, animations:'disabled' })；未覆盖任何既有截图
+结束(UTC): 2026-11-05T10:14:47.781Z
+=== EXIT_CODE=0 ===

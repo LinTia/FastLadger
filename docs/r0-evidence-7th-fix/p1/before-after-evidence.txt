@@ -1,0 +1,17 @@
+sample | old(HEAD) rc | new(fixed) rc | old verdict | new verdict
+---
+K1-01 UTF-16LE Bearer | 0 | 2 | CLEAN(bypass) | BLOCKED  << fixed
+K1-02 UTF-16BE auth | 0 | 2 | CLEAN(bypass) | BLOCKED  << fixed
+K1-03 NUL insertion | 0 | 2 | CLEAN(bypass) | BLOCKED  << fixed
+K1-04 undecodable | 0 | 2 | CLEAN(bypass) | BLOCKED  << fixed
+K2-01 short token | 0 | 2 | CLEAN(bypass) | BLOCKED  << fixed
+K2-02 short api key | 0 | 2 | CLEAN(bypass) | BLOCKED  << fixed
+K2-03 short password | 0 | 2 | CLEAN(bypass) | BLOCKED  << fixed
+K2-04 business fields | 0 | 0 | CLEAN(bypass) | CLEAN
+K3-01 x-api-key | 0 | 2 | CLEAN(bypass) | BLOCKED  << fixed
+K3-02 apiKey/API_KEY | 0 | 2 | CLEAN(bypass) | BLOCKED  << fixed
+K3-03 Base64 cred | 0 | 2 | CLEAN(bypass) | BLOCKED  << fixed
+K3-04 JSON nested | 0 | 2 | CLEAN(bypass) | BLOCKED  << fixed
+K3-05 variants | 0 | 2 | CLEAN(bypass) | BLOCKED  << fixed
+---
+新扫描器封死的可复现绕过数：12 / 13

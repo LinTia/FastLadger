@@ -1,0 +1,285 @@
+=== git diff --stat ===
+ .github/workflows/r0-e2e.yml     | 13 +++++-
+ server/web/dist/app.js           | 52 +++++++++++++++++----
+ tools/r0/e2e/run.js              | 11 ++++-
+ tools/r0/e2e/specs/c-controls.js | 99 ++++++++++++++++++++++++++++++++--------
+ 4 files changed, 145 insertions(+), 30 deletions(-)
+
+=== git diff -- server/web/dist/app.js（唯一业务代码改动） ===
+diff --git a/server/web/dist/app.js b/server/web/dist/app.js
+index 572363b..3f3eb06 100644
+--- a/server/web/dist/app.js
++++ b/server/web/dist/app.js
+@@ -383,6 +383,7 @@ async function renderTxns(bookId) {
+   /* 表格 */
+   const tableWrap = document.createElement("div");
+   card.append(tableWrap);
++  view.append(card);                                // 与 renderHome/renderBooks/renderAccounts 一致：挂载视图
+ 
+   async function load() {
+     renderSkeleton(tableWrap);                      // 对齐原型：加载中骨架屏
+@@ -396,10 +397,27 @@ async function renderTxns(bookId) {
+     const mn = dateStartUnix(f.minDate, false), mx = dateStartUnix(f.maxDate, true);
+     if (mn !== null) q.set("minTime", String(mn));
+     if (mx !== null) q.set("maxTime", String(mx));
+-    const data = await api("GET", "/books/" + bookId + "/transactions?" + q.toString());
+-    state.sel.clear(); refreshSel();
+-    renderTable(data);
+-    window.scrollTo({ top: 0, behavior: "smooth" }); // 翻页后回顶（原型分页行为）
++    try {
++      const data = await api("GET", "/books/" + bookId + "/transactions?" + q.toString());
++      state.sel.clear(); refreshSel();
++      renderTable(data);
++      window.scrollTo({ top: 0, behavior: "smooth" }); // 翻页后回顶（原型分页行为）
++    } catch (e) {
++      // I-TXNS-19：请求失败时清除骨架屏，避免页面永久停在加载态（既有 toast 由调用方负责）
++      renderLoadError(tableWrap, e);
++      throw e;
++    }
++  }
++
++  // 加载失败反馈：复用既有 .empty 样式与 textContent，仅静态文本，不新增交互
++  function renderLoadError(wrap, err) {
++    wrap.replaceChildren();
++    const box = document.createElement("div"); box.className = "empty";
++    const ic = document.createElement("div"); ic.className = "icon"; ic.textContent = "⚠️";
++    const p = document.createElement("p");
++    p.textContent = "交易加载失败：" + (err && err.message ? err.message : "请求失败") + "（可重新查询或刷新页面）";
++    box.append(ic, p);
++    wrap.append(box);
+   }
+ 
+   // 骨架屏：数据未返回前占位，避免白屏跳变
+@@ -532,17 +550,30 @@ function openTxForm(bookId, onDone) {
+   $("#fType").value = "2";
+   fillSelect($("#fAccount"), state.accounts);
+   fillSelect($("#fTo"), state.accounts);
+-  fillSelect($("#fCategory"), state.categories);
+   $("#fDate").value = new Date().toISOString().slice(0, 10);
+   $("#fNote").value = "";
+   $("#fAmount").value = "";
+   syncFormFields();
+   dlg.classList.remove("hidden");
+   if (typeof dlg.showModal === "function") dlg.showModal(); else dlg.setAttribute("open", "");
++  // 与编辑表单 openTxEditForm（按 catType 过滤）口径一致：分类下拉只列与当前类型匹配的分类
++  function refillCategories() {
++    const t = Number($("#fType").value);
++    if (t === 3) return;                 // 转账隐藏分类行，提交 categoryId:0 的既有语义不变
++    const cats = state.categories.filter((c) => c.catType === t);
++    if (cats.length) {
++      fillSelect($("#fCategory"), cats);
++      $("#fCategory").value = String(cats[0].id);   // 切换类型后重置已选分类
++    } else {
++      fillSelect($("#fCategory"), [], "（暂无可选分类）");
++      $("#fCategory").value = "0";
++    }
++  }
+   function syncFormFields() {
+     const t = Number($("#fType").value);
+     $("#fToRow").classList.toggle("hidden", t !== 3);
+     $("#fCatRow").classList.toggle("hidden", t === 3);
++    refillCategories();
+   }
+   $("#fType").onchange = syncFormFields;
+   $("#fCancel").onclick = () => { dlg.close ? dlg.close() : dlg.removeAttribute("open"); dlg.classList.add("hidden"); };
+@@ -565,7 +596,7 @@ function openTxForm(bookId, onDone) {
+     if (t === 3) {
+       body.toAccountId = Number($("#fTo").value);
+       if (!body.toAccountId || body.toAccountId === body.accountId) { toast("转账需选择不同的两个账户", "err"); return; }
+-    } else if (!body.accountId) { toast("请选择账户", "err"); return; }
++    } else if (!body.accountId || !body.categoryId) { toast("请选择账户与分类", "err"); return; }
+     try {
+       const done = btnPending($("#fSubmit"), "保存中…");
+       try {
+@@ -1675,13 +1706,16 @@ async function renderMembers(bookId) {
+       toast("已生成邀请码", "ok");
+     });
+   });
+-  row.append(h, invBtn);
++  row.append(h);                                  // 邀请入口延后到确认当前用户在本账本的角色后再挂载
+   card.append(row);
+   const tip = document.createElement("p"); tip.className = "muted"; tip.textContent = "角色决定写权限：管理员可管理账户/分类与他人的交易；普通成员只能记录和查看自己权限范围内的账目。";
+   card.append(tip);
+ 
+   const members = await api("GET", "/books/" + bookId + "/members");
+-  const me = await api("GET", "/users/me");
++  // /users/me 失败时失败关闭：拿不到身份就不渲染邀请入口；后端 service 层 403 校验原样保留
++  const me = await api("GET", "/users/me").catch(() => null);
++  const myRole = me ? (members.find((m) => m.uid === me.id) || {}).role : null;
++  if (myRole === 1 || myRole === 2) row.append(invBtn);
+ 
+   // 家庭信息块（P1-4：家庭名称 / 成员数量 / 创建时间）
+   const book = books.find((b) => b.id === bookId) || {};
+@@ -1707,7 +1741,7 @@ async function renderMembers(bookId) {
+   ["成员姓名", "角色", "可见性", ""].forEach((t) => { const th = document.createElement("th"); th.textContent = t; trh.append(th); });
+   thead.append(trh); table.append(thead);
+   const tbody = document.createElement("tbody");
+-  const myUid = me.id;
++  const myUid = me ? me.id : null;
+   for (const mb of members) {
+     const tr = document.createElement("tr");
+     const tdN = document.createElement("td"); tdN.textContent = mb.username + (mb.uid === myUid ? "（我）" : "");
+
+=== 补充：git diff -- tools/r0/e2e/specs/c-controls.js（含 I-ACCT-06 回退片段） ===
+diff --git a/tools/r0/e2e/specs/c-controls.js b/tools/r0/e2e/specs/c-controls.js
+index eb0a33b..c56886c 100644
+--- a/tools/r0/e2e/specs/c-controls.js
++++ b/tools/r0/e2e/specs/c-controls.js
+@@ -14,6 +14,7 @@ const path = require('node:path');
+ const api = require('../lib/api');
+ const { storageStateFor } = require('../lib/fixtures');
+ const { attachDiagnostics } = require('../lib/evidence');
++const { runTxnsControls } = require('./txns-controls');
+ 
+ const CONTROLS = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'fixtures', 'controls.json'), 'utf8'));
+ const VIEWPORT = { width: 390, height: 844 };
+@@ -284,20 +285,18 @@ async function groupTxDetail(ctx) {
+   return { R };
+ }
+ 
++/**
++ * I-TXNS-01..19 逐条真实执行（不再整页判空、不再硬编码 BLOCKED）。
++ * 具体配方见 specs/txns-controls.js，与 D 套件共用同一实现以避免重复。
++ */
+ async function groupTxns(ctx) {
+-  const { page, data, base } = ctx;
+-  const R = {};
+-  await page.goto(`${base}/#b/${data.books.main.id}/txns`, { waitUntil: 'domcontentloaded' });
+-  await sleep(page, 1800);
+-  const body = await text(page);
+-  if (body.trim().length === 0) {
+-    R['I-TXNS-01'] = bad('交易总表 #view 渲染为空——运行时确认该页不可用（需排查 renderTxns）');
+-    for (let i = 2; i <= 19; i += 1) R[`I-TXNS-${String(i).padStart(2, '0')}`] = blocked('同页渲染为空，控件不存在，无法执行（同上条缺陷）');
+-    return { R };
+-  }
+-  R['I-TXNS-01'] = /搜索/.test(body) ? ok('搜索控件渲染') : bad('无搜索控件');
+-  for (let i = 2; i <= 19; i += 1) R[`I-TXNS-${String(i).padStart(2, '0')}`] = blocked('页面可用性待修复后逐条断言');
+-  return { R };
++  return runTxnsControls({
++    page: ctx.page,
++    base: ctx.base,
++    data: ctx.data,
++    out: ctx.out,
++    shotDir: 'C/I-TXNS',
++  });
+ }
+ 
+ async function groupAccounts(ctx) {
+@@ -316,16 +315,78 @@ async function groupAccounts(ctx) {
+     R['I-ACCT-04'] = (await page.locator('#acctName').count()) === 1 ? ok('名称输入 #acctName') : bad('无名称输入');
+     R['I-ACCT-05'] = (await page.locator('#acctCat').count()) === 1 ? ok(`类型下拉 #acctCat（${await page.locator('#acctCat option').count()} 项）`) : bad('无类型下拉');
+     const name = 'E2E 账户 ' + Date.now();
++    const rowsBefore = await page.locator('#view table tbody tr').count();
+     await page.fill('#acctName', name);
++    // 确定性等待：真实 POST 响应 + 重绘后 tbody 行数 +1（不使用固定 sleep）。
++    // 注意：本条按 Owner 收紧裁决保持 FAIL——DOM/API 一致性不等于视觉可见性。
++    const postPromise = page.waitForResponse(
++      (r) => r.request().method() === 'POST' && /\/api\/v1\/books\/\d+\/accounts$/.test(r.url()),
++      { timeout: 15000 },
++    ).catch(() => null);
+     await page.locator('#acctSubmit').click();
+-    await sleep(page, 1300);
+-    await sleep(page, 800);
++    const postResp = await postPromise;
++    const redrawn = await page.waitForFunction(
++      (n) => {
++        const v = document.querySelector('#view');
++        return !!v && v.querySelectorAll('table tbody tr').length === n;
++      },
++      rowsBefore + 1,
++      { timeout: 10000 },
++    ).then(() => true).catch(() => false);
++    const domNames = await page.locator('#view table tbody tr td:first-child').allTextContents();
++    const inDom = domNames.some((t) => t.trim() === name);
+     const apiAccs = await api.accounts(base, data.users.owner.token, data.books.main.id);
+     const inApi = apiAccs.some((a) => a.name === name);
+-    const inUi = await waitText(page, name, 6000);
+-    R['I-ACCT-06'] = inApi && inUi
+-      ? ok(`创建成功并在页面渲染：${name}`)
+-      : bad(`创建后 API 可见=${inApi} 页面可见=${inUi}（疑似列表未刷新，需 QA 复现确认）；#acctErr=「${await errText(page, '#acctErr')}」toast=「${await toastText(page)}」`);
++    const dup = apiAccs.filter((a) => a.name === name).length;
++    const postStatus = postResp ? postResp.status() : 0;
++
++    // 视觉可见性原始观测（不得省略）：#view.innerText 是否含名称、命中行的首列 computed display
++    const visibleInnerText = await page.evaluate(
++      (n) => {
++        const v = document.querySelector('#view');
++        return v ? (v.innerText || '').includes(n) : false;
++      },
++      name,
++    );
++    const firstTdDisplay = await page.evaluate((n) => {
++      const tds = Array.from(document.querySelectorAll('#view table tbody tr td:first-child'));
++      const hit = tds.find((td) => (td.textContent || '').trim() === n);
++      return hit ? window.getComputedStyle(hit).display : '(未找到对应 td)';
++    }, name);
++    const acctErrText = await errText(page, '#acctErr');
++    const toastTextValue = await toastText(page);
++    const visibilityObservations = {
++      id: 'I-ACCT-06',
++      bookId: data.books.main.id,
++      name,
++      viewport: page.viewportSize(),
++      postStatus,
++      rowsBefore,
++      rowsAfterExpected: rowsBefore + 1,
++      redrawn,
++      inDom,
++      inApi,
++      dup,
++      domNames,
++      visibleInnerText,
++      firstTdDisplay,
++      acctErr: acctErrText,
++      toast: toastTextValue,
++      conclusion: '390px 视口下账户名称列被 style.css L331 隐藏，视觉可见性未闭环，待 Owner 裁决；本轮不改 CSS',
++    };
++    ctx.out.writeJson('C/I-ACCT/visibility-observations.json', visibilityObservations);
++    const visibilityShot = await ctx.out.screenshot(page, 'C/I-ACCT', 'I-ACCT-06-visibility').catch(() => '');
++
++    // 收紧裁决：无条件 FAIL，不允许任何 PASS 分支。
++    // 正向观测只证明「数据链路正常」；真实用户在 390px 视口下仍看不到账户名，
++    // 可见性验收项未闭环，不得因改用 td.textContent 而放宽断言制造 PASS。
++    R['I-ACCT-06'] = bad(
++      `FAIL（可见性未闭环，待 Owner 裁决 CSS）：POST=${postStatus} 重绘+1=${redrawn} DOM 首列 textContent 命中=${inDom} API 命中=${inApi} 重复数=${dup}；`
++      + `visibleInnerText=${visibleInnerText}；firstTdDisplay=${firstTdDisplay}；DOM 首列=${JSON.stringify(domNames)}；`
++      + '390px 视口下账户名称列被 style.css L331 隐藏，视觉可见性未闭环，待 Owner 裁决；本轮不改 CSS；'
++      + `#acctErr=「${acctErrText}」toast=「${toastTextValue}」；原始观测见 C/I-ACCT/visibility-observations.json`,
++      visibilityShot ? [visibilityShot] : [],
++    );
+     R['I-ACCT-07'] = /¥/.test(await text(page)) ? ok('余额列渲染 ¥ 金额') : bad('余额渲染异常');
+     R['I-ACCT-08'] = (await page.locator('button', { hasText: '编辑' }).count()) > 0 ? ok('编辑按钮存在') : bad('无编辑');
+     R['I-ACCT-09'] = (await page.locator('button', { hasText: '删除' }).count()) > 0 ? ok('删除按钮存在') : bad('无删除');
+
+=== 补充：git diff -- .github/workflows/r0-e2e.yml（--suite d 门禁 step；依 team-lead 补充授权由 team-lead 侧落地，非本工程师修改） ===
+diff --git a/.github/workflows/r0-e2e.yml b/.github/workflows/r0-e2e.yml
+index 7675688..8d6047e 100644
+--- a/.github/workflows/r0-e2e.yml
++++ b/.github/workflows/r0-e2e.yml
+@@ -74,6 +74,16 @@ jobs:
+           R0_ARTIFACT_DIR: ${{ github.workspace }}/artifacts/r0-e2e
+         run: node run.js --suite a
+ 
++      # D 是四项已确认业务缺陷的回归门禁：任一断言失败即 job 失败。
++      # 与 C 的报告型定位严格区分，避免把「已知产品缺口」误读成回归通过。
++      - name: 包 D · 四项业务缺陷回归（门禁）
++        id: d_defects
++        working-directory: tools/r0/e2e
++        env:
++          R0_SERVER_BIN: ${{ github.workspace }}/server/fastledger
++          R0_ARTIFACT_DIR: ${{ github.workspace }}/artifacts/r0-e2e
++        run: node run.js --suite d
++
+       # C 是报告型：允许存在已知产品缺口（PASS/FAIL 分布本身就是结论），
+       # 因此单独一步且 continue-on-error，避免"产品有缺口 =流水线红"掩盖其它信号。
+       - name: 包 C · 228 条逐控件运行时验收（报告型）
+@@ -93,7 +103,8 @@ jobs:
+             echo ""
+             echo "- commit: ${{ github.sha }}"
+             echo "- 包 A 退出码: ${{ steps.a_suite.outcome }}"
+-            echo "- 包 C 退出码: ${{ steps.c_controls.outcome }}"
++            echo "- 包 D 退出码（四项缺陷回归门禁）: ${{ steps.d_defects.outcome }}"
++            echo "- 包 C 退出码（报告型，success 不代表无 FAIL）: ${{ steps.c_controls.outcome }}"
+           } >> "$GITHUB_STEP_SUMMARY"
+ 
+       - name: 上传证据（日志/截图/trace/报告/校验和）

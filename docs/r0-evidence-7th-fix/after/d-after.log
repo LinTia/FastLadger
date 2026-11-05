@@ -1,0 +1,9 @@
+SERVER up http://127.0.0.1:63447 schema=8
+BROWSER playwright-core channel=msedge version=156.0.4314.58
+D 汇总：{"PASS":39}
+
+SUMMARY {"D:PASS":39,"total":39}
+ARTIFACTS C:\Users\47006\WorkBuddy\fastledger\repo_tmp\artifacts\r0-fix-after-d\2026-11-05_09-56-28-dadc9a3-d
+CHECKSUMS 46 files
+
+=== EXIT_CODE=0 ===

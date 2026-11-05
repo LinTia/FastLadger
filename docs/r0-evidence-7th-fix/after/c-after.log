@@ -1,0 +1,16 @@
+SERVER up http://127.0.0.1:61886 schema=8
+BROWSER playwright-core channel=msedge version=156.0.4314.58
+C 汇总：{"PASS":163,"FAIL":5,"BLOCKED":59,"N/A":1}
+
+SUMMARY {"C:PASS":163,"C:FAIL":5,"C:BLOCKED":59,"C:N/A":1,"total":228}
+ARTIFACTS C:\Users\47006\WorkBuddy\fastledger\repo_tmp\artifacts\r0-fix-after-c\2026-11-05_09-55-18-dadc9a3-c
+CHECKSUMS 32 files
+
+失败明细：
+  I-LOGIN-04 FAIL 浏览器中不存在「明文切换」控件（主报告登记缺失 R0-E-39）；DOM 无 eye/toggle 类元素
+  I-LOGIN-11 FAIL 产品侧未实现（主报告已登记：R0-E-38）；本轮确认浏览器中不存在该控件
+  I-LOGIN-12 FAIL 产品侧未实现（主报告已登记：R0-E-38）；本轮确认浏览器中不存在该控件
+  I-HOME-01 FAIL 本页无账本切换控件（主报告登记缺失 R0-E-01），顶部仅标题
+  I-ACCT-06 FAIL FAIL（可见性未闭环，待 Owner 裁决 CSS）：POST=200 重绘+1=true DOM 首列 textContent 命中=true API 命中=true 重复数=1；visibleInnerText=false；firstTdDisplay=none；DOM 首列=["现金","E2E 账户 1793872540830","储蓄卡","信用卡"]；390px 视口下账户名称列被 style.css L331 隐藏，视觉可见性未闭环，待 Owner 裁决；本轮不改 CSS；#acctErr=「」toast=「✓ 账户已创建」；原始观测见 C/I-ACCT/visibility-observations.json
+
+=== EXIT_CODE=1 ===

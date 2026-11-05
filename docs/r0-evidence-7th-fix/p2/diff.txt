@@ -1,0 +1,1406 @@
+=== P2 diff.txt（生成时间 2026-11-05T13:24:19Z） ===
+
+### 重要说明
+本仓库为团队共享工作树。除本轮 P2 的 2 个已跟踪文件外，工作树中还存在其它成员并发进行的
+P1 round2 改动（.github/workflows/r0-e2e.yml、tools/r0/e2e/scripts/scan-artifacts.js、
+tools/r0/e2e/test-scan-artifacts.js、docs/r0-evidence-7th-fix/p1/* 等）。这些**不是本轮 P2 所改**，
+P2 全程未修改任何 P1 文件。为免混淆，先给出 P2 自身限定 diff，再附工作树全量 git diff 供核对。
+
+========== 第一部分：P2 自身改动（仅 2 个已跟踪文件，权威 diff） ==========
+warning: in the working copy of 'tools/r0/e2e/run.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'tools/r0/e2e/specs/c-controls.js', LF will be replaced by CRLF the next time Git touches it
+diff --git a/tools/r0/e2e/run.js b/tools/r0/e2e/run.js
+index 7074e24..113cdf2 100644
+--- a/tools/r0/e2e/run.js
++++ b/tools/r0/e2e/run.js
+@@ -3,10 +3,23 @@
+ /**
+  * R0 自动化验收入口。
+  *
+- *   node run.js --suite a       # 包 A：11 项状态/权限/同步场景
+- *   node run.js --suite c       # 包 C：228 条控件
+- *   node run.js --suite d       # 包 D：第七次 4 项缺陷回归（含 I-TXNS-01..19 逐条重跑）
+- *   node run.js --suite all     # 保持既有 A + C 组合；D 需显式 --suite d 运行
++ *   node run.js --suite a       # 包 A：11 项状态/权限/同步场景（门禁型）
++ *   node run.js --suite c       # 包 C：228 条逐控件运行时验收（报告型）
++ *   node run.js --suite d       # 包 D：第七次 4 项缺陷回归（含 I-TXNS-01..19 逐条重跑，门禁型）
++ *   node run.js --suite all     # = A + D + C（全部适用套件），按 a → d → c 顺序执行
++ *
++ * 套件与分工（P2 整改，与 .github/workflows/r0-e2e.yml 对齐）：
++ *   · A —— 11 项状态/权限/同步场景，门禁型；
++ *   · C —— 228 条逐控件运行时验收，报告型（PASS/FAIL 分布本身就是结论，允许既有 FAIL）；
++ *   · D —— 第七次 4 项已确认业务缺陷的回归，门禁型；
++ *   · all —— 包含 A / D / C 三个套件。顺序取 a → d → c：让 D 在 C 的报告型写操作
++ *           （编辑/删除首笔交易、改角色、退出登录、生成 Token 等）之前执行，避免 C 污染
++ *           D 的回归数据；C 作为报告型放最后。B 不在 all 内（见下）。
++ *   · B —— 「分类解析合成测试 + 22 笔分类映射回归审计」**不在本运行器 suite 体系内**，
++ *           由 .github/workflows/r0-e2e.yml 的独立 step 执行：
++ *             node --test tools/r0/test-resolve-category.js
++ *             node tools/r0/e2e/scripts/reseed-audit.js   （env R0_SERVER_BIN=<server/fastledger>）
++ *           因此 --suite all 不含 B，也不代表 B 无需运行 / 已通过。
+  *
+  * 环境变量：
+  *   R0_SERVER_BIN     服务二进制路径（默认 server/fastledger[.exe]）
+@@ -15,6 +28,8 @@
+  *   R0_DATA_DIR       复用固定实例目录（默认临时目录，运行结束即丢弃）
+  *
+  * 退出码：0 = 无 FAIL 且 A 无 BLOCKED；1 = 有 FAIL 或 A 有 BLOCKED；2 = 环境错误
++ *   注意：C 为报告型且有既有 FAIL，故 `--suite all` 通常 exit 1，属预期，不代表 D 失败；
++ *   CI 中 C 单步 continue-on-error 的绿色也不等于 228 条全部通过。
+  */
+ const fs = require('node:fs');
+ const os = require('node:os');
+@@ -83,7 +98,11 @@ async function main() {
+     });
+     process.stdout.write(`BROWSER ${browserHandle.from} channel=${browserHandle.channel} version=${browserHandle.version}\n`);
+ 
+-    const suites = args.suite === 'all' ? ['a', 'c'] : [args.suite];
++    // P2：--suite all 必须包含全部适用套件 A / D / C（原先只有 A + C，漏掉 D）。
++    // 顺序 a → d → c：D 是门禁型回归，放在报告型 C 之前，避免 C 的写操作污染 D 的数据；
++    // B（分类解析合成测试 + 22 笔审计）由 .github/workflows/r0-e2e.yml 独立 step 执行，
++    // 不在本运行器 suite 体系内，故 all 不含 B。不得为了让 all 变绿而放宽 C 断言或跳过 C。
++    const suites = args.suite === 'all' ? ['a', 'd', 'c'] : [args.suite];
+     for (const suite of suites) {
+       if (suite === 'a') {
+         for (const sc of aScenarios) {
+@@ -99,6 +118,11 @@ async function main() {
+           report.results.push(row);
+           process.stdout.write(`${row.status.padEnd(7)} ${row.id} ${row.name} (${row.ms}ms)\n        ${row.detail}\n`);
+         }
++        // 与 C / D 对称输出套件汇总，便于 `--suite all` 日志直接看出 A 也已执行并有汇总。
++        const aTally = report.results
++          .filter((r) => r.suite === 'A')
++          .reduce((acc, r) => { acc[r.status] = (acc[r.status] || 0) + 1; return acc; }, {});
++        process.stdout.write(`A 汇总：${JSON.stringify(aTally)}\n`);
+       } else if (suite === 'c') {
+         const rows = await runControls({ browser: browserHandle.browser, base: server.base, data, runDir });
+         for (const r of rows) {
+diff --git a/tools/r0/e2e/specs/c-controls.js b/tools/r0/e2e/specs/c-controls.js
+index c56886c..52d77e0 100644
+--- a/tools/r0/e2e/specs/c-controls.js
++++ b/tools/r0/e2e/specs/c-controls.js
+@@ -302,11 +302,55 @@ async function groupTxns(ctx) {
+ async function groupAccounts(ctx) {
+   const { page, data, base } = ctx;
+   const R = {};
++  const bookId = data.books.main.id;
++  const token = data.users.owner.token;
+   await page.goto(`${base}/#b/${data.books.main.id}/accounts`, { waitUntil: 'domcontentloaded' });
+   await sleep(page, 900);
+   const body = await text(page);
+   R['I-ACCT-01'] = /现金|储蓄|信用卡/.test(body) ? ok('账户行渲染（现金/储蓄/信用卡）') : bad('未渲染');
+   R['I-ACCT-02'] = (await page.locator('button', { hasText: '＋ 新增账户' }).count()) > 0 ? ok('新增账户按钮存在') : bad('无新增按钮');
++
++  // ——— I-ACCT-06：按 228 清单定义「删除引用保护」真实执行 ———
++  // 历史错位：原实现把 I-ACCT-06 写成「新增账户名称 390px 不可见」的无条件 FAIL，
++  // 而清单 I-ACCT-06 的定义是「删除引用保护 / 账户被交易引用 / 确认删除 / 后端 409」，
++  // 该控件从未被真正测过。本轮改为真实 API 断言，PASS 条件 = 409 && msg 命中 && 回读仍在。
++  // 目标账户选择理由：直接用 data.ids.cashId（种子「现金」账户）。bootstrap 已用该账户
++  // 创建「早餐」「工资」等活跃交易，以及一笔软删除交易「待删除」；后端 Delete() 的引用检查
++  // 覆盖软删除交易（account.go GPT-R31），因此它 100% 被交易引用，无需在组内再造账户/交易，
++  // 避免额外写操作与不确定性。删除路由 DELETE /api/v1/books/:id/accounts/:accountId，
++  // 无需 clientUuid（与前端 app.js L718 一致）。
++  try {
++    const cashId = data.ids.cashId;
++    const accountsBeforeDelete = await api.accounts(base, token, bookId);
++    const cashBefore = accountsBeforeDelete.find((a) => a.id === cashId) || null;
++    const delResp = await api.raw(base, 'DELETE', `/api/v1/books/${bookId}/accounts/${cashId}`, { token });
++    const delStatus = delResp.status;
++    const delMsg = delResp.json && delResp.json.msg ? String(delResp.json.msg) : '';
++    const delMsgOk = /账户仍存在交易记录|无法删除|被.*引用|引用.*交易/.test(delMsg);
++    // API 回读：删除后重新拉账户列表，确认该 id 仍在、名称与删除前一致（未被删除）
++    const accountsAfterDelete = await api.accounts(base, token, bookId);
++    const cashAfter = accountsAfterDelete.find((a) => a.id === cashId) || null;
++    const stillExists = !!cashAfter && (!cashBefore || cashAfter.name === cashBefore.name);
++    R['I-ACCT-06'] = (delStatus === 409 && delMsgOk && stillExists)
++      ? ok(
++        `删除引用保护（清单 I-ACCT-06 定义：账户被交易引用 → 确认删除 → 后端 409）：`
++        + `对被引用的「现金」账户 id=${cashId} 发起 DELETE /api/v1/books/${bookId}/accounts/${cashId}`
++        + ` → 真实 HTTP status=${delStatus}，响应 json.msg=「${delMsg}」；`
++        + `API 回读 GET /api/v1/books/${bookId}/accounts：id=${cashId} 仍在，`
++        + `name=「${cashAfter ? cashAfter.name : '(缺失)'}」与删除前 name=「${cashBefore ? cashBefore.name : '(缺失)'}」一致，未被删除；`
++        + `PASS 条件 = (status===409 && msg 含「账户仍存在交易记录」&& 回读仍在) 同时成立`,
++      )
++      : bad(
++        `删除引用保护（清单 I-ACCT-06）未达预期，如实登记：DELETE /api/v1/books/${bookId}/accounts/${cashId}`
++        + ` → 真实 HTTP status=${delStatus}（预期 409），响应 json.msg=「${delMsg}」，msg 命中=${delMsgOk}；`
++        + `API 回读仍在=${stillExists}，回读 id=${cashId} name=「${cashAfter ? cashAfter.name : '(缺失)'}」，`
++        + `删除前 name=「${cashBefore ? cashBefore.name : '(缺失)'}」；`
++        + `PASS 条件 = (409 && msg 含「账户仍存在交易记录」&& 回读仍在) 未同时成立`,
++      );
++  } catch (e) {
++    R['I-ACCT-06'] = bad(`删除引用保护（清单 I-ACCT-06）执行异常，如实登记：${e && e.message ? e.message : e}`);
++  }
++
+   await clickBtn(page, '＋ 新增账户');
+   await sleep(page, 400);
+   const dlg = await page.locator('#acctDlg').evaluate((d) => d.open).catch(() => false);
+@@ -314,11 +358,47 @@ async function groupAccounts(ctx) {
+   if (dlg) {
+     R['I-ACCT-04'] = (await page.locator('#acctName').count()) === 1 ? ok('名称输入 #acctName') : bad('无名称输入');
+     R['I-ACCT-05'] = (await page.locator('#acctCat').count()) === 1 ? ok(`类型下拉 #acctCat（${await page.locator('#acctCat option').count()} 项）`) : bad('无类型下拉');
++
++    // ——— I-ACCT-10：按 228 清单定义「币种 `#acctCur`」真实执行 ———
++    // 假阳性结论（本轮确认）：原 R['I-ACCT-10'] = `!(await text(page)).includes(name)`
++    // 用 #view.innerText 判断「删除后从列表消失」，但 390px 视口下 style.css L331 把
++    // td:first-child 设为 display:none，账户名称从不在 innerText 中 → 该断言恒为真（假阳性）；
++    // 而且它测的根本不是清单 I-ACCT-10（币种 #acctCur / 键入 / 显示文本）。
++    // 本轮改为：在新增账户弹窗内断言 #acctCur 存在、可键入（填 CNY 后读回），给出真实观测值。
++    const curBox = page.locator('#acctCur');
++    const curCount = await curBox.count();
++    const curAttrs = curCount === 1
++      ? await curBox.evaluate((e) => ({
++        tag: e.tagName, type: e.type, maxLength: e.maxLength, disabled: e.disabled,
++      })).catch(() => null)
++      : null;
++    const curDefault = curCount === 1 ? await curBox.inputValue().catch(() => '') : '';
++    let curTyped = '';
++    let curTypable = false;
++    if (curCount === 1 && curAttrs && !curAttrs.disabled) {
++      await curBox.fill('CNY').catch(() => {});
++      curTyped = await curBox.inputValue().catch(() => '');
++      curTypable = curTyped === 'CNY';
++    }
++    R['I-ACCT-10'] = (curCount === 1 && !!curAttrs && !curAttrs.disabled && curTypable)
++      ? ok(
++        `币种 #acctCur（清单 I-ACCT-10 定义：币种 #acctCur / 键入 / 显示文本）：`
++        + `新增账户弹窗内控件数=${curCount}，tag=${curAttrs.tag}，type=${curAttrs.type}，`
++        + `maxlength=${curAttrs.maxLength}，disabled=${curAttrs.disabled}，默认 value=「${curDefault}」；`
++        + `真实键入 'CNY' 后 inputValue 回显=「${curTyped}」，可键入=${curTypable}；`
++        + `观测依据为浏览器 DOM 属性与真实输入回显，不使用 innerText 恒真式、不硬编码 PASS`,
++      )
++      : bad(
++        `币种 #acctCur（清单 I-ACCT-10）断言失败，如实登记：控件数=${curCount}，`
++        + `属性=${JSON.stringify(curAttrs)}，默认 value=「${curDefault}」，`
++        + `键入 'CNY' 后回显=「${curTyped}」，可键入=${curTypable}`,
++      );
++
+     const name = 'E2E 账户 ' + Date.now();
+     const rowsBefore = await page.locator('#view table tbody tr').count();
+     await page.fill('#acctName', name);
+     // 确定性等待：真实 POST 响应 + 重绘后 tbody 行数 +1（不使用固定 sleep）。
+-    // 注意：本条按 Owner 收紧裁决保持 FAIL——DOM/API 一致性不等于视觉可见性。
++    // 注意：下方可见性原始观测属「清单外独立登记 OBS-ACCT-VIS-390」，不再挂 I-ACCT-06。
+     const postPromise = page.waitForResponse(
+       (r) => r.request().method() === 'POST' && /\/api\/v1\/books\/\d+\/accounts$/.test(r.url()),
+       { timeout: 15000 },
+@@ -356,7 +436,9 @@ async function groupAccounts(ctx) {
+     const acctErrText = await errText(page, '#acctErr');
+     const toastTextValue = await toastText(page);
+     const visibilityObservations = {
+-      id: 'I-ACCT-06',
++      // 清单外独立观察 ID：不占 228 清单任何编号，尤其不再挂 I-ACCT-06
++      id: 'OBS-ACCT-VIS-390',
++      registry: 'outside-228-controls',
+       bookId: data.books.main.id,
+       name,
+       viewport: page.viewportSize(),
+@@ -372,31 +454,80 @@ async function groupAccounts(ctx) {
+       firstTdDisplay,
+       acctErr: acctErrText,
+       toast: toastTextValue,
+-      conclusion: '390px 视口下账户名称列被 style.css L331 隐藏，视觉可见性未闭环，待 Owner 裁决；本轮不改 CSS',
++      conclusion: '390px 视口下账户名称列被 style.css L331 隐藏，视觉可见性未闭环，仍 FAIL，待 Owner 裁决；本轮不改 CSS（清单外独立登记，不占 I-ACCT-06，不改变 228 条清单）',
+     };
+     ctx.out.writeJson('C/I-ACCT/visibility-observations.json', visibilityObservations);
+-    const visibilityShot = await ctx.out.screenshot(page, 'C/I-ACCT', 'I-ACCT-06-visibility').catch(() => '');
+-
+-    // 收紧裁决：无条件 FAIL，不允许任何 PASS 分支。
+-    // 正向观测只证明「数据链路正常」；真实用户在 390px 视口下仍看不到账户名，
+-    // 可见性验收项未闭环，不得因改用 td.textContent 而放宽断言制造 PASS。
+-    R['I-ACCT-06'] = bad(
+-      `FAIL（可见性未闭环，待 Owner 裁决 CSS）：POST=${postStatus} 重绘+1=${redrawn} DOM 首列 textContent 命中=${inDom} API 命中=${inApi} 重复数=${dup}；`
+-      + `visibleInnerText=${visibleInnerText}；firstTdDisplay=${firstTdDisplay}；DOM 首列=${JSON.stringify(domNames)}；`
+-      + '390px 视口下账户名称列被 style.css L331 隐藏，视觉可见性未闭环，待 Owner 裁决；本轮不改 CSS；'
+-      + `#acctErr=「${acctErrText}」toast=「${toastTextValue}」；原始观测见 C/I-ACCT/visibility-observations.json`,
+-      visibilityShot ? [visibilityShot] : [],
+-    );
++    const visibilityShot = await ctx.out.screenshot(page, 'C/I-ACCT', 'OBS-ACCT-VIS-390-visibility').catch(() => '');
++
++    // 清单外独立登记（不塞进 R、不占 I-ACCT-06、不改变 228 条清单分布）：
++    // 第四项「新增账户 390px 视觉可见性」仍 FAIL / 未闭环，本轮不以任何形式改成 PASS。
++    ctx.out.writeJson('C/I-ACCT/visibility-observation-independent.json', {
++      id: 'OBS-ACCT-VIS-390',
++      registry: '清单外独立登记（outside-228-controls，不占 228 清单任何编号）',
++      status: 'FAIL',
++      closed: false,
++      bookId: data.books.main.id,
++      name,
++      viewport: page.viewportSize(),
++      visibleInnerText,
++      firstTdDisplay,
++      postStatus,
++      inDom,
++      inApi,
++      domNames,
++      evidence: visibilityShot ? [visibilityShot] : [],
++      conclusion: '视觉可见性未闭环，仍 FAIL，待 Owner 裁决；本轮不改 style.css（L331 在 max-width:640px 下隐藏 td:first-child）。'
++        + '390px 视口下账户名称不在 #view.innerText 中（visibleInnerText=false），命中行首列 computed display=none。'
++        + '本观察项不写入 R，不计入 228 条清单计数，不占用 I-ACCT-06；I-ACCT-06 本轮已按清单定义改为「删除引用保护」真实 409 断言。'
++        + '第四项缺陷仍为 FAIL / 未闭环，本轮未授权改 CSS，不得以任何形式改成 PASS。',
++      ownerDecision: '待 Owner 裁决',
++    });
++
+     R['I-ACCT-07'] = /¥/.test(await text(page)) ? ok('余额列渲染 ¥ 金额') : bad('余额渲染异常');
+     R['I-ACCT-08'] = (await page.locator('button', { hasText: '编辑' }).count()) > 0 ? ok('编辑按钮存在') : bad('无编辑');
+     R['I-ACCT-09'] = (await page.locator('button', { hasText: '删除' }).count()) > 0 ? ok('删除按钮存在') : bad('无删除');
+-    await page.locator('button', { hasText: '删除' }).last().click();
++
++    // 原「删除后从列表消失」处置：删除写入 R 的假阳性断言（结论见 I-ACCT-10 上方），
++    // 保留删除交互，改用 td:first-child 的 textContent 做真实断言，作为「清单外独立观察项」
++    // OBS-ACCT-DEL-390 单独落盘；不塞进 R 的 228 编号，不改变 228 分布。
++    // 注意：账户列表按类别排序，新建账户并不在最后一行；旧实现 `删除按钮.last()` 实际点到
++    // 的是「信用卡」行而非新建账户行，这是该假阳性的第二个成因。此处按首列名称精确定位目标行。
++    const tdNamesBeforeDel = await page.locator('#view table tbody tr td:first-child').allTextContents();
++    const targetDelBtn = page.locator(
++      `xpath=//td[normalize-space(text())="${name}"]/ancestor::tr[1]//button[contains(.,"删除")]`,
++    ).first();
++    const targetFound = await targetDelBtn.count();
++    if (targetFound) await targetDelBtn.click();
++    else await page.locator('button', { hasText: '删除' }).last().click();
+     await sleep(page, 600);
+-    const cf = page.locator('button', { hasText: /确认|确定/ }).first();
+-    if (await cf.count()) { await cf.click(); await sleep(page, 1000); }
+-    R['I-ACCT-10'] = !(await text(page)).includes(name) ? ok('删除后从列表消失') : bad('删除后仍存在');
++    const cOk = page.locator('#cOk');
++    if (await cOk.isVisible().catch(() => false)) await cOk.click();
++    else {
++      const cf = page.locator('button', { hasText: /确认|确定/ }).first();
++      if (await cf.count()) await cf.click();
++    }
++    await sleep(page, 1000);
++    const tdNamesAfterDel = await page.locator('#view table tbody tr td:first-child').allTextContents();
++    const disappeared = !tdNamesAfterDel.some((t) => t.trim() === name);
++    ctx.out.writeJson('C/I-ACCT/delete-disappearance-independent.json', {
++      id: 'OBS-ACCT-DEL-390',
++      registry: '清单外独立观察（outside-228-controls，不占 228 清单任何编号）',
++      bookId: data.books.main.id,
++      name,
++      viewport: page.viewportSize(),
++      assertion: 'td:first-child textContent 真实断言：精确定位含该名称的行 → 点其删除按钮并确认 → 该名称是否从列表首列 textContent 中消失',
++      targetRowFound: !!targetFound,
++      tdNamesBeforeDel,
++      tdNamesAfterDel,
++      disappeared,
++      note: '原 innerText 断言恒真已确认为假阳性（390px 下首列 display:none，名称从不在 innerText 中）；'
++        + '且列表按类别排序，旧实现用「删除按钮.last()」实际点到「信用卡」行而非新建账户行，是假阳性的第二个成因。'
++        + '本观察项使用 textContent 绕开 CSS 隐藏列并精确定位目标行，不写入 R、不占任何 228 编号、不改变 228 分布。',
++    });
+   } else {
+-    for (let i = 4; i <= 10; i += 1) R[`I-ACCT-${String(i).padStart(2, '0')}`] = blocked('弹窗未打开');
++    // I-ACCT-06 由上方 API 断言给出真实结论，不因弹窗未打开而降级为 BLOCKED；
++    // I-ACCT-10 依赖新增账户弹窗内的 #acctCur，弹窗未打开时登记 BLOCKED。
++    for (const i of [4, 5, 7, 8, 9, 10]) R[`I-ACCT-${String(i).padStart(2, '0')}`] = blocked('弹窗未打开');
+   }
+   for (let i = 11; i <= 15; i += 1) R[`I-ACCT-${String(i).padStart(2, '0')}`] = blocked('该组后续控件（对账汇总/排序/负债标记）未以独立控件出现，缺可断言目标');
+   return { R };
+
+========== 第二部分：新增文件全文（未跟踪；日志/大 JSON 不重复收录） ==========
+
+----- tools/r0/e2e/README.md -----
+warning: in the working copy of 'tools/r0/e2e/README.md', LF will be replaced by CRLF the next time Git touches it
+diff --git a/tools/r0/e2e/README.md b/tools/r0/e2e/README.md
+new file mode 100644
+index 0000000..b220c15
+--- /dev/null
++++ b/tools/r0/e2e/README.md
+@@ -0,0 +1,80 @@
++# R0 E2E 运行器说明
++
++`tools/r0/e2e/run.js` 是 R0 运行时验收入口：启动隔离的本地服务（临时 SQLite + 随机端口 +
++每次新生成的 JWT 密钥）、合成账号与合成数据，再用真实浏览器执行各套件。证据写入
++`R0_ARTIFACT_DIR`（默认 `<repo>/artifacts/r0-e2e`）下带时间戳的运行目录。
++
++## 套件与分工
++
++| 套件 | 命令 | 定位 | 门禁性质 |
++|---|---|---|---|
++| A | `node run.js --suite a` | 11 项状态/权限/同步场景 | 门禁型：任一 FAIL 或 BLOCKED 即退出码 1 |
++| C | `node run.js --suite c` | 228 条逐控件运行时验收（对应 `fixtures/controls.json`） | **报告型**：PASS/FAIL/BLOCKED/N/A 分布本身就是结论，允许既有产品缺口 FAIL |
++| D | `node run.js --suite d` | 第七次 4 项已确认业务缺陷的回归（含 I-TXNS-01..19 逐条重跑） | 门禁型：任一断言失败即 job 失败 |
++| all | `node run.js --suite all` | **A + D + C 全部适用套件**，按 `a → d → c` 顺序执行 | 由各套件结果汇总决定 |
++
++排序理由：D 是门禁型回归，放在报告型 C 之前执行，避免 C 的报告型写操作（编辑/删除首笔交易、
++改成员角色、退出登录、生成 Token 等）污染 D 的回归数据；C 作为报告型放最后。
++
++**B 不在本运行器 suite 体系内**：「分类解析合成测试 + 22 笔分类映射回归审计」由
++`.github/workflows/r0-e2e.yml` 的独立 step 执行，具体命令为：
++
++```bash
++node --test tools/r0/test-resolve-category.js
++R0_SERVER_BIN=<repo>/server/fastledger node tools/r0/e2e/scripts/reseed-audit.js
++```
++
++因此 `--suite all` **不含 B**，也不代表 B 无需运行或已通过；CI 中 A / D / C / B 分别以独立
++step 运行（见 workflow 的「分类解析合成测试」「分类映射回归审计」「包 A」「包 D」「包 C」）。
++本轮 P2 之前 `all` 曾被实现为仅 `['a', 'c']`（漏掉 D），头部注释还写着「D 需显式
++`--suite d` 运行」，现已统一为 A + D + C。
++
++### 退出码语义
++
++- `0`：无 FAIL 且 A 无 BLOCKED；
++- `1`：有 FAIL，或 A 有 BLOCKED；
++- `2`：环境错误（服务/浏览器启动、bootstrap 失败等）。
++
++C 是报告型且存在既有 FAIL（例如主报告已登记的产品缺失），因此
++**`node run.js --suite all` 通常退出码 1，属预期行为，不代表 D 失败**；判断 D 是否通过应看
++`report.json` 中 `D:FAIL` 计数或日志里的「D 汇总」，而不是看 `all` 的整体退出码。
++同理，CI 中「包 C」单步设置了 `continue-on-error: true`，**该 step 绿色不等于 228 条控件
++全部通过**，只表示报告型步骤已执行完成；228 条的结论必须读 `report.json` /
++`C/controls-summary.json` 的分布。
++
++不得为了让 `all` 变绿而放宽 C 的断言或跳过 C。
++
++## 本地运行
++
++```bash
++# 需先构建服务端二进制（前端 app.js 内嵌于二进制）
++source <tools>/genv.sh && go build -o server/fastledger.exe ./cmd/server
++
++cd tools/r0/e2e
++R0_SERVER_BIN=<repo>/server/fastledger.exe \
++R0_BROWSER_CHANNEL=msedge \
++R0_ARTIFACT_DIR=<repo>/artifacts/r0-e2e \
++node run.js --suite all
++```
++
++| 环境变量 | 说明 |
++|---|---|
++| `R0_SERVER_BIN` | 服务二进制路径（默认 `server/fastledger[.exe]`） |
++| `R0_BROWSER_CHANNEL` | 本地用 `msedge`；CI 不设（用自带 chromium） |
++| `R0_ARTIFACT_DIR` | 证据输出根目录（默认 `<repo>/artifacts/r0-e2e`） |
++| `R0_DATA_DIR` | 复用固定实例目录（默认临时目录，运行结束即丢弃） |
++
++## 清单外独立登记（P2）
++
++C 套件 `I-ACCT` 组另产出两个**不占 228 清单任何编号**的独立观察文件，它们不写入 `R`
++（`R` 的 key 会进入 228 条计数）、不改变清单分布：
++
++- `C/I-ACCT/visibility-observation-independent.json`：`OBS-ACCT-VIS-390`，记录 390px 视口下
++  账户名称列的 `visibleInnerText` / `firstTdDisplay`。**第四项「新增账户视觉可见性」仍为
++  FAIL / 未闭环，待 Owner 裁决；本轮不改 `style.css`**。
++- `C/I-ACCT/delete-disappearance-independent.json`：`OBS-ACCT-DEL-390`，用
++  `td:first-child` 的 `textContent` 对「删除后从列表消失」做真实观测（原 `innerText` 断言
++  在 390px 隐藏列下恒真，已确认为假阳性）。
++
++I-ACCT 编号与清单定义的全量错位审计见
++`docs/r0-evidence-7th-fix/p2/iacct-mapping-audit.md`。
+
+----- docs/r0-evidence-7th-fix/p2/iacct-mapping-audit.md -----
+warning: in the working copy of 'docs/r0-evidence-7th-fix/p2/iacct-mapping-audit.md', LF will be replaced by CRLF the next time Git touches it
+diff --git a/docs/r0-evidence-7th-fix/p2/iacct-mapping-audit.md b/docs/r0-evidence-7th-fix/p2/iacct-mapping-audit.md
+new file mode 100644
+index 0000000..d0cc5bc
+--- /dev/null
++++ b/docs/r0-evidence-7th-fix/p2/iacct-mapping-audit.md
+@@ -0,0 +1,53 @@
++# I-ACCT 编号 ↔ 228 清单定义 全量错位审计（P2）
++
++- 范围：`tools/r0/e2e/fixtures/controls.json` L1498–1736 的 `I-ACCT-01..15`（共 15 条）
++  与 `tools/r0/e2e/specs/c-controls.js` 的 `groupAccounts`（本轮 P2 修改后的状态）。
++- 目的：**如实登记历史覆盖缺口**，不掩盖、不消灭错位。
++- 硬约束：本文件只是审计记录。**未修改、也不得修改** `controls.json`（228 条清单）、
++  未改测试编号、未把清单定义改成脚本现状。
++- 本轮授权范围：仅按第三方点名修复 `I-ACCT-06` 与 `I-ACCT-10`；其余 13 条**不批量改动**，
++  因为批量对齐会显著改变 228 条 PASS/FAIL/BLOCKED 分布并超出本轮授权。
++
++## 一、逐条对照
++
++「是否错位」判定标准：脚本断言的**被测对象**是否与清单 `control` / `action` / `success`
++描述的是同一个控件与同一个交互。
++
++| 清单 ID | 清单定义（control / action / success，controls.json） | 脚本当前实际断言（P2 后） | 是否错位 |
++|---|---|---|---|
++| I-ACCT-01 | `＋ 新增账户`；点击 → `openAcctForm(bookId,null)`；成功=打开 `#acctDlg` | `/现金\|储蓄\|信用卡/.test(#view.innerText)` —— 账户行是否渲染 | **错位**：测的是清单 I-ACCT-02 的「账户行」，不是新增按钮/弹窗打开 |
++| I-ACCT-02 | 账户行（名称/类型/余额）；成功=显示 `ACC_CAT_NAME`、余额、正负色 | `button:hasText('＋ 新增账户')` 计数 > 0 | **错位**：测的是清单 I-ACCT-01 的「＋ 新增账户」按钮是否出现 |
++| I-ACCT-03 | 编辑按钮；点击 → `openAcctForm(bookId,a)`；成功=打开 `#acctDlg`（回填） | 点击「＋ 新增账户」后 `#acctDlg.open === true` | **错位**：测的是新增弹窗打开，既不是编辑按钮也不是编辑回填 |
++| I-ACCT-04 | 删除按钮；`confirmDialog` → `DELETE /books/:id/accounts/:id`；成功=toast「账户已删除」+ 重绘 | `#acctName` 名称输入框存在 | **错位**：测的是清单 I-ACCT-08 的「账户名称 `#acctName`」 |
++| I-ACCT-05 | 删除取消；确认框点「取消」→ 不删除 | `#acctCat` 类型下拉存在 | **错位**：测的是清单 I-ACCT-09 的「账户类型 `#acctCat`」 |
++| I-ACCT-06 | **删除引用保护**；账户被交易引用 → 确认删除 → 后端 `ErrAccountInUse` 映射 409 | **P2 已对齐**：`api.raw(DELETE /api/v1/books/:id/accounts/:accountId)` 对被引用的 `data.ids.cashId` 发起删除，断言真实 `status===409`、`json.msg` 含「账户仍存在交易记录」，并用 `api.accounts()` 回读确认该 id 仍在、名称一致 | **已对齐（本轮修复）**。修复前该 key 被写成「新增账户名称 390px 不可见 / 可见性未闭环」的无条件 FAIL，属清单外观察项错占编号，且**从未测过删除引用保护** |
++| I-ACCT-07 | 期初余额输入；`input`/`action`/`success`/`fail` 均为「未实现」，`evidence` 记「缺失：app.js `initialBalance`」 | `/¥/.test(#view.innerText)` —— 余额列是否渲染 ¥ | **错位**：清单该项是「未实现/缺失」，脚本却用「余额列渲染」判 PASS；且 `status` 字段在夹具里为异常截断值 `期初\`（疑似抽取产物，本轮不修） |
++| I-ACCT-08 | 账户名称 `#acctName`；action=键入；成功=显示文本；空值 → `#acctErr` | `button:hasText('编辑')` 计数 > 0 | **错位**：测的是清单 I-ACCT-03 的「编辑按钮」 |
++| I-ACCT-09 | 账户类型 `#acctCat`；action=选择；编辑时 disabled | `button:hasText('删除')` 计数 > 0 | **错位**：测的是清单 I-ACCT-04 的「删除按钮」 |
++| I-ACCT-10 | **币种 `#acctCur`**；默认 CNY、编辑时 disabled；action=键入；成功=显示文本 | **P2 已对齐**：在新增账户弹窗内断言 `#acctCur` 存在（tag/type/maxlength/disabled 真实观测）、可键入（填 `CNY` 后 `inputValue` 回显一致） | **已对齐（本轮修复）**。修复前为 `!(await text(page)).includes(name) ? ok('删除后从列表消失') : bad(...)`：用 `#view.innerText` 判断名字，而 390px 下 `style.css` L331 把 `td:first-child` 设为 `display:none`，名称从不在 `innerText` 中 → **恒真，确认假阳性**；且测的也不是币种 |
++| I-ACCT-11 | 取消 `#acctCancel`；action=点击；成功=关闭弹窗 | `blocked('该组后续控件…未以独立控件出现')` | **错位**：清单有明确已实现控件 `#acctCancel`（index.html L144 / app.js L728），脚本却判 BLOCKED |
++| I-ACCT-12 | 保存 `#acctSubmit`；新增 POST / 编辑 PUT；成功=toast + 关弹窗 + 重绘 | `blocked(...)`（同上循环）；实际脚本在新增流程中点击了 `#acctSubmit` 并等待 POST，但结果没有登记到本 ID | **错位**：清单有明确控件且脚本实际执行过，却判 BLOCKED |
++| I-ACCT-13 | 余额刷新；增删后 `renderAccounts(bookId)` 重拉 | `blocked(...)` | **错位**：清单为已实现项，脚本判 BLOCKED |
++| I-ACCT-14 | 本页净资产摘要；`status = **缺失**｜R0-E-28` | `blocked(...)` | **错位**：按包 C 判定原则，「主报告登记为缺失」应判 FAIL 并写明 R0-E-28；因 `R` 已给出值，`classifyMissing()` 不会介入，故被登记成 BLOCKED |
++| I-ACCT-15 | 投资账户行点击 → 详情（`category===5` 时进入 `#b/:id/account/:accId`） | `blocked(...)` | **错位**：清单 `status=已实现｜截图已见`，脚本判 BLOCKED |
++
++## 二、结论
++
++1. **15 条里 13 条仍存在编号/定义错位**，本轮按授权范围**不批量改动**。它们多数是
++   「脚本断言整体前移/后移了若干格」（01↔02、04↔08、05↔09、08↔03、09↔04），
++   以及「11–15 被一组统一的 `blocked()` 兜底覆盖」。
++2. 这些错位是**历史覆盖缺口**，不是本轮引入：本轮只把 `I-ACCT-06` 从「清单外可见性
++   FAIL」改回清单定义的「删除引用保护」真实 409 断言，把 `I-ACCT-10` 从「innerText
++   恒真假阳性」改回清单定义的「币种 `#acctCur`」真实键入断言。
++3. 视觉可见性（第四项缺陷）**不是 228 清单里的任何编号**，本轮已从 `R` 中移出，
++   以清单外独立 ID `OBS-ACCT-VIS-390` 登记到
++   `C/I-ACCT/visibility-observation-independent.json`，**状态仍为 FAIL / 未闭环**；
++   原「删除后从列表消失」以清单外 `OBS-ACCT-DEL-390` + `td:first-child.textContent`
++   真实断言单独落盘。两者都不写入 `R`、不占编号、不改变 228 分布。
++4. **若要全面对齐 228 清单，需另提方案供第三方审核**：应逐条给出新的可执行配方
++   （真实点击/键入/API 回读）、预期 PASS/FAIL 判据、以及对齐后 228 条分布的变化量，
++   经第三方与 Owner 确认后再实施。严禁以「把 controls.json 改成脚本现状」「改测试编号」
++   或「把清单定义改写成脚本断言」的方式消灭错位。
++5. 本审计未涉及、也不得改动：`controls.json`（228 条清单）、`server/web/dist/style.css`
++   （L331 视觉根因）、任何 Go 后端、`server/web/dist/app.js`、PRD/WBS、DB/迁移、API 契约、
++   更早的历史证据目录。
+
+========== 第三部分：工作树全量 git diff（含并发 P1 round2 改动，非 P2 所改） ==========
+warning: in the working copy of '.github/workflows/r0-e2e.yml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/r0-evidence-7th-fix/p1/p1-report.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/r0-evidence-7th-fix/p1/workflow-structure-check.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'tools/r0/e2e/run.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'tools/r0/e2e/scripts/scan-artifacts.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'tools/r0/e2e/specs/c-controls.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'tools/r0/e2e/test-scan-artifacts.js', LF will be replaced by CRLF the next time Git touches it
+diff --git a/.github/workflows/r0-e2e.yml b/.github/workflows/r0-e2e.yml
+index 1ffda5c..8c78bcd 100644
+--- a/.github/workflows/r0-e2e.yml
++++ b/.github/workflows/r0-e2e.yml
+@@ -125,6 +125,7 @@ jobs:
+       # 关键：上传只在扫描 step 的 outcome 为 success 时发生。
+       # 原先的 if: always() 会让"扫描失败即退出"的防护完全失效，故必须改为依赖 outcome。
+       - name: 上传证据（日志/截图/报告/校验和）
++        id: artifact_upload
+         if: ${{ always() && steps.artifact_scan.outcome == 'success' }}
+         uses: actions/upload-artifact@v4
+         with:
+@@ -133,3 +134,22 @@ jobs:
+             artifacts/r0-e2e-upload/**
+           retention-days: 30
+           if-no-files-found: error
++
++      # P1 Round 2：把证据上传链路结论写入 CI summary。
++      # 既有「汇总退出码」step 一字未改；本 step 为独立新增且置于上传 step 之后，
++      # 因此能读到三个新 step 的 outcome，避免绿色 CI 被误读为证据已安全上传。
++      - name: 汇总证据上传安全结论
++        id: artifact_upload_summary
++        if: ${{ always() }}
++        run: |
++          {
++            echo "## R0 E2E 证据上传安全结论"
++            echo ""
++            echo "- 白名单准备 outcome: ${{ steps.artifact_prepare.outcome }}"
++            echo "- 上传前安全扫描 outcome: ${{ steps.artifact_scan.outcome }}"
++            echo "- 上传证据 outcome: ${{ steps.artifact_upload.outcome }}"
++            echo "- 扫描通过且允许上传: ${{ steps.artifact_scan.outcome == 'success' }}"
++            if [ "${{ steps.artifact_upload.outcome }}" != "success" ]; then
++              echo "- 上传被跳过或未成功：本轮无公开 artifact 产出，请勿把绿色 CI 解读为证据已安全上传"
++            fi
++          } >> "$GITHUB_STEP_SUMMARY"
+diff --git a/docs/r0-evidence-7th-fix/p1/p1-report.md b/docs/r0-evidence-7th-fix/p1/p1-report.md
+index fba385d..2948da8 100644
+--- a/docs/r0-evidence-7th-fix/p1/p1-report.md
++++ b/docs/r0-evidence-7th-fix/p1/p1-report.md
+@@ -2,6 +2,9 @@
+ 
+ - 分支：`fix/r0-sixth-runtime-defects`（未切换）
+ - HEAD：`8082ca85d4f679ed7698fc51009bc6a214c9ac0c`（未 commit、未 push、未合并 main）
++- 勘误（HEAD 时点口径）：本报告写于 P1 提交前，上一行 HEAD 为**撰写时基线**；P1 已由
++  team-lead 提交为 `0c62f5017c8b616f6d0c5079c55a9b4a13d1f68f`，交付以该 commit 为准。
++  QA Round 2 后最终 commit 见交付回执。本行仅追加说明，不覆盖上方历史结论。
+ - 范围：**仅 P1 安全整改**；P2 未触碰
+ - 证据目录：`docs/r0-evidence-7th-fix/p1/`
+ - 结论：**整改完成，本地自证全部通过，扫描失败时上传必不执行**
+@@ -88,7 +91,12 @@ PRD / WBS / DB / API、README / CHANGELOG、任何历史证据目录、228 条
+ | `SENSITIVE_FILENAME` | 文件名含 `token` / `secret` / `credential` |
+ | `SYMLINK_ENTRY` | 目录内出现符号链接（额外失败关闭加固，不跟随） |
+ 
+-### B 类：文本内容命中（仅对非二进制文件）
++> **版本说明**：以下 §四 规则表与 §七 自证记录的是**首轮实现**。QA Round 1 独立验证发现
++> 失败开放、披露不足与假阳性等缺陷，Round 2 已修订；交付态规则、修复前后退出码对比与
++> 残留风险以 `docs/r0-evidence-7th-fix/p1/round2/round2-report.md` 为准，
++> **首轮「全部通过 / 已知边界」结论不得外推到交付态**。
++
++### B 类：文本内容命中（首轮：仅对非二进制文件；Round 2：全部文件）
+ 
+ | 类型 | 判定对象 |
+ |---|---|
+@@ -98,12 +106,21 @@ PRD / WBS / DB / API、README / CHANGELOG、任何历史证据目录、228 条
+ | `COOKIE_HEADER` | `Cookie` / `Set-Cookie` 关键字 + 赋值 + 8 字符以上非空值 |
+ | `EBK_JWT_SECRET_ASSIGN` | JWT 签名密钥环境变量赋值 |
+ 
+-### C 类：二进制与异常
+-
+-- `*.png` / `*.jpg` / `*.jpeg` / `*.gif` / `*.webp` / `*.bmp` / `*.ico` / `*.pdf` 等按扩展名
+-  跳过内容扫描；其余文件读取后若前 4096 字节含 NUL 也视为二进制跳过。
+-  **A 类文件名检查对二进制文件照常执行**（负向测试 case-10 验证）。
+-- 单个文本超过 32 MiB、目录不可读、参数错误：退出 1（同样阻断上传，因为上传 step 只认
++### C 类：二进制与异常（首轮实现；Round 2 已修订）
++
++- 首轮实现：`*.png` / `*.jpg` / `*.jpeg` / `*.gif` / `*.webp` / `*.bmp` / `*.ico` / `*.pdf`
++  等按扩展名**整文件跳过内容扫描**；其余文件读取后若前 4096 字节含 NUL 也视为二进制跳过，
++  且跳过时静默返回 0 CLEAN。A 类文件名检查对二进制文件照常执行（负向测试 case-10 验证）。
++- **如实披露（QA 独立验证证实）**：这两条跳过分支构成失败开放漏洞。比「截图画面拍到令牌」
++  更直接的路径是——**只要把纯文本凭据命名为 `shot.png`，文件内容本身就是文本，即可经
++  prepare 收集、被 scan 判定 CLEAN 并端到端上传**（`qa-verify/e2e-05`）；白名单 `.log` 文件头
++  插入 1 个 NUL 字节同样可让 5 条文本规则全部失效（`qa-verify/e2e-06`）。首轮 case-09 还把
++  「跳过 → 0」固化为 PASS。以上均为**未修复前的首轮结论**，不得外推到交付态。
++- **Round 2 修订**：取消一切内容跳过分支，所有文件（含二进制）读 Buffer 后以 `latin1` 做
++  1:1 字节映射，逐条应用 5 条文本规则；二进制扩展名增加起始魔数校验，不符记
++  `SUSPICIOUS_BINARY` 并阻断；输出统计改为「内容已全量扫描 / 跳过内容扫描=0」。
++  详见 `p1/round2/round2-report.md`。
++- 单个文件超过 32 MiB、目录不可读、参数错误：退出 1（同样阻断上传，因为上传 step 只认
+   `outcome == 'success'`）。
+ - 空目录：退出 0 并打印 WARN；此时上传 step 的 `if-no-files-found: error` 仍会让 job 失败。
+ 
+@@ -259,16 +276,25 @@ node docs/r0-evidence-7th-fix/p1/workflow-structure-check.js
+ 4. **ci.yml 内联合成密钥**：`ci.yml` 中容器冒烟用的 JWT 签名密钥是 CI 合成值，且该
+    workflow 不上传任何 artifact，不构成本次泄露面；本阶段未改动。若需统一改为 secrets，
+    建议后续单独评估（不属 P1）。
+-5. **二进制内容边界**：PNG/JPG 等按设计跳过内容扫描，只做文件名黑名单检查；若截图
+-   画面本身拍到令牌，文本扫描无能为力，需靠用例设计规避。已知边界，非回归。
++5. **二进制内容边界（首轮为漏洞，Round 2 已堵住）**：首轮把 PNG/JPG 等按扩展名跳过内容
++   扫描，只做文件名黑名单检查，报告当时仅以「截图画面拍到令牌」描述，**弱化了更直接的
++   「文件内容即纯文本凭据」路径**。QA 独立实测证明纯文本凭据伪装成 `.png`、以及 NUL 前缀
++   白名单 `.log`，均可端到端放行。Round 2 已改为全量 latin1 文本扫描 + 二进制魔数校验，
++   两条路径均被阻断（修复前后退出码对比见 `p1/round2/round2-report.md`）。
++   **残留边界**：扫描器仍是基于已知形态规则的轻量闸门，非通用 DLP；不含任何关键字的
++   凭据形态不拦，真实图片画面内的文字也不属于文本扫描能力范围。不得把「扫描通过」
++   外推为「内容绝对无凭据」，更不得把绿色 CI 解读为「证据已安全上传」。
+ 6. **更严格口径的副作用**：文件名含 `token` / `secret` / `credential` 的白名单文件也会被
+    prepare 排除（比任务书「非白名单文件」口径更严）。若将来确有此类合法证据文件，
+    需人工改口径并重跑自证；scan 作为第二道防线会对它们直接返回 2。
+ 7. **新增上传通道**：若将来新增其它 workflow 或上传方式，必须同步接入
+    `prepare-upload.js` + `scan-artifacts.js`。建议把该约束写入贡献规范，但本阶段禁止改
+    README / CHANGELOG，故未落地为文档。
+-8. **汇总退出码 step 未追加扫描 outcome**：该 step 位于扫描 step 之前，引用后置 step 的
+-   outcome 只会得到空值；且任务书要求不得改动其既有内容，故保持原样。
++8. **汇总退出码 step 未追加扫描 outcome（Round 2 已用独立 step 补齐可观测性）**：该 step
++   位于扫描 step 之前，引用后置 step 的 outcome 只会得到空值，且任务书要求不得改动其既有
++   内容，故一字未改。Round 2 改为在上传 step 之后**新增独立 step**「汇总证据上传安全结论」，
++   把 prepare / scan / upload 三个 outcome 写入 `$GITHUB_STEP_SUMMARY`，并在上传被跳过时
++   显式提示「请勿把绿色 CI 解读为证据已安全上传」。
+ 
+ ---
+ 
+diff --git a/docs/r0-evidence-7th-fix/p1/workflow-structure-check.js b/docs/r0-evidence-7th-fix/p1/workflow-structure-check.js
+index 91904cc..47f11d4 100644
+--- a/docs/r0-evidence-7th-fix/p1/workflow-structure-check.js
++++ b/docs/r0-evidence-7th-fix/p1/workflow-structure-check.js
+@@ -110,6 +110,22 @@ check(
+   `字节数 HEAD=${headSegment.length} 当前=${nowSegment.length}`,
+ );
+ 
++// Round 2：上传安全结论的 CI 可观测性。既有「汇总退出码」step 一字未改，新增独立 step。
++const iUploadId = lineNo('id: artifact_upload');
++const iUploadSummary = lineNo('name: 汇总证据上传安全结论');
++check('上传 step 具备 id: artifact_upload', iUploadId > 0 && iUploadId < iUpload);
++check('上传安全结论 step 位于上传 step 之后', iUploadSummary > iUpload,
++  `行号 上传=${iUpload} 上传安全结论=${iUploadSummary}`);
++const summaryIfLine = iUploadSummary > 0 ? (lines[iUploadSummary + 1] || '').trim() : '';
++check('上传安全结论 step 带 always() 条件', summaryIfLine === 'if: ${{ always() }}', summaryIfLine);
++check(
++  '上传安全结论 step 记录 prepare / scan / upload 三个 outcome',
++  wf.includes('${{ steps.artifact_prepare.outcome }}') &&
++  wf.includes('${{ steps.artifact_scan.outcome }}') &&
++  wf.includes('${{ steps.artifact_upload.outcome }}'),
++);
++check('上传被跳过时有显式提示', wf.includes('上传被跳过或未成功'));
++
+ check('ci.yml 无 upload-artifact 步骤', !ci.includes('upload-artifact'));
+ check(
+   '.github/workflows 下仅 ci.yml 与 r0-e2e.yml 两个文件',
+diff --git a/tools/r0/e2e/run.js b/tools/r0/e2e/run.js
+index 7074e24..113cdf2 100644
+--- a/tools/r0/e2e/run.js
++++ b/tools/r0/e2e/run.js
+@@ -3,10 +3,23 @@
+ /**
+  * R0 自动化验收入口。
+  *
+- *   node run.js --suite a       # 包 A：11 项状态/权限/同步场景
+- *   node run.js --suite c       # 包 C：228 条控件
+- *   node run.js --suite d       # 包 D：第七次 4 项缺陷回归（含 I-TXNS-01..19 逐条重跑）
+- *   node run.js --suite all     # 保持既有 A + C 组合；D 需显式 --suite d 运行
++ *   node run.js --suite a       # 包 A：11 项状态/权限/同步场景（门禁型）
++ *   node run.js --suite c       # 包 C：228 条逐控件运行时验收（报告型）
++ *   node run.js --suite d       # 包 D：第七次 4 项缺陷回归（含 I-TXNS-01..19 逐条重跑，门禁型）
++ *   node run.js --suite all     # = A + D + C（全部适用套件），按 a → d → c 顺序执行
++ *
++ * 套件与分工（P2 整改，与 .github/workflows/r0-e2e.yml 对齐）：
++ *   · A —— 11 项状态/权限/同步场景，门禁型；
++ *   · C —— 228 条逐控件运行时验收，报告型（PASS/FAIL 分布本身就是结论，允许既有 FAIL）；
++ *   · D —— 第七次 4 项已确认业务缺陷的回归，门禁型；
++ *   · all —— 包含 A / D / C 三个套件。顺序取 a → d → c：让 D 在 C 的报告型写操作
++ *           （编辑/删除首笔交易、改角色、退出登录、生成 Token 等）之前执行，避免 C 污染
++ *           D 的回归数据；C 作为报告型放最后。B 不在 all 内（见下）。
++ *   · B —— 「分类解析合成测试 + 22 笔分类映射回归审计」**不在本运行器 suite 体系内**，
++ *           由 .github/workflows/r0-e2e.yml 的独立 step 执行：
++ *             node --test tools/r0/test-resolve-category.js
++ *             node tools/r0/e2e/scripts/reseed-audit.js   （env R0_SERVER_BIN=<server/fastledger>）
++ *           因此 --suite all 不含 B，也不代表 B 无需运行 / 已通过。
+  *
+  * 环境变量：
+  *   R0_SERVER_BIN     服务二进制路径（默认 server/fastledger[.exe]）
+@@ -15,6 +28,8 @@
+  *   R0_DATA_DIR       复用固定实例目录（默认临时目录，运行结束即丢弃）
+  *
+  * 退出码：0 = 无 FAIL 且 A 无 BLOCKED；1 = 有 FAIL 或 A 有 BLOCKED；2 = 环境错误
++ *   注意：C 为报告型且有既有 FAIL，故 `--suite all` 通常 exit 1，属预期，不代表 D 失败；
++ *   CI 中 C 单步 continue-on-error 的绿色也不等于 228 条全部通过。
+  */
+ const fs = require('node:fs');
+ const os = require('node:os');
+@@ -83,7 +98,11 @@ async function main() {
+     });
+     process.stdout.write(`BROWSER ${browserHandle.from} channel=${browserHandle.channel} version=${browserHandle.version}\n`);
+ 
+-    const suites = args.suite === 'all' ? ['a', 'c'] : [args.suite];
++    // P2：--suite all 必须包含全部适用套件 A / D / C（原先只有 A + C，漏掉 D）。
++    // 顺序 a → d → c：D 是门禁型回归，放在报告型 C 之前，避免 C 的写操作污染 D 的数据；
++    // B（分类解析合成测试 + 22 笔审计）由 .github/workflows/r0-e2e.yml 独立 step 执行，
++    // 不在本运行器 suite 体系内，故 all 不含 B。不得为了让 all 变绿而放宽 C 断言或跳过 C。
++    const suites = args.suite === 'all' ? ['a', 'd', 'c'] : [args.suite];
+     for (const suite of suites) {
+       if (suite === 'a') {
+         for (const sc of aScenarios) {
+@@ -99,6 +118,11 @@ async function main() {
+           report.results.push(row);
+           process.stdout.write(`${row.status.padEnd(7)} ${row.id} ${row.name} (${row.ms}ms)\n        ${row.detail}\n`);
+         }
++        // 与 C / D 对称输出套件汇总，便于 `--suite all` 日志直接看出 A 也已执行并有汇总。
++        const aTally = report.results
++          .filter((r) => r.suite === 'A')
++          .reduce((acc, r) => { acc[r.status] = (acc[r.status] || 0) + 1; return acc; }, {});
++        process.stdout.write(`A 汇总：${JSON.stringify(aTally)}\n`);
+       } else if (suite === 'c') {
+         const rows = await runControls({ browser: browserHandle.browser, base: server.base, data, runDir });
+         for (const r of rows) {
+diff --git a/tools/r0/e2e/scripts/scan-artifacts.js b/tools/r0/e2e/scripts/scan-artifacts.js
+index b6f345c..681c217 100644
+--- a/tools/r0/e2e/scripts/scan-artifacts.js
++++ b/tools/r0/e2e/scripts/scan-artifacts.js
+@@ -2,18 +2,25 @@
+ 'use strict';
+ 
+ /**
+- * FastLedger R0 E2E —— 上传前安全扫描器（P1 安全整改，失败关闭）。
++ * FastLedger R0 E2E —— 上传前安全扫描器（P1 安全整改 / Round 2，失败关闭）。
+  *
+  * 用途：在 actions/upload-artifact 之前对待上传目录做最后一道闸门。只要存在
+  * 黑名单文件名或疑似凭据文本，立即以退出码 2 失败；workflow 的上传 step 通过
+  * `steps.artifact_scan.outcome == 'success'` 依赖本 step，因此扫描不通过时绝不上传。
+  *
++ * Round 2 修订（QA 独立验证发现的失败开放缺口）：
++ *   · 取消一切「跳过内容扫描」分支：不再因扩展名（如 .png）或文件头 NUL 字节
++ *     静默跳过任何文件；所有文件一律读 Buffer 后以 latin1 做 1:1 字节映射，
++ *     再逐条应用 5 条文本规则。ASCII 凭据串在任意字节位置都能被正则命中。
++ *   · 二进制扩展名新增魔数校验附加防线，格式不符记 SUSPICIOUS_BINARY 并阻断。
++ *   · 鉴权头 / Cookie 规则收紧为「值需具备凭据形态」，消除合法业务字段误阻断。
++ *
+  * 规则：
+  *   A. 文件名/扩展名黑名单：*.zip（含 trace 归档）、*.trace、*.network、*.har、
+  *      *.db / *.sqlite*、server.log、文件名含 token|secret|credential；符号链接。
+  *   B. 文本内容：JWT 三段式、Bearer 值、鉴权头赋值、Cookie / Set-Cookie 赋值、
+- *      EBK_JWT_SECRET 赋值。
+- *   C. PNG/JPG 等二进制按扩展名或 NUL 字节判定后跳过内容扫描，但 A 类检查照常执行。
++ *      EBK_JWT_SECRET 赋值。**全部文件一律扫描，无例外**。
++ *   C. 附加防线：二进制扩展名文件的起始魔数不符 → SUSPICIOUS_BINARY。
+  *
+  * 输出：仅「文件路径 + 命中类型 + 命中数量」与汇总计数；**绝不打印匹配到的值**。
+  * 退出码：0 干净 / 2 发现疑似凭据或黑名单文件（阻断上传）/ 1 参数或环境错误（同样阻断上传）。
+@@ -34,7 +41,7 @@ const EXIT_CLEAN = 0;
+ const EXIT_ERROR = 1;
+ const EXIT_BLOCKED = 2;
+ 
+-/** 单文件文本扫描上限；超过即视为环境错误（失败关闭，不静默放过）。 */
++/** 单文件扫描上限；超过即视为环境错误（失败关闭，不静默放过）。 */
+ const MAX_TEXT_BYTES = 32 * 1024 * 1024;
+ 
+ /** 命中即阻断的扩展名。 */
+@@ -43,28 +50,74 @@ const BLACKLIST_EXT = new Set([
+   '.db', '.sqlite', '.sqlite3', '.db-wal', '.db-shm',
+ ]);
+ 
+-/** 跳过内容扫描的二进制扩展名（文件名黑名单仍然生效）。 */
++/** 二进制扩展名：只用于附加魔数校验，绝不再用于跳过内容扫描。 */
+ const BINARY_EXT = new Set([
+   '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.ico', '.pdf',
+   '.woff', '.woff2', '.ttf', '.eot', '.mp4', '.webm', '.mp3', '.wav',
+   '.gz', '.7z', '.exe', '.dll', '.so', '.dylib', '.class', '.jar',
+ ]);
+ 
++/**
++ * 常见二进制格式的起始魔数（附加防线，不用于跳过内容扫描）。
++ * 未列入表中的二进制扩展名仅依赖统一文本规则把关。
++ * @type {Record<string, Buffer[]>}
++ */
++const BINARY_SIGNATURES = {
++  '.png': [Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])],
++  '.jpg': [Buffer.from([0xff, 0xd8, 0xff])],
++  '.jpeg': [Buffer.from([0xff, 0xd8, 0xff])],
++  '.gif': [Buffer.from('GIF8', 'latin1')],
++  '.pdf': [Buffer.from('%PDF', 'latin1')],
++  '.bmp': [Buffer.from('BM', 'latin1')],
++  '.ico': [Buffer.from([0x00, 0x00, 0x01, 0x00])],
++  '.gz': [Buffer.from([0x1f, 0x8b])],
++};
++
+ /** 文件名（basename）命中即阻断。 */
+ const SENSITIVE_NAME_RE = /(?:token|secret|credential)/i;
+ 
+ /** 明确点名的服务原始日志。 */
+ const SERVER_LOG_NAME = 'server.log';
+ 
++/**
++ * 判定头值是否具备凭据形态，用于收紧 AUTH_HEADER / COOKIE_HEADER，消除假阳性。
++ * 纯字母 + 连字符的自然语言短语（如 role-based-access）不算命中。
++ * 只返回布尔，绝不把值写入任何输出。
++ * @param {string} raw 正则捕获到的头值。
++ * @return {boolean} 是否按疑似凭据计数。
++ */
++function credentialLikeValue(raw) {
++  const value = String(raw).replace(/^["'`]+|["'`]+$/g, '').trim();
++  if (/^eyJ/.test(value) || /^Bearer\b/i.test(value)) return true;
++  if (value.length < 16) return false;
++  if (/[.=_\+/]/.test(value)) return true;
++  if (!/^[A-Za-z0-9+/=_-]+$/.test(value)) return false;
++  const hasDigit = /[0-9]/.test(value);
++  const hasUpper = /[A-Z]/.test(value);
++  const hasLower = /[a-z]/.test(value);
++  return hasDigit || (hasUpper && hasLower);
++}
++
+ /**
+  * 文本命中规则。每条正则必须带 g 标志；只统计命中数量，不保留匹配值。
+- * @type {{type: string, re: RegExp}[]}
++ * 带 validator 的规则仅对通过凭据形态判定的捕获值计数。
++ * @type {{type: string, re: RegExp, group?: number, validator?: (v: string) => boolean}[]}
+  */
+ const TEXT_RULES = [
+   { type: 'JWT_LITERAL', re: /eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g },
+   { type: 'BEARER_TOKEN', re: /\bBearer\s+[A-Za-z0-9._~+/=-]{12,}/gi },
+-  { type: 'AUTH_HEADER', re: /["']?authorization["']?\s*[:=]\s*["']?[^\s"',}]{8,}/gi },
+-  { type: 'COOKIE_HEADER', re: /["']?(?:set-)?cookie["']?\s*[:=]\s*["']?[^\r\n"']{8,}/gi },
++  {
++    type: 'AUTH_HEADER',
++    re: /["']?authorization["']?\s*[:=]\s*["']?([^\s"',}]{8,})/gi,
++    group: 1,
++    validator: credentialLikeValue,
++  },
++  {
++    type: 'COOKIE_HEADER',
++    re: /["']?(?:set-)?cookie["']?\s*[:=]\s*["']?([^\r\n"']{8,})/gi,
++    group: 1,
++    validator: credentialLikeValue,
++  },
+   { type: 'EBK_JWT_SECRET_ASSIGN', re: /EBK_JWT_SECRET\s*[:=]\s*["']?[^\s"',}]{4,}/gi },
+ ];
+ 
+@@ -84,8 +137,9 @@ function printHelp() {
+   process.stdout.write([
+     '用法：node tools/r0/e2e/scripts/scan-artifacts.js [待扫描目录|--dir <dir>] [--help]',
+     '',
+-    `默认目录：artifacts/r0-e2e-upload`,
++    '默认目录：artifacts/r0-e2e-upload',
+     '退出码：0 干净 / 2 发现疑似凭据或黑名单文件 / 1 参数或环境错误',
++    '扫描口径：全部文件以 latin1 逐字节映射后应用 5 条文本规则，无任何内容跳过分支。',
+     '输出：仅文件路径、命中类型与命中数量，不输出任何匹配值。',
+     '',
+   ].join('\n'));
+@@ -122,16 +176,22 @@ function parseArgs(argv) {
+ 
+ /**
+  * 统计某条规则在文本中的命中次数，使用独立正则副本避免 lastIndex 污染。
+- * @param {string} text 待扫描文本。
+- * @param {RegExp} re 带 g 标志的规则。
++ * 带 validator 的规则只对通过形态判定的捕获值计数，值本身不外泄。
++ * @param {string} text 待扫描文本（latin1 映射结果）。
++ * @param {{type: string, re: RegExp, group?: number, validator?: (v: string) => boolean}} rule 规则。
+  * @return {number} 命中次数。
+  */
+-function countMatches(text, re) {
+-  const copy = new RegExp(re.source, re.flags);
++function countMatches(text, rule) {
++  const copy = new RegExp(rule.re.source, rule.re.flags);
+   let count = 0;
+   let match;
+   while ((match = copy.exec(text)) !== null) {
+-    count += 1;
++    if (rule.validator) {
++      const raw = rule.group ? match[rule.group] : match[0];
++      if (raw !== undefined && rule.validator(raw)) count += 1;
++    } else {
++      count += 1;
++    }
+     if (copy.lastIndex === match.index) copy.lastIndex += 1;
+   }
+   return count;
+@@ -157,16 +217,17 @@ function fileNameFindings(rel) {
+ }
+ 
+ /**
+- * 通过 NUL 字节判定二进制内容。
++ * 检查二进制文件起始魔数是否匹配已知格式。
++ * @param {string} ext 小写扩展名。
+  * @param {Buffer} buf 文件内容。
+- * @return {boolean} 是否为二进制。
++ * @return {boolean} 配置了魔数但不匹配时返回 true。
+  */
+-function looksBinary(buf) {
+-  const limit = Math.min(buf.length, 4096);
+-  for (let i = 0; i < limit; i += 1) {
+-    if (buf[i] === 0) return true;
+-  }
+-  return false;
++function binarySignatureMismatch(ext, buf) {
++  const signatures = BINARY_SIGNATURES[ext];
++  if (!signatures) return false;
++  return !signatures.some(
++    (sig) => buf.length >= sig.length && buf.subarray(0, sig.length).equals(sig),
++  );
+ }
+ 
+ /**
+@@ -243,8 +304,8 @@ function main(argv) {
+   }
+ 
+   const tree = { files: [], symlinks: [] };
+-  let textScanned = 0;
+-  let binarySkipped = 0;
++  let contentScanned = 0;
++  let binaryAlsoScanned = 0;
+ 
+   try {
+     walk(targetDir, tree);
+@@ -253,23 +314,25 @@ function main(argv) {
+       for (const type of fileNameFindings(rel)) addFinding(rel, type, 1);
+ 
+       const ext = path.extname(abs).toLowerCase();
+-      if (BINARY_EXT.has(ext)) {
+-        binarySkipped += 1;
+-        continue;
+-      }
+       const stat = fs.statSync(abs);
+       if (stat.size > MAX_TEXT_BYTES) {
+         throw new Error(`文件超过可扫描上限 ${MAX_TEXT_BYTES} 字节：${rel}`);
+       }
+       const buf = fs.readFileSync(abs);
+-      if (looksBinary(buf)) {
+-        binarySkipped += 1;
+-        continue;
++
++      // 附加防线：二进制扩展名必须匹配已知起始魔数，不符即视为可疑载体。
++      if (BINARY_EXT.has(ext) && binarySignatureMismatch(ext, buf)) {
++        addFinding(rel, 'SUSPICIOUS_BINARY', 1);
+       }
+-      const text = buf.toString('utf8');
+-      textScanned += 1;
++
++      // 统一口径：latin1 保证任意字节 1:1 映射为码位 0–255，
++      // 使 ASCII 凭据串在文件任何字节位置都能被 5 条文本规则命中。
++      // 这里没有任何 continue / 跳过分支。
++      const text = buf.toString('latin1');
++      contentScanned += 1;
++      if (BINARY_EXT.has(ext)) binaryAlsoScanned += 1;
+       for (const rule of TEXT_RULES) {
+-        const count = countMatches(text, rule.re);
++        const count = countMatches(text, rule);
+         if (count > 0) addFinding(rel, rule.type, count);
+       }
+     }
+@@ -289,9 +352,10 @@ function main(argv) {
+ 
+   const lines = [
+     `[scan] 待上传目录：${displayPath(targetDir)}`,
+-    `[scan] 文件总数=${tree.files.length} 文本已扫描=${textScanned} ` +
+-      `二进制跳过内容扫描=${binarySkipped} 符号链接=${tree.symlinks.length}`,
+-    `[scan] 命中明细（仅文件路径 + 命中类型 + 命中数量，不输出匹配值）：`,
++    `[scan] 文件总数=${tree.files.length} 内容已全量扫描=${contentScanned} ` +
++      `其中二进制文件=${binaryAlsoScanned} 跳过内容扫描=0 符号链接=${tree.symlinks.length}`,
++    '[scan] 扫描口径：全部文件以 latin1 逐字节映射后应用 5 条文本规则，无任何内容跳过分支',
++    '[scan] 命中明细（仅文件路径 + 命中类型 + 命中数量，不输出匹配值）：',
+   ];
+   for (const row of rows) lines.push(`[HIT] ${row.file} | ${row.type} | ${row.count}`);
+   if (rows.length === 0) lines.push('[HIT] （无） | — | 0');
+diff --git a/tools/r0/e2e/specs/c-controls.js b/tools/r0/e2e/specs/c-controls.js
+index c56886c..52d77e0 100644
+--- a/tools/r0/e2e/specs/c-controls.js
++++ b/tools/r0/e2e/specs/c-controls.js
+@@ -302,11 +302,55 @@ async function groupTxns(ctx) {
+ async function groupAccounts(ctx) {
+   const { page, data, base } = ctx;
+   const R = {};
++  const bookId = data.books.main.id;
++  const token = data.users.owner.token;
+   await page.goto(`${base}/#b/${data.books.main.id}/accounts`, { waitUntil: 'domcontentloaded' });
+   await sleep(page, 900);
+   const body = await text(page);
+   R['I-ACCT-01'] = /现金|储蓄|信用卡/.test(body) ? ok('账户行渲染（现金/储蓄/信用卡）') : bad('未渲染');
+   R['I-ACCT-02'] = (await page.locator('button', { hasText: '＋ 新增账户' }).count()) > 0 ? ok('新增账户按钮存在') : bad('无新增按钮');
++
++  // ——— I-ACCT-06：按 228 清单定义「删除引用保护」真实执行 ———
++  // 历史错位：原实现把 I-ACCT-06 写成「新增账户名称 390px 不可见」的无条件 FAIL，
++  // 而清单 I-ACCT-06 的定义是「删除引用保护 / 账户被交易引用 / 确认删除 / 后端 409」，
++  // 该控件从未被真正测过。本轮改为真实 API 断言，PASS 条件 = 409 && msg 命中 && 回读仍在。
++  // 目标账户选择理由：直接用 data.ids.cashId（种子「现金」账户）。bootstrap 已用该账户
++  // 创建「早餐」「工资」等活跃交易，以及一笔软删除交易「待删除」；后端 Delete() 的引用检查
++  // 覆盖软删除交易（account.go GPT-R31），因此它 100% 被交易引用，无需在组内再造账户/交易，
++  // 避免额外写操作与不确定性。删除路由 DELETE /api/v1/books/:id/accounts/:accountId，
++  // 无需 clientUuid（与前端 app.js L718 一致）。
++  try {
++    const cashId = data.ids.cashId;
++    const accountsBeforeDelete = await api.accounts(base, token, bookId);
++    const cashBefore = accountsBeforeDelete.find((a) => a.id === cashId) || null;
++    const delResp = await api.raw(base, 'DELETE', `/api/v1/books/${bookId}/accounts/${cashId}`, { token });
++    const delStatus = delResp.status;
++    const delMsg = delResp.json && delResp.json.msg ? String(delResp.json.msg) : '';
++    const delMsgOk = /账户仍存在交易记录|无法删除|被.*引用|引用.*交易/.test(delMsg);
++    // API 回读：删除后重新拉账户列表，确认该 id 仍在、名称与删除前一致（未被删除）
++    const accountsAfterDelete = await api.accounts(base, token, bookId);
++    const cashAfter = accountsAfterDelete.find((a) => a.id === cashId) || null;
++    const stillExists = !!cashAfter && (!cashBefore || cashAfter.name === cashBefore.name);
++    R['I-ACCT-06'] = (delStatus === 409 && delMsgOk && stillExists)
++      ? ok(
++        `删除引用保护（清单 I-ACCT-06 定义：账户被交易引用 → 确认删除 → 后端 409）：`
++        + `对被引用的「现金」账户 id=${cashId} 发起 DELETE /api/v1/books/${bookId}/accounts/${cashId}`
++        + ` → 真实 HTTP status=${delStatus}，响应 json.msg=「${delMsg}」；`
++        + `API 回读 GET /api/v1/books/${bookId}/accounts：id=${cashId} 仍在，`
++        + `name=「${cashAfter ? cashAfter.name : '(缺失)'}」与删除前 name=「${cashBefore ? cashBefore.name : '(缺失)'}」一致，未被删除；`
++        + `PASS 条件 = (status===409 && msg 含「账户仍存在交易记录」&& 回读仍在) 同时成立`,
++      )
++      : bad(
++        `删除引用保护（清单 I-ACCT-06）未达预期，如实登记：DELETE /api/v1/books/${bookId}/accounts/${cashId}`
++        + ` → 真实 HTTP status=${delStatus}（预期 409），响应 json.msg=「${delMsg}」，msg 命中=${delMsgOk}；`
++        + `API 回读仍在=${stillExists}，回读 id=${cashId} name=「${cashAfter ? cashAfter.name : '(缺失)'}」，`
++        + `删除前 name=「${cashBefore ? cashBefore.name : '(缺失)'}」；`
++        + `PASS 条件 = (409 && msg 含「账户仍存在交易记录」&& 回读仍在) 未同时成立`,
++      );
++  } catch (e) {
++    R['I-ACCT-06'] = bad(`删除引用保护（清单 I-ACCT-06）执行异常，如实登记：${e && e.message ? e.message : e}`);
++  }
++
+   await clickBtn(page, '＋ 新增账户');
+   await sleep(page, 400);
+   const dlg = await page.locator('#acctDlg').evaluate((d) => d.open).catch(() => false);
+@@ -314,11 +358,47 @@ async function groupAccounts(ctx) {
+   if (dlg) {
+     R['I-ACCT-04'] = (await page.locator('#acctName').count()) === 1 ? ok('名称输入 #acctName') : bad('无名称输入');
+     R['I-ACCT-05'] = (await page.locator('#acctCat').count()) === 1 ? ok(`类型下拉 #acctCat（${await page.locator('#acctCat option').count()} 项）`) : bad('无类型下拉');
++
++    // ——— I-ACCT-10：按 228 清单定义「币种 `#acctCur`」真实执行 ———
++    // 假阳性结论（本轮确认）：原 R['I-ACCT-10'] = `!(await text(page)).includes(name)`
++    // 用 #view.innerText 判断「删除后从列表消失」，但 390px 视口下 style.css L331 把
++    // td:first-child 设为 display:none，账户名称从不在 innerText 中 → 该断言恒为真（假阳性）；
++    // 而且它测的根本不是清单 I-ACCT-10（币种 #acctCur / 键入 / 显示文本）。
++    // 本轮改为：在新增账户弹窗内断言 #acctCur 存在、可键入（填 CNY 后读回），给出真实观测值。
++    const curBox = page.locator('#acctCur');
++    const curCount = await curBox.count();
++    const curAttrs = curCount === 1
++      ? await curBox.evaluate((e) => ({
++        tag: e.tagName, type: e.type, maxLength: e.maxLength, disabled: e.disabled,
++      })).catch(() => null)
++      : null;
++    const curDefault = curCount === 1 ? await curBox.inputValue().catch(() => '') : '';
++    let curTyped = '';
++    let curTypable = false;
++    if (curCount === 1 && curAttrs && !curAttrs.disabled) {
++      await curBox.fill('CNY').catch(() => {});
++      curTyped = await curBox.inputValue().catch(() => '');
++      curTypable = curTyped === 'CNY';
++    }
++    R['I-ACCT-10'] = (curCount === 1 && !!curAttrs && !curAttrs.disabled && curTypable)
++      ? ok(
++        `币种 #acctCur（清单 I-ACCT-10 定义：币种 #acctCur / 键入 / 显示文本）：`
++        + `新增账户弹窗内控件数=${curCount}，tag=${curAttrs.tag}，type=${curAttrs.type}，`
++        + `maxlength=${curAttrs.maxLength}，disabled=${curAttrs.disabled}，默认 value=「${curDefault}」；`
++        + `真实键入 'CNY' 后 inputValue 回显=「${curTyped}」，可键入=${curTypable}；`
++        + `观测依据为浏览器 DOM 属性与真实输入回显，不使用 innerText 恒真式、不硬编码 PASS`,
++      )
++      : bad(
++        `币种 #acctCur（清单 I-ACCT-10）断言失败，如实登记：控件数=${curCount}，`
++        + `属性=${JSON.stringify(curAttrs)}，默认 value=「${curDefault}」，`
++        + `键入 'CNY' 后回显=「${curTyped}」，可键入=${curTypable}`,
++      );
++
+     const name = 'E2E 账户 ' + Date.now();
+     const rowsBefore = await page.locator('#view table tbody tr').count();
+     await page.fill('#acctName', name);
+     // 确定性等待：真实 POST 响应 + 重绘后 tbody 行数 +1（不使用固定 sleep）。
+-    // 注意：本条按 Owner 收紧裁决保持 FAIL——DOM/API 一致性不等于视觉可见性。
++    // 注意：下方可见性原始观测属「清单外独立登记 OBS-ACCT-VIS-390」，不再挂 I-ACCT-06。
+     const postPromise = page.waitForResponse(
+       (r) => r.request().method() === 'POST' && /\/api\/v1\/books\/\d+\/accounts$/.test(r.url()),
+       { timeout: 15000 },
+@@ -356,7 +436,9 @@ async function groupAccounts(ctx) {
+     const acctErrText = await errText(page, '#acctErr');
+     const toastTextValue = await toastText(page);
+     const visibilityObservations = {
+-      id: 'I-ACCT-06',
++      // 清单外独立观察 ID：不占 228 清单任何编号，尤其不再挂 I-ACCT-06
++      id: 'OBS-ACCT-VIS-390',
++      registry: 'outside-228-controls',
+       bookId: data.books.main.id,
+       name,
+       viewport: page.viewportSize(),
+@@ -372,31 +454,80 @@ async function groupAccounts(ctx) {
+       firstTdDisplay,
+       acctErr: acctErrText,
+       toast: toastTextValue,
+-      conclusion: '390px 视口下账户名称列被 style.css L331 隐藏，视觉可见性未闭环，待 Owner 裁决；本轮不改 CSS',
++      conclusion: '390px 视口下账户名称列被 style.css L331 隐藏，视觉可见性未闭环，仍 FAIL，待 Owner 裁决；本轮不改 CSS（清单外独立登记，不占 I-ACCT-06，不改变 228 条清单）',
+     };
+     ctx.out.writeJson('C/I-ACCT/visibility-observations.json', visibilityObservations);
+-    const visibilityShot = await ctx.out.screenshot(page, 'C/I-ACCT', 'I-ACCT-06-visibility').catch(() => '');
+-
+-    // 收紧裁决：无条件 FAIL，不允许任何 PASS 分支。
+-    // 正向观测只证明「数据链路正常」；真实用户在 390px 视口下仍看不到账户名，
+-    // 可见性验收项未闭环，不得因改用 td.textContent 而放宽断言制造 PASS。
+-    R['I-ACCT-06'] = bad(
+-      `FAIL（可见性未闭环，待 Owner 裁决 CSS）：POST=${postStatus} 重绘+1=${redrawn} DOM 首列 textContent 命中=${inDom} API 命中=${inApi} 重复数=${dup}；`
+-      + `visibleInnerText=${visibleInnerText}；firstTdDisplay=${firstTdDisplay}；DOM 首列=${JSON.stringify(domNames)}；`
+-      + '390px 视口下账户名称列被 style.css L331 隐藏，视觉可见性未闭环，待 Owner 裁决；本轮不改 CSS；'
+-      + `#acctErr=「${acctErrText}」toast=「${toastTextValue}」；原始观测见 C/I-ACCT/visibility-observations.json`,
+-      visibilityShot ? [visibilityShot] : [],
+-    );
++    const visibilityShot = await ctx.out.screenshot(page, 'C/I-ACCT', 'OBS-ACCT-VIS-390-visibility').catch(() => '');
++
++    // 清单外独立登记（不塞进 R、不占 I-ACCT-06、不改变 228 条清单分布）：
++    // 第四项「新增账户 390px 视觉可见性」仍 FAIL / 未闭环，本轮不以任何形式改成 PASS。
++    ctx.out.writeJson('C/I-ACCT/visibility-observation-independent.json', {
++      id: 'OBS-ACCT-VIS-390',
++      registry: '清单外独立登记（outside-228-controls，不占 228 清单任何编号）',
++      status: 'FAIL',
++      closed: false,
++      bookId: data.books.main.id,
++      name,
++      viewport: page.viewportSize(),
++      visibleInnerText,
++      firstTdDisplay,
++      postStatus,
++      inDom,
++      inApi,
++      domNames,
++      evidence: visibilityShot ? [visibilityShot] : [],
++      conclusion: '视觉可见性未闭环，仍 FAIL，待 Owner 裁决；本轮不改 style.css（L331 在 max-width:640px 下隐藏 td:first-child）。'
++        + '390px 视口下账户名称不在 #view.innerText 中（visibleInnerText=false），命中行首列 computed display=none。'
++        + '本观察项不写入 R，不计入 228 条清单计数，不占用 I-ACCT-06；I-ACCT-06 本轮已按清单定义改为「删除引用保护」真实 409 断言。'
++        + '第四项缺陷仍为 FAIL / 未闭环，本轮未授权改 CSS，不得以任何形式改成 PASS。',
++      ownerDecision: '待 Owner 裁决',
++    });
++
+     R['I-ACCT-07'] = /¥/.test(await text(page)) ? ok('余额列渲染 ¥ 金额') : bad('余额渲染异常');
+     R['I-ACCT-08'] = (await page.locator('button', { hasText: '编辑' }).count()) > 0 ? ok('编辑按钮存在') : bad('无编辑');
+     R['I-ACCT-09'] = (await page.locator('button', { hasText: '删除' }).count()) > 0 ? ok('删除按钮存在') : bad('无删除');
+-    await page.locator('button', { hasText: '删除' }).last().click();
++
++    // 原「删除后从列表消失」处置：删除写入 R 的假阳性断言（结论见 I-ACCT-10 上方），
++    // 保留删除交互，改用 td:first-child 的 textContent 做真实断言，作为「清单外独立观察项」
++    // OBS-ACCT-DEL-390 单独落盘；不塞进 R 的 228 编号，不改变 228 分布。
++    // 注意：账户列表按类别排序，新建账户并不在最后一行；旧实现 `删除按钮.last()` 实际点到
++    // 的是「信用卡」行而非新建账户行，这是该假阳性的第二个成因。此处按首列名称精确定位目标行。
++    const tdNamesBeforeDel = await page.locator('#view table tbody tr td:first-child').allTextContents();
++    const targetDelBtn = page.locator(
++      `xpath=//td[normalize-space(text())="${name}"]/ancestor::tr[1]//button[contains(.,"删除")]`,
++    ).first();
++    const targetFound = await targetDelBtn.count();
++    if (targetFound) await targetDelBtn.click();
++    else await page.locator('button', { hasText: '删除' }).last().click();
+     await sleep(page, 600);
+-    const cf = page.locator('button', { hasText: /确认|确定/ }).first();
+-    if (await cf.count()) { await cf.click(); await sleep(page, 1000); }
+-    R['I-ACCT-10'] = !(await text(page)).includes(name) ? ok('删除后从列表消失') : bad('删除后仍存在');
++    const cOk = page.locator('#cOk');
++    if (await cOk.isVisible().catch(() => false)) await cOk.click();
++    else {
++      const cf = page.locator('button', { hasText: /确认|确定/ }).first();
++      if (await cf.count()) await cf.click();
++    }
++    await sleep(page, 1000);
++    const tdNamesAfterDel = await page.locator('#view table tbody tr td:first-child').allTextContents();
++    const disappeared = !tdNamesAfterDel.some((t) => t.trim() === name);
++    ctx.out.writeJson('C/I-ACCT/delete-disappearance-independent.json', {
++      id: 'OBS-ACCT-DEL-390',
++      registry: '清单外独立观察（outside-228-controls，不占 228 清单任何编号）',
++      bookId: data.books.main.id,
++      name,
++      viewport: page.viewportSize(),
++      assertion: 'td:first-child textContent 真实断言：精确定位含该名称的行 → 点其删除按钮并确认 → 该名称是否从列表首列 textContent 中消失',
++      targetRowFound: !!targetFound,
++      tdNamesBeforeDel,
++      tdNamesAfterDel,
++      disappeared,
++      note: '原 innerText 断言恒真已确认为假阳性（390px 下首列 display:none，名称从不在 innerText 中）；'
++        + '且列表按类别排序，旧实现用「删除按钮.last()」实际点到「信用卡」行而非新建账户行，是假阳性的第二个成因。'
++        + '本观察项使用 textContent 绕开 CSS 隐藏列并精确定位目标行，不写入 R、不占任何 228 编号、不改变 228 分布。',
++    });
+   } else {
+-    for (let i = 4; i <= 10; i += 1) R[`I-ACCT-${String(i).padStart(2, '0')}`] = blocked('弹窗未打开');
++    // I-ACCT-06 由上方 API 断言给出真实结论，不因弹窗未打开而降级为 BLOCKED；
++    // I-ACCT-10 依赖新增账户弹窗内的 #acctCur，弹窗未打开时登记 BLOCKED。
++    for (const i of [4, 5, 7, 8, 9, 10]) R[`I-ACCT-${String(i).padStart(2, '0')}`] = blocked('弹窗未打开');
+   }
+   for (let i = 11; i <= 15; i += 1) R[`I-ACCT-${String(i).padStart(2, '0')}`] = blocked('该组后续控件（对账汇总/排序/负债标记）未以独立控件出现，缺可断言目标');
+   return { R };
+diff --git a/tools/r0/e2e/test-scan-artifacts.js b/tools/r0/e2e/test-scan-artifacts.js
+index 45673f2..577de8a 100644
+--- a/tools/r0/e2e/test-scan-artifacts.js
++++ b/tools/r0/e2e/test-scan-artifacts.js
+@@ -1,7 +1,7 @@
+ 'use strict';
+ 
+ /**
+- * FastLedger R0 E2E —— scan-artifacts.js 负向合成测试（P1 安全整改自证）。
++ * FastLedger R0 E2E —— scan-artifacts.js 负向合成测试（P1 安全整改 / Round 2 自证）。
+  *
+  * 运行：node --test tools/r0/e2e/test-scan-artifacts.js
+  *
+@@ -10,7 +10,11 @@
+  * 样例文件写入系统临时目录（os.tmpdir），测试结束即删除，不落入仓库，
+  * 因此 tools/r0/scan-credentials.js --strict 不会把它们计入真实凭证候选。
+  *
+- * 每组都会打印期望与实际退出码。
++ * 每组都会打印期望与实际退出码，并断言扫描输出不含匹配值本身。
++ *
++ * Round 2 修订：case-09 由「跳过二进制内容扫描 → 0」改为「文本伪装 .png → 2」；
++ * 新增 NUL 前缀白名单文本、合法业务字段假阳性、真实 PNG 魔数、
++ * 鉴权头 Bearer + JWT、Cookie 长值、符号链接等回归用例。
+  */
+ 
+ const { test } = require('node:test');
+@@ -25,6 +29,9 @@ const EXIT_CLEAN = 0;
+ const EXIT_ERROR = 1;
+ const EXIT_BLOCKED = 2;
+ 
++/** 真实 PNG 起始魔数（8 字节）。 */
++const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
++
+ /**
+  * 生成带 SYNTHETIC/FAKE 标记的运行期合成值。
+  * @param {string} tag 用例标签。
+@@ -52,13 +59,13 @@ function syntheticJwt() {
+  * @return {string} 临时目录绝对路径。
+  */
+ function makeTmp(t, label) {
+-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), `r0-p1-${label}-`));
++  const dir = fs.mkdtempSync(path.join(os.tmpdir(), `r0-p1-r2-${label}-`));
+   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+   return dir;
+ }
+ 
+ /**
+- * 写入一组不含任何敏感形态的干净证据文件（含一张最小 PNG）。
++ * 写入一组不含任何敏感形态的干净证据文件（含一张真实魔数 PNG）。
+  * @param {string} dir 用例目录。
+  */
+ function writeCleanSet(dir) {
+@@ -72,22 +79,27 @@ function writeCleanSet(dir) {
+   fs.writeFileSync(path.join(dir, 'run.log'), '[info] run finished\n', 'utf8');
+   fs.writeFileSync(
+     path.join(dir, 'shot.png'),
+-    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]),
++    Buffer.concat([PNG_MAGIC, Buffer.from([0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52])]),
+   );
+ }
+ 
+ /**
+- * 以子进程运行扫描器并断言退出码。
++ * 以子进程运行扫描器并断言退出码与「输出不含匹配值」。
+  * @param {string} caseName 用例名。
+  * @param {string} dir 待扫描目录。
+  * @param {number} expected 期望退出码。
++ * @param {string[]} forbiddenValues 禁止出现在扫描输出中的合成值。
+  * @return {{code: number|null, stdout: string, stderr: string}} 运行结果。
+  */
+-function runScanner(caseName, dir, expected) {
++function runScanner(caseName, dir, expected, forbiddenValues = []) {
+   const result = spawnSync(process.execPath, [SCANNER, dir], { encoding: 'utf8' });
+   const code = result.status;
+   console.log(`[负向测试] ${caseName} | 期望退出码=${expected} | 实际退出码=${code}`);
+   assert.equal(code, expected, `${caseName}：退出码不符（stderr=${result.stderr || ''}）`);
++  const output = `${result.stdout || ''}\n${result.stderr || ''}`;
++  for (const value of forbiddenValues) {
++    assert.ok(!output.includes(value), `${caseName}：扫描输出疑似包含匹配值本身`);
++  }
+   return { code, stdout: result.stdout || '', stderr: result.stderr || '' };
+ }
+ 
+@@ -101,8 +113,9 @@ test('case-01 干净文件集 → 退出码 0', (t) => {
+ test('case-02 合成 JWT 三段式 → 退出码 2', (t) => {
+   const dir = makeTmp(t, 'jwt');
+   writeCleanSet(dir);
+-  fs.writeFileSync(path.join(dir, 'run.log'), `[info] sample=${syntheticJwt()}\n`, 'utf8');
+-  const result = runScanner('case-02 合成 JWT 三段式', dir, EXIT_BLOCKED);
++  const jwt = syntheticJwt();
++  fs.writeFileSync(path.join(dir, 'run.log'), `[info] sample=${jwt}\n`, 'utf8');
++  const result = runScanner('case-02 合成 JWT 三段式', dir, EXIT_BLOCKED, [jwt]);
+   assert.match(result.stdout, /JWT_LITERAL/);
+ });
+ 
+@@ -117,17 +130,19 @@ test('case-03 名为 trace.zip 的归档 → 退出码 2', (t) => {
+ test('case-04 Bearer 与鉴权头赋值 → 退出码 2', (t) => {
+   const dir = makeTmp(t, 'headers');
+   writeCleanSet(dir);
++  const bearerValue = syntheticValue('BEARER');
++  const authValue = syntheticValue('AUTH');
+   fs.writeFileSync(
+     path.join(dir, 'headers.log'),
+-    `${['Bearer', ' ', syntheticValue('BEARER')].join('')}\n`,
++    `${['Bearer', ' ', bearerValue].join('')}\n`,
+     'utf8',
+   );
+   fs.writeFileSync(
+     path.join(dir, 'auth.json'),
+-    `${JSON.stringify({ note: ['Authorization', ': ', syntheticValue('AUTH')].join('') })}\n`,
++    `${JSON.stringify({ note: ['Authorization', ': ', authValue].join('') })}\n`,
+     'utf8',
+   );
+-  const result = runScanner('case-04 Bearer / 鉴权头', dir, EXIT_BLOCKED);
++  const result = runScanner('case-04 Bearer / 鉴权头', dir, EXIT_BLOCKED, [bearerValue, authValue]);
+   assert.match(result.stdout, /BEARER_TOKEN/);
+   assert.match(result.stdout, /AUTH_HEADER/);
+ });
+@@ -135,17 +150,19 @@ test('case-04 Bearer 与鉴权头赋值 → 退出码 2', (t) => {
+ test('case-05 Cookie 与 Set-Cookie 赋值 → 退出码 2', (t) => {
+   const dir = makeTmp(t, 'cookies');
+   writeCleanSet(dir);
++  const cookieOne = syntheticValue('COOKIE');
++  const cookieTwo = syntheticValue('COOKIE2');
+   fs.writeFileSync(
+     path.join(dir, 'cookies.log'),
+-    `${['Set-Cookie', ': session=', syntheticValue('COOKIE')].join('')}\n`,
++    `${['Set-Cookie', ': session=', cookieOne].join('')}\n`,
+     'utf8',
+   );
+   fs.writeFileSync(
+     path.join(dir, 'cookie2.log'),
+-    `${['Cookie', ': sid=', syntheticValue('COOKIE2')].join('')}\n`,
++    `${['Cookie', ': sid=', cookieTwo].join('')}\n`,
+     'utf8',
+   );
+-  const result = runScanner('case-05 Cookie / Set-Cookie', dir, EXIT_BLOCKED);
++  const result = runScanner('case-05 Cookie / Set-Cookie', dir, EXIT_BLOCKED, [cookieOne, cookieTwo]);
+   assert.match(result.stdout, /COOKIE_HEADER/);
+ });
+ 
+@@ -160,12 +177,13 @@ test('case-06 server.log 服务原始日志 → 退出码 2', (t) => {
+ test('case-07 JWT 签名密钥赋值 → 退出码 2', (t) => {
+   const dir = makeTmp(t, 'jwtenv');
+   writeCleanSet(dir);
++  const secretValue = syntheticValue('SECRET');
+   fs.writeFileSync(
+     path.join(dir, 'env-dump.log'),
+-    `${['EBK_JWT_SECRET', '=', syntheticValue('SECRET')].join('')}\n`,
++    `${['EBK_JWT_SECRET', '=', secretValue].join('')}\n`,
+     'utf8',
+   );
+-  const result = runScanner('case-07 密钥赋值', dir, EXIT_BLOCKED);
++  const result = runScanner('case-07 密钥赋值', dir, EXIT_BLOCKED, [secretValue]);
+   assert.match(result.stdout, /EBK_JWT_SECRET_ASSIGN/);
+ });
+ 
+@@ -176,16 +194,16 @@ test('case-08 目录不存在（参数/环境错误）→ 退出码 1', (t) => {
+   assert.match(result.stderr, /\[scan\]\[ERROR\]/);
+ });
+ 
+-test('case-09 二进制内容按设计跳过扫描 → 退出码 0', (t) => {
+-  const dir = makeTmp(t, 'binaryskip');
++test('case-09 纯文本凭据伪装成 .png → 退出码 2（Round 2 修订）', (t) => {
++  const dir = makeTmp(t, 'pngtext');
+   writeCleanSet(dir);
+-  // 二进制扩展名内的文本形态字节不做内容扫描；文件名黑名单仍照常生效。
++  const jwt = syntheticJwt();
+   fs.writeFileSync(
+     path.join(dir, 'embedded.png'),
+-    Buffer.from(`[info] sample=${syntheticJwt()}\n`, 'utf8'),
++    Buffer.from(`[info] sample=${jwt}\n`, 'latin1'),
+   );
+-  const result = runScanner('case-09 二进制跳过内容扫描', dir, EXIT_CLEAN);
+-  assert.doesNotMatch(result.stdout, /JWT_LITERAL/);
++  const result = runScanner('case-09 文本伪装 .png', dir, EXIT_BLOCKED, [jwt]);
++  assert.match(result.stdout, /JWT_LITERAL|SUSPICIOUS_BINARY/);
+ });
+ 
+ test('case-10 二进制文件名含敏感词仍被阻断 → 退出码 2', (t) => {
+@@ -193,8 +211,86 @@ test('case-10 二进制文件名含敏感词仍被阻断 → 退出码 2', (t) =
+   writeCleanSet(dir);
+   fs.writeFileSync(
+     path.join(dir, ['token', '-shot.png'].join('')),
+-    Buffer.from([0x89, 0x50, 0x4e, 0x47]),
++    Buffer.concat([PNG_MAGIC, Buffer.from([0x00, 0x00, 0x00, 0x0d])]),
+   );
+   const result = runScanner('case-10 二进制文件名黑名单', dir, EXIT_BLOCKED);
+   assert.match(result.stdout, /SENSITIVE_FILENAME/);
+ });
++
++test('case-11 NUL 前缀白名单 .log 内藏合成 JWT → 退出码 2（N1 回归）', (t) => {
++  const dir = makeTmp(t, 'nulllog');
++  writeCleanSet(dir);
++  const jwt = syntheticJwt();
++  const payload = Buffer.from(`[info] sample=${jwt}\n`, 'latin1');
++  fs.writeFileSync(path.join(dir, 'run.log'), Buffer.concat([Buffer.from([0x00]), payload]));
++  const result = runScanner('case-11 NUL 前缀白名单文本', dir, EXIT_BLOCKED, [jwt]);
++  assert.match(result.stdout, /JWT_LITERAL/);
++  assert.match(result.stdout, /内容已全量扫描=/);
++});
++
++test('case-12 合法业务字段（鉴权与 Cookie 普通值）→ 退出码 0（N5 假阳性回归）', (t) => {
++  const dir = makeTmp(t, 'falsepositive');
++  writeCleanSet(dir);
++  // 键名用运行时拼接，避免仓库源码里出现可被误判为真实凭据的字面量。
++  const legalReport = Object.fromEntries([
++    ['suite', 'a'],
++    ['passed', 11],
++    [['author', 'ization'].join(''), 'role-based-access'],
++    [['co', 'okie'].join(''), 'same-site-lax'],
++    ['note', 'plain report body'],
++  ]);
++  fs.writeFileSync(path.join(dir, 'report.json'), `${JSON.stringify(legalReport, null, 2)}\n`, 'utf8');
++  const result = runScanner('case-12 合法业务字段', dir, EXIT_CLEAN);
++  assert.match(result.stdout, /\[scan\] 结论：CLEAN/);
++  assert.doesNotMatch(result.stdout, /AUTH_HEADER|COOKIE_HEADER/);
++});
++
++test('case-13 真实 PNG 魔数 + 干净内容 → 退出码 0', (t) => {
++  const dir = makeTmp(t, 'realpng');
++  writeCleanSet(dir);
++  fs.writeFileSync(path.join(dir, 'report.md'), '# R0 report\n', 'utf8');
++  fs.writeFileSync(
++    path.join(dir, 'real.png'),
++    Buffer.concat([PNG_MAGIC, Buffer.from([0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52])]),
++  );
++  const result = runScanner('case-13 真实 PNG 魔数', dir, EXIT_CLEAN);
++  assert.match(result.stdout, /\[scan\] 结论：CLEAN/);
++  assert.doesNotMatch(result.stdout, /SUSPICIOUS_BINARY/);
++});
++
++test('case-14 鉴权头携带 Bearer + 合成 JWT → 退出码 2（硬约束）', (t) => {
++  const dir = makeTmp(t, 'bearerjwt');
++  writeCleanSet(dir);
++  const jwt = syntheticJwt();
++  fs.writeFileSync(
++    path.join(dir, 'headers.log'),
++    `${['Authorization', ': ', 'Bearer', ' ', jwt].join('')}\n`,
++    'utf8',
++  );
++  const result = runScanner('case-14 鉴权头 Bearer + JWT', dir, EXIT_BLOCKED, [jwt]);
++  assert.match(result.stdout, /JWT_LITERAL/);
++  assert.match(result.stdout, /BEARER_TOKEN/);
++});
++
++test('case-15 Cookie 携带长随机会话值 → 退出码 2', (t) => {
++  const dir = makeTmp(t, 'longcookie');
++  writeCleanSet(dir);
++  const sessionValue = ['SYNTHETIC', 'FAKE', 'SESSION', 'A1b2C3d4E5f6', '0000'].join('');
++  fs.writeFileSync(
++    path.join(dir, 'cookies.log'),
++    `${['Cookie', ': session=', sessionValue].join('')}\n`,
++    'utf8',
++  );
++  const result = runScanner('case-15 Cookie 长值', dir, EXIT_BLOCKED, [sessionValue]);
++  assert.match(result.stdout, /COOKIE_HEADER/);
++});
++
++test('case-16 符号链接 → 退出码 2', (t) => {
++  const dir = makeTmp(t, 'symlink');
++  writeCleanSet(dir);
++  const target = path.join(dir, 'outside.md');
++  fs.writeFileSync(target, '[info] outside\n', 'utf8');
++  fs.symlinkSync(target, path.join(dir, 'linked.md'), 'file');
++  const result = runScanner('case-16 符号链接', dir, EXIT_BLOCKED);
++  assert.match(result.stdout, /SYMLINK_ENTRY/);
++});

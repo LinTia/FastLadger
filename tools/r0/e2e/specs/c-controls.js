@@ -14,6 +14,7 @@ const path = require('node:path');
 const api = require('../lib/api');
 const { storageStateFor } = require('../lib/fixtures');
 const { attachDiagnostics } = require('../lib/evidence');
+const { runTxnsControls } = require('./txns-controls');
 
 const CONTROLS = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'fixtures', 'controls.json'), 'utf8'));
 const VIEWPORT = { width: 390, height: 844 };
@@ -284,30 +285,72 @@ async function groupTxDetail(ctx) {
   return { R };
 }
 
+/**
+ * I-TXNS-01..19 逐条真实执行（不再整页判空、不再硬编码 BLOCKED）。
+ * 具体配方见 specs/txns-controls.js，与 D 套件共用同一实现以避免重复。
+ */
 async function groupTxns(ctx) {
-  const { page, data, base } = ctx;
-  const R = {};
-  await page.goto(`${base}/#b/${data.books.main.id}/txns`, { waitUntil: 'domcontentloaded' });
-  await sleep(page, 1800);
-  const body = await text(page);
-  if (body.trim().length === 0) {
-    R['I-TXNS-01'] = bad('交易总表 #view 渲染为空——运行时确认该页不可用（需排查 renderTxns）');
-    for (let i = 2; i <= 19; i += 1) R[`I-TXNS-${String(i).padStart(2, '0')}`] = blocked('同页渲染为空，控件不存在，无法执行（同上条缺陷）');
-    return { R };
-  }
-  R['I-TXNS-01'] = /搜索/.test(body) ? ok('搜索控件渲染') : bad('无搜索控件');
-  for (let i = 2; i <= 19; i += 1) R[`I-TXNS-${String(i).padStart(2, '0')}`] = blocked('页面可用性待修复后逐条断言');
-  return { R };
+  return runTxnsControls({
+    page: ctx.page,
+    base: ctx.base,
+    data: ctx.data,
+    out: ctx.out,
+    shotDir: 'C/I-TXNS',
+  });
 }
 
 async function groupAccounts(ctx) {
   const { page, data, base } = ctx;
   const R = {};
+  const bookId = data.books.main.id;
+  const token = data.users.owner.token;
   await page.goto(`${base}/#b/${data.books.main.id}/accounts`, { waitUntil: 'domcontentloaded' });
   await sleep(page, 900);
   const body = await text(page);
   R['I-ACCT-01'] = /现金|储蓄|信用卡/.test(body) ? ok('账户行渲染（现金/储蓄/信用卡）') : bad('未渲染');
   R['I-ACCT-02'] = (await page.locator('button', { hasText: '＋ 新增账户' }).count()) > 0 ? ok('新增账户按钮存在') : bad('无新增按钮');
+
+  // ——— I-ACCT-06：按 228 清单定义「删除引用保护」真实执行 ———
+  // 历史错位：原实现把 I-ACCT-06 写成「新增账户名称 390px 不可见」的无条件 FAIL，
+  // 而清单 I-ACCT-06 的定义是「删除引用保护 / 账户被交易引用 / 确认删除 / 后端 409」，
+  // 该控件从未被真正测过。本轮改为真实 API 断言，PASS 条件 = 409 && msg 命中 && 回读仍在。
+  // 目标账户选择理由：直接用 data.ids.cashId（种子「现金」账户）。bootstrap 已用该账户
+  // 创建「早餐」「工资」等活跃交易，以及一笔软删除交易「待删除」；后端 Delete() 的引用检查
+  // 覆盖软删除交易（account.go GPT-R31），因此它 100% 被交易引用，无需在组内再造账户/交易，
+  // 避免额外写操作与不确定性。删除路由 DELETE /api/v1/books/:id/accounts/:accountId，
+  // 无需 clientUuid（与前端 app.js L718 一致）。
+  try {
+    const cashId = data.ids.cashId;
+    const accountsBeforeDelete = await api.accounts(base, token, bookId);
+    const cashBefore = accountsBeforeDelete.find((a) => a.id === cashId) || null;
+    const delResp = await api.raw(base, 'DELETE', `/api/v1/books/${bookId}/accounts/${cashId}`, { token });
+    const delStatus = delResp.status;
+    const delMsg = delResp.json && delResp.json.msg ? String(delResp.json.msg) : '';
+    const delMsgOk = /账户仍存在交易记录|无法删除|被.*引用|引用.*交易/.test(delMsg);
+    // API 回读：删除后重新拉账户列表，确认该 id 仍在、名称与删除前一致（未被删除）
+    const accountsAfterDelete = await api.accounts(base, token, bookId);
+    const cashAfter = accountsAfterDelete.find((a) => a.id === cashId) || null;
+    const stillExists = !!cashAfter && (!cashBefore || cashAfter.name === cashBefore.name);
+    R['I-ACCT-06'] = (delStatus === 409 && delMsgOk && stillExists)
+      ? ok(
+        `删除引用保护（清单 I-ACCT-06 定义：账户被交易引用 → 确认删除 → 后端 409）：`
+        + `对被引用的「现金」账户 id=${cashId} 发起 DELETE /api/v1/books/${bookId}/accounts/${cashId}`
+        + ` → 真实 HTTP status=${delStatus}，响应 json.msg=「${delMsg}」；`
+        + `API 回读 GET /api/v1/books/${bookId}/accounts：id=${cashId} 仍在，`
+        + `name=「${cashAfter ? cashAfter.name : '(缺失)'}」与删除前 name=「${cashBefore ? cashBefore.name : '(缺失)'}」一致，未被删除；`
+        + `PASS 条件 = (status===409 && msg 含「账户仍存在交易记录」&& 回读仍在) 同时成立`,
+      )
+      : bad(
+        `删除引用保护（清单 I-ACCT-06）未达预期，如实登记：DELETE /api/v1/books/${bookId}/accounts/${cashId}`
+        + ` → 真实 HTTP status=${delStatus}（预期 409），响应 json.msg=「${delMsg}」，msg 命中=${delMsgOk}；`
+        + `API 回读仍在=${stillExists}，回读 id=${cashId} name=「${cashAfter ? cashAfter.name : '(缺失)'}」，`
+        + `删除前 name=「${cashBefore ? cashBefore.name : '(缺失)'}」；`
+        + `PASS 条件 = (409 && msg 含「账户仍存在交易记录」&& 回读仍在) 未同时成立`,
+      );
+  } catch (e) {
+    R['I-ACCT-06'] = bad(`删除引用保护（清单 I-ACCT-06）执行异常，如实登记：${e && e.message ? e.message : e}`);
+  }
+
   await clickBtn(page, '＋ 新增账户');
   await sleep(page, 400);
   const dlg = await page.locator('#acctDlg').evaluate((d) => d.open).catch(() => false);
@@ -315,27 +358,176 @@ async function groupAccounts(ctx) {
   if (dlg) {
     R['I-ACCT-04'] = (await page.locator('#acctName').count()) === 1 ? ok('名称输入 #acctName') : bad('无名称输入');
     R['I-ACCT-05'] = (await page.locator('#acctCat').count()) === 1 ? ok(`类型下拉 #acctCat（${await page.locator('#acctCat option').count()} 项）`) : bad('无类型下拉');
+
+    // ——— I-ACCT-10：按 228 清单定义「币种 `#acctCur`」真实执行 ———
+    // 假阳性结论（本轮确认）：原 R['I-ACCT-10'] = `!(await text(page)).includes(name)`
+    // 用 #view.innerText 判断「删除后从列表消失」，但 390px 视口下 style.css L331 把
+    // td:first-child 设为 display:none，账户名称从不在 innerText 中 → 该断言恒为真（假阳性）；
+    // 而且它测的根本不是清单 I-ACCT-10（币种 #acctCur / 键入 / 显示文本）。
+    // 本轮改为：在新增账户弹窗内断言 #acctCur 存在、可键入（填 CNY 后读回），给出真实观测值。
+    const curBox = page.locator('#acctCur');
+    const curCount = await curBox.count();
+    const curAttrs = curCount === 1
+      ? await curBox.evaluate((e) => ({
+        tag: e.tagName, type: e.type, maxLength: e.maxLength, disabled: e.disabled,
+      })).catch(() => null)
+      : null;
+    const curDefault = curCount === 1 ? await curBox.inputValue().catch(() => '') : '';
+    let curTyped = '';
+    let curTypable = false;
+    if (curCount === 1 && curAttrs && !curAttrs.disabled) {
+      await curBox.fill('CNY').catch(() => {});
+      curTyped = await curBox.inputValue().catch(() => '');
+      curTypable = curTyped === 'CNY';
+    }
+    R['I-ACCT-10'] = (curCount === 1 && !!curAttrs && !curAttrs.disabled && curTypable)
+      ? ok(
+        `币种 #acctCur（清单 I-ACCT-10 定义：币种 #acctCur / 键入 / 显示文本）：`
+        + `新增账户弹窗内控件数=${curCount}，tag=${curAttrs.tag}，type=${curAttrs.type}，`
+        + `maxlength=${curAttrs.maxLength}，disabled=${curAttrs.disabled}，默认 value=「${curDefault}」；`
+        + `真实键入 'CNY' 后 inputValue 回显=「${curTyped}」，可键入=${curTypable}；`
+        + `观测依据为浏览器 DOM 属性与真实输入回显，不使用 innerText 恒真式、不硬编码 PASS`,
+      )
+      : bad(
+        `币种 #acctCur（清单 I-ACCT-10）断言失败，如实登记：控件数=${curCount}，`
+        + `属性=${JSON.stringify(curAttrs)}，默认 value=「${curDefault}」，`
+        + `键入 'CNY' 后回显=「${curTyped}」，可键入=${curTypable}`,
+      );
+
     const name = 'E2E 账户 ' + Date.now();
+    const rowsBefore = await page.locator('#view table tbody tr').count();
     await page.fill('#acctName', name);
+    // 确定性等待：真实 POST 响应 + 重绘后 tbody 行数 +1（不使用固定 sleep）。
+    // 注意：下方可见性原始观测属「清单外独立登记 OBS-ACCT-VIS-390」，不再挂 I-ACCT-06。
+    const postPromise = page.waitForResponse(
+      (r) => r.request().method() === 'POST' && /\/api\/v1\/books\/\d+\/accounts$/.test(r.url()),
+      { timeout: 15000 },
+    ).catch(() => null);
     await page.locator('#acctSubmit').click();
-    await sleep(page, 1300);
-    await sleep(page, 800);
+    const postResp = await postPromise;
+    const redrawn = await page.waitForFunction(
+      (n) => {
+        const v = document.querySelector('#view');
+        return !!v && v.querySelectorAll('table tbody tr').length === n;
+      },
+      rowsBefore + 1,
+      { timeout: 10000 },
+    ).then(() => true).catch(() => false);
+    const domNames = await page.locator('#view table tbody tr td:first-child').allTextContents();
+    const inDom = domNames.some((t) => t.trim() === name);
     const apiAccs = await api.accounts(base, data.users.owner.token, data.books.main.id);
     const inApi = apiAccs.some((a) => a.name === name);
-    const inUi = await waitText(page, name, 6000);
-    R['I-ACCT-06'] = inApi && inUi
-      ? ok(`创建成功并在页面渲染：${name}`)
-      : bad(`创建后 API 可见=${inApi} 页面可见=${inUi}（疑似列表未刷新，需 QA 复现确认）；#acctErr=「${await errText(page, '#acctErr')}」toast=「${await toastText(page)}」`);
+    const dup = apiAccs.filter((a) => a.name === name).length;
+    const postStatus = postResp ? postResp.status() : 0;
+
+    // 视觉可见性原始观测（不得省略）：#view.innerText 是否含名称、命中行的首列 computed display
+    const visibleInnerText = await page.evaluate(
+      (n) => {
+        const v = document.querySelector('#view');
+        return v ? (v.innerText || '').includes(n) : false;
+      },
+      name,
+    );
+    const firstTdDisplay = await page.evaluate((n) => {
+      const tds = Array.from(document.querySelectorAll('#view table tbody tr td:first-child'));
+      const hit = tds.find((td) => (td.textContent || '').trim() === n);
+      return hit ? window.getComputedStyle(hit).display : '(未找到对应 td)';
+    }, name);
+    const acctErrText = await errText(page, '#acctErr');
+    const toastTextValue = await toastText(page);
+    const visibilityObservations = {
+      // 清单外独立观察 ID：不占 228 清单任何编号，尤其不再挂 I-ACCT-06
+      id: 'OBS-ACCT-VIS-390',
+      registry: 'outside-228-controls',
+      bookId: data.books.main.id,
+      name,
+      viewport: page.viewportSize(),
+      postStatus,
+      rowsBefore,
+      rowsAfterExpected: rowsBefore + 1,
+      redrawn,
+      inDom,
+      inApi,
+      dup,
+      domNames,
+      visibleInnerText,
+      firstTdDisplay,
+      acctErr: acctErrText,
+      toast: toastTextValue,
+      conclusion: '390px 视口下账户名称列被 style.css L331 隐藏，视觉可见性未闭环，仍 FAIL，待 Owner 裁决；本轮不改 CSS（清单外独立登记，不占 I-ACCT-06，不改变 228 条清单）',
+    };
+    ctx.out.writeJson('C/I-ACCT/visibility-observations.json', visibilityObservations);
+    const visibilityShot = await ctx.out.screenshot(page, 'C/I-ACCT', 'OBS-ACCT-VIS-390-visibility').catch(() => '');
+
+    // 清单外独立登记（不塞进 R、不占 I-ACCT-06、不改变 228 条清单分布）：
+    // 第四项「新增账户 390px 视觉可见性」仍 FAIL / 未闭环，本轮不以任何形式改成 PASS。
+    ctx.out.writeJson('C/I-ACCT/visibility-observation-independent.json', {
+      id: 'OBS-ACCT-VIS-390',
+      registry: '清单外独立登记（outside-228-controls，不占 228 清单任何编号）',
+      status: 'FAIL',
+      closed: false,
+      bookId: data.books.main.id,
+      name,
+      viewport: page.viewportSize(),
+      visibleInnerText,
+      firstTdDisplay,
+      postStatus,
+      inDom,
+      inApi,
+      domNames,
+      evidence: visibilityShot ? [visibilityShot] : [],
+      conclusion: '视觉可见性未闭环，仍 FAIL，待 Owner 裁决；本轮不改 style.css（L331 在 max-width:640px 下隐藏 td:first-child）。'
+        + '390px 视口下账户名称不在 #view.innerText 中（visibleInnerText=false），命中行首列 computed display=none。'
+        + '本观察项不写入 R，不计入 228 条清单计数，不占用 I-ACCT-06；I-ACCT-06 本轮已按清单定义改为「删除引用保护」真实 409 断言。'
+        + '第四项缺陷仍为 FAIL / 未闭环，本轮未授权改 CSS，不得以任何形式改成 PASS。',
+      ownerDecision: '待 Owner 裁决',
+    });
+
     R['I-ACCT-07'] = /¥/.test(await text(page)) ? ok('余额列渲染 ¥ 金额') : bad('余额渲染异常');
     R['I-ACCT-08'] = (await page.locator('button', { hasText: '编辑' }).count()) > 0 ? ok('编辑按钮存在') : bad('无编辑');
     R['I-ACCT-09'] = (await page.locator('button', { hasText: '删除' }).count()) > 0 ? ok('删除按钮存在') : bad('无删除');
-    await page.locator('button', { hasText: '删除' }).last().click();
+
+    // 原「删除后从列表消失」处置：删除写入 R 的假阳性断言（结论见 I-ACCT-10 上方），
+    // 保留删除交互，改用 td:first-child 的 textContent 做真实断言，作为「清单外独立观察项」
+    // OBS-ACCT-DEL-390 单独落盘；不塞进 R 的 228 编号，不改变 228 分布。
+    // 注意：账户列表按类别排序，新建账户并不在最后一行；旧实现 `删除按钮.last()` 实际点到
+    // 的是「信用卡」行而非新建账户行，这是该假阳性的第二个成因。此处按首列名称精确定位目标行。
+    const tdNamesBeforeDel = await page.locator('#view table tbody tr td:first-child').allTextContents();
+    const targetDelBtn = page.locator(
+      `xpath=//td[normalize-space(text())="${name}"]/ancestor::tr[1]//button[contains(.,"删除")]`,
+    ).first();
+    const targetFound = await targetDelBtn.count();
+    if (targetFound) await targetDelBtn.click();
+    else await page.locator('button', { hasText: '删除' }).last().click();
     await sleep(page, 600);
-    const cf = page.locator('button', { hasText: /确认|确定/ }).first();
-    if (await cf.count()) { await cf.click(); await sleep(page, 1000); }
-    R['I-ACCT-10'] = !(await text(page)).includes(name) ? ok('删除后从列表消失') : bad('删除后仍存在');
+    const cOk = page.locator('#cOk');
+    if (await cOk.isVisible().catch(() => false)) await cOk.click();
+    else {
+      const cf = page.locator('button', { hasText: /确认|确定/ }).first();
+      if (await cf.count()) await cf.click();
+    }
+    await sleep(page, 1000);
+    const tdNamesAfterDel = await page.locator('#view table tbody tr td:first-child').allTextContents();
+    const disappeared = !tdNamesAfterDel.some((t) => t.trim() === name);
+    ctx.out.writeJson('C/I-ACCT/delete-disappearance-independent.json', {
+      id: 'OBS-ACCT-DEL-390',
+      registry: '清单外独立观察（outside-228-controls，不占 228 清单任何编号）',
+      bookId: data.books.main.id,
+      name,
+      viewport: page.viewportSize(),
+      assertion: 'td:first-child textContent 真实断言：精确定位含该名称的行 → 点其删除按钮并确认 → 该名称是否从列表首列 textContent 中消失',
+      targetRowFound: !!targetFound,
+      tdNamesBeforeDel,
+      tdNamesAfterDel,
+      disappeared,
+      note: '原 innerText 断言恒真已确认为假阳性（390px 下首列 display:none，名称从不在 innerText 中）；'
+        + '且列表按类别排序，旧实现用「删除按钮.last()」实际点到「信用卡」行而非新建账户行，是假阳性的第二个成因。'
+        + '本观察项使用 textContent 绕开 CSS 隐藏列并精确定位目标行，不写入 R、不占任何 228 编号、不改变 228 分布。',
+    });
   } else {
-    for (let i = 4; i <= 10; i += 1) R[`I-ACCT-${String(i).padStart(2, '0')}`] = blocked('弹窗未打开');
+    // I-ACCT-06 由上方 API 断言给出真实结论，不因弹窗未打开而降级为 BLOCKED；
+    // I-ACCT-10 依赖新增账户弹窗内的 #acctCur，弹窗未打开时登记 BLOCKED。
+    for (const i of [4, 5, 7, 8, 9, 10]) R[`I-ACCT-${String(i).padStart(2, '0')}`] = blocked('弹窗未打开');
   }
   for (let i = 11; i <= 15; i += 1) R[`I-ACCT-${String(i).padStart(2, '0')}`] = blocked('该组后续控件（对账汇总/排序/负债标记）未以独立控件出现，缺可断言目标');
   return { R };

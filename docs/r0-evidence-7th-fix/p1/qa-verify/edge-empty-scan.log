@@ -1,0 +1,7 @@
+[scan] 待上传目录：<仓库外:empty-dest>
+[scan] 文件总数=0 文本已扫描=0 二进制跳过内容扫描=0 符号链接=0
+[scan] 命中明细（仅文件路径 + 命中类型 + 命中数量，不输出匹配值）：
+[HIT] （无） | — | 0
+[scan] 命中文件/类型组合=0 命中总数=0
+[scan][WARN] 目录为空；上传 step 的 if-no-files-found=error 仍会使 job 失败
+[scan] 结论：CLEAN —— 允许上传

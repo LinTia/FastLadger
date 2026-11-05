@@ -1,0 +1,11 @@
+id=42029758227
+name=R0 E2E
+event=pull_request
+status=completed
+conclusion=success
+head_branch=fix/r0-sixth-runtime-defects
+head_sha=0c62f5017c8b616f6d0c5079c55a9b4a13d1f68f
+created_at=2026-11-05T12:44:54Z
+run_started_at=2026-11-05T12:44:54Z
+html_url=https://github.com/LinTia/FastLadger/actions/runs/42029758227
+pull_requests_count=1

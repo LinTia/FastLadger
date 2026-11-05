@@ -3,9 +3,23 @@
 /**
  * R0 自动化验收入口。
  *
- *   node run.js --suite a       # 包 A：11 项状态/权限/同步场景
- *   node run.js --suite c       # 包 C：228 条控件
- *   node run.js --suite all
+ *   node run.js --suite a       # 包 A：11 项状态/权限/同步场景（门禁型）
+ *   node run.js --suite c       # 包 C：228 条逐控件运行时验收（报告型）
+ *   node run.js --suite d       # 包 D：第七次 4 项缺陷回归（含 I-TXNS-01..19 逐条重跑，门禁型）
+ *   node run.js --suite all     # = A + D + C（全部适用套件），按 a → d → c 顺序执行
+ *
+ * 套件与分工（P2 整改，与 .github/workflows/r0-e2e.yml 对齐）：
+ *   · A —— 11 项状态/权限/同步场景，门禁型；
+ *   · C —— 228 条逐控件运行时验收，报告型（PASS/FAIL 分布本身就是结论，允许既有 FAIL）；
+ *   · D —— 第七次 4 项已确认业务缺陷的回归，门禁型；
+ *   · all —— 包含 A / D / C 三个套件。顺序取 a → d → c：让 D 在 C 的报告型写操作
+ *           （编辑/删除首笔交易、改角色、退出登录、生成 Token 等）之前执行，避免 C 污染
+ *           D 的回归数据；C 作为报告型放最后。B 不在 all 内（见下）。
+ *   · B —— 「分类解析合成测试 + 22 笔分类映射回归审计」**不在本运行器 suite 体系内**，
+ *           由 .github/workflows/r0-e2e.yml 的独立 step 执行：
+ *             node --test tools/r0/test-resolve-category.js
+ *             node tools/r0/e2e/scripts/reseed-audit.js   （env R0_SERVER_BIN=<server/fastledger>）
+ *           因此 --suite all 不含 B，也不代表 B 无需运行 / 已通过。
  *
  * 环境变量：
  *   R0_SERVER_BIN     服务二进制路径（默认 server/fastledger[.exe]）
@@ -14,6 +28,8 @@
  *   R0_DATA_DIR       复用固定实例目录（默认临时目录，运行结束即丢弃）
  *
  * 退出码：0 = 无 FAIL 且 A 无 BLOCKED；1 = 有 FAIL 或 A 有 BLOCKED；2 = 环境错误
+ *   注意：C 为报告型且有既有 FAIL，故 `--suite all` 通常 exit 1，属预期，不代表 D 失败；
+ *   CI 中 C 单步 continue-on-error 的绿色也不等于 228 条全部通过。
  */
 const fs = require('node:fs');
 const os = require('node:os');
@@ -25,6 +41,7 @@ const { RunDir, envInfo } = require('./lib/evidence');
 const { bootstrap } = require('./lib/fixtures');
 const aScenarios = require('./specs/a-scenarios');
 const { runControls } = require('./specs/c-controls');
+const { runDefects } = require('./specs/d-defects');
 
 function parseArgs(argv) {
   const out = { suite: 'all' };
@@ -81,7 +98,11 @@ async function main() {
     });
     process.stdout.write(`BROWSER ${browserHandle.from} channel=${browserHandle.channel} version=${browserHandle.version}\n`);
 
-    const suites = args.suite === 'all' ? ['a', 'c'] : [args.suite];
+    // P2：--suite all 必须包含全部适用套件 A / D / C（原先只有 A + C，漏掉 D）。
+    // 顺序 a → d → c：D 是门禁型回归，放在报告型 C 之前，避免 C 的写操作污染 D 的数据；
+    // B（分类解析合成测试 + 22 笔审计）由 .github/workflows/r0-e2e.yml 独立 step 执行，
+    // 不在本运行器 suite 体系内，故 all 不含 B。不得为了让 all 变绿而放宽 C 断言或跳过 C。
+    const suites = args.suite === 'all' ? ['a', 'd', 'c'] : [args.suite];
     for (const suite of suites) {
       if (suite === 'a') {
         for (const sc of aScenarios) {
@@ -97,6 +118,11 @@ async function main() {
           report.results.push(row);
           process.stdout.write(`${row.status.padEnd(7)} ${row.id} ${row.name} (${row.ms}ms)\n        ${row.detail}\n`);
         }
+        // 与 C / D 对称输出套件汇总，便于 `--suite all` 日志直接看出 A 也已执行并有汇总。
+        const aTally = report.results
+          .filter((r) => r.suite === 'A')
+          .reduce((acc, r) => { acc[r.status] = (acc[r.status] || 0) + 1; return acc; }, {});
+        process.stdout.write(`A 汇总：${JSON.stringify(aTally)}\n`);
       } else if (suite === 'c') {
         const rows = await runControls({ browser: browserHandle.browser, base: server.base, data, runDir });
         for (const r of rows) {
@@ -104,6 +130,13 @@ async function main() {
         }
         const tally = rows.reduce((acc, r) => { acc[r.status] = (acc[r.status] || 0) + 1; return acc; }, {});
         process.stdout.write(`C 汇总：${JSON.stringify(tally)}\n`);
+      } else if (suite === 'd') {
+        const rows = await runDefects({ browser: browserHandle.browser, base: server.base, data, runDir });
+        for (const r of rows) {
+          report.results.push(r);
+        }
+        const tally = rows.reduce((acc, r) => { acc[r.status] = (acc[r.status] || 0) + 1; return acc; }, {});
+        process.stdout.write(`D 汇总：${JSON.stringify(tally)}\n`);
       } else {
         throw new Error(`未知 suite：${suite}`);
       }

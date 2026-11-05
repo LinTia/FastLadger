@@ -1,0 +1,13 @@
+=== QA 独立重跑（不采信工程师 artifacts）===
+=== suite=d ===
+=== 命令: R0_SERVER_BIN=/c/Users/47006/WorkBuddy/fastledger/repo_tmp/server/fastledger.exe R0_BROWSER_CHANNEL=msedge R0_ARTIFACT_DIR=/c/Users/47006/WorkBuddy/fastledger/repo_tmp/artifacts/r0-qa-verify node run.js --suite d ===
+=== 开始(UTC): 2026-11-05T10:00:07Z ===
+SERVER up http://127.0.0.1:60064 schema=8
+BROWSER playwright-core channel=msedge version=156.0.4314.58
+D 汇总：{"PASS":39}
+
+SUMMARY {"D:PASS":39,"total":39}
+ARTIFACTS C:\Users\47006\WorkBuddy\fastledger\repo_tmp\artifacts\r0-qa-verify\2026-11-05_10-00-07-dadc9a3-d
+CHECKSUMS 46 files
+=== 结束(UTC): 2026-11-05T10:00:44Z ===
+=== EXIT_CODE=0 ===

@@ -1,0 +1,419 @@
+
+=== 场景 A · NUL 前缀白名单 .log（QA e2e-06 复刻）===
+--- prepare（NUL .log） 实际退出码=0 ---
+[prepare] 源目录：<仓库外:nul-src>
+[prepare] 目标目录：<仓库外:nul-dest>（运行前已清空）
+[prepare] 白名单：.png .md .json .log .txt
+[prepare] 排除清单（共 0，仅文件名与原因，不含内容）：
+  （无）
+[prepare] 收集清单（共 2，仅文件名，不含内容）：
+  - report.md
+  - run.log
+[prepare] 符号链接跳过：0
+[prepare] 汇总：扫描=2 收集=2 排除=0 符号链接跳过=0
+[prepare] 结论：OK（输出目录已就绪，仍需经 scan-artifacts.js 扫描后方可上传）
+[PASS] prepare 退出 0 且确实收集了 run.log
+--- scan（NUL .log） 实际退出码=2 ---
+[scan] 待上传目录：<仓库外:nul-dest>
+[scan] 文件总数=2 内容已全量扫描=2 其中二进制文件=0 跳过内容扫描=0 符号链接=0
+[scan] 扫描口径：全部文件以 latin1 逐字节映射后应用 5 条文本规则，无任何内容跳过分支
+[scan] 命中明细（仅文件路径 + 命中类型 + 命中数量，不输出匹配值）：
+[HIT] run.log | JWT_LITERAL | 1
+[scan] 命中文件/类型组合=1 命中总数=1
+[scan] 结论：BLOCKED —— 禁止上传，请先清除上述命中项
+[PASS] scan 退出 2（失败关闭，不再静默 CLEAN） :: 实际退出码=2
+[PASS] 命中 JWT_LITERAL
+[PASS] 输出不含合成值本身
+[PASS] 统计口径为全量扫描、跳过=0
+结论：该文件会被阻断、不会上传（scan=2 → artifact_scan.outcome=failure → 上传 step 被跳过）
+
+=== 场景 B · 纯文本凭据伪装 .png（QA e2e-05 复刻）===
+--- prepare（文本伪装 .png） 实际退出码=0 ---
+[prepare] 源目录：<仓库外:png-src>
+[prepare] 目标目录：<仓库外:png-dest>（运行前已清空）
+[prepare] 白名单：.png .md .json .log .txt
+[prepare] 排除清单（共 0，仅文件名与原因，不含内容）：
+  （无）
+[prepare] 收集清单（共 2，仅文件名，不含内容）：
+  - report.md
+  - shot.png
+[prepare] 符号链接跳过：0
+[prepare] 汇总：扫描=2 收集=2 排除=0 符号链接跳过=0
+[prepare] 结论：OK（输出目录已就绪，仍需经 scan-artifacts.js 扫描后方可上传）
+[PASS] prepare 退出 0 且确实收集了 shot.png
+--- scan（文本伪装 .png） 实际退出码=2 ---
+[scan] 待上传目录：<仓库外:png-dest>
+[scan] 文件总数=2 内容已全量扫描=2 其中二进制文件=1 跳过内容扫描=0 符号链接=0
+[scan] 扫描口径：全部文件以 latin1 逐字节映射后应用 5 条文本规则，无任何内容跳过分支
+[scan] 命中明细（仅文件路径 + 命中类型 + 命中数量，不输出匹配值）：
+[HIT] shot.png | JWT_LITERAL | 1
+[HIT] shot.png | SUSPICIOUS_BINARY | 1
+[scan] 命中文件/类型组合=2 命中总数=2
+[scan] 结论：BLOCKED —— 禁止上传，请先清除上述命中项
+[PASS] scan 退出 2（失败关闭，不再静默 CLEAN） :: 实际退出码=2
+[PASS] 命中 JWT_LITERAL 或 SUSPICIOUS_BINARY
+[PASS] 输出不含合成值本身
+结论：该文件会被阻断、不会上传（scan=2 → artifact_scan.outcome=failure → 上传 step 被跳过）
+
+=== 场景 C · 合法业务字段（N5 假阳性回归）===
+--- scan（合法业务字段） 实际退出码=0 ---
+[scan] 待上传目录：<仓库外:false-positive>
+[scan] 文件总数=1 内容已全量扫描=1 其中二进制文件=0 跳过内容扫描=0 符号链接=0
+[scan] 扫描口径：全部文件以 latin1 逐字节映射后应用 5 条文本规则，无任何内容跳过分支
+[scan] 命中明细（仅文件路径 + 命中类型 + 命中数量，不输出匹配值）：
+[HIT] （无） | — | 0
+[scan] 命中文件/类型组合=0 命中总数=0
+[scan] 结论：CLEAN —— 允许上传
+[PASS] scan 退出 0（不再误阻断合法证据） :: 实际退出码=0
+[PASS] 未命中 AUTH_HEADER / COOKIE_HEADER
+
+=== 场景 E · 真实 PNG 魔数 + 内容内嵌合成 JWT（证明零跳过分支）===
+--- prepare（真实 PNG + 内嵌 JWT） 实际退出码=0 ---
+[prepare] 源目录：<仓库外:realpng-jwt-src>
+[prepare] 目标目录：<仓库外:realpng-jwt-dest>（运行前已清空）
+[prepare] 白名单：.png .md .json .log .txt
+[prepare] 排除清单（共 0，仅文件名与原因，不含内容）：
+  （无）
+[prepare] 收集清单（共 2，仅文件名，不含内容）：
+  - real-with-text.png
+  - report.md
+[prepare] 符号链接跳过：0
+[prepare] 汇总：扫描=2 收集=2 排除=0 符号链接跳过=0
+[prepare] 结论：OK（输出目录已就绪，仍需经 scan-artifacts.js 扫描后方可上传）
+[PASS] prepare 退出 0 且确实收集该 PNG
+--- scan（真实 PNG + 内嵌 JWT） 实际退出码=2 ---
+[scan] 待上传目录：<仓库外:realpng-jwt-dest>
+[scan] 文件总数=2 内容已全量扫描=2 其中二进制文件=1 跳过内容扫描=0 符号链接=0
+[scan] 扫描口径：全部文件以 latin1 逐字节映射后应用 5 条文本规则，无任何内容跳过分支
+[scan] 命中明细（仅文件路径 + 命中类型 + 命中数量，不输出匹配值）：
+[HIT] real-with-text.png | JWT_LITERAL | 1
+[scan] 命中文件/类型组合=1 命中总数=1
+[scan] 结论：BLOCKED —— 禁止上传，请先清除上述命中项
+[PASS] scan 退出 2（魔数符合仍被文本规则阻断） :: 实际退出码=2
+[PASS] 命中 JWT_LITERAL
+[PASS] 未记 SUSPICIOUS_BINARY（证明魔数校验本身通过）
+[PASS] 输出不含合成值本身
+结论：魔数符合也照样过文本规则，零跳过分支生效；该文件会被阻断、不会上传
+
+=== 场景 F · 扫描器源码零跳过分支静态核验 ===
+[PASS] 主扫描循环存在且可定位 :: 切片长度=1005
+[PASS] 源码不含 looksBinary
+[PASS] 源码不含 binarySkipped
+[PASS] 主扫描循环内无任何 continue 语句（零内容跳过分支）
+[PASS] 主扫描循环使用 latin1 逐字节映射
+[PASS] 魔数是额外命中条件而非放行通行证
+[PASS] 统计口径如实：跳过内容扫描=0
+[PASS] MAX_TEXT_BYTES 超限仍抛错（退出 1）
+结论：交付态扫描器不存在任何「静默跳过内容扫描后返回 CLEAN」的分支
+
+=== 场景 D · 干净真实产物链路（r0-qa-verify）===
+--- prepare（r0-qa-verify） 实际退出码=0 ---
+[prepare] 源目录：artifacts/r0-qa-verify
+[prepare] 目标目录：<仓库外:clean-r0-qa-verify-dest>（运行前已清空）
+[prepare] 白名单：.png .md .json .log .txt
+[prepare] 排除清单（共 12，仅文件名与原因，不含内容）：
+  - 2026-11-05_09-59-36-dadc9a3-a/A01/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_09-59-36-dadc9a3-a/A02/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_09-59-36-dadc9a3-a/A03/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_09-59-36-dadc9a3-a/A04/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_09-59-36-dadc9a3-a/A05/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_09-59-36-dadc9a3-a/A06/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_09-59-36-dadc9a3-a/A07/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_09-59-36-dadc9a3-a/A08/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_09-59-36-dadc9a3-a/A09/admin-trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_09-59-36-dadc9a3-a/A09/member-trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_09-59-36-dadc9a3-a/A09/owner-trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_09-59-36-dadc9a3-a/A10/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+[prepare] 收集清单（共 99，仅文件名，不含内容）：
+  - 2026-11-05_09-59-36-dadc9a3-a/A01/after-login.png
+  - 2026-11-05_09-59-36-dadc9a3-a/A01/pending.png
+  - 2026-11-05_09-59-36-dadc9a3-a/A02/network-abort.png
+  - 2026-11-05_09-59-36-dadc9a3-a/A03/http-503.png
+  - 2026-11-05_09-59-36-dadc9a3-a/A04/retry-success.png
+  - 2026-11-05_09-59-36-dadc9a3-a/A05/slow-network.png
+  - 2026-11-05_09-59-36-dadc9a3-a/A06/home-with-data.png
+  - 2026-11-05_09-59-36-dadc9a3-a/A07/empty-book.png
+  - 2026-11-05_09-59-36-dadc9a3-a/A08/member-members-page.png
+  - 2026-11-05_09-59-36-dadc9a3-a/A09/members-admin.png
+  - 2026-11-05_09-59-36-dadc9a3-a/A09/members-member.png
+  - 2026-11-05_09-59-36-dadc9a3-a/A09/members-owner.png
+  - 2026-11-05_09-59-36-dadc9a3-a/A10/back-online.png
+  - 2026-11-05_09-59-36-dadc9a3-a/A10/offline.png
+  - 2026-11-05_09-59-36-dadc9a3-a/A11/push-results.json
+  - 2026-11-05_09-59-36-dadc9a3-a/SHA256SUMS.txt
+  - 2026-11-05_09-59-36-dadc9a3-a/fixtures.json
+  - 2026-11-05_09-59-36-dadc9a3-a/report.json
+  - 2026-11-05_09-59-36-dadc9a3-a/report.md
+  - 2026-11-05_10-00-07-dadc9a3-d/D/I-TXNS/I-TXNS-01.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/I-TXNS/I-TXNS-02.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/I-TXNS/I-TXNS-03.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/I-TXNS/I-TXNS-04.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/I-TXNS/I-TXNS-05.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/I-TXNS/I-TXNS-06.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/I-TXNS/I-TXNS-07.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/I-TXNS/I-TXNS-08.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/I-TXNS/I-TXNS-09.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/I-TXNS/I-TXNS-10.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/I-TXNS/I-TXNS-11.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/I-TXNS/I-TXNS-12.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/I-TXNS/I-TXNS-13.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/I-TXNS/I-TXNS-14.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/I-TXNS/I-TXNS-15.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/I-TXNS/I-TXNS-16.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/I-TXNS/I-TXNS-17-skeleton.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/I-TXNS/I-TXNS-17.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/I-TXNS/I-TXNS-18.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/I-TXNS/I-TXNS-19.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/account/D-ACCT-01.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/account/D-ACCT-02.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/account/D-ACCT-03.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/account/D-ACCT-04.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/account/visibility-observations.json
+  - 2026-11-05_10-00-07-dadc9a3-d/D/category/D-CAT-01.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/category/D-CAT-02.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/category/D-CAT-03.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/category/D-CAT-04.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/category/D-CAT-05.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/category/D-CAT-06.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/defects-summary.json
+  - 2026-11-05_10-00-07-dadc9a3-d/D/members/D-MEM-01.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/members/D-MEM-02.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/members/D-MEM-03.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/members/D-MEM-04.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/members/D-MEM-05.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/members/D-MEM-06.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/txns/D-TXNS-01.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/txns/D-TXNS-02.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/txns/D-TXNS-03.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/txns/D-TXNS-04.png
+  - 2026-11-05_10-00-07-dadc9a3-d/D/txns/diagnostics.json
+  - 2026-11-05_10-00-07-dadc9a3-d/SHA256SUMS.txt
+  - 2026-11-05_10-00-07-dadc9a3-d/fixtures.json
+  - 2026-11-05_10-00-07-dadc9a3-d/report.json
+  - 2026-11-05_10-00-07-dadc9a3-d/report.md
+  - 2026-11-05_10-00-44-dadc9a3-c/C/I-ACCT/I-ACCT-06-visibility.png
+  - 2026-11-05_10-00-44-dadc9a3-c/C/I-ACCT/visibility-observations.json
+  - 2026-11-05_10-00-44-dadc9a3-c/C/I-LOGIN/I-LOGIN-10.png
+  - 2026-11-05_10-00-44-dadc9a3-c/C/I-LOGIN/I-LOGIN-13.png
+  - 2026-11-05_10-00-44-dadc9a3-c/C/I-LOGIN/I-LOGIN-14.png
+  - 2026-11-05_10-00-44-dadc9a3-c/C/I-LOGIN/I-LOGIN-15.png
+  - 2026-11-05_10-00-44-dadc9a3-c/C/I-TXNS/I-TXNS-01.png
+  - 2026-11-05_10-00-44-dadc9a3-c/C/I-TXNS/I-TXNS-02.png
+  - 2026-11-05_10-00-44-dadc9a3-c/C/I-TXNS/I-TXNS-03.png
+  - 2026-11-05_10-00-44-dadc9a3-c/C/I-TXNS/I-TXNS-04.png
+  - 2026-11-05_10-00-44-dadc9a3-c/C/I-TXNS/I-TXNS-05.png
+  - 2026-11-05_10-00-44-dadc9a3-c/C/I-TXNS/I-TXNS-06.png
+  - 2026-11-05_10-00-44-dadc9a3-c/C/I-TXNS/I-TXNS-07.png
+  - 2026-11-05_10-00-44-dadc9a3-c/C/I-TXNS/I-TXNS-08.png
+  - 2026-11-05_10-00-44-dadc9a3-c/C/I-TXNS/I-TXNS-09.png
+  - 2026-11-05_10-00-44-dadc9a3-c/C/I-TXNS/I-TXNS-10.png
+  - 2026-11-05_10-00-44-dadc9a3-c/C/I-TXNS/I-TXNS-11.png
+  - 2026-11-05_10-00-44-dadc9a3-c/C/I-TXNS/I-TXNS-12.png
+  - 2026-11-05_10-00-44-dadc9a3-c/C/I-TXNS/I-TXNS-13.png
+  - 2026-11-05_10-00-44-dadc9a3-c/C/I-TXNS/I-TXNS-14.png
+  - 2026-11-05_10-00-44-dadc9a3-c/C/I-TXNS/I-TXNS-15.png
+  - 2026-11-05_10-00-44-dadc9a3-c/C/I-TXNS/I-TXNS-16.png
+  - 2026-11-05_10-00-44-dadc9a3-c/C/I-TXNS/I-TXNS-17-skeleton.png
+  - 2026-11-05_10-00-44-dadc9a3-c/C/I-TXNS/I-TXNS-17.png
+  - 2026-11-05_10-00-44-dadc9a3-c/C/I-TXNS/I-TXNS-18.png
+  - 2026-11-05_10-00-44-dadc9a3-c/C/I-TXNS/I-TXNS-19.png
+  - 2026-11-05_10-00-44-dadc9a3-c/C/I-TXNS/diagnostics.json
+  - 2026-11-05_10-00-44-dadc9a3-c/C/controls-summary.json
+  - 2026-11-05_10-00-44-dadc9a3-c/C/login/after-login.png
+  - 2026-11-05_10-00-44-dadc9a3-c/SHA256SUMS.txt
+  - 2026-11-05_10-00-44-dadc9a3-c/fixtures.json
+  - 2026-11-05_10-00-44-dadc9a3-c/report.json
+  - 2026-11-05_10-00-44-dadc9a3-c/report.md
+[prepare] 符号链接跳过：0
+[prepare] 汇总：扫描=111 收集=99 排除=12 符号链接跳过=0
+[prepare] 结论：OK（输出目录已就绪，仍需经 scan-artifacts.js 扫描后方可上传）
+--- scan（r0-qa-verify） 实际退出码=0 ---
+[scan] 待上传目录：<仓库外:clean-r0-qa-verify-dest>
+[scan] 文件总数=99 内容已全量扫描=99 其中二进制文件=80 跳过内容扫描=0 符号链接=0
+[scan] 扫描口径：全部文件以 latin1 逐字节映射后应用 5 条文本规则，无任何内容跳过分支
+[scan] 命中明细（仅文件路径 + 命中类型 + 命中数量，不输出匹配值）：
+[HIT] （无） | — | 0
+[scan] 命中文件/类型组合=0 命中总数=0
+[scan] 结论：CLEAN —— 允许上传
+[PASS] prepare 退出 0（r0-qa-verify） :: 实际退出码=0
+[PASS] scan 退出 0（r0-qa-verify） :: 实际退出码=0
+[PASS] 命中总数=0
+[PASS] 真实 PNG 未被判 SUSPICIOUS_BINARY
+结论：r0-qa-verify 干净链路仍允许上传（prepare=0 / scan=0），收紧未误伤正常截图与报告
+
+=== 场景 D · 干净真实产物链路（r0-e2e）===
+--- prepare（r0-e2e） 实际退出码=0 ---
+[prepare] 源目录：artifacts/r0-e2e
+[prepare] 目标目录：<仓库外:clean-r0-e2e-dest>（运行前已清空）
+[prepare] 白名单：.png .md .json .log .txt
+[prepare] 排除清单（共 36，仅文件名与原因，不含内容）：
+  - 2026-11-05_07-25-54-ebab48d-a/A01/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-25-54-ebab48d-a/A02/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-25-54-ebab48d-a/A03/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-25-54-ebab48d-a/A04/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-25-54-ebab48d-a/A05/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-25-54-ebab48d-a/A06/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-25-54-ebab48d-a/A07/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-25-54-ebab48d-a/A08/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-25-54-ebab48d-a/A09/admin-trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-25-54-ebab48d-a/A09/member-trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-25-54-ebab48d-a/A09/owner-trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-25-54-ebab48d-a/A10/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-28-01-ebab48d-a/A01/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-28-01-ebab48d-a/A02/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-28-01-ebab48d-a/A03/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-28-01-ebab48d-a/A04/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-28-01-ebab48d-a/A05/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-28-01-ebab48d-a/A06/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-28-01-ebab48d-a/A07/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-28-01-ebab48d-a/A08/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-28-01-ebab48d-a/A09/admin-trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-28-01-ebab48d-a/A09/member-trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-28-01-ebab48d-a/A09/owner-trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-28-01-ebab48d-a/A10/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-48-36-ebab48d-all/A01/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-48-36-ebab48d-all/A02/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-48-36-ebab48d-all/A03/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-48-36-ebab48d-all/A04/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-48-36-ebab48d-all/A05/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-48-36-ebab48d-all/A06/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-48-36-ebab48d-all/A07/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-48-36-ebab48d-all/A08/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-48-36-ebab48d-all/A09/admin-trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-48-36-ebab48d-all/A09/member-trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-48-36-ebab48d-all/A09/owner-trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - 2026-11-05_07-48-36-ebab48d-all/A10/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+[prepare] 收集清单（共 113，仅文件名，不含内容）：
+  - 2026-11-05_07-25-54-ebab48d-a/A01/pending-then-home.png
+  - 2026-11-05_07-25-54-ebab48d-a/A02/network-abort.png
+  - 2026-11-05_07-25-54-ebab48d-a/A03/http-503.png
+  - 2026-11-05_07-25-54-ebab48d-a/A04/retry-success.png
+  - 2026-11-05_07-25-54-ebab48d-a/A05/slow-network.png
+  - 2026-11-05_07-25-54-ebab48d-a/A06/home-with-data.png
+  - 2026-11-05_07-25-54-ebab48d-a/A07/empty-book.png
+  - 2026-11-05_07-25-54-ebab48d-a/A08/member-members-page.png
+  - 2026-11-05_07-25-54-ebab48d-a/A09/members-admin.png
+  - 2026-11-05_07-25-54-ebab48d-a/A09/members-member.png
+  - 2026-11-05_07-25-54-ebab48d-a/A09/members-owner.png
+  - 2026-11-05_07-25-54-ebab48d-a/A10/back-online.png
+  - 2026-11-05_07-25-54-ebab48d-a/A10/offline.png
+  - 2026-11-05_07-25-54-ebab48d-a/A11/push-results.json
+  - 2026-11-05_07-25-54-ebab48d-a/SHA256SUMS.txt
+  - 2026-11-05_07-25-54-ebab48d-a/fixtures.json
+  - 2026-11-05_07-25-54-ebab48d-a/report.json
+  - 2026-11-05_07-25-54-ebab48d-a/report.md
+  - 2026-11-05_07-28-01-ebab48d-a/A01/after-login.png
+  - 2026-11-05_07-28-01-ebab48d-a/A01/pending.png
+  - 2026-11-05_07-28-01-ebab48d-a/A02/network-abort.png
+  - 2026-11-05_07-28-01-ebab48d-a/A03/http-503.png
+  - 2026-11-05_07-28-01-ebab48d-a/A04/retry-success.png
+  - 2026-11-05_07-28-01-ebab48d-a/A05/slow-network.png
+  - 2026-11-05_07-28-01-ebab48d-a/A06/home-with-data.png
+  - 2026-11-05_07-28-01-ebab48d-a/A07/empty-book.png
+  - 2026-11-05_07-28-01-ebab48d-a/A08/member-members-page.png
+  - 2026-11-05_07-28-01-ebab48d-a/A09/members-admin.png
+  - 2026-11-05_07-28-01-ebab48d-a/A09/members-member.png
+  - 2026-11-05_07-28-01-ebab48d-a/A09/members-owner.png
+  - 2026-11-05_07-28-01-ebab48d-a/A10/back-online.png
+  - 2026-11-05_07-28-01-ebab48d-a/A10/offline.png
+  - 2026-11-05_07-28-01-ebab48d-a/A11/push-results.json
+  - 2026-11-05_07-28-01-ebab48d-a/SHA256SUMS.txt
+  - 2026-11-05_07-28-01-ebab48d-a/fixtures.json
+  - 2026-11-05_07-28-01-ebab48d-a/report.json
+  - 2026-11-05_07-28-01-ebab48d-a/report.md
+  - 2026-11-05_07-34-07-ebab48d-c/C/I-LOGIN/I-LOGIN-10.png
+  - 2026-11-05_07-34-07-ebab48d-c/C/I-LOGIN/I-LOGIN-13.png
+  - 2026-11-05_07-34-07-ebab48d-c/C/I-LOGIN/I-LOGIN-14.png
+  - 2026-11-05_07-34-07-ebab48d-c/C/I-LOGIN/I-LOGIN-15.png
+  - 2026-11-05_07-34-07-ebab48d-c/C/controls-summary.json
+  - 2026-11-05_07-34-07-ebab48d-c/C/login/after-login.png
+  - 2026-11-05_07-34-07-ebab48d-c/SHA256SUMS.txt
+  - 2026-11-05_07-34-07-ebab48d-c/fixtures.json
+  - 2026-11-05_07-34-07-ebab48d-c/report.json
+  - 2026-11-05_07-34-07-ebab48d-c/report.md
+  - 2026-11-05_07-38-31-ebab48d-c/C/I-LOGIN/I-LOGIN-10.png
+  - 2026-11-05_07-38-31-ebab48d-c/C/I-LOGIN/I-LOGIN-13.png
+  - 2026-11-05_07-38-31-ebab48d-c/C/I-LOGIN/I-LOGIN-14.png
+  - 2026-11-05_07-38-31-ebab48d-c/C/I-LOGIN/I-LOGIN-15.png
+  - 2026-11-05_07-38-31-ebab48d-c/C/controls-summary.json
+  - 2026-11-05_07-38-31-ebab48d-c/C/login/after-login.png
+  - 2026-11-05_07-38-31-ebab48d-c/SHA256SUMS.txt
+  - 2026-11-05_07-38-31-ebab48d-c/fixtures.json
+  - 2026-11-05_07-38-31-ebab48d-c/report.json
+  - 2026-11-05_07-38-31-ebab48d-c/report.md
+  - 2026-11-05_07-40-21-ebab48d-c/C/I-CAT/diagnostics.json
+  - 2026-11-05_07-40-21-ebab48d-c/C/I-LOGIN/I-LOGIN-10.png
+  - 2026-11-05_07-40-21-ebab48d-c/C/I-LOGIN/I-LOGIN-13.png
+  - 2026-11-05_07-40-21-ebab48d-c/C/I-LOGIN/I-LOGIN-14.png
+  - 2026-11-05_07-40-21-ebab48d-c/C/I-LOGIN/I-LOGIN-15.png
+  - 2026-11-05_07-40-21-ebab48d-c/C/controls-summary.json
+  - 2026-11-05_07-40-21-ebab48d-c/C/login/after-login.png
+  - 2026-11-05_07-40-21-ebab48d-c/SHA256SUMS.txt
+  - 2026-11-05_07-40-21-ebab48d-c/fixtures.json
+  - 2026-11-05_07-40-21-ebab48d-c/report.json
+  - 2026-11-05_07-40-21-ebab48d-c/report.md
+  - 2026-11-05_07-44-22-ebab48d-c/C/I-LOGIN/I-LOGIN-10.png
+  - 2026-11-05_07-44-22-ebab48d-c/C/I-LOGIN/I-LOGIN-13.png
+  - 2026-11-05_07-44-22-ebab48d-c/C/I-LOGIN/I-LOGIN-14.png
+  - 2026-11-05_07-44-22-ebab48d-c/C/I-LOGIN/I-LOGIN-15.png
+  - 2026-11-05_07-44-22-ebab48d-c/C/controls-summary.json
+  - 2026-11-05_07-44-22-ebab48d-c/C/login/after-login.png
+  - 2026-11-05_07-44-22-ebab48d-c/SHA256SUMS.txt
+  - 2026-11-05_07-44-22-ebab48d-c/fixtures.json
+  - 2026-11-05_07-44-22-ebab48d-c/report.json
+  - 2026-11-05_07-44-22-ebab48d-c/report.md
+  - 2026-11-05_07-46-31-ebab48d-c/C/I-LOGIN/I-LOGIN-10.png
+  - 2026-11-05_07-46-31-ebab48d-c/C/I-LOGIN/I-LOGIN-13.png
+  - 2026-11-05_07-46-31-ebab48d-c/C/I-LOGIN/I-LOGIN-14.png
+  - 2026-11-05_07-46-31-ebab48d-c/C/I-LOGIN/I-LOGIN-15.png
+  - 2026-11-05_07-46-31-ebab48d-c/C/controls-summary.json
+  - 2026-11-05_07-46-31-ebab48d-c/C/login/after-login.png
+  - 2026-11-05_07-46-31-ebab48d-c/SHA256SUMS.txt
+  - 2026-11-05_07-46-31-ebab48d-c/fixtures.json
+  - 2026-11-05_07-46-31-ebab48d-c/report.json
+  - 2026-11-05_07-46-31-ebab48d-c/report.md
+  - 2026-11-05_07-48-36-ebab48d-all/A01/after-login.png
+  - 2026-11-05_07-48-36-ebab48d-all/A01/pending.png
+  - 2026-11-05_07-48-36-ebab48d-all/A02/network-abort.png
+  - 2026-11-05_07-48-36-ebab48d-all/A03/http-503.png
+  - 2026-11-05_07-48-36-ebab48d-all/A04/retry-success.png
+  - 2026-11-05_07-48-36-ebab48d-all/A05/slow-network.png
+  - 2026-11-05_07-48-36-ebab48d-all/A06/home-with-data.png
+  - 2026-11-05_07-48-36-ebab48d-all/A07/empty-book.png
+  - 2026-11-05_07-48-36-ebab48d-all/A08/member-members-page.png
+  - 2026-11-05_07-48-36-ebab48d-all/A09/members-admin.png
+  - 2026-11-05_07-48-36-ebab48d-all/A09/members-member.png
+  - 2026-11-05_07-48-36-ebab48d-all/A09/members-owner.png
+  - 2026-11-05_07-48-36-ebab48d-all/A10/back-online.png
+  - 2026-11-05_07-48-36-ebab48d-all/A10/offline.png
+  - 2026-11-05_07-48-36-ebab48d-all/A11/push-results.json
+  - 2026-11-05_07-48-36-ebab48d-all/C/I-LOGIN/I-LOGIN-10.png
+  - 2026-11-05_07-48-36-ebab48d-all/C/I-LOGIN/I-LOGIN-13.png
+  - 2026-11-05_07-48-36-ebab48d-all/C/I-LOGIN/I-LOGIN-14.png
+  - 2026-11-05_07-48-36-ebab48d-all/C/I-LOGIN/I-LOGIN-15.png
+  - 2026-11-05_07-48-36-ebab48d-all/C/controls-summary.json
+  - 2026-11-05_07-48-36-ebab48d-all/C/login/after-login.png
+  - 2026-11-05_07-48-36-ebab48d-all/SHA256SUMS.txt
+  - 2026-11-05_07-48-36-ebab48d-all/fixtures.json
+  - 2026-11-05_07-48-36-ebab48d-all/report.json
+  - 2026-11-05_07-48-36-ebab48d-all/report.md
+[prepare] 符号链接跳过：0
+[prepare] 汇总：扫描=149 收集=113 排除=36 符号链接跳过=0
+[prepare] 结论：OK（输出目录已就绪，仍需经 scan-artifacts.js 扫描后方可上传）
+--- scan（r0-e2e） 实际退出码=0 ---
+[scan] 待上传目录：<仓库外:clean-r0-e2e-dest>
+[scan] 文件总数=113 内容已全量扫描=113 其中二进制文件=71 跳过内容扫描=0 符号链接=0
+[scan] 扫描口径：全部文件以 latin1 逐字节映射后应用 5 条文本规则，无任何内容跳过分支
+[scan] 命中明细（仅文件路径 + 命中类型 + 命中数量，不输出匹配值）：
+[HIT] （无） | — | 0
+[scan] 命中文件/类型组合=0 命中总数=0
+[scan] 结论：CLEAN —— 允许上传
+[PASS] prepare 退出 0（r0-e2e） :: 实际退出码=0
+[PASS] scan 退出 0（r0-e2e） :: 实际退出码=0
+[PASS] 命中总数=0
+[PASS] 真实 PNG 未被判 SUSPICIOUS_BINARY
+结论：r0-e2e 干净链路仍允许上传（prepare=0 / scan=0），收紧未误伤正常截图与报告
+
+Round 2 端到端自证总结论：PASS（失败项=0）
+
+[e2e-verify] 退出码=0

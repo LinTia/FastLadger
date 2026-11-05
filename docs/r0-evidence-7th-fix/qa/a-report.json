@@ -1,0 +1,180 @@
+{
+  "suite": "a",
+  "startedAt": "2026-11-05T09:59:36.500Z",
+  "env": {
+    "capturedAt": "2026-11-05T09:59:37.578Z",
+    "node": "v22.22.2",
+    "platform": "win32 x64",
+    "os": "Windows_NT 10.0.26200",
+    "cpus": 16,
+    "memoryMB": 31862,
+    "cwd": "C:\\Users\\47006\\WorkBuddy\\fastledger\\repo_tmp\\tools\\r0\\e2e",
+    "gitSha": "dadc9a3b9c567cad2bbad7e47361fb774365b949",
+    "ci": {
+      "githubActions": false,
+      "runId": null,
+      "runAttempt": null,
+      "workflow": null,
+      "job": null,
+      "serverUrl": null,
+      "repository": null,
+      "ref": null
+    },
+    "browser": {
+      "version": "156.0.4314.58",
+      "engine": "playwright-core",
+      "channel": "msedge"
+    },
+    "server": {
+      "binary": "fastledger.exe",
+      "health": {
+        "instanceId": "29265993b28746fda3a53b0fc8f23445",
+        "restoreEpoch": 1,
+        "schemaVersion": 8,
+        "status": "up"
+      }
+    }
+  },
+  "server": {
+    "base": "http://127.0.0.1:65208",
+    "port": 65208,
+    "dataDir": "C:\\Users\\47006\\AppData\\Local\\Temp\\fl-e2e-5kxvlX",
+    "health": {
+      "instanceId": "29265993b28746fda3a53b0fc8f23445",
+      "restoreEpoch": 1,
+      "schemaVersion": 8,
+      "status": "up"
+    },
+    "binary": "C:/Users/47006/WorkBuddy/fastledger/repo_tmp/server/fastledger.exe"
+  },
+  "results": [
+    {
+      "suite": "A",
+      "id": "A01",
+      "name": "pending：提交中按钮进入禁用 + 文案「登录中…」",
+      "status": "PASS",
+      "detail": "请求被延迟=true；pending 态={\"text\":\"登录中…\",\"disabled\":true}；登录后 token 已写入=true",
+      "evidence": [
+        "A01/pending.png",
+        "A01/after-login.png"
+      ],
+      "ms": 2129
+    },
+    {
+      "suite": "A",
+      "id": "A02",
+      "name": "网络拒绝：请求 abort → 错误提示可见且留在登录页",
+      "status": "PASS",
+      "detail": "toast=「✕ Failed to fetch」；仍在登录页=true；写入 token=false",
+      "evidence": [
+        "A02/network-abort.png"
+      ],
+      "ms": 596
+    },
+    {
+      "suite": "A",
+      "id": "A03",
+      "name": "HTTP 503：服务端 503 → 展示错误信息，不伪造成功",
+      "status": "PASS",
+      "detail": "toast=「✕ 服务暂时不可用」；是否误写 token=false",
+      "evidence": [
+        "A03/http-503.png"
+      ],
+      "ms": 580
+    },
+    {
+      "suite": "A",
+      "id": "A04",
+      "name": "恢复：一次失败后重试成功并可进入账本",
+      "status": "PASS",
+      "detail": "首次失败 toast=「✕ Failed to fetch」；重试后是否登录=true；token 已写入=true；hash=#books",
+      "evidence": [
+        "A04/retry-success.png"
+      ],
+      "ms": 1288
+    },
+    {
+      "suite": "A",
+      "id": "A05",
+      "name": "慢速网络：800ms 延迟下 pending 仍可见，最终成功",
+      "status": "PASS",
+      "detail": "总耗时=1144ms（含 800ms 链路延迟）；中途按钮文案=「登录中…」",
+      "evidence": [
+        "A05/slow-network.png"
+      ],
+      "ms": 3755
+    },
+    {
+      "suite": "A",
+      "id": "A06",
+      "name": "有数据：首页展示真实金额与交易条目",
+      "status": "PASS",
+      "detail": "页面含 ¥=true；含种子交易=true；API 交易数=3",
+      "evidence": [
+        "A06/home-with-data.png"
+      ],
+      "ms": 1847
+    },
+    {
+      "suite": "A",
+      "id": "A07",
+      "name": "空数据：空账本显示空态且不串数据",
+      "status": "PASS",
+      "detail": "API 交易数=0；页面残留他账本数据=[]；页面含「暂无」=false",
+      "evidence": [
+        "A07/empty-book.png"
+      ],
+      "ms": 1570
+    },
+    {
+      "suite": "A",
+      "id": "A08",
+      "name": "权限不足：member 调管理接口被 403 拒绝且不泄露",
+      "status": "PASS",
+      "detail": "DELETE /books → 403；POST /members/invite → 403；成员页「邀请成员」按钮数=0（UI 未隐藏=真实缺陷，已记录）；页面文本长度=164",
+      "evidence": [
+        "A08/member-members-page.png"
+      ],
+      "ms": 1553
+    },
+    {
+      "suite": "A",
+      "id": "A09",
+      "name": "多角色：owner/admin/member 三种会话看到不同能力",
+      "status": "PASS",
+      "detail": "owner: 成员数=3 邀请按钮=1；admin: 成员数=3 邀请按钮=1；member: 成员数=3 邀请按钮=0",
+      "evidence": [
+        "A09/members-owner.png",
+        "A09/members-admin.png",
+        "A09/members-member.png"
+      ],
+      "ms": 4045
+    },
+    {
+      "suite": "A",
+      "id": "A10",
+      "name": "离线 / 恢复：离线时报错，恢复网络后重试成功",
+      "status": "PASS",
+      "detail": "离线时 toast=「✕ Failed to fetch」视图文本长度=162；恢复后含金额=true 含种子=true",
+      "evidence": [
+        "A10/offline.png",
+        "A10/back-online.png"
+      ],
+      "ms": 3972
+    },
+    {
+      "suite": "A",
+      "id": "A11",
+      "name": "同步冲突：同一 clientUuid 重放不重复落账",
+      "status": "PASS",
+      "detail": "首次 status=created，重放（金额改为 9999）status=conflict；交易数 3→4（应 +1）",
+      "evidence": [],
+      "ms": 8
+    }
+  ],
+  "summary": {
+    "A:PASS": 11,
+    "total": 11
+  },
+  "finishedAt": "2026-11-05T09:59:58.969Z"
+}

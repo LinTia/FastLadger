@@ -383,6 +383,7 @@ async function renderTxns(bookId) {
   /* 表格 */
   const tableWrap = document.createElement("div");
   card.append(tableWrap);
+  view.append(card);                                // 与 renderHome/renderBooks/renderAccounts 一致：挂载视图
 
   async function load() {
     renderSkeleton(tableWrap);                      // 对齐原型：加载中骨架屏
@@ -396,10 +397,27 @@ async function renderTxns(bookId) {
     const mn = dateStartUnix(f.minDate, false), mx = dateStartUnix(f.maxDate, true);
     if (mn !== null) q.set("minTime", String(mn));
     if (mx !== null) q.set("maxTime", String(mx));
-    const data = await api("GET", "/books/" + bookId + "/transactions?" + q.toString());
-    state.sel.clear(); refreshSel();
-    renderTable(data);
-    window.scrollTo({ top: 0, behavior: "smooth" }); // 翻页后回顶（原型分页行为）
+    try {
+      const data = await api("GET", "/books/" + bookId + "/transactions?" + q.toString());
+      state.sel.clear(); refreshSel();
+      renderTable(data);
+      window.scrollTo({ top: 0, behavior: "smooth" }); // 翻页后回顶（原型分页行为）
+    } catch (e) {
+      // I-TXNS-19：请求失败时清除骨架屏，避免页面永久停在加载态（既有 toast 由调用方负责）
+      renderLoadError(tableWrap, e);
+      throw e;
+    }
+  }
+
+  // 加载失败反馈：复用既有 .empty 样式与 textContent，仅静态文本，不新增交互
+  function renderLoadError(wrap, err) {
+    wrap.replaceChildren();
+    const box = document.createElement("div"); box.className = "empty";
+    const ic = document.createElement("div"); ic.className = "icon"; ic.textContent = "⚠️";
+    const p = document.createElement("p");
+    p.textContent = "交易加载失败：" + (err && err.message ? err.message : "请求失败") + "（可重新查询或刷新页面）";
+    box.append(ic, p);
+    wrap.append(box);
   }
 
   // 骨架屏：数据未返回前占位，避免白屏跳变
@@ -532,17 +550,30 @@ function openTxForm(bookId, onDone) {
   $("#fType").value = "2";
   fillSelect($("#fAccount"), state.accounts);
   fillSelect($("#fTo"), state.accounts);
-  fillSelect($("#fCategory"), state.categories);
   $("#fDate").value = new Date().toISOString().slice(0, 10);
   $("#fNote").value = "";
   $("#fAmount").value = "";
   syncFormFields();
   dlg.classList.remove("hidden");
   if (typeof dlg.showModal === "function") dlg.showModal(); else dlg.setAttribute("open", "");
+  // 与编辑表单 openTxEditForm（按 catType 过滤）口径一致：分类下拉只列与当前类型匹配的分类
+  function refillCategories() {
+    const t = Number($("#fType").value);
+    if (t === 3) return;                 // 转账隐藏分类行，提交 categoryId:0 的既有语义不变
+    const cats = state.categories.filter((c) => c.catType === t);
+    if (cats.length) {
+      fillSelect($("#fCategory"), cats);
+      $("#fCategory").value = String(cats[0].id);   // 切换类型后重置已选分类
+    } else {
+      fillSelect($("#fCategory"), [], "（暂无可选分类）");
+      $("#fCategory").value = "0";
+    }
+  }
   function syncFormFields() {
     const t = Number($("#fType").value);
     $("#fToRow").classList.toggle("hidden", t !== 3);
     $("#fCatRow").classList.toggle("hidden", t === 3);
+    refillCategories();
   }
   $("#fType").onchange = syncFormFields;
   $("#fCancel").onclick = () => { dlg.close ? dlg.close() : dlg.removeAttribute("open"); dlg.classList.add("hidden"); };
@@ -565,7 +596,7 @@ function openTxForm(bookId, onDone) {
     if (t === 3) {
       body.toAccountId = Number($("#fTo").value);
       if (!body.toAccountId || body.toAccountId === body.accountId) { toast("转账需选择不同的两个账户", "err"); return; }
-    } else if (!body.accountId) { toast("请选择账户", "err"); return; }
+    } else if (!body.accountId || !body.categoryId) { toast("请选择账户与分类", "err"); return; }
     try {
       const done = btnPending($("#fSubmit"), "保存中…");
       try {
@@ -1675,13 +1706,16 @@ async function renderMembers(bookId) {
       toast("已生成邀请码", "ok");
     });
   });
-  row.append(h, invBtn);
+  row.append(h);                                  // 邀请入口延后到确认当前用户在本账本的角色后再挂载
   card.append(row);
   const tip = document.createElement("p"); tip.className = "muted"; tip.textContent = "角色决定写权限：管理员可管理账户/分类与他人的交易；普通成员只能记录和查看自己权限范围内的账目。";
   card.append(tip);
 
   const members = await api("GET", "/books/" + bookId + "/members");
-  const me = await api("GET", "/users/me");
+  // /users/me 失败时失败关闭：拿不到身份就不渲染邀请入口；后端 service 层 403 校验原样保留
+  const me = await api("GET", "/users/me").catch(() => null);
+  const myRole = me ? (members.find((m) => m.uid === me.id) || {}).role : null;
+  if (myRole === 1 || myRole === 2) row.append(invBtn);
 
   // 家庭信息块（P1-4：家庭名称 / 成员数量 / 创建时间）
   const book = books.find((b) => b.id === bookId) || {};
@@ -1707,7 +1741,7 @@ async function renderMembers(bookId) {
   ["成员姓名", "角色", "可见性", ""].forEach((t) => { const th = document.createElement("th"); th.textContent = t; trh.append(th); });
   thead.append(trh); table.append(thead);
   const tbody = document.createElement("tbody");
-  const myUid = me.id;
+  const myUid = me ? me.id : null;
   for (const mb of members) {
     const tr = document.createElement("tr");
     const tdN = document.createElement("td"); tdN.textContent = mb.username + (mb.uid === myUid ? "（我）" : "");

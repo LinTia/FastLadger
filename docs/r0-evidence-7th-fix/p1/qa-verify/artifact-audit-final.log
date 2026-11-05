@@ -1,0 +1,15 @@
+[audit] 审计对象: <artifact-extract>（QA 独立下载并解压）
+[audit] 总文件数=99 符号链接=0
+[audit] 扩展名分布: .png=80, .json=13, .txt=3, .md=3
+[audit] 黑名单扩展名=0 server.log=0 文件名敏感词=0
+[audit] 文本文件数=19 二进制/跳过内容扫描=80
+[audit] 文本规则命中（仅路径 | 类型 | 数量，不输出值）:
+  [HIT] （无） | — | 0
+[audit] 全文件原始字节「短标记」命中（观察项；孤立短串可能是二进制随机巧合，不判阻断）:
+  [BYTE] 2026-11-05_12-46-20-57e5cd0-c/C/I-TXNS/I-TXNS-03.png | BYTE_eyJ_PREFIX | 1
+[audit] 全文件原始字节「严格凭据形态」命中（阻断项）:
+  [STRICT] （无） | — | 0
+[audit] 孤立 eyJ 上下文性质（只输出布尔/比例/偏移，不输出任何字节内容）:
+  [CTX] 2026-11-05_12-46-20-57e5cd0-c/C/I-TXNS/I-TXNS-03.png | offset=25509 | full_jwt_shape=False | header_dot_shape=False | ctx_printable_ratio=0.319 | png_magic=True
+[audit] 文本规则命中总数=0 严格字节形态命中总数=0
+[audit] 结论: CLEAN

@@ -1,0 +1,10 @@
+[A] 上传目录中黑名单扩展名/server.log 文件数：
+0
+[B] git 已跟踪 artifacts 文件数：
+0
+[C] git ls-files 中含 trace.zip 的条目数：
+0
+[D] 上传目录文件总数：
+113
+[E] .gitignore 是否忽略 artifacts/：
+artifacts/r0-e2e-upload
