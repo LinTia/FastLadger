@@ -1,0 +1,2163 @@
+{
+  "suite": "c",
+  "startedAt": "2026-11-05T09:55:18.843Z",
+  "env": {
+    "capturedAt": "2026-11-05T09:55:19.900Z",
+    "node": "v22.22.2",
+    "platform": "win32 x64",
+    "os": "Windows_NT 10.0.26200",
+    "cpus": 16,
+    "memoryMB": 31862,
+    "cwd": "C:\\Users\\47006\\WorkBuddy\\fastledger\\repo_tmp\\tools\\r0\\e2e",
+    "gitSha": "dadc9a3b9c567cad2bbad7e47361fb774365b949",
+    "ci": {
+      "githubActions": false,
+      "runId": null,
+      "runAttempt": null,
+      "workflow": null,
+      "job": null,
+      "serverUrl": null,
+      "repository": null,
+      "ref": null
+    },
+    "browser": {
+      "version": "156.0.4314.58",
+      "engine": "playwright-core",
+      "channel": "msedge"
+    },
+    "server": {
+      "binary": "fastledger.exe",
+      "health": {
+        "instanceId": "15395335b30211b16fd05f7741c79974",
+        "restoreEpoch": 1,
+        "schemaVersion": 8,
+        "status": "up"
+      }
+    }
+  },
+  "server": {
+    "base": "http://127.0.0.1:61886",
+    "port": 61886,
+    "dataDir": "C:\\Users\\47006\\AppData\\Local\\Temp\\fl-e2e-F2XRh6",
+    "health": {
+      "instanceId": "15395335b30211b16fd05f7741c79974",
+      "restoreEpoch": 1,
+      "schemaVersion": 8,
+      "status": "up"
+    },
+    "binary": "C:/Users/47006/WorkBuddy/fastledger/repo_tmp/server/fastledger.exe"
+  },
+  "results": [
+    {
+      "suite": "C",
+      "id": "I-LOGIN-01",
+      "name": "登录 · 用户名输入",
+      "group": "3.1.1 登录 / 注册 / 加入账本",
+      "status": "PASS",
+      "detail": "键入回显=probe-user，autocomplete=username，required=true",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-LOGIN-02",
+      "name": "登录 · 密码输入",
+      "group": "3.1.1 登录 / 注册 / 加入账本",
+      "status": "PASS",
+      "detail": "type=password，输入后仍为密文",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-LOGIN-03",
+      "name": "注册 · 确认密码输入",
+      "group": "3.1.1 登录 / 注册 / 加入账本",
+      "status": "PASS",
+      "detail": "注册模式有确认密码框，type=password",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-LOGIN-04",
+      "name": "登录/注册 · 密码明文切换",
+      "group": "3.1.1 登录 / 注册 / 加入账本",
+      "status": "FAIL",
+      "detail": "浏览器中不存在「明文切换」控件（主报告登记缺失 R0-E-39）；DOM 无 eye/toggle 类元素",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-LOGIN-05",
+      "name": "登录 · 登录提交按钮",
+      "group": "3.1.1 登录 / 注册 / 加入账本",
+      "status": "PASS",
+      "detail": "登录按钮唯一可点击",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-LOGIN-06",
+      "name": "登录 · 登录提交行为",
+      "group": "3.1.1 登录 / 注册 / 加入账本",
+      "status": "PASS",
+      "detail": "提交后写入 fl_token 并进入 #books",
+      "evidence": [
+        "C/login/after-login.png"
+      ]
+    },
+    {
+      "suite": "C",
+      "id": "I-LOGIN-07",
+      "name": "注册 · 注册提交行为",
+      "group": "3.1.1 登录 / 注册 / 加入账本",
+      "status": "PASS",
+      "detail": "两次密码不一致时提示「✕ 两次输入的密码不一致」",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-LOGIN-08",
+      "name": "登录 · 注册入口切换",
+      "group": "3.1.1 登录 / 注册 / 加入账本",
+      "status": "BLOCKED",
+      "detail": "登录页无「加入账本/邀请码」入口，加入流程需邀请链接直达",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-LOGIN-09",
+      "name": "登录/注册 · 注册关闭 / 返回登录",
+      "group": "3.1.1 登录 / 注册 / 加入账本",
+      "status": "BLOCKED",
+      "detail": "登录页无「加入账本/邀请码」入口，加入流程需邀请链接直达",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-LOGIN-10",
+      "name": "登录 · 加入账本入口",
+      "group": "3.1.1 登录 / 注册 / 加入账本",
+      "status": "BLOCKED",
+      "detail": "未提供可执行配方：该控件的交互目标未以稳定选择器出现在页面",
+      "evidence": [
+        "C/I-LOGIN/I-LOGIN-10.png"
+      ]
+    },
+    {
+      "suite": "C",
+      "id": "I-LOGIN-11",
+      "name": "登录 · 邀请码输入与提交",
+      "group": "3.1.1 登录 / 注册 / 加入账本",
+      "status": "FAIL",
+      "detail": "产品侧未实现（主报告已登记：R0-E-38）；本轮确认浏览器中不存在该控件",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-LOGIN-12",
+      "name": "登录 · 邀请码失效 / 异常反馈",
+      "group": "3.1.1 登录 / 注册 / 加入账本",
+      "status": "FAIL",
+      "detail": "产品侧未实现（主报告已登记：R0-E-38）；本轮确认浏览器中不存在该控件",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-LOGIN-13",
+      "name": "登录/注册 · 登录 / 注册失败反馈",
+      "group": "3.1.1 登录 / 注册 / 加入账本",
+      "status": "BLOCKED",
+      "detail": "未提供可执行配方：该控件的交互目标未以稳定选择器出现在页面",
+      "evidence": [
+        "C/I-LOGIN/I-LOGIN-13.png"
+      ]
+    },
+    {
+      "suite": "C",
+      "id": "I-LOGIN-14",
+      "name": "登录/注册 · 重复提交 / pending 恢复",
+      "group": "3.1.1 登录 / 注册 / 加入账本",
+      "status": "BLOCKED",
+      "detail": "未提供可执行配方：该控件的交互目标未以稳定选择器出现在页面",
+      "evidence": [
+        "C/I-LOGIN/I-LOGIN-14.png"
+      ]
+    },
+    {
+      "suite": "C",
+      "id": "I-LOGIN-15",
+      "name": "全局 · 顶栏退出",
+      "group": "3.1.1 登录 / 注册 / 加入账本",
+      "status": "BLOCKED",
+      "detail": "未提供可执行配方：该控件的交互目标未以稳定选择器出现在页面",
+      "evidence": [
+        "C/I-LOGIN/I-LOGIN-15.png"
+      ]
+    },
+    {
+      "suite": "C",
+      "id": "I-BOOKS-01",
+      "name": "账本列表 · 账本行链接",
+      "group": "3.1.2 账本列表 `#books`",
+      "status": "PASS",
+      "detail": "账本行渲染「E2E 主账本」",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-BOOKS-02",
+      "name": "账本列表 · 账本删除按钮",
+      "group": "3.1.2 账本列表 `#books`",
+      "status": "PASS",
+      "detail": "每行有删除按钮",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-BOOKS-03",
+      "name": "账本列表 · 删除取消",
+      "group": "3.1.2 账本列表 `#books`",
+      "status": "PASS",
+      "detail": "创建成功：E2E 临时账本 1793872522997",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-BOOKS-04",
+      "name": "账本列表 · 新账本名称输入",
+      "group": "3.1.2 账本列表 `#books`",
+      "status": "PASS",
+      "detail": "存在账本类型选择",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-BOOKS-05",
+      "name": "账本列表 · 账本类型下拉",
+      "group": "3.1.2 账本列表 `#books`",
+      "status": "PASS",
+      "detail": "两种类型均有渲染",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-BOOKS-06",
+      "name": "账本列表 · 创建账本提交",
+      "group": "3.1.2 账本列表 `#books`",
+      "status": "PASS",
+      "detail": "#fab 存在",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-BOOKS-07",
+      "name": "账本列表 · 空态",
+      "group": "3.1.2 账本列表 `#books`",
+      "status": "PASS",
+      "detail": "底部 Tab 存在",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-BOOKS-08",
+      "name": "全局 · 品牌点击",
+      "group": "3.1.2 账本列表 `#books`",
+      "status": "PASS",
+      "detail": "账本行有进入箭头",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-BOOKS-09",
+      "name": "全局 · 顶栏「账本」",
+      "group": "3.1.2 账本列表 `#books`",
+      "status": "PASS",
+      "detail": "空态与新建后刷新已覆盖（空账本行为见 A07）",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-BOOKS-10",
+      "name": "账本列表 · 账本重命名 UI",
+      "group": "3.1.2 账本列表 `#books`",
+      "status": "PASS",
+      "detail": "删除按钮 owner 可见；非 owner 由服务端 403 兜底（A08 已验证）",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-BOOKS-11",
+      "name": "账本列表 · 账本详情 / 账本设置页入口",
+      "group": "3.1.2 账本列表 `#books`",
+      "status": "BLOCKED",
+      "detail": "列表未提供重命名入口（仅删除/进入），无对应控件可执行",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-HOME-01",
+      "name": "首页 · 账本切换控件（本页内）",
+      "group": "3.1.3 首页 `#b/:id`",
+      "status": "FAIL",
+      "detail": "本页无账本切换控件（主报告登记缺失 R0-E-01），顶部仅标题",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-HOME-02",
+      "name": "首页 · 月份切换控件（首页）",
+      "group": "3.1.3 首页 `#b/:id`",
+      "status": "N/A",
+      "detail": "月份切换为待裁决交互，未实现",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-HOME-03",
+      "name": "首页 · 本月收入卡",
+      "group": "3.1.3 首页 `#b/:id`",
+      "status": "PASS",
+      "detail": "概览卡「本月收入」",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-HOME-04",
+      "name": "首页 · 本月支出卡",
+      "group": "3.1.3 首页 `#b/:id`",
+      "status": "PASS",
+      "detail": "概览卡「本月支出」",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-HOME-05",
+      "name": "首页 · 结余卡",
+      "group": "3.1.3 首页 `#b/:id`",
+      "status": "PASS",
+      "detail": "概览卡「结余」",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-HOME-06",
+      "name": "首页 · 首页筛选入口 / 筛选条",
+      "group": "3.1.3 首页 `#b/:id`",
+      "status": "PASS",
+      "detail": "概览卡「净资产」",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-HOME-07",
+      "name": "首页 · 每条账单行",
+      "group": "3.1.3 首页 `#b/:id`",
+      "status": "PASS",
+      "detail": "金额以 ¥ 千分位渲染",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-HOME-08",
+      "name": "首页 · 账单行内容（分类/备注/商户/时间/金额）",
+      "group": "3.1.3 首页 `#b/:id`",
+      "status": "PASS",
+      "detail": "账单列表渲染真实交易",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-HOME-09",
+      "name": "首页 · 桌面「＋ 记一笔」按钮",
+      "group": "3.1.3 首页 `#b/:id`",
+      "status": "PASS",
+      "detail": "#fab 唯一",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-HOME-10",
+      "name": "首页 · 中央 FAB「＋」",
+      "group": "3.1.3 首页 `#b/:id`",
+      "status": "PASS",
+      "detail": "点 FAB 打开记一笔弹窗（#formDlg.open=true）",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-HOME-11",
+      "name": "首页 · 底部 Tab「首页」",
+      "group": "3.1.3 首页 `#b/:id`",
+      "status": "PASS",
+      "detail": "弹窗可取消关闭",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-HOME-12",
+      "name": "首页 · 底部 Tab「账单」",
+      "group": "3.1.3 首页 `#b/:id`",
+      "status": "PASS",
+      "detail": "底部 Tab 渲染",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-HOME-13",
+      "name": "首页 · 底部 Tab「报表」",
+      "group": "3.1.3 首页 `#b/:id`",
+      "status": "PASS",
+      "detail": "Tab 切换由 I-NAV 覆盖",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-HOME-14",
+      "name": "首页 · 底部 Tab「我的」",
+      "group": "3.1.3 首页 `#b/:id`",
+      "status": "PASS",
+      "detail": "账单按日期分组（今天）",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-HOME-15",
+      "name": "首页 · 账单加载态（骨架屏）",
+      "group": "3.1.3 首页 `#b/:id`",
+      "status": "PASS",
+      "detail": "首屏无需滚动即可见概览与最近账单",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-HOME-16",
+      "name": "首页 · 账单空态",
+      "group": "3.1.3 首页 `#b/:id`",
+      "status": "BLOCKED",
+      "detail": "下拉刷新/滚动加载未实现，无对应控件",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-HOME-17",
+      "name": "首页 · 账单错误态",
+      "group": "3.1.3 首页 `#b/:id`",
+      "status": "PASS",
+      "detail": "空账本行为由 A07 覆盖",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-HOME-18",
+      "name": "首页 · 按日分组标题 + 日小计",
+      "group": "3.1.3 首页 `#b/:id`",
+      "status": "PASS",
+      "detail": "member 同页只读，写操作服务端 403（A08）",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-ADD-01",
+      "name": "记一笔 · 打开弹窗",
+      "group": "3.1.4 记一笔弹窗 `#formDlg`",
+      "status": "PASS",
+      "detail": "#fab 打开 #formDlg",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-ADD-02",
+      "name": "记一笔 · 类型选择 `#fType`",
+      "group": "3.1.4 记一笔弹窗 `#formDlg`",
+      "status": "PASS",
+      "detail": "类型为 <select id=fType>，选项数=3",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-ADD-03",
+      "name": "记一笔 · 金额输入 `#fAmount`",
+      "group": "3.1.4 记一笔弹窗 `#formDlg`",
+      "status": "PASS",
+      "detail": "金额框 #fAmount 存在",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-ADD-04",
+      "name": "记一笔 · 资金账户 `#fAccount`",
+      "group": "3.1.4 记一笔弹窗 `#formDlg`",
+      "status": "PASS",
+      "detail": "金额可键入并回显",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-ADD-05",
+      "name": "记一笔 · 转入账户 `#fTo`（#fToRow hidden）",
+      "group": "3.1.4 记一笔弹窗 `#formDlg`",
+      "status": "PASS",
+      "detail": "账户下拉选项数=3",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-ADD-06",
+      "name": "记一笔 · 分类 `#fCategory`",
+      "group": "3.1.4 记一笔弹窗 `#formDlg`",
+      "status": "PASS",
+      "detail": "分类下拉选项数=22",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-ADD-07",
+      "name": "记一笔 · 日期 `#fDate`",
+      "group": "3.1.4 记一笔弹窗 `#formDlg`",
+      "status": "PASS",
+      "detail": "#fDate 存在",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-ADD-08",
+      "name": "记一笔 · 备注 `#fNote`",
+      "group": "3.1.4 记一笔弹窗 `#formDlg`",
+      "status": "PASS",
+      "detail": "#fNote 备注存在",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-ADD-09",
+      "name": "记一笔 · 支付渠道选择器",
+      "group": "3.1.4 记一笔弹窗 `#formDlg`",
+      "status": "PASS",
+      "detail": "#fSubmit 保存存在",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-ADD-10",
+      "name": "记一笔 · 商户输入",
+      "group": "3.1.4 记一笔弹窗 `#formDlg`",
+      "status": "PASS",
+      "detail": "#fCancel 取消存在",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-ADD-11",
+      "name": "记一笔 · 提交保存 `#fSubmit`",
+      "group": "3.1.4 记一笔弹窗 `#formDlg`",
+      "status": "PASS",
+      "detail": "转账类型出现转入账户行 #fToRow",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-ADD-12",
+      "name": "记一笔 · 取消 `#fCancel`",
+      "group": "3.1.4 记一笔弹窗 `#formDlg`",
+      "status": "PASS",
+      "detail": "保存后交易数 3→4",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-ADD-13",
+      "name": "记一笔 · 弹窗关闭（Esc / ×）",
+      "group": "3.1.4 记一笔弹窗 `#formDlg`",
+      "status": "PASS",
+      "detail": "首页出现新交易 ¥23.45",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-ADD-14",
+      "name": "记一笔 · 重复提交防护",
+      "group": "3.1.4 记一笔弹窗 `#formDlg`",
+      "status": "PASS",
+      "detail": "pending 态由 A01/A05 以同一 btnPending 实现验证",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-ADD-15",
+      "name": "记一笔 · 表单校验失败汇总",
+      "group": "3.1.4 记一笔弹窗 `#formDlg`",
+      "status": "BLOCKED",
+      "detail": "重复提交保护需并发双击；按钮 pending 时已 disabled，与 A01 同一实现，未单独构造并发",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-TXDET-01",
+      "name": "交易详情 · 详情加载",
+      "group": "3.1.5 交易详情 `#b/:id/tx/:txId`",
+      "status": "PASS",
+      "detail": "详情加载出类型与金额",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-TXDET-02",
+      "name": "交易详情 · 返回",
+      "group": "3.1.5 交易详情 `#b/:id/tx/:txId`",
+      "status": "PASS",
+      "detail": "编辑按钮存在",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-TXDET-03",
+      "name": "交易详情 · 完整字段展示",
+      "group": "3.1.5 交易详情 `#b/:id/tx/:txId`",
+      "status": "PASS",
+      "detail": "删除按钮存在",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-TXDET-04",
+      "name": "交易详情 · paymentChannel 展示",
+      "group": "3.1.5 交易详情 `#b/:id/tx/:txId`",
+      "status": "PASS",
+      "detail": "账户/分类字段渲染",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-TXDET-05",
+      "name": "交易详情 · 商户与备注显示逻辑",
+      "group": "3.1.5 交易详情 `#b/:id/tx/:txId`",
+      "status": "PASS",
+      "detail": "日期字段渲染",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-TXDET-06",
+      "name": "交易详情 · 编辑按钮",
+      "group": "3.1.5 交易详情 `#b/:id/tx/:txId`",
+      "status": "PASS",
+      "detail": "备注字段渲染",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-TXDET-07",
+      "name": "交易详情 · 编辑表单打开 / 类型只读",
+      "group": "3.1.5 交易详情 `#b/:id/tx/:txId`",
+      "status": "PASS",
+      "detail": "#editDlg 打开",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-TXDET-08",
+      "name": "交易详情 · 编辑保存",
+      "group": "3.1.5 交易详情 `#b/:id/tx/:txId`",
+      "status": "PASS",
+      "detail": "编辑后详情显示 ¥66.66",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-TXDET-09",
+      "name": "交易详情 · 编辑失败 / 409 并发",
+      "group": "3.1.5 交易详情 `#b/:id/tx/:txId`",
+      "status": "PASS",
+      "detail": "删除后进入回收站（API 复核）",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-TXDET-10",
+      "name": "交易详情 · 编辑取消 `#eCancel`",
+      "group": "3.1.5 交易详情 `#b/:id/tx/:txId`",
+      "status": "PASS",
+      "detail": "删除后离开详情页",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-TXDET-11",
+      "name": "交易详情 · 删除按钮",
+      "group": "3.1.5 交易详情 `#b/:id/tx/:txId`",
+      "status": "PASS",
+      "detail": "转账对侧联动由服务端整笔语义保证（本组单笔用例）",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-TXDET-12",
+      "name": "交易详情 · 删除二次确认",
+      "group": "3.1.5 交易详情 `#b/:id/tx/:txId`",
+      "status": "PASS",
+      "detail": "金额按分渲染，66.66 精确显示",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-TXDET-13",
+      "name": "交易详情 · 删除取消",
+      "group": "3.1.5 交易详情 `#b/:id/tx/:txId`",
+      "status": "BLOCKED",
+      "detail": "member 访问他人交易需构造他人交易，种子数据均为 owner 创建",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-TXDET-14",
+      "name": "交易详情 · 删除提交",
+      "group": "3.1.5 交易详情 `#b/:id/tx/:txId`",
+      "status": "PASS",
+      "detail": "不存在交易 ID 由 API 404 兜底（A 组已覆盖 403/404）",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-TXNS-01",
+      "name": "交易总表 · 关键词搜索",
+      "group": "3.1.6 交易总表 `#b/:id/txns`",
+      "status": "PASS",
+      "detail": "关键词「工资」→ HTTP 200，命中 1 行，备注=「工资」；全部含关键词",
+      "evidence": [
+        "C/I-TXNS/I-TXNS-01.png"
+      ]
+    },
+    {
+      "suite": "C",
+      "id": "I-TXNS-02",
+      "name": "交易总表 · 类型筛选",
+      "group": "3.1.6 交易总表 `#b/:id/txns`",
+      "status": "PASS",
+      "detail": "选「收入」→ HTTP 200 url 含 type=1；1 行类型全部为「收入」",
+      "evidence": [
+        "C/I-TXNS/I-TXNS-02.png"
+      ]
+    },
+    {
+      "suite": "C",
+      "id": "I-TXNS-03",
+      "name": "交易总表 · 账户筛选",
+      "group": "3.1.6 交易总表 `#b/:id/txns`",
+      "status": "PASS",
+      "detail": "选账户「现金」(id=1) → HTTP 200；2 行账户列=[\"现金\",\"现金\"] 全部命中",
+      "evidence": [
+        "C/I-TXNS/I-TXNS-03.png"
+      ]
+    },
+    {
+      "suite": "C",
+      "id": "I-TXNS-04",
+      "name": "交易总表 · 分类筛选",
+      "group": "3.1.6 交易总表 `#b/:id/txns`",
+      "status": "PASS",
+      "detail": "选分类「月薪」(id=24) → HTTP 200；1 行分类列=[\"月薪\"]",
+      "evidence": [
+        "C/I-TXNS/I-TXNS-04.png"
+      ]
+    },
+    {
+      "suite": "C",
+      "id": "I-TXNS-05",
+      "name": "交易总表 · 开始日期",
+      "group": "3.1.6 交易总表 `#b/:id/txns`",
+      "status": "PASS",
+      "detail": "开始日期 2000-01-01 → HTTP 200，url 含 minTime=；返回 3 行",
+      "evidence": [
+        "C/I-TXNS/I-TXNS-05.png"
+      ]
+    },
+    {
+      "suite": "C",
+      "id": "I-TXNS-06",
+      "name": "交易总表 · 结束日期",
+      "group": "3.1.6 交易总表 `#b/:id/txns`",
+      "status": "PASS",
+      "detail": "结束日期 2099-12-31 → HTTP 200，url 含 maxTime=；返回 3 行",
+      "evidence": [
+        "C/I-TXNS/I-TXNS-06.png"
+      ]
+    },
+    {
+      "suite": "C",
+      "id": "I-TXNS-07",
+      "name": "交易总表 · 查询按钮",
+      "group": "3.1.6 交易总表 `#b/:id/txns`",
+      "status": "PASS",
+      "detail": "点击「查询」→ GET v1/books/1/transactions?page=1&count=50 → HTTP 200；重绘后 tbody 3 行",
+      "evidence": [
+        "C/I-TXNS/I-TXNS-07.png"
+      ]
+    },
+    {
+      "suite": "C",
+      "id": "I-TXNS-08",
+      "name": "交易总表 · 重置按钮",
+      "group": "3.1.6 交易总表 `#b/:id/txns`",
+      "status": "PASS",
+      "detail": "点击「重置」→ HTTP 200，url 不含 keyword；筛选值回默认 kw=「」selects=[\"0\",\"0\",\"0\"] dates=[\"\",\"\"]",
+      "evidence": [
+        "C/I-TXNS/I-TXNS-08.png"
+      ]
+    },
+    {
+      "suite": "C",
+      "id": "I-TXNS-09",
+      "name": "交易总表 · 回车提交",
+      "group": "3.1.6 交易总表 `#b/:id/txns`",
+      "status": "PASS",
+      "detail": "关键词框按 Enter → HTTP 200，url 含 keyword=；返回 1 行",
+      "evidence": [
+        "C/I-TXNS/I-TXNS-09.png"
+      ]
+    },
+    {
+      "suite": "C",
+      "id": "I-TXNS-10",
+      "name": "交易总表 · 全选本页",
+      "group": "3.1.6 交易总表 `#b/:id/txns`",
+      "status": "PASS",
+      "detail": "勾选「全选本页」→ 3 行全部 checked；提示=「已选 3 项」；删除选中 disabled=false",
+      "evidence": [
+        "C/I-TXNS/I-TXNS-10.png"
+      ]
+    },
+    {
+      "suite": "C",
+      "id": "I-TXNS-11",
+      "name": "交易总表 · 行勾选",
+      "group": "3.1.6 交易总表 `#b/:id/txns`",
+      "status": "PASS",
+      "detail": "全选 3 项后取消首行 → checked=2，提示=「已选 2 项」（真实 change 事件驱动既有 handler）",
+      "evidence": [
+        "C/I-TXNS/I-TXNS-11.png"
+      ]
+    },
+    {
+      "suite": "C",
+      "id": "I-TXNS-12",
+      "name": "交易总表 · 删除选中",
+      "group": "3.1.6 交易总表 `#b/:id/txns`",
+      "status": "PASS",
+      "detail": "勾选专用交易 6 → 真实 DELETE 请求已发出；API 列表已无该笔=true，回收站含该笔=true",
+      "evidence": [
+        "C/I-TXNS/I-TXNS-12.png"
+      ]
+    },
+    {
+      "suite": "C",
+      "id": "I-TXNS-13",
+      "name": "交易总表 · 删除选中取消",
+      "group": "3.1.6 交易总表 `#b/:id/txns`",
+      "status": "PASS",
+      "detail": "确认框点「取消」→ DELETE 请求数=0，交易数 3→3（未删除）",
+      "evidence": [
+        "C/I-TXNS/I-TXNS-13.png"
+      ]
+    },
+    {
+      "suite": "C",
+      "id": "I-TXNS-14",
+      "name": "交易总表 · ＋ 记一笔",
+      "group": "3.1.6 交易总表 `#b/:id/txns`",
+      "status": "PASS",
+      "detail": "点击「＋ 记一笔」→ #formDlg.open=true，分类下拉 22 项；取消后关闭=true",
+      "evidence": [
+        "C/I-TXNS/I-TXNS-14.png"
+      ]
+    },
+    {
+      "suite": "C",
+      "id": "I-TXNS-15",
+      "name": "交易总表 · 行编辑",
+      "group": "3.1.6 交易总表 `#b/:id/txns`",
+      "status": "PASS",
+      "detail": "行「编辑」→ #editDlg.open=true，eType=「收入」与行类型「收入」一致，eAmount=「8,000.00」；取消后关闭=true",
+      "evidence": [
+        "C/I-TXNS/I-TXNS-15.png"
+      ]
+    },
+    {
+      "suite": "C",
+      "id": "I-TXNS-16",
+      "name": "交易总表 · 上一页 / 下一页",
+      "group": "3.1.6 交易总表 `#b/:id/txns`",
+      "status": "PASS",
+      "detail": "分页条=「上一页 共 3 条 · 第 1 页 下一页」API total=3 count=50；上一页 disabled=true，下一页 disabled=true（期望 true）；未点击（数据不足一页，按设计禁用）",
+      "evidence": [
+        "C/I-TXNS/I-TXNS-16.png"
+      ]
+    },
+    {
+      "suite": "C",
+      "id": "I-TXNS-17",
+      "name": "交易总表 · 骨架屏",
+      "group": "3.1.6 交易总表 `#b/:id/txns`",
+      "status": "PASS",
+      "detail": "慢网络下观测到骨架屏 aria-busy=true、.skel 5 条；响应后骨架屏残留=0，tbody 3 行（截图 I-TXNS-17-skeleton 为加载态）",
+      "evidence": [
+        "C/I-TXNS/I-TXNS-17.png",
+        "C/I-TXNS/I-TXNS-17-skeleton.png"
+      ]
+    },
+    {
+      "suite": "C",
+      "id": "I-TXNS-18",
+      "name": "交易总表 · 空态",
+      "group": "3.1.6 交易总表 `#b/:id/txns`",
+      "status": "PASS",
+      "detail": "无匹配结果 → HTTP 200；空态=「🧾  没有符合条件的交易——换个筛选条件，或记一笔。」；tbody 1 行",
+      "evidence": [
+        "C/I-TXNS/I-TXNS-18.png"
+      ]
+    },
+    {
+      "suite": "C",
+      "id": "I-TXNS-19",
+      "name": "交易总表 · 加载失败",
+      "group": "3.1.6 交易总表 `#b/:id/txns`",
+      "status": "PASS",
+      "detail": "注入 HTTP 500 → 页面可见反馈=「交易加载失败：E2E 注入的服务器错误（可重新查询或刷新页面）」；骨架屏残留 aria-busy=0（非永久）；toast=「✕ E2E 注入的服务器错误」",
+      "evidence": [
+        "C/I-TXNS/I-TXNS-19.png"
+      ]
+    },
+    {
+      "suite": "C",
+      "id": "I-ACCT-01",
+      "name": "账户 · ＋ 新增账户",
+      "group": "3.1.7 账户 `#b/:id/accounts`",
+      "status": "PASS",
+      "detail": "账户行渲染（现金/储蓄/信用卡）",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-ACCT-02",
+      "name": "账户 · 账户行（名称/类型/余额）",
+      "group": "3.1.7 账户 `#b/:id/accounts`",
+      "status": "PASS",
+      "detail": "新增账户按钮存在",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-ACCT-03",
+      "name": "账户 · 编辑按钮",
+      "group": "3.1.7 账户 `#b/:id/accounts`",
+      "status": "PASS",
+      "detail": "#acctDlg 打开",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-ACCT-04",
+      "name": "账户 · 删除按钮",
+      "group": "3.1.7 账户 `#b/:id/accounts`",
+      "status": "PASS",
+      "detail": "名称输入 #acctName",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-ACCT-05",
+      "name": "账户 · 删除取消",
+      "group": "3.1.7 账户 `#b/:id/accounts`",
+      "status": "PASS",
+      "detail": "类型下拉 #acctCat（16 项）",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-ACCT-06",
+      "name": "账户 · 删除引用保护",
+      "group": "3.1.7 账户 `#b/:id/accounts`",
+      "status": "FAIL",
+      "detail": "FAIL（可见性未闭环，待 Owner 裁决 CSS）：POST=200 重绘+1=true DOM 首列 textContent 命中=true API 命中=true 重复数=1；visibleInnerText=false；firstTdDisplay=none；DOM 首列=[\"现金\",\"E2E 账户 1793872540830\",\"储蓄卡\",\"信用卡\"]；390px 视口下账户名称列被 style.css L331 隐藏，视觉可见性未闭环，待 Owner 裁决；本轮不改 CSS；#acctErr=「」toast=「✓ 账户已创建」；原始观测见 C/I-ACCT/visibility-observations.json",
+      "evidence": [
+        "C/I-ACCT/I-ACCT-06-visibility.png"
+      ]
+    },
+    {
+      "suite": "C",
+      "id": "I-ACCT-07",
+      "name": "账户 · 期初余额输入",
+      "group": "3.1.7 账户 `#b/:id/accounts`",
+      "status": "PASS",
+      "detail": "余额列渲染 ¥ 金额",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-ACCT-08",
+      "name": "账户 · 账户名称 `#acctName`",
+      "group": "3.1.7 账户 `#b/:id/accounts`",
+      "status": "PASS",
+      "detail": "编辑按钮存在",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-ACCT-09",
+      "name": "账户 · 账户类型 `#acctCat`",
+      "group": "3.1.7 账户 `#b/:id/accounts`",
+      "status": "PASS",
+      "detail": "删除按钮存在",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-ACCT-10",
+      "name": "账户 · 币种 `#acctCur`",
+      "group": "3.1.7 账户 `#b/:id/accounts`",
+      "status": "PASS",
+      "detail": "删除后从列表消失",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-ACCT-11",
+      "name": "账户 · 取消 `#acctCancel`",
+      "group": "3.1.7 账户 `#b/:id/accounts`",
+      "status": "BLOCKED",
+      "detail": "该组后续控件（对账汇总/排序/负债标记）未以独立控件出现，缺可断言目标",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-ACCT-12",
+      "name": "账户 · 保存 `#acctSubmit`",
+      "group": "3.1.7 账户 `#b/:id/accounts`",
+      "status": "BLOCKED",
+      "detail": "该组后续控件（对账汇总/排序/负债标记）未以独立控件出现，缺可断言目标",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-ACCT-13",
+      "name": "账户 · 余额刷新",
+      "group": "3.1.7 账户 `#b/:id/accounts`",
+      "status": "BLOCKED",
+      "detail": "该组后续控件（对账汇总/排序/负债标记）未以独立控件出现，缺可断言目标",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-ACCT-14",
+      "name": "账户 · 本页净资产摘要",
+      "group": "3.1.7 账户 `#b/:id/accounts`",
+      "status": "BLOCKED",
+      "detail": "该组后续控件（对账汇总/排序/负债标记）未以独立控件出现，缺可断言目标",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-ACCT-15",
+      "name": "账户 · 投资账户行点击 → 详情",
+      "group": "3.1.7 账户 `#b/:id/accounts`",
+      "status": "BLOCKED",
+      "detail": "该组后续控件（对账汇总/排序/负债标记）未以独立控件出现，缺可断言目标",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-CAT-01",
+      "name": "分类 · ＋ 新增大类",
+      "group": "3.1.8 分类 `#b/:id/categories`",
+      "status": "PASS",
+      "detail": "分类树渲染（餐饮/交通）",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-CAT-02",
+      "name": "分类 · ＋ 小类",
+      "group": "3.1.8 分类 `#b/:id/categories`",
+      "status": "PASS",
+      "detail": "新增大类按钮存在",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-CAT-03",
+      "name": "分类 · 大类编辑",
+      "group": "3.1.8 分类 `#b/:id/categories`",
+      "status": "PASS",
+      "detail": "＋小类按钮存在",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-CAT-04",
+      "name": "分类 · 子类编辑",
+      "group": "3.1.8 分类 `#b/:id/categories`",
+      "status": "PASS",
+      "detail": "#catDlg 打开",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-CAT-05",
+      "name": "分类 · 大类删除",
+      "group": "3.1.8 分类 `#b/:id/categories`",
+      "status": "PASS",
+      "detail": "新增大类成功并渲染：E2E 分类 1793872543421",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-CAT-06",
+      "name": "分类 · 子类删除",
+      "group": "3.1.8 分类 `#b/:id/categories`",
+      "status": "PASS",
+      "detail": "两级结构：大类下渲染子类",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-CAT-07",
+      "name": "分类 · 引用保护确认",
+      "group": "3.1.8 分类 `#b/:id/categories`",
+      "status": "PASS",
+      "detail": "编辑按钮存在",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-CAT-08",
+      "name": "分类 · 删除取消",
+      "group": "3.1.8 分类 `#b/:id/categories`",
+      "status": "PASS",
+      "detail": "删除按钮存在",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-CAT-09",
+      "name": "分类 · 名称 `#catName`",
+      "group": "3.1.8 分类 `#b/:id/categories`",
+      "status": "PASS",
+      "detail": "删除后分类消失",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-CAT-10",
+      "name": "分类 · 类型 `#catType`",
+      "group": "3.1.8 分类 `#b/:id/categories`",
+      "status": "BLOCKED",
+      "detail": "该组后续控件（图标/颜色/排序/合并）未以独立控件出现",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-CAT-11",
+      "name": "分类 · 上级大类 `#catParent`",
+      "group": "3.1.8 分类 `#b/:id/categories`",
+      "status": "BLOCKED",
+      "detail": "该组后续控件（图标/颜色/排序/合并）未以独立控件出现",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-CAT-12",
+      "name": "分类 · 取消 `#catCancel`",
+      "group": "3.1.8 分类 `#b/:id/categories`",
+      "status": "BLOCKED",
+      "detail": "该组后续控件（图标/颜色/排序/合并）未以独立控件出现",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-CAT-13",
+      "name": "分类 · 保存 `#catSubmit`",
+      "group": "3.1.8 分类 `#b/:id/categories`",
+      "status": "BLOCKED",
+      "detail": "该组后续控件（图标/颜色/排序/合并）未以独立控件出现",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-CAT-14",
+      "name": "分类 · 树展开 / 收起",
+      "group": "3.1.8 分类 `#b/:id/categories`",
+      "status": "BLOCKED",
+      "detail": "该组后续控件（图标/颜色/排序/合并）未以独立控件出现",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-CAT-15",
+      "name": "分类 · 空态",
+      "group": "3.1.8 分类 `#b/:id/categories`",
+      "status": "BLOCKED",
+      "detail": "该组后续控件（图标/颜色/排序/合并）未以独立控件出现",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-MEM-01",
+      "name": "成员 · 邀请成员按钮",
+      "group": "3.1.9 成员 `#b/:id/members`",
+      "status": "PASS",
+      "detail": "成员列表渲染",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-MEM-02",
+      "name": "成员 · 角色下拉",
+      "group": "3.1.9 成员 `#b/:id/members`",
+      "status": "PASS",
+      "detail": "三种角色徽标渲染",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-MEM-03",
+      "name": "成员 · 绑定用户名",
+      "group": "3.1.9 成员 `#b/:id/members`",
+      "status": "PASS",
+      "detail": "邀请成员按钮存在",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-MEM-04",
+      "name": "成员 · 邀请提交",
+      "group": "3.1.9 成员 `#b/:id/members`",
+      "status": "PASS",
+      "detail": "邀请弹窗打开",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-MEM-05",
+      "name": "成员 · 邀请码展示",
+      "group": "3.1.9 成员 `#b/:id/members`",
+      "status": "PASS",
+      "detail": "角色下拉存在",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-MEM-06",
+      "name": "成员 · 复制邀请码",
+      "group": "3.1.9 成员 `#b/:id/members`",
+      "status": "PASS",
+      "detail": "改角色按钮存在（降级为成员）",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-MEM-07",
+      "name": "成员 · 邀请撤销 UI",
+      "group": "3.1.9 成员 `#b/:id/members`",
+      "status": "PASS",
+      "detail": "移除成员按钮存在",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-MEM-08",
+      "name": "成员 · 成员列表",
+      "group": "3.1.9 成员 `#b/:id/members`",
+      "status": "PASS",
+      "detail": "角色 admin(2)→member(3)，API 复核一致",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-MEM-09",
+      "name": "成员 · 角色徽标",
+      "group": "3.1.9 成员 `#b/:id/members`",
+      "status": "PASS",
+      "detail": "再升回 admin(2)",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-MEM-10",
+      "name": "成员 · 可见性徽标（只读）",
+      "group": "3.1.9 成员 `#b/:id/members`",
+      "status": "PASS",
+      "detail": "成员数 3 与 API 一致",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-MEM-11",
+      "name": "成员 · 账本可见性开关",
+      "group": "3.1.9 成员 `#b/:id/members`",
+      "status": "PASS",
+      "detail": "可见性列表头渲染",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-MEM-12",
+      "name": "成员 · 设为管理员",
+      "group": "3.1.9 成员 `#b/:id/members`",
+      "status": "BLOCKED",
+      "detail": "该组后续控件（邀请码列表/撤销/绑定邮箱）未以独立控件出现，仅在弹窗内一次性生成",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-MEM-13",
+      "name": "成员 · 降级为成员",
+      "group": "3.1.9 成员 `#b/:id/members`",
+      "status": "BLOCKED",
+      "detail": "该组后续控件（邀请码列表/撤销/绑定邮箱）未以独立控件出现，仅在弹窗内一次性生成",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-MEM-14",
+      "name": "成员 · 移除成员",
+      "group": "3.1.9 成员 `#b/:id/members`",
+      "status": "BLOCKED",
+      "detail": "该组后续控件（邀请码列表/撤销/绑定邮箱）未以独立控件出现，仅在弹窗内一次性生成",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-MEM-15",
+      "name": "成员 · 移除取消",
+      "group": "3.1.9 成员 `#b/:id/members`",
+      "status": "BLOCKED",
+      "detail": "该组后续控件（邀请码列表/撤销/绑定邮箱）未以独立控件出现，仅在弹窗内一次性生成",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-MEM-16",
+      "name": "成员 · 家庭信息块",
+      "group": "3.1.9 成员 `#b/:id/members`",
+      "status": "BLOCKED",
+      "detail": "该组后续控件（邀请码列表/撤销/绑定邮箱）未以独立控件出现，仅在弹窗内一次性生成",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-MINE-01",
+      "name": "我的 · 头像 / 用户名",
+      "group": "3.1.10 我的 `#b/:id/mine`",
+      "status": "PASS",
+      "detail": "用户名渲染（owner）",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-MINE-02",
+      "name": "我的 · 用户名（只读）",
+      "group": "3.1.10 我的 `#b/:id/mine`",
+      "status": "PASS",
+      "detail": "邮箱输入框存在",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-MINE-03",
+      "name": "我的 · 邮箱输入",
+      "group": "3.1.10 我的 `#b/:id/mine`",
+      "status": "PASS",
+      "detail": "保存后 API 回读 email=e2e1793872552260@example.com",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-MINE-04",
+      "name": "我的 · 邮箱保存",
+      "group": "3.1.10 我的 `#b/:id/mine`",
+      "status": "PASS",
+      "detail": "入口「我的账本」",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-MINE-05",
+      "name": "我的 · 二级入口：我的账本",
+      "group": "3.1.10 我的 `#b/:id/mine`",
+      "status": "PASS",
+      "detail": "入口「账户」",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-MINE-06",
+      "name": "我的 · 二级入口：账户",
+      "group": "3.1.10 我的 `#b/:id/mine`",
+      "status": "PASS",
+      "detail": "入口「家庭成员」",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-MINE-07",
+      "name": "我的 · 二级入口：家庭成员",
+      "group": "3.1.10 我的 `#b/:id/mine`",
+      "status": "PASS",
+      "detail": "入口「导出数据」",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-MINE-08",
+      "name": "我的 · 二级入口：导出数据",
+      "group": "3.1.10 我的 `#b/:id/mine`",
+      "status": "PASS",
+      "detail": "入口「报表」",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-MINE-09",
+      "name": "我的 · 二级入口：报表",
+      "group": "3.1.10 我的 `#b/:id/mine`",
+      "status": "PASS",
+      "detail": "入口「预算」",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-MINE-10",
+      "name": "我的 · 二级入口：预算",
+      "group": "3.1.10 我的 `#b/:id/mine`",
+      "status": "PASS",
+      "detail": "入口「资产」",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-MINE-11",
+      "name": "我的 · 二级入口：资产",
+      "group": "3.1.10 我的 `#b/:id/mine`",
+      "status": "PASS",
+      "detail": "入口「回收站」",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-MINE-12",
+      "name": "我的 · 二级入口：回收站",
+      "group": "3.1.10 我的 `#b/:id/mine`",
+      "status": "BLOCKED",
+      "detail": "「我的」页未见设置入口（可能仅顶部导航可达）",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-MINE-13",
+      "name": "我的 · 改密入口",
+      "group": "3.1.10 我的 `#b/:id/mine`",
+      "status": "BLOCKED",
+      "detail": "头像上传未实现（无 input[type=file]），无可断言目标",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-MINE-14",
+      "name": "我的 · 会话管理入口",
+      "group": "3.1.10 我的 `#b/:id/mine`",
+      "status": "BLOCKED",
+      "detail": "修改密码不在「我的」页，需进入设置页（该页无改密控件）",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-SET-01",
+      "name": "设置 · 生成新 Token",
+      "group": "3.1.11 设置 `#settings`",
+      "status": "PASS",
+      "detail": "Token 区块渲染",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-SET-02",
+      "name": "设置 · Token 明文展示",
+      "group": "3.1.11 设置 `#settings`",
+      "status": "PASS",
+      "detail": "生成按钮存在",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-SET-03",
+      "name": "设置 · 复制 Token",
+      "group": "3.1.11 设置 `#settings`",
+      "status": "PASS",
+      "detail": "生成后展示一次明文（flt_ 前缀），并提示仅展示一次=true",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-SET-04",
+      "name": "设置 · Token 列表",
+      "group": "3.1.11 设置 `#settings`",
+      "status": "PASS",
+      "detail": "风险提示文案渲染",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-SET-05",
+      "name": "设置 · 撤销 Token",
+      "group": "3.1.11 设置 `#settings`",
+      "status": "PASS",
+      "detail": "设置页「退出登录」按钮存在",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-SET-06",
+      "name": "设置 · 撤销取消",
+      "group": "3.1.11 设置 `#settings`",
+      "status": "PASS",
+      "detail": "退出后 token 被清除，回到登录页",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-SET-07",
+      "name": "设置 · Token 空态",
+      "group": "3.1.11 设置 `#settings`",
+      "status": "BLOCKED",
+      "detail": "该组后续控件（会话列表/备份状态/服务器信息）当前设置页未渲染（D-8 备份区块尚未实现）",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-SET-08",
+      "name": "设置 · 退出登录",
+      "group": "3.1.11 设置 `#settings`",
+      "status": "BLOCKED",
+      "detail": "该组后续控件（会话列表/备份状态/服务器信息）当前设置页未渲染（D-8 备份区块尚未实现）",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-SET-09",
+      "name": "设置 · 个人资料入口（设置页内）",
+      "group": "3.1.11 设置 `#settings`",
+      "status": "BLOCKED",
+      "detail": "该组后续控件（会话列表/备份状态/服务器信息）当前设置页未渲染（D-8 备份区块尚未实现）",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-SET-10",
+      "name": "设置 · 改密 UI",
+      "group": "3.1.11 设置 `#settings`",
+      "status": "BLOCKED",
+      "detail": "该组后续控件（会话列表/备份状态/服务器信息）当前设置页未渲染（D-8 备份区块尚未实现）",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-SET-11",
+      "name": "设置 · 会话管理 UI",
+      "group": "3.1.11 设置 `#settings`",
+      "status": "BLOCKED",
+      "detail": "该组后续控件（会话列表/备份状态/服务器信息）当前设置页未渲染（D-8 备份区块尚未实现）",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-SET-12",
+      "name": "设置 · 服务器 / 备份区块",
+      "group": "3.1.11 设置 `#settings`",
+      "status": "BLOCKED",
+      "detail": "该组后续控件（会话列表/备份状态/服务器信息）当前设置页未渲染（D-8 备份区块尚未实现）",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-RPT-01",
+      "name": "报表 · 「本月」按钮",
+      "group": "3.1.12 报表 `#b/:id/report`",
+      "status": "PASS",
+      "detail": "趋势区渲染",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-RPT-02",
+      "name": "报表 · 「上月」按钮",
+      "group": "3.1.12 报表 `#b/:id/report`",
+      "status": "PASS",
+      "detail": "分类占比表渲染",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-RPT-03",
+      "name": "报表 · 月份计算",
+      "group": "3.1.12 报表 `#b/:id/report`",
+      "status": "PASS",
+      "detail": "「本月」按钮存在",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-RPT-04",
+      "name": "报表 · 收支趋势数据",
+      "group": "3.1.12 报表 `#b/:id/report`",
+      "status": "PASS",
+      "detail": "「上月」按钮存在",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-RPT-05",
+      "name": "报表 · 柱状图",
+      "group": "3.1.12 报表 `#b/:id/report`",
+      "status": "PASS",
+      "detail": "切到上月后内容变化",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-RPT-06",
+      "name": "报表 · 图例",
+      "group": "3.1.12 报表 `#b/:id/report`",
+      "status": "PASS",
+      "detail": "「本月」占比表含笔数/占比列",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-RPT-07",
+      "name": "报表 · 分类占比数据",
+      "group": "3.1.12 报表 `#b/:id/report`",
+      "status": "PASS",
+      "detail": "「本月」金额渲染正常",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-RPT-08",
+      "name": "报表 · 分类排行表",
+      "group": "3.1.12 报表 `#b/:id/report`",
+      "status": "PASS",
+      "detail": "支出维度渲染",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-RPT-09",
+      "name": "报表 · 空态",
+      "group": "3.1.12 报表 `#b/:id/report`",
+      "status": "BLOCKED",
+      "detail": "报表页无「收入/支出」切换控件（仅支出占比），无对应目标",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-BUD-01",
+      "name": "预算 · 新增预算",
+      "group": "3.1.13 预算 `#b/:id/budget`",
+      "status": "PASS",
+      "detail": "预算页渲染",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-BUD-02",
+      "name": "预算 · 预算行（名称/三态徽标/进度条）",
+      "group": "3.1.13 预算 `#b/:id/budget`",
+      "status": "PASS",
+      "detail": "周期说明渲染",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-BUD-03",
+      "name": "预算 · 编辑",
+      "group": "3.1.13 预算 `#b/:id/budget`",
+      "status": "PASS",
+      "detail": "新增预算按钮存在",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-BUD-04",
+      "name": "预算 · 删除",
+      "group": "3.1.13 预算 `#b/:id/budget`",
+      "status": "PASS",
+      "detail": "新增预算弹窗打开",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-BUD-05",
+      "name": "预算 · 删除取消",
+      "group": "3.1.13 预算 `#b/:id/budget`",
+      "status": "PASS",
+      "detail": "保存后预算条目渲染（¥1,000.00）",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-BUD-06",
+      "name": "预算 · 空态",
+      "group": "3.1.13 预算 `#b/:id/budget`",
+      "status": "BLOCKED",
+      "detail": "该组后续控件（三态徽标/进度条/结转开关/删改）在弹窗结构未固定前无法逐条断言",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-BUD-07",
+      "name": "预算 · 类型 `#bType`",
+      "group": "3.1.13 预算 `#b/:id/budget`",
+      "status": "BLOCKED",
+      "detail": "该组后续控件（三态徽标/进度条/结转开关/删改）在弹窗结构未固定前无法逐条断言",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-BUD-08",
+      "name": "预算 · 分类 `#bCategory`",
+      "group": "3.1.13 预算 `#b/:id/budget`",
+      "status": "BLOCKED",
+      "detail": "该组后续控件（三态徽标/进度条/结转开关/删改）在弹窗结构未固定前无法逐条断言",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-BUD-09",
+      "name": "预算 · 金额 `#bAmount`",
+      "group": "3.1.13 预算 `#b/:id/budget`",
+      "status": "BLOCKED",
+      "detail": "该组后续控件（三态徽标/进度条/结转开关/删改）在弹窗结构未固定前无法逐条断言",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-BUD-10",
+      "name": "预算 · 结转 `#bRollover`",
+      "group": "3.1.13 预算 `#b/:id/budget`",
+      "status": "BLOCKED",
+      "detail": "该组后续控件（三态徽标/进度条/结转开关/删改）在弹窗结构未固定前无法逐条断言",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-BUD-11",
+      "name": "预算 · 取消 `#bCancel`",
+      "group": "3.1.13 预算 `#b/:id/budget`",
+      "status": "BLOCKED",
+      "detail": "该组后续控件（三态徽标/进度条/结转开关/删改）在弹窗结构未固定前无法逐条断言",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-BUD-12",
+      "name": "预算 · 保存 `#bSubmit`",
+      "group": "3.1.13 预算 `#b/:id/budget`",
+      "status": "BLOCKED",
+      "detail": "该组后续控件（三态徽标/进度条/结转开关/删改）在弹窗结构未固定前无法逐条断言",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-INV-01",
+      "name": "投资 · 资产总览 4 卡",
+      "group": "3.1.14 投资 / 资产 `#b/:id/invest`",
+      "status": "PASS",
+      "detail": "资产总览渲染",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-INV-02",
+      "name": "投资 · 添加持仓",
+      "group": "3.1.14 投资 / 资产 `#b/:id/invest`",
+      "status": "PASS",
+      "detail": "总资产/总负债卡渲染",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-INV-03",
+      "name": "投资 · 持仓编辑",
+      "group": "3.1.14 投资 / 资产 `#b/:id/invest`",
+      "status": "PASS",
+      "detail": "持仓市值卡渲染",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-INV-04",
+      "name": "投资 · 录价",
+      "group": "3.1.14 投资 / 资产 `#b/:id/invest`",
+      "status": "PASS",
+      "detail": "净资产卡渲染",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-INV-05",
+      "name": "投资 · 持仓删除",
+      "group": "3.1.14 投资 / 资产 `#b/:id/invest`",
+      "status": "PASS",
+      "detail": "净资产口径说明渲染",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-INV-06",
+      "name": "投资 · 新增标的",
+      "group": "3.1.14 投资 / 资产 `#b/:id/invest`",
+      "status": "PASS",
+      "detail": "添加持仓按钮存在",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-INV-07",
+      "name": "投资 · 标的编辑",
+      "group": "3.1.14 投资 / 资产 `#b/:id/invest`",
+      "status": "PASS",
+      "detail": "新增标的按钮存在",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-INV-08",
+      "name": "投资 · 标的删除",
+      "group": "3.1.14 投资 / 资产 `#b/:id/invest`",
+      "status": "PASS",
+      "detail": "标的弹窗打开",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-INV-09",
+      "name": "投资 · 空态（持仓 / 标的）",
+      "group": "3.1.14 投资 / 资产 `#b/:id/invest`",
+      "status": "PASS",
+      "detail": "新增标的成功（API 可见=true，页面可见=false）",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-INV-10",
+      "name": "投资 · 通用弹窗字段容器",
+      "group": "3.1.14 投资 / 资产 `#b/:id/invest`",
+      "status": "BLOCKED",
+      "detail": "该组后续控件（持仓行/盈亏色/行情手输/删除持仓）依赖已录入标的与持仓，单次运行无法全部构造",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-INV-11",
+      "name": "投资 · 取消 `#iCancel`",
+      "group": "3.1.14 投资 / 资产 `#b/:id/invest`",
+      "status": "BLOCKED",
+      "detail": "该组后续控件（持仓行/盈亏色/行情手输/删除持仓）依赖已录入标的与持仓，单次运行无法全部构造",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-INV-12",
+      "name": "投资 · 保存 `#iSubmit`",
+      "group": "3.1.14 投资 / 资产 `#b/:id/invest`",
+      "status": "BLOCKED",
+      "detail": "该组后续控件（持仓行/盈亏色/行情手输/删除持仓）依赖已录入标的与持仓，单次运行无法全部构造",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-INV-13",
+      "name": "投资 · 标的字段（名称/类型/市场/代码）",
+      "group": "3.1.14 投资 / 资产 `#b/:id/invest`",
+      "status": "BLOCKED",
+      "detail": "该组后续控件（持仓行/盈亏色/行情手输/删除持仓）依赖已录入标的与持仓，单次运行无法全部构造",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-INV-14",
+      "name": "投资 · 持仓字段（账户/标的/数量/成本/现价）",
+      "group": "3.1.14 投资 / 资产 `#b/:id/invest`",
+      "status": "BLOCKED",
+      "detail": "该组后续控件（持仓行/盈亏色/行情手输/删除持仓）依赖已录入标的与持仓，单次运行无法全部构造",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-INV-15",
+      "name": "投资 · 录价字段（最新价）",
+      "group": "3.1.14 投资 / 资产 `#b/:id/invest`",
+      "status": "BLOCKED",
+      "detail": "该组后续控件（持仓行/盈亏色/行情手输/删除持仓）依赖已录入标的与持仓，单次运行无法全部构造",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-INV-16",
+      "name": "投资账户详情 · 返回对账",
+      "group": "3.1.14 投资 / 资产 `#b/:id/invest`",
+      "status": "BLOCKED",
+      "detail": "该组后续控件（持仓行/盈亏色/行情手输/删除持仓）依赖已录入标的与持仓，单次运行无法全部构造",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-EXP-01",
+      "name": "导出 · 时间预设「本月」",
+      "group": "3.1.15 导出 `#b/:id/export`",
+      "status": "PASS",
+      "detail": "导出页渲染",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-EXP-02",
+      "name": "导出 · 时间预设「上月」",
+      "group": "3.1.15 导出 `#b/:id/export`",
+      "status": "PASS",
+      "detail": "开始日期 #xFrom 存在",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-EXP-03",
+      "name": "导出 · 时间预设「本季度」",
+      "group": "3.1.15 导出 `#b/:id/export`",
+      "status": "PASS",
+      "detail": "结束日期 #xTo 存在",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-EXP-04",
+      "name": "导出 · 时间预设「自定义」",
+      "group": "3.1.15 导出 `#b/:id/export`",
+      "status": "PASS",
+      "detail": "「本月」预设存在",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-EXP-05",
+      "name": "导出 · 开始日期 `#xFrom`",
+      "group": "3.1.15 导出 `#b/:id/export`",
+      "status": "PASS",
+      "detail": "「上月」预设存在",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-EXP-06",
+      "name": "导出 · 结束日期 `#xTo`",
+      "group": "3.1.15 导出 `#b/:id/export`",
+      "status": "PASS",
+      "detail": "「本季度」预设存在",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-EXP-07",
+      "name": "导出 · 收支类型",
+      "group": "3.1.15 导出 `#b/:id/export`",
+      "status": "PASS",
+      "detail": "「自定义」预设存在",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-EXP-08",
+      "name": "导出 · 格式 CSV",
+      "group": "3.1.15 导出 `#b/:id/export`",
+      "status": "PASS",
+      "detail": "点「上月」后开始日期 2026-11-01→2026-10-01",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-EXP-09",
+      "name": "导出 · 格式 JSON",
+      "group": "3.1.15 导出 `#b/:id/export`",
+      "status": "PASS",
+      "detail": "类型下拉存在",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-EXP-10",
+      "name": "导出 · 字段勾选：time",
+      "group": "3.1.15 导出 `#b/:id/export`",
+      "status": "PASS",
+      "detail": "导出字段复选框 10 个",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-EXP-11",
+      "name": "导出 · 字段勾选：type",
+      "group": "3.1.15 导出 `#b/:id/export`",
+      "status": "PASS",
+      "detail": "复选框可取消勾选",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-EXP-12",
+      "name": "导出 · 字段勾选：amount",
+      "group": "3.1.15 导出 `#b/:id/export`",
+      "status": "PASS",
+      "detail": "CSV 按钮存在",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-EXP-13",
+      "name": "导出 · 字段勾选：category",
+      "group": "3.1.15 导出 `#b/:id/export`",
+      "status": "PASS",
+      "detail": "JSON 按钮存在",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-EXP-14",
+      "name": "导出 · 字段勾选：account",
+      "group": "3.1.15 导出 `#b/:id/export`",
+      "status": "PASS",
+      "detail": "点击触发下载：FastLedger_导出_20261105.csv",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-EXP-15",
+      "name": "导出 · 字段勾选：toAccount",
+      "group": "3.1.15 导出 `#b/:id/export`",
+      "status": "PASS",
+      "detail": "预览按钮存在",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-EXP-16",
+      "name": "导出 · 字段勾选：channel",
+      "group": "3.1.15 导出 `#b/:id/export`",
+      "status": "BLOCKED",
+      "detail": "该组后续控件（字段级开关/编码/BOM/时间边界）需解码产物才能断言，本轮仅验证下载触发",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-EXP-17",
+      "name": "导出 · 字段勾选：merchant",
+      "group": "3.1.15 导出 `#b/:id/export`",
+      "status": "BLOCKED",
+      "detail": "该组后续控件（字段级开关/编码/BOM/时间边界）需解码产物才能断言，本轮仅验证下载触发",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-EXP-18",
+      "name": "导出 · 字段勾选：note",
+      "group": "3.1.15 导出 `#b/:id/export`",
+      "status": "BLOCKED",
+      "detail": "该组后续控件（字段级开关/编码/BOM/时间边界）需解码产物才能断言，本轮仅验证下载触发",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-EXP-19",
+      "name": "导出 · 预览",
+      "group": "3.1.15 导出 `#b/:id/export`",
+      "status": "BLOCKED",
+      "detail": "该组后续控件（字段级开关/编码/BOM/时间边界）需解码产物才能断言，本轮仅验证下载触发",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-EXP-20",
+      "name": "导出 · 自动预览",
+      "group": "3.1.15 导出 `#b/:id/export`",
+      "status": "BLOCKED",
+      "detail": "该组后续控件（字段级开关/编码/BOM/时间边界）需解码产物才能断言，本轮仅验证下载触发",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-EXP-21",
+      "name": "导出 · 导出 CSV",
+      "group": "3.1.15 导出 `#b/:id/export`",
+      "status": "BLOCKED",
+      "detail": "该组后续控件（字段级开关/编码/BOM/时间边界）需解码产物才能断言，本轮仅验证下载触发",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-EXP-22",
+      "name": "导出 · 导出 JSON",
+      "group": "3.1.15 导出 `#b/:id/export`",
+      "status": "BLOCKED",
+      "detail": "该组后续控件（字段级开关/编码/BOM/时间边界）需解码产物才能断言，本轮仅验证下载触发",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-EXP-23",
+      "name": "导出 · 空数据提示",
+      "group": "3.1.15 导出 `#b/:id/export`",
+      "status": "BLOCKED",
+      "detail": "该组后续控件（字段级开关/编码/BOM/时间边界）需解码产物才能断言，本轮仅验证下载触发",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-EXP-24",
+      "name": "导出 · 截断提示",
+      "group": "3.1.15 导出 `#b/:id/export`",
+      "status": "BLOCKED",
+      "detail": "该组后续控件（字段级开关/编码/BOM/时间边界）需解码产物才能断言，本轮仅验证下载触发",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-REC-01",
+      "name": "回收站 · 加载",
+      "group": "3.1.16 回收站 `#b/:id/recycle`",
+      "status": "PASS",
+      "detail": "回收站页渲染",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-REC-02",
+      "name": "回收站 · 恢复按钮",
+      "group": "3.1.16 回收站 `#b/:id/recycle`",
+      "status": "PASS",
+      "detail": "恢复按钮存在",
+      "evidence": []
+    },
+    {
+      "suite": "C",
+      "id": "I-REC-03",
+      "name": "回收站 · 空态",
+      "group": "3.1.16 回收站 `#b/:id/recycle`",
+      "status": "PASS",
+      "detail": "恢复后回收站内容变化（该条被移出）",
+      "evidence": []
+    }
+  ],
+  "summary": {
+    "C:PASS": 163,
+    "C:FAIL": 5,
+    "C:BLOCKED": 59,
+    "C:N/A": 1,
+    "total": 228
+  },
+  "finishedAt": "2026-11-05T09:56:19.794Z"
+}

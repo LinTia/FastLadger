@@ -5,7 +5,8 @@
  *
  *   node run.js --suite a       # 包 A：11 项状态/权限/同步场景
  *   node run.js --suite c       # 包 C：228 条控件
- *   node run.js --suite all
+ *   node run.js --suite d       # 包 D：第七次 4 项缺陷回归（含 I-TXNS-01..19 逐条重跑）
+ *   node run.js --suite all     # 保持既有 A + C 组合；D 需显式 --suite d 运行
  *
  * 环境变量：
  *   R0_SERVER_BIN     服务二进制路径（默认 server/fastledger[.exe]）
@@ -25,6 +26,7 @@ const { RunDir, envInfo } = require('./lib/evidence');
 const { bootstrap } = require('./lib/fixtures');
 const aScenarios = require('./specs/a-scenarios');
 const { runControls } = require('./specs/c-controls');
+const { runDefects } = require('./specs/d-defects');
 
 function parseArgs(argv) {
   const out = { suite: 'all' };
@@ -104,6 +106,13 @@ async function main() {
         }
         const tally = rows.reduce((acc, r) => { acc[r.status] = (acc[r.status] || 0) + 1; return acc; }, {});
         process.stdout.write(`C 汇总：${JSON.stringify(tally)}\n`);
+      } else if (suite === 'd') {
+        const rows = await runDefects({ browser: browserHandle.browser, base: server.base, data, runDir });
+        for (const r of rows) {
+          report.results.push(r);
+        }
+        const tally = rows.reduce((acc, r) => { acc[r.status] = (acc[r.status] || 0) + 1; return acc; }, {});
+        process.stdout.write(`D 汇总：${JSON.stringify(tally)}\n`);
       } else {
         throw new Error(`未知 suite：${suite}`);
       }

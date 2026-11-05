@@ -14,6 +14,7 @@ const path = require('node:path');
 const api = require('../lib/api');
 const { storageStateFor } = require('../lib/fixtures');
 const { attachDiagnostics } = require('../lib/evidence');
+const { runTxnsControls } = require('./txns-controls');
 
 const CONTROLS = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'fixtures', 'controls.json'), 'utf8'));
 const VIEWPORT = { width: 390, height: 844 };
@@ -284,20 +285,18 @@ async function groupTxDetail(ctx) {
   return { R };
 }
 
+/**
+ * I-TXNS-01..19 逐条真实执行（不再整页判空、不再硬编码 BLOCKED）。
+ * 具体配方见 specs/txns-controls.js，与 D 套件共用同一实现以避免重复。
+ */
 async function groupTxns(ctx) {
-  const { page, data, base } = ctx;
-  const R = {};
-  await page.goto(`${base}/#b/${data.books.main.id}/txns`, { waitUntil: 'domcontentloaded' });
-  await sleep(page, 1800);
-  const body = await text(page);
-  if (body.trim().length === 0) {
-    R['I-TXNS-01'] = bad('交易总表 #view 渲染为空——运行时确认该页不可用（需排查 renderTxns）');
-    for (let i = 2; i <= 19; i += 1) R[`I-TXNS-${String(i).padStart(2, '0')}`] = blocked('同页渲染为空，控件不存在，无法执行（同上条缺陷）');
-    return { R };
-  }
-  R['I-TXNS-01'] = /搜索/.test(body) ? ok('搜索控件渲染') : bad('无搜索控件');
-  for (let i = 2; i <= 19; i += 1) R[`I-TXNS-${String(i).padStart(2, '0')}`] = blocked('页面可用性待修复后逐条断言');
-  return { R };
+  return runTxnsControls({
+    page: ctx.page,
+    base: ctx.base,
+    data: ctx.data,
+    out: ctx.out,
+    shotDir: 'C/I-TXNS',
+  });
 }
 
 async function groupAccounts(ctx) {
@@ -316,16 +315,78 @@ async function groupAccounts(ctx) {
     R['I-ACCT-04'] = (await page.locator('#acctName').count()) === 1 ? ok('名称输入 #acctName') : bad('无名称输入');
     R['I-ACCT-05'] = (await page.locator('#acctCat').count()) === 1 ? ok(`类型下拉 #acctCat（${await page.locator('#acctCat option').count()} 项）`) : bad('无类型下拉');
     const name = 'E2E 账户 ' + Date.now();
+    const rowsBefore = await page.locator('#view table tbody tr').count();
     await page.fill('#acctName', name);
+    // 确定性等待：真实 POST 响应 + 重绘后 tbody 行数 +1（不使用固定 sleep）。
+    // 注意：本条按 Owner 收紧裁决保持 FAIL——DOM/API 一致性不等于视觉可见性。
+    const postPromise = page.waitForResponse(
+      (r) => r.request().method() === 'POST' && /\/api\/v1\/books\/\d+\/accounts$/.test(r.url()),
+      { timeout: 15000 },
+    ).catch(() => null);
     await page.locator('#acctSubmit').click();
-    await sleep(page, 1300);
-    await sleep(page, 800);
+    const postResp = await postPromise;
+    const redrawn = await page.waitForFunction(
+      (n) => {
+        const v = document.querySelector('#view');
+        return !!v && v.querySelectorAll('table tbody tr').length === n;
+      },
+      rowsBefore + 1,
+      { timeout: 10000 },
+    ).then(() => true).catch(() => false);
+    const domNames = await page.locator('#view table tbody tr td:first-child').allTextContents();
+    const inDom = domNames.some((t) => t.trim() === name);
     const apiAccs = await api.accounts(base, data.users.owner.token, data.books.main.id);
     const inApi = apiAccs.some((a) => a.name === name);
-    const inUi = await waitText(page, name, 6000);
-    R['I-ACCT-06'] = inApi && inUi
-      ? ok(`创建成功并在页面渲染：${name}`)
-      : bad(`创建后 API 可见=${inApi} 页面可见=${inUi}（疑似列表未刷新，需 QA 复现确认）；#acctErr=「${await errText(page, '#acctErr')}」toast=「${await toastText(page)}」`);
+    const dup = apiAccs.filter((a) => a.name === name).length;
+    const postStatus = postResp ? postResp.status() : 0;
+
+    // 视觉可见性原始观测（不得省略）：#view.innerText 是否含名称、命中行的首列 computed display
+    const visibleInnerText = await page.evaluate(
+      (n) => {
+        const v = document.querySelector('#view');
+        return v ? (v.innerText || '').includes(n) : false;
+      },
+      name,
+    );
+    const firstTdDisplay = await page.evaluate((n) => {
+      const tds = Array.from(document.querySelectorAll('#view table tbody tr td:first-child'));
+      const hit = tds.find((td) => (td.textContent || '').trim() === n);
+      return hit ? window.getComputedStyle(hit).display : '(未找到对应 td)';
+    }, name);
+    const acctErrText = await errText(page, '#acctErr');
+    const toastTextValue = await toastText(page);
+    const visibilityObservations = {
+      id: 'I-ACCT-06',
+      bookId: data.books.main.id,
+      name,
+      viewport: page.viewportSize(),
+      postStatus,
+      rowsBefore,
+      rowsAfterExpected: rowsBefore + 1,
+      redrawn,
+      inDom,
+      inApi,
+      dup,
+      domNames,
+      visibleInnerText,
+      firstTdDisplay,
+      acctErr: acctErrText,
+      toast: toastTextValue,
+      conclusion: '390px 视口下账户名称列被 style.css L331 隐藏，视觉可见性未闭环，待 Owner 裁决；本轮不改 CSS',
+    };
+    ctx.out.writeJson('C/I-ACCT/visibility-observations.json', visibilityObservations);
+    const visibilityShot = await ctx.out.screenshot(page, 'C/I-ACCT', 'I-ACCT-06-visibility').catch(() => '');
+
+    // 收紧裁决：无条件 FAIL，不允许任何 PASS 分支。
+    // 正向观测只证明「数据链路正常」；真实用户在 390px 视口下仍看不到账户名，
+    // 可见性验收项未闭环，不得因改用 td.textContent 而放宽断言制造 PASS。
+    R['I-ACCT-06'] = bad(
+      `FAIL（可见性未闭环，待 Owner 裁决 CSS）：POST=${postStatus} 重绘+1=${redrawn} DOM 首列 textContent 命中=${inDom} API 命中=${inApi} 重复数=${dup}；`
+      + `visibleInnerText=${visibleInnerText}；firstTdDisplay=${firstTdDisplay}；DOM 首列=${JSON.stringify(domNames)}；`
+      + '390px 视口下账户名称列被 style.css L331 隐藏，视觉可见性未闭环，待 Owner 裁决；本轮不改 CSS；'
+      + `#acctErr=「${acctErrText}」toast=「${toastTextValue}」；原始观测见 C/I-ACCT/visibility-observations.json`,
+      visibilityShot ? [visibilityShot] : [],
+    );
     R['I-ACCT-07'] = /¥/.test(await text(page)) ? ok('余额列渲染 ¥ 金额') : bad('余额渲染异常');
     R['I-ACCT-08'] = (await page.locator('button', { hasText: '编辑' }).count()) > 0 ? ok('编辑按钮存在') : bad('无编辑');
     R['I-ACCT-09'] = (await page.locator('button', { hasText: '删除' }).count()) > 0 ? ok('删除按钮存在') : bad('无删除');

@@ -1,0 +1,19 @@
+=== git status --porcelain ===
+ M .github/workflows/r0-e2e.yml
+ M server/web/dist/app.js
+ M tools/r0/e2e/run.js
+ M tools/r0/e2e/specs/c-controls.js
+?? docs/r0-evidence-7th-fix/
+?? tools/r0/e2e/scripts/baseline-probe.js
+?? tools/r0/e2e/scripts/negative-check.js
+?? tools/r0/e2e/specs/d-defects.js
+?? tools/r0/e2e/specs/txns-controls.js
+
+=== branch / HEAD ===
+fix/r0-sixth-runtime-defects
+dadc9a3b9c567cad2bbad7e47361fb774365b949
+
+=== 禁止文件核查 ===
+(上述禁止文件均未被修改)
+
+说明：.github/workflows/r0-e2e.yml 的改动由 team-lead 依据其补充授权落地（新增 --suite d 门禁 step + 汇总退出码写入 d outcome）；本工程师仅核对，未重复修改。

@@ -25,7 +25,7 @@ concurrency:
 
 jobs:
   e2e:
-    name: A(11 场景) + C(228 控件) + B(分类审计)
+    name: A(11 场景) + D(缺陷回归) + C(228 控件) + B(分类审计)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -74,6 +74,16 @@ jobs:
           R0_ARTIFACT_DIR: ${{ github.workspace }}/artifacts/r0-e2e
         run: node run.js --suite a
 
+      # D 是四项已确认业务缺陷的回归门禁：任一断言失败即 job 失败。
+      # 与 C 的报告型定位严格区分，避免把「已知产品缺口」误读成回归通过。
+      - name: 包 D · 四项业务缺陷回归（门禁）
+        id: d_defects
+        working-directory: tools/r0/e2e
+        env:
+          R0_SERVER_BIN: ${{ github.workspace }}/server/fastledger
+          R0_ARTIFACT_DIR: ${{ github.workspace }}/artifacts/r0-e2e
+        run: node run.js --suite d
+
       # C 是报告型：允许存在已知产品缺口（PASS/FAIL 分布本身就是结论），
       # 因此单独一步且 continue-on-error，避免"产品有缺口 =流水线红"掩盖其它信号。
       - name: 包 C · 228 条逐控件运行时验收（报告型）
@@ -93,7 +103,8 @@ jobs:
             echo ""
             echo "- commit: ${{ github.sha }}"
             echo "- 包 A 退出码: ${{ steps.a_suite.outcome }}"
-            echo "- 包 C 退出码: ${{ steps.c_controls.outcome }}"
+            echo "- 包 D 退出码（四项缺陷回归门禁）: ${{ steps.d_defects.outcome }}"
+            echo "- 包 C 退出码（报告型，success 不代表无 FAIL）: ${{ steps.c_controls.outcome }}"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: 上传证据（日志/截图/trace/报告/校验和）

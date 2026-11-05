@@ -253,7 +253,7 @@ module.exports = [
         const apiOk = denied.status === 403 && deniedInvite.status === 403;
         return {
           status: apiOk ? 'PASS' : 'FAIL',
-          detail: `DELETE /books → ${denied.status}；POST /members/invite → ${deniedInvite.status}；成员页「邀请成员」按钮数=${inviteBtn}（UI 未隐藏=真实缺陷，已记录）；页面文本长度=${body.length}`,
+          detail: `DELETE /books → ${denied.status}；POST /members/invite → ${deniedInvite.status}；成员页「邀请成员」按钮数=${inviteBtn}（成员管理接口 403 校验通过；UI 入口可见性另由 D 套件 D-MEM-* 覆盖）；页面文本长度=${body.length}`,
           evidence: [shot],
         };
       });
