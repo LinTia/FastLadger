@@ -7,7 +7,7 @@
 ## 当前状态（2026-10-31 历史快照，部分已过时）
 
 > 下表是 2026-10-31 的历史快照。schema 版本、测试基线、阶段进度以 `docs/` 最新交付文档、`CHANGELOG.md` 与服务器实测为准；**R0（基准冻结与差异盘点）当前未通过 / 阻塞**，见 [R0 报告](docs/FastLedger-R0-基准冻结与差异盘点.md)。本表不作为 R0 验收依据。
-> **截至 [1.81] 的 R0 收尾状态（第六次自动化交付经第七次独立复核）**：**A = PARTIAL**（独立 CI run `41990345757` 的 11/11 脚本均报告 PASS，但 A05 的 PASS 条件只检查耗时、没有断言 pending 文案/disabled，需修正后重跑）；**B = PARTIAL**（分类解析硬化有效，但 t021 的 `meal → dinner` override 由 WorkBuddy 自行署名，尚待 Owner 裁决）；**C = PARTIAL**（228 条：PASS 144 / FAIL 6 / BLOCKED 77 / N/A 1；发现至少 15 条硬编码 PASS 缺少直接断言或可追溯证据引用，需纠偏）；**D = PARTIAL**（13 路由覆盖 3/5/5 维持）。第六次发现的交易总表空白、记一笔分类未按类型过滤、member 邀请按钮未隐藏、新增账户列表疑似未刷新，均先登记修复提案，未授权改业务代码。RV-05 仍 **Owner ACTION REQUIRED**。**R0 继续 BLOCK，不授权 R1–R7。** 详见 [第六次整改回执](docs/FastLedger-R0-第六次整改-A-C自动化交付回执.md) 与 [第七次测试质量纠偏任务单](docs/FastLedger-R0-第七次测试质量纠偏任务单.md)。
+> **截至 [1.82] 的 R0 收尾状态（第八次安全扫描器独立复核）**：WorkBuddy 已提交 K1–K3 扫描器整改（UTF-16LE/BE、NUL 复扫、短凭据、敏感键名、标准 Base64）；30 项扫描器测试 CI step 已 success，普通 CI run `42079445701` success。但独立复核新增 **RV-07–RV-12**：明文 PEM 私钥可经 TXT 白名单漏检、fail-closed 集成验证未成为上传门禁、宽松 UTF-8 解码阈值可能允许关键词被非法字节打断、Base64URL 未覆盖，且两项测试未经过真实上传白名单链路。R0 E2E run `42079445817` 在审查时仍 in_progress（A/D 门禁 success，C 与 Artifact 安全扫描/上传未完成），因此 K1–K3 只能判 **PARTIAL**，不能宣称安全闭环。A/B/C/D 状态沿用第七次复核基线（A/B/C/D = PARTIAL；当前 run 结果待回填），RV-05 仍 **Owner ACTION REQUIRED**。**R0 继续 BLOCK，不授权 R1–R7。** 详见 [第八次安全扫描器独立复核](docs/FastLedger-R0-第八次安全扫描器独立复核.md)。
 
 | 项 | 状态 |
 |---|---|
@@ -50,6 +50,7 @@
 | [`docs/r0-evidence-5th/`](docs/r0-evidence-5th/) | **R0 第五次整改证据** | `seed-mapping-before/after.json`（22 笔分类映射）、`checksum-verification.txt`（104 PNG 逐文件校验）、`api-route-coverage.md`（13 条路由）、`ci-metadata-correction.md`（run/job/耗时与四类 SHA）、`ci-coverage-matrix.md`（CI 能/不能证明什么）、`ci-run-de2fb26/`（全仓 `-race` 的 GitHub 原生 run）、`ci-run-22fd310/`（第五次整改提交的 run） |
 | [`docs/FastLedger-R0-第六次整改-A-C自动化交付回执.md`](docs/FastLedger-R0-第六次整改-A-C自动化交付回执.md) | **R0 第六次整改 · A/C 自动化交付回执** | B 分类解析硬化（14 条合成测试 + 22 笔审计）；A 11/11 本地 PASS（待 CI 复核）；C 228 条 144/6/77/1；4 条新发现缺陷；CI 只需 Owner 三件手机小事 |
 | [`docs/FastLedger-R0-第七次测试质量纠偏任务单.md`](docs/FastLedger-R0-第七次测试质量纠偏任务单.md) | **R0 第七次测试质量纠偏任务单（WorkBuddy）** | 修正 A05 假阳性、C 至少 15 条硬编码 PASS、控制清单 SHA 漂移校验、t021 Owner 裁决；不授权业务代码修改或启动 R1–R7 |
+| [`docs/FastLedger-R0-第八次安全扫描器独立复核.md`](docs/FastLedger-R0-第八次安全扫描器独立复核.md) | **R0 第八次独立复核（WorkBuddy K1–K3 安全整改）** | RV-07–RV-12：PEM 私钥漏检、fail-closed 上传门禁、UTF-8 非法字节、Base64URL 与测试覆盖缺口；R0 仍 BLOCK |
 | [`docs/r0-evidence-6th/`](docs/r0-evidence-6th/) | **R0 第六次整改证据** | `report.json/md`（239 条）、`controls-summary.json`、`unit-resolve-category.log`、`reseed-audit.log`、`screenshots/`、`SHA256SUMS.txt` |
 | [`docs/FastLedger-R0-独立补漏与复核记录.md`](docs/FastLedger-R0-独立补漏与复核记录.md) | **R0 独立补漏与复核记录** | 修正误判、补充 R0-E-20~39、复核 R0 退出条件与 D-1~D-8；静态复核 + 二次整改复核，R0 尚未通过 |
 | [`docs/FastLedger-R0-第三次最小整改任务单-RV-02-RV-05-RV-06.md`](docs/FastLedger-R0-第三次最小整改任务单-RV-02-RV-05-RV-06.md) | **R0 第三次最小整改任务单** | 第三方审阅任务单；[1.68] 已按此执行并推送，待第三方独立复核；Git 历史重写仍须 Owner 授权 |
