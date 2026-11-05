@@ -1,0 +1,52 @@
+{
+  "source": "第四次提交的 docs/r0-screenshots/pairs/seed-manifest.json",
+  "generatedAt": "2026-11-05T02:03:51.761Z",
+  "categoryFallbacks": [
+    {
+      "txId": "t007",
+      "protoCategoryId": "shopping",
+      "used": "cat_shopping",
+      "reason": "补 cat_ 前缀"
+    },
+    {
+      "txId": "t009",
+      "protoCategoryId": "travel",
+      "used": "cat_travel",
+      "reason": "补 cat_ 前缀"
+    },
+    {
+      "txId": "t010",
+      "protoCategoryId": "travel",
+      "used": "cat_travel",
+      "reason": "补 cat_ 前缀"
+    },
+    {
+      "txId": "t017",
+      "protoCategoryId": "shopping",
+      "used": "cat_shopping",
+      "reason": "补 cat_ 前缀"
+    }
+  ],
+  "affected": [
+    {
+      "txId": "t007",
+      "usedProtoCategoryId": "cat_shopping",
+      "reason": "补 cat_ 前缀"
+    },
+    {
+      "txId": "t009",
+      "usedProtoCategoryId": "cat_travel",
+      "reason": "补 cat_ 前缀"
+    },
+    {
+      "txId": "t010",
+      "usedProtoCategoryId": "cat_travel",
+      "reason": "补 cat_ 前缀"
+    },
+    {
+      "txId": "t017",
+      "usedProtoCategoryId": "cat_shopping",
+      "reason": "补 cat_ 前缀"
+    }
+  ]
+}

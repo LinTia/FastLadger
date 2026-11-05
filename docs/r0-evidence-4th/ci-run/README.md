@@ -17,10 +17,12 @@
 | 时间 | 2026-11-05T02:19Z 前后（精确值见 `run-meta.json`） |
 
 > 前一次提交 `31716b0` 的 run `41951501832` 同样 **success**（结论一致）。本目录以**包含证据自身的提交**为准，避免"日志与提交错位"。两次 run 的业务代码均为 `bff6a2b`（`server/` 自该提交起零改动）。
+>
+> **四类 SHA 不得合并**（CI 测试 commit `9d083f6` / 业务代码 `bff6a2b` / 证据目录提交 `11bdfcc` / 第五次整改时 main HEAD `72cbab7`）：本 run 的 head 是 `9d083f6`，**不包含**其后提交的最终版证据目录；详见 `docs/r0-evidence-5th/ci-metadata-correction.md`。
 
 ## 2. 两个 job 的逐步骤结论
 
-**job 1 `build / vet / test / race`（id `126996266896`，success）**
+**job 1 `build / vet / test / race`（id `127004401500`，success）**
 
 | # | 步骤 | 结论 |
 |---|---|---|
@@ -32,7 +34,7 @@
 | 9 | go test 全量 | success |
 | 10 | go test -race（Hub 并发 / 事务边界） | success |
 
-**job 2 `docker build / run / healthz`（id `126996901301`，success）**
+**job 2 `docker build / run / healthz`（id `127005322262`，success）**
 
 | # | 步骤 | 结论 |
 |---|---|---|
@@ -44,7 +46,7 @@
 
 - 环境：`go version go1.22.12 linux/amd64`、`gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1)`、`CGO_ENABLED=1`，runner 镜像 `ubuntu-24.04`。
 - `go test ./... -count=1 -v`：**10 个含测试包全部 `ok`**，2 个包 `[no test files]`（`internal/version`、`web`）。
-- `-race` 步骤：`ws` / `service` / `api` 三包全部 `ok`（10.4s / 66.4s / 24.0s）。
+- `-race` 步骤：`ws` / `service` / `api` 三包全部 `ok`（13.204s / 93.326s / 34.720s）。
 - 全日志 `--- FAIL` 行数 **0**、`DATA RACE` 行数 **0**。
 - 容器冒烟返回：`{"code":0,"data":{"instanceId":"...","restoreEpoch":1,"schemaVersion":8,"status":"up"},"msg":"ok"}`（该 `instanceId` 是 CI 一次性容器的，与生产实例无关）。
 

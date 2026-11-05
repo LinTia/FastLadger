@@ -7,7 +7,7 @@
 ## 当前状态（2026-10-31 历史快照，部分已过时）
 
 > 下表是 2026-10-31 的历史快照。schema 版本、测试基线、阶段进度以 `docs/` 最新交付文档、`CHANGELOG.md` 与服务器实测为准；**R0（基准冻结与差异盘点）当前未通过 / 阻塞**，见 [R0 报告](docs/FastLedger-R0-基准冻结与差异盘点.md)。本表不作为 R0 验收依据。
-> **截至 [1.77] 的 R0 收尾状态（第五次最小整改任务单已建立，WorkBuddy 尚未执行）**：RV-02/RV-03 已按交付记录完成；RV-05 当前树扫描、脱敏与令牌失效验证已完成，但旧 SHA 历史对象仍有公开可读风险，Owner 已记录改回 Private 的决策、实际状态仍待验证；RV-06 工具脚本及限定范围 QA 复跑已完成，Owner/CI 独立复跑未完成；RV-01/R0-E-35 仍待 Owner/CI 独立复跑。D-3/D-5/D-6/D-2（当前 Web R0 范围）/RV-04 已于 2026-11-05 经 Owner 裁决；D-4/D-8 仅技术方案定稿，功能未实现。**R0 截图基线与逐控件运行时验收仍不完整，R0 继续 BLOCK，不授权 R1–R7。**详见 [R0 收尾执行清单](docs/FastLedger-R0-收尾执行清单.md)、[第四次证据补齐任务单](docs/FastLedger-R0-第四次证据补齐任务单.md) 与 [第三次整改交付回执](docs/FastLedger-R0-第三次整改交付回执.md)、[第五次最小整改任务单](docs/FastLedger-R0-第五次最小整改任务单.md)。
+> **截至 [1.78] 的 R0 收尾状态（第五次最小整改已执行，第三方复核前）**：四包统一为 **A = BLOCKED / B = PARTIAL / C = BLOCKED / D = PARTIAL**（原第四次回执把 B/D 写成 PASS，属过宽，已改判）。B 已修复 4 笔交易误挂父类的分类映射并重采 104 张同数据集成对图，但仅 owner 一个角色、状态维度（loading/empty/error/permission/offline/conflict）与 `invest`/`members` 数据仍未覆盖；D 已更正 CI 元数据（job `127004401500`/`127005322262`，`-race` 13.204s/93.326s/34.720s），13 条路由中覆盖 3 / 部分 5 / 未覆盖 5。RV-05（旧 SHA `259bd11` 仍可匿名读取、仓库仍 Public）为 **Owner ACTION REQUIRED**。**R0 继续 BLOCK，不授权 R1–R7。** 详见 [第五次最小整改执行回执](docs/FastLedger-R0-第五次最小整改-执行回执.md)、[R0 主报告](docs/FastLedger-R0-基准冻结与差异盘点.md)、[R0 收尾执行清单](docs/FastLedger-R0-收尾执行清单.md)。
 
 | 项 | 状态 |
 |---|---|
@@ -45,7 +45,9 @@
 | [`docs/FastLedger-R0-收尾执行清单.md`](docs/FastLedger-R0-收尾执行清单.md) | **R0 收尾执行清单（2026-11-05）** | 统一区分 R0 审计门槛与后续业务实现；汇总 RV 状态、D-4/D-8 待补、Owner 决策、截图/运行时/API 测试缺口与最终放行条件 |
 | [`docs/FastLedger-R0-第四次证据补齐任务单.md`](docs/FastLedger-R0-第四次证据补齐任务单.md) | **R0 第四次证据补齐任务单（WorkBuddy）** | R0-E-35 独立复验、13 页同视口对照、228 条控件运行时验收、API/race 测试证据；不授权业务代码修改或启动 R1–R7 |
 | [`docs/FastLedger-R0-第五次最小整改任务单.md`](docs/FastLedger-R0-第五次最小整改任务单.md) | **R0 第五次最小整改任务单（WorkBuddy）** | 第四次独立复核纠偏：A/C BLOCKED、B/D PARTIAL；分类映射、角色/状态证据、CI 元数据、未覆盖路由与 RV-05 Owner 安全动作；不授权业务代码修改或启动 R1–R7 |
-| [`docs/FastLedger-R0-第四次证据补齐-执行回执.md`](docs/FastLedger-R0-第四次证据补齐-执行回执.md) | **R0 第四次证据补齐 · 执行回执（更新版 2）** | 包 B **PASS（同数据主集，104 张）**、包 D **PASS（正式 CI run `41954006789` + 全仓 race）**、A/C 仍 BLOCKED；含采集中发现的 5 条实现侧问题与未覆盖项；R0 仍 BLOCK |
+| [`docs/FastLedger-R0-第四次证据补齐-执行回执.md`](docs/FastLedger-R0-第四次证据补齐-执行回执.md) | **R0 第四次证据补齐 · 执行回执（历史记录，已被第五次复核纠偏）** | 原文写 B/D 为 PASS，**第五次复核改判 B = PARTIAL、D = PARTIAL**（见文件开头「第三方独立复核纠偏」小节）；A/C 仍 BLOCKED；历史执行事实保留 |
+| [`docs/FastLedger-R0-第五次最小整改-执行回执.md`](docs/FastLedger-R0-第五次最小整改-执行回执.md) | **R0 第五次最小整改 · 执行回执** | 逐项回执：A BLOCKED / B PARTIAL / C BLOCKED / D PARTIAL；分类映射修复前后、104 PNG 校验、角色/状态覆盖、CI 元数据更正、未覆盖路由处置、RV-05 Owner 待办与文档同步清单 |
+| [`docs/r0-evidence-5th/`](docs/r0-evidence-5th/) | **R0 第五次整改证据** | `seed-mapping-before/after.json`（22 笔分类映射）、`checksum-verification.txt`（104 PNG 逐文件校验）、`api-route-coverage.md`（13 条路由）、`ci-metadata-correction.md`（run/job/耗时与四类 SHA） |
 | [`docs/FastLedger-R0-独立补漏与复核记录.md`](docs/FastLedger-R0-独立补漏与复核记录.md) | **R0 独立补漏与复核记录** | 修正误判、补充 R0-E-20~39、复核 R0 退出条件与 D-1~D-8；静态复核 + 二次整改复核，R0 尚未通过 |
 | [`docs/FastLedger-R0-第三次最小整改任务单-RV-02-RV-05-RV-06.md`](docs/FastLedger-R0-第三次最小整改任务单-RV-02-RV-05-RV-06.md) | **R0 第三次最小整改任务单** | 第三方审阅任务单；[1.68] 已按此执行并推送，待第三方独立复核；Git 历史重写仍须 Owner 授权 |
 | [`docs/FastLedger-R0-独立复核补充-RV-05至06.md`](docs/FastLedger-R0-独立复核补充-RV-05至06.md) | **独立复核补充 RV-05~06** | 按多 AI 对齐规范 13 字段登记凭证安全事件与独立复现问题；状态拆分、证据与 Owner 待决策项 |
@@ -55,7 +57,7 @@
 | [`docs/r0-screenshots/security-scan.md`](docs/r0-screenshots/security-scan.md) | **凭证安全扫描报告（脱敏）** | `--strict` 真实凭证候选 0；只含路径 / 类型 / 数量 / 脱敏上下文，无敏感值 |
 | [`docs/FastLedger-R0-独立复核补充-RV-01至04.md`](docs/FastLedger-R0-独立复核补充-RV-01至04.md) | **R0 二次整改后的独立复核补充** | R0-RV-01~04：骨架屏失败态证据、SHA 基准、逐控件字段语义、首页月份切换需求依据；R0 仍阻塞 |
 | [`docs/r0-screenshots/`](docs/r0-screenshots/) | **R0 真实截图基线（43 张 PNG）+ 索引 / 阻塞清单** | Edge headless 采集的 normal / empty / error 首屏；见目录内 `README.md`。**截图基线未完成，R0 未通过** |
-| [`docs/r0-screenshots/pairs/`](docs/r0-screenshots/pairs/) | **R0 包 B 同数据集成对截图（104 张）** | 原型 52 + 实现 52，13 页 × 4 视口；**同一数据集**（5 账户 / 37 分类 / 22 交易 / 5 预算，余额两侧一致）；含未登录态与记一笔弹层动作级；`manifest` / `seed-manifest.json` / `SHA256SUMS.txt`（108 行）/ README |
+| [`docs/r0-screenshots/pairs/`](docs/r0-screenshots/pairs/) | **R0 包 B 同数据集成对截图（104 张）** | 原型 52 + 实现 52，13 页 × 4 视口；**同一数据集**（5 账户 / 37 分类 / 22 交易 / 5 预算，余额两侧一致）；含未登录态与记一笔弹层动作级；**第五次重采（分类映射修复后）**；`manifest` / `seed-manifest.json`（22 笔映射审计）/ `SHA256SUMS.txt` / `SHA256SUMS-4th-round.txt` / README。**包 B 状态 = PARTIAL**（仅 owner 角色、状态维度与 invest/members 未覆盖） |
 | [`docs/r0-evidence-4th/`](docs/r0-evidence-4th/) | **R0 包 D 测试证据（正式 CI + 服务器）** | `ci-run/`：Actions run `41954006789` 元数据、原始 job 日志与证明行摘录；根目录：服务器 Linux 全仓 `go test ./...` 与 `-race` 日志、退出码、环境与 SHA256 |
 | [`docs/r0-screenshots/runtime/`](docs/r0-screenshots/runtime/) | **R0-RV-01 隔离运行时复验证据（5 PNG + 3 JSON）** | 仅拦截交易列表请求后的 pending / rejected / 恢复态截图与真实 CDP Network/Console 日志；见目录内 `README.md`。**本机隔离运行时复验已完成；失败态观察到骨架屏未清理（`.skel`=4、`aria-busy=true`）；待 Owner/CI 独立复跑及慢速网络、有数据态、多角色等场景验证；缺陷尚未关闭，R0 未通过** |
 | [`docs/FastLedger-新手开发完整指南.md`](docs/FastLedger-新手开发完整指南.md) | 新手开发完整指南（含可照敲代码骨架） | 应届生照着做即可开发 |

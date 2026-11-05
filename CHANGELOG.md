@@ -2,6 +2,18 @@
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.78] - 2026-11-05
+
+### R0 第五次最小整改执行：B/D 改判 PARTIAL、分类映射修复重采、CI 元数据更正、RV-05 交还 Owner
+
+- **A（R0-E-35 / RV-01）仍 BLOCKED**：未做 Owner/CI 独立复跑，未改动既有 `docs/r0-screenshots/runtime/` 证据；待补场景（pending / 网络拒绝 / 503 / 恢复 / 慢速网络 / 有数据 / 空数据 / 权限不足 / 多角色 / 离线恢复 / 同步冲突）列于第五次回执。
+- **B 由 PASS 改判 PARTIAL**：修复 `tools/r0/seed-from-dataset.js` 分类兜底顺序（原「补 `cat_` 前缀」先于名称匹配，致 t007/t009/t010/t017 四笔交易落到父类），改为「精确 ID → 名称路径 → 同父类唯一前缀 → 规范化 ID → 父类兜底」；重跑种子与两侧采集，**104 张**（原型 52 + 实现 52，13 页 × 4 视口，`errors=0`）。22 笔映射审计：`id` 18 / `name-path` 3 / `name-prefix` 1 / 父类降级 0；报表首行由「购物 ¥580」变为「服饰 ¥580」，**新旧报表数字不可混用**。角色改为从 `/users/me` + `/books/:id/members` 读取真实角色（`owner`），不再用登录名；新增 `roleSource`/`bookMembers` 字段。旧校验和保留为 `SHA256SUMS-4th-round.txt`。仍缺：多角色、loading/empty/error/permission/offline/conflict、`invest`/`members` 数据对齐、像素级 diff。
+- **C 仍 BLOCKED**：§3.1 的 228 条仍是验收对象，本轮未执行任何一条真实交互，未用截图或静态映射替代。
+- **D 由 PASS 改判 PARTIAL**：更正 CI 元数据——job id `127004401500` / `127005322262`（原写 `126996266896` / `126996901301` 属另一次 run），`-race` 耗时 `13.204s / 93.326s / 34.720s`（原写 `10.4s / 66.4s / 24.0s` 同为该另一次 run）；拆清「CI 测试 commit `9d083f6` / 业务代码 `bff6a2b` / 证据提交 `11bdfcc` / 本轮 main HEAD `72cbab7`」四类 SHA，明确该 run **不包含**其后提交的最终证据目录。逐路由复核 13 条：**覆盖 3 / 部分 5 / 未覆盖 5**，更正 `GET /healthz`、`GET /users/me`（原写"未覆盖"，实有命名用例）与 `GET /accounts/:aid`（实为部分覆盖）；未覆盖路由取方案 B（不补测试）并给最小补测建议。
+- **RV-05：Owner ACTION REQUIRED**。旧提交 `259bd11` 仍可匿名读取（29 个 JWT 格式值，均已失效/撤销），仓库仍 `private=false`；**改 Private ≠ 历史对象物理清除**。本轮未改可见性、未 force-push、未重写历史、未删 refs、未联系 GitHub Support。
+- **文档同步**：主报告 §5.3.1/§5.3 注 3、§7.7（新增）、§8、§10.5（新增）与第四次回执（新增纠偏小节，B/D 改判）、README、`workbuddy/第三方审阅者导读.md` 统一口径；新增 `docs/FastLedger-R0-第五次最小整改-执行回执.md` 与 `docs/r0-evidence-5th/`（映射前后 JSON、104 PNG 校验日志、13 条路由覆盖、CI 元数据更正）。
+- **范围**：仅证据/审计文档、`tools/r0/`、CHANGELOG、README、导读；**未改业务代码、PRD、WBS、API、数据库**；未启动 R1–R7，PWA 未实施。**R0 仍未通过 / BLOCK，不授权 R1。**
+
 ## [1.77] - 2026-11-05
 
 ### R0 第五次最小整改任务单：纠正第四次证据状态与文档口径
@@ -16,6 +28,8 @@
 ## [1.76] - 2026-11-05
 
 ### R0 第四次证据补齐：包 B 升级为「同一数据集」104 张成对图；包 D 升级为正式 CI run
+
+> **已被 [1.78] 改判**：本条把 B/D 标为 PASS 属过宽，第五次复核后统一为 **B = PARTIAL、D = PARTIAL**；本条的执行事实（104 张采集、CI run 日志）仍有效，但分类映射与 CI 元数据已在 [1.78] 更正。
 
 - **包 B（13 页对照）PASS（同数据主集）**：新增 `tools/r0/extract-prototype-dataset.js`（从原型 bundle 提取原生数据集 → `tools/r0/prototype-dataset.json`，含 bundle SHA256）与 `tools/r0/seed-from-dataset.js`（按同一数据集经公开 API 种入实现侧空账本，先清空建账本时自动播种的默认账户/分类）。
   - 数据集：5 账户 / 37 分类（12 大类 + 25 小类）/ 22 交易 / 5 预算；两侧账户余额一致（28,100.00 / 0.00 / −716.30 / −1,125.00 / 3,868.00）。

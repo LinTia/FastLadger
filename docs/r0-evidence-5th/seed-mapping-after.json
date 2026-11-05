@@ -1,0 +1,256 @@
+{
+  "source": "tools/r0/seed-from-dataset.js（修复后重跑）",
+  "viaCounts": {
+    "id": 18,
+    "name-path": 3,
+    "name-prefix": 1
+  },
+  "categoryAudit": [
+    {
+      "txId": "t001",
+      "implTxId": 1,
+      "protoCategoryId": "meal",
+      "protoDisplayName": "餐饮-早餐",
+      "resolvedProtoCategoryId": "meal",
+      "resolvedName": "餐饮-三餐",
+      "implCategoryId": 43,
+      "via": "id"
+    },
+    {
+      "txId": "t002",
+      "implTxId": 2,
+      "protoCategoryId": "taxi",
+      "protoDisplayName": "交通-打车",
+      "resolvedProtoCategoryId": "taxi",
+      "resolvedName": "交通-打车",
+      "implCategoryId": 47,
+      "via": "id"
+    },
+    {
+      "txId": "t003",
+      "implTxId": 3,
+      "protoCategoryId": "meal",
+      "protoDisplayName": "餐饮-午餐",
+      "resolvedProtoCategoryId": "meal",
+      "resolvedName": "餐饮-三餐",
+      "implCategoryId": 43,
+      "via": "id"
+    },
+    {
+      "txId": "t004",
+      "implTxId": 4,
+      "protoCategoryId": "takeout",
+      "protoDisplayName": "餐饮-外卖",
+      "resolvedProtoCategoryId": "takeout",
+      "resolvedName": "餐饮-外卖",
+      "implCategoryId": 44,
+      "via": "id"
+    },
+    {
+      "txId": "t005",
+      "implTxId": 5,
+      "protoCategoryId": "bus",
+      "protoDisplayName": "交通-公交",
+      "resolvedProtoCategoryId": "bus",
+      "resolvedName": "交通-公交地铁",
+      "implCategoryId": 48,
+      "via": "id"
+    },
+    {
+      "txId": "t006",
+      "implTxId": 6,
+      "protoCategoryId": "salary",
+      "protoDisplayName": "收入-工资",
+      "resolvedProtoCategoryId": "salary",
+      "resolvedName": "工资-工资",
+      "implCategoryId": 64,
+      "via": "id"
+    },
+    {
+      "txId": "t007",
+      "implTxId": 7,
+      "protoCategoryId": "shopping",
+      "protoDisplayName": "购物-服饰",
+      "resolvedProtoCategoryId": "shopping_clothes",
+      "resolvedName": "购物-服饰",
+      "implCategoryId": 51,
+      "via": "name-path"
+    },
+    {
+      "txId": "t008",
+      "implTxId": 8,
+      "protoCategoryId": "grocery",
+      "protoDisplayName": "购物-超市",
+      "resolvedProtoCategoryId": "grocery",
+      "resolvedName": "购物-超市日用",
+      "implCategoryId": 52,
+      "via": "id"
+    },
+    {
+      "txId": "t009",
+      "implTxId": 9,
+      "protoCategoryId": "travel",
+      "protoDisplayName": "旅游-住宿",
+      "resolvedProtoCategoryId": "travel_hotel",
+      "resolvedName": "旅游-住宿",
+      "implCategoryId": 55,
+      "via": "name-path"
+    },
+    {
+      "txId": "t010",
+      "implTxId": 10,
+      "protoCategoryId": "travel",
+      "protoDisplayName": "旅游-门票",
+      "resolvedProtoCategoryId": "travel_ticket",
+      "resolvedName": "旅游-门票",
+      "implCategoryId": 56,
+      "via": "name-path"
+    },
+    {
+      "txId": "t011",
+      "implTxId": 11,
+      "protoCategoryId": "movie",
+      "protoDisplayName": "娱乐-电影",
+      "resolvedProtoCategoryId": "movie",
+      "resolvedName": "娱乐-电影演出",
+      "implCategoryId": 58,
+      "via": "id"
+    },
+    {
+      "txId": "t012",
+      "implTxId": 12,
+      "protoCategoryId": "meal",
+      "protoDisplayName": "餐饮-晚餐",
+      "resolvedProtoCategoryId": "meal",
+      "resolvedName": "餐饮-三餐",
+      "implCategoryId": 43,
+      "via": "id"
+    },
+    {
+      "txId": "t013",
+      "implTxId": 13,
+      "protoCategoryId": "bonus",
+      "protoDisplayName": "收入-奖金",
+      "resolvedProtoCategoryId": "bonus",
+      "resolvedName": "奖金-奖金",
+      "implCategoryId": 65,
+      "via": "id"
+    },
+    {
+      "txId": "t014",
+      "implTxId": 14,
+      "protoCategoryId": "transfer",
+      "protoDisplayName": "转账-还款",
+      "resolvedProtoCategoryId": "transfer",
+      "resolvedName": "转账",
+      "implCategoryId": 42,
+      "via": "id"
+    },
+    {
+      "txId": "t015",
+      "implTxId": 15,
+      "protoCategoryId": "grocery",
+      "protoDisplayName": "购物-超市",
+      "resolvedProtoCategoryId": "grocery",
+      "resolvedName": "购物-超市日用",
+      "implCategoryId": 52,
+      "via": "id"
+    },
+    {
+      "txId": "t016",
+      "implTxId": 16,
+      "protoCategoryId": "meal",
+      "protoDisplayName": "餐饮-午餐",
+      "resolvedProtoCategoryId": "meal",
+      "resolvedName": "餐饮-三餐",
+      "implCategoryId": 43,
+      "via": "id"
+    },
+    {
+      "txId": "t017",
+      "implTxId": 17,
+      "protoCategoryId": "shopping",
+      "protoDisplayName": "购物-数码",
+      "resolvedProtoCategoryId": "shopping_digital",
+      "resolvedName": "购物-数码家电",
+      "implCategoryId": 53,
+      "via": "name-prefix"
+    },
+    {
+      "txId": "t018",
+      "implTxId": 18,
+      "protoCategoryId": "taxi",
+      "protoDisplayName": "交通-打车",
+      "resolvedProtoCategoryId": "taxi",
+      "resolvedName": "交通-打车",
+      "implCategoryId": 47,
+      "via": "id"
+    },
+    {
+      "txId": "t019",
+      "implTxId": 19,
+      "protoCategoryId": "rent",
+      "protoDisplayName": "居家-房租",
+      "resolvedProtoCategoryId": "rent",
+      "resolvedName": "居家-房租",
+      "implCategoryId": 61,
+      "via": "id"
+    },
+    {
+      "txId": "t020",
+      "implTxId": 20,
+      "protoCategoryId": "utility",
+      "protoDisplayName": "居家-水电燃气",
+      "resolvedProtoCategoryId": "utility",
+      "resolvedName": "居家-水电燃气",
+      "implCategoryId": 62,
+      "via": "id"
+    },
+    {
+      "txId": "t021",
+      "implTxId": 21,
+      "protoCategoryId": "meal",
+      "protoDisplayName": "餐饮-聚餐",
+      "resolvedProtoCategoryId": "meal",
+      "resolvedName": "餐饮-三餐",
+      "implCategoryId": 43,
+      "via": "id"
+    },
+    {
+      "txId": "t022",
+      "implTxId": 22,
+      "protoCategoryId": "other_income",
+      "protoDisplayName": "收入-其他",
+      "resolvedProtoCategoryId": "other_income",
+      "resolvedName": "其他收入-其他",
+      "implCategoryId": 67,
+      "via": "id"
+    }
+  ],
+  "categoryFallbacks": [
+    {
+      "txId": "t007",
+      "protoCategoryId": "shopping",
+      "used": "shopping_clothes",
+      "reason": "按分类名路径「购物-服饰」命中"
+    },
+    {
+      "txId": "t009",
+      "protoCategoryId": "travel",
+      "used": "travel_hotel",
+      "reason": "按分类名路径「旅游-住宿」命中"
+    },
+    {
+      "txId": "t010",
+      "protoCategoryId": "travel",
+      "used": "travel_ticket",
+      "reason": "按分类名路径「旅游-门票」命中"
+    },
+    {
+      "txId": "t017",
+      "protoCategoryId": "shopping",
+      "used": "shopping_digital",
+      "reason": "按分类名「购物-数码」唯一前缀匹配"
+    }
+  ]
+}

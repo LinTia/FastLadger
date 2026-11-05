@@ -220,7 +220,9 @@ function expand(tpl, book, tx) {
     appUrl: APP_URL,
     bookId: BOOK_ID || null,
     txId: TX_ID || null,
-    role: WHOAMI,
+    whoami: WHOAMI,
+    role: 'unresolved',
+    roleSource: 'unresolved',
     standalone: '同一脚本、同一浏览器、同一会话；prototype 与实现分别采集，按 page+viewport 配对',
     items: [],
     skipped: [],
@@ -235,6 +237,30 @@ function expand(tpl, book, tx) {
     cdp = new CDP(ws);
     await cdp.send('Page.enable');
     await cdp.send('Runtime.enable');
+
+    // 角色必须来自服务端真实成员数据，而不是登录名/显示名：
+    // GET /users/me 取 uid → GET /books/:id/members 取该 uid 的 role（owner/admin/member）。
+    if (SIDES.includes('impl') && TOKEN && BOOK_ID) {
+      try {
+        const auth = { Authorization: `Bearer ${TOKEN}` };
+        const meJson = await (await fetch(`${APP_URL}api/v1/users/me`, { headers: auth })).json();
+        const uid = meJson && meJson.data ? meJson.data.id : null;
+        const memJson = await (await fetch(`${APP_URL}api/v1/books/${BOOK_ID}/members`, { headers: auth })).json();
+        const list = memJson && Array.isArray(memJson.data) ? memJson.data : [];
+        const self = list.find((m) => m.uid === uid) || null;
+        // 服务端角色是枚举整数（model.RoleOwner=1 / RoleAdmin=2 / RoleMember=3），落盘时转成可读名
+        const ROLE_NAMES = { 1: 'owner', 2: 'admin', 3: 'member' };
+        const roleName = (v) => ROLE_NAMES[v] || `role(${v})`;
+        manifest.role = self ? roleName(self.role) : 'unknown';
+        manifest.roleRaw = self ? self.role : null;
+        manifest.roleSource = 'api:/users/me + /books/:id/members';
+        manifest.roleUid = uid;
+        manifest.bookMembers = list.map((m) => ({ uid: m.uid, username: m.username, role: roleName(m.role) }));
+      } catch (e) {
+        manifest.role = 'unknown';
+        manifest.roleSource = `api-error(${String(e && e.message ? e.message : e)})`;
+      }
+    }
 
     // 注入脚本管理：登录页需要"未登录"态，其余页面需要登录态，因此必须可挂可摘
     const addScript = async (source) => {

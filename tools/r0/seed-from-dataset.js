@@ -131,28 +131,71 @@ const toCents = (yuan) => Math.round(Number(yuan) * 100);
   // ---- 交易 ----
   const txMap = {};
   const categoryFallbacks = [];
-  // 原型数据本身存在悬空分类 ID（如 t007 的 `shopping` 实际应为 `cat_shopping`）：
-  // 先尝试补 `cat_` 前缀，再按 categoryName 的大类名兜底；每次兜底都登记，不静默篡改。
+  const categoryAudit = [];
+  // 原型数据本身存在悬空分类 ID（如 t007 的 `shopping`，正确目标是「购物-服饰」=shopping_clothes）。
+  // 解析优先级（稳定 ID / 明确路径优先，父类仅作最后兜底）：
+  //   1) 原型分类 ID 精确命中；
+  //   2) 交易自带的展示名「父-子」按分类树路径命中子类（或大类名命中大类）——这一层才是修复点：
+  //      之前把「补 cat_ 前缀」放在名称路径之前，导致 4 笔交易被错误映射到父类；
+  //   3) 规范化 ID（补 `cat_` 前缀）；
+  //   4) 最后才按大类名降级，且必须登记。
+  const catById = new Map(categories.map((c) => [c.id, c]));
   const topByName = new Map(categories.filter((c) => c.parentId === null).map((c) => [c.name, c.id]));
+  const childByPath = new Map();
+  const childrenByParentName = new Map();
+  for (const c of categories.filter((x) => x.parentId !== null)) {
+    const parent = catById.get(c.parentId);
+    if (!parent) continue;
+    childByPath.set(`${parent.name}-${c.name}`, c.id);
+    if (!childrenByParentName.has(parent.name)) childrenByParentName.set(parent.name, []);
+    childrenByParentName.get(parent.name).push(c);
+  }
+  /**
+   * 展示名与分类实名不完全一致的兜底（原型自身数据瑕疵）：
+   * 例：t017 展示「购物-数码」，而子类实名是「数码家电」——按"同父类下唯一前缀匹配"命中。
+   * 只有唯一候选才算命中；多候选一律不猜，交由后续降级并登记。
+   */
+  function matchByDisplayPrefix(display) {
+    const parts = display.split('-');
+    if (parts.length !== 2) return '';
+    const [parentName, childPart] = parts;
+    const kids = childrenByParentName.get(parentName) || [];
+    const hits = kids.filter((c) => c.name.startsWith(childPart) || childPart.startsWith(c.name));
+    return hits.length === 1 ? hits[0].id : '';
+  }
   function resolveCategory(t) {
-    if (categoryMap[t.categoryId]) return categoryMap[t.categoryId];
+    if (categoryMap[t.categoryId]) {
+      return { protoId: t.categoryId, implId: categoryMap[t.categoryId], via: 'id' };
+    }
+    const display = String(t.categoryName || '');
+    const pathHit = childByPath.get(display) || topByName.get(display);
+    if (pathHit && categoryMap[pathHit]) {
+      categoryFallbacks.push({ txId: t.id, protoCategoryId: t.categoryId, used: pathHit, reason: `按分类名路径「${display}」命中` });
+      return { protoId: pathHit, implId: categoryMap[pathHit], via: 'name-path' };
+    }
+    const prefixHit = matchByDisplayPrefix(display);
+    if (prefixHit && categoryMap[prefixHit]) {
+      categoryFallbacks.push({ txId: t.id, protoCategoryId: t.categoryId, used: prefixHit, reason: `按分类名「${display}」唯一前缀匹配` });
+      return { protoId: prefixHit, implId: categoryMap[prefixHit], via: 'name-prefix' };
+    }
     const prefixed = `cat_${t.categoryId}`;
     if (categoryMap[prefixed]) {
       categoryFallbacks.push({ txId: t.id, protoCategoryId: t.categoryId, used: prefixed, reason: '补 cat_ 前缀' });
-      return categoryMap[prefixed];
+      return { protoId: prefixed, implId: categoryMap[prefixed], via: 'id-normalized' };
     }
-    const topName = String(t.categoryName || '').split('-')[0];
+    const topName = display.split('-')[0];
     const topId = topByName.get(topName);
     if (topId && categoryMap[topId]) {
-      categoryFallbacks.push({ txId: t.id, protoCategoryId: t.categoryId, used: topId, reason: `按大类名「${topName}」兜底` });
-      return categoryMap[topId];
+      categoryFallbacks.push({ txId: t.id, protoCategoryId: t.categoryId, used: topId, reason: `降级到父类「${topName}」（无匹配子类）` });
+      return { protoId: topId, implId: categoryMap[topId], via: 'parent-fallback' };
     }
-    return 0;
+    return { protoId: '', implId: 0, via: 'unresolved' };
   }
 
   for (const t of transactions) {
     const accountId = accountMap[t.accountId];
-    const categoryId = resolveCategory(t);
+    const resolved = resolveCategory(t);
+    const categoryId = resolved.implId;
     if (!accountId) throw new Error(`交易 ${t.id} 的账户 ${t.accountId} 未建立`);
     if (!categoryId) throw new Error(`交易 ${t.id} 的分类 ${t.categoryId} 既不存在也无法兜底`);
     const res = await call(`/api/v1/books/${bookId}/transactions`, 'POST', {
@@ -168,6 +211,18 @@ const toCents = (yuan) => Math.round(Number(yuan) * 100);
     }, token);
     const ids = res.transactionIds || [];
     txMap[t.id] = ids[0] || 0;
+    const protoCat = catById.get(resolved.protoId);
+    const parent = protoCat && protoCat.parentId ? catById.get(protoCat.parentId) : null;
+    categoryAudit.push({
+      txId: t.id,
+      implTxId: txMap[t.id],
+      protoCategoryId: t.categoryId,
+      protoDisplayName: t.categoryName,
+      resolvedProtoCategoryId: resolved.protoId,
+      resolvedName: protoCat ? (parent ? `${parent.name}-${protoCat.name}` : protoCat.name) : '(unresolved)',
+      implCategoryId: categoryId,
+      via: resolved.via,
+    });
   }
 
   // ---- 预算 ----
@@ -223,6 +278,7 @@ const toCents = (yuan) => Math.round(Number(yuan) * 100);
     firstTxId: txMap[transactions[0].id] || 0,
     txMap,
     categoryFallbacks,
+    categoryAudit,
     balances: { unit: '分', byImplAccountId: balanceByImplId, protoAccountsAfterAlignment: protoAccounts.map((a) => ({ id: a.id, name: a.name, balance: a.balance })) },
     protoInjectionPath,
     fieldDiffs: [

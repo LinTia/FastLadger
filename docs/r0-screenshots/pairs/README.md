@@ -14,9 +14,11 @@
 | 视口 | `360×800` / `390×844` / `430×932` / `1280×800`（4 档） |
 | 页面 | 13 页（见 §3），每页每视口各 1 张 |
 | 张数 | 原型 **52** + 实现 **52** = **104** PNG |
-| 状态 | `default`（已登录默认态）、`logged-out`（登录页 4×2）、`dialog-open`（实现侧记一笔弹层 4） |
+| 状态 | `default`（44）、`logged-out`（登录页 4×2）、`dialog-open`（实现侧记一笔弹层 4）；**loading/empty/error/permission/offline/sync-conflict 未覆盖** |
+| 角色 | 实现侧 `role=owner`（`manifest-impl.json` → `roleSource: api:/users/me + /books/:id/members`）；**仅采集了 owner 一个角色**，admin/member/只读未采集 |
 | 错误 | 两侧 `errors = 0`、`skipped = 0` |
 | 采集时间 | 2026-11-05（`manifest-*.json` 逐张记录 `capturedAt`） |
+| 轮次 | **第五次整改重采**（分类映射修复后）；上一轮产物保留为 `SHA256SUMS-4th-round.txt` |
 
 ## 2. 同一数据集（关键）
 
@@ -50,6 +52,29 @@ prototype/assets/index-*.js
 
 原型原先的静态演示余额（100000 / 5000 / 1200 / 800 / −3200）已被**替换**为上述派生值——这是"同数据"的必要一步，也顺带暴露了 D-4 期初余额未实现的后果（余额只能靠交易堆出来）。
 
+### 2.1 分类映射修复（第五次整改）
+
+第三方复核指出 `seed-from-dataset.js` 的分类兜底顺序有问题：原先「补 `cat_` 前缀」排在名称匹配之前，导致 4 笔交易被映射到**父类**而不是已存在的子类。已修复解析优先级为：
+
+```
+① 原型分类 ID 精确命中
+② 交易展示名「父-子」按分类树路径精确命中
+③ 同父类下按展示名"唯一前缀"匹配（原型数据瑕疵兜底，例：「购物-数码」→「数码家电」）
+④ 规范化 ID（补 cat_ 前缀）
+⑤ 最后才按父类降级，且必须登记
+```
+
+| 交易 | 修复前 | 修复后 | 命中方式 |
+|---|---|---|---|
+| t007（购物-服饰 ¥580） | `cat_shopping`（父类「购物」） | `shopping_clothes`（「购物-服饰」） | name-path |
+| t009（旅游-住宿 ¥2,480） | `cat_travel`（父类「旅游」） | `travel_hotel`（「旅游-住宿」） | name-path |
+| t010（旅游-门票 ¥680） | `cat_travel`（父类「旅游」） | `travel_ticket`（「旅游-门票」） | name-path |
+| t017（购物-数码 ¥680） | `cat_shopping`（父类「购物」） | `shopping_digital`（「购物-数码家电」） | name-prefix（唯一） |
+
+22 笔映射统计：`id` 18 笔 / `name-path` 3 笔 / `name-prefix` 1 笔 / **父类降级 0 笔**。逐笔审计表见 `docs/r0-evidence-5th/seed-mapping-after.json`，修复前见 `seed-mapping-before.json`。
+
+**对统计聚合的影响**：报表「本月支出分类占比」首行由「购物 ¥580」变为「服饰 ¥580」（其余行不变），即该笔支出从父类聚合下沉到子类。这说明修复前后的报表数字**不能混用**；本目录全部截图与 `seed-manifest.json` 均为修复后重采版本，旧版校验和存于 `SHA256SUMS-4th-round.txt`。
+
 ## 3. 页面对照状态
 
 | 页面 | 原型 | 实现 | 数据 | 备注 |
@@ -66,7 +91,7 @@ prototype/assets/index-*.js
 | export | `/export` | `#b/1/export` | — | 静态说明页 |
 | members | `/family` | `#b/1/members` | **未对齐** | 原型 2 名成员；实现侧 1 名，需邀请流程 |
 | mine | `/profile` | `#b/1/mine` | 基本一致 | |
-| settings | `/profile`（二级菜单） | `#settings` | 基本一致 | 原型无独立设置路由，故 `mine`/`settings` 两图 SHA256 相同 |
+| settings | `/profile`（二级菜单） | `#settings` | 基本一致 | **原型无独立设置路由**：`settings` 与 `mine` 实际是同一个 `/profile`，两图 SHA256 相同，**不构成两个独立原型页面**，统计页数时应按 12 个独立原型路由计 |
 
 ## 4. 结构差异（实测，非推测）
 
@@ -117,15 +142,25 @@ R0_BOOK_ID=1 R0_TX_ID=1 \
 - 仅 1 个角色（账本 owner），未覆盖 admin/member/只读/回收站视角；
 - 未在 4 档视口之外验证（平板横屏、超宽屏等）。
 
-## 8. 文件清单
+## 8. 本目录的状态结论（第五次复核后）
+
+**包 B = PARTIAL，不是 PASS。**
+
+已有：13 页 × 4 视口、两侧各 52 张、同一数据集（含修复后的分类映射）、登录页与记一笔弹层的动作级采集、104 张字节级校验。
+
+仍缺：多角色（仅 owner）、loading/empty/error/permission/offline/conflict 状态、`invest`/`members` 两页数据对齐、像素级 diff。
+按任务单口径，**截图数量与采集成功不等于同数据同角色同状态全覆盖**，因此只能判 PARTIAL。
+
+## 9. 文件清单
 
 | 文件 | 说明 |
 |---|---|
 | `prototype/*.png` | 原型 52 张（13 页 × 4 视口） |
 | `impl/*.png` | 实现 52 张（同上） |
 | `manifest-prototype.json` | 原型侧逐张元数据：URL/实际路径/视口/字节/SHA256/时间/注入数据集信息 |
-| `manifest-impl.json` | 实现侧逐张元数据：同上 + `hasToken`/`action`/`actionMeta`（弹层尺寸与打开状态） |
-| `seed-manifest.json` | 数据集映射（原型 id → 实现 id）、余额回填值、字段差异清单、分类兜底记录 |
+| `manifest-impl.json` | 实现侧逐张元数据：同上 + `hasToken`/`action`/`actionMeta`（弹层尺寸与打开状态）/`role`（API 读取的真实角色） |
+| `seed-manifest.json` | 数据集映射（原型 id → 实现 id）、余额回填值、字段差异清单、22 笔分类映射审计（`categoryAudit`） |
+| `SHA256SUMS-4th-round.txt` | 第四次重采（分类映射修复前）的校验和，仅作历史对照 |
 | `SHA256SUMS.txt` | 上述全部文件校验和（108 行） |
 
 > **校验和说明**：`SHA256SUMS.txt` 基于 LF 工作树计算。Windows 上 `core.autocrlf=true` 的 clone 会把 `*.json` / `*.md` / `*.txt` 检出为 CRLF，文本文件哈希据此不同（**PNG 哈希不受影响**）；这是行尾规范化，不是内容篡改。需要逐字节复核时用 `git -c core.autocrlf=false clone`。

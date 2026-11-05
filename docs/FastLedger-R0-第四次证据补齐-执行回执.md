@@ -4,7 +4,21 @@
 > 依据：`docs/FastLedger-R0-第四次证据补齐任务单.md`
 > 本轮起始文档 HEAD：`31716b0d51a12ee6c705cc670059b2e129c1e37f`
 > 业务代码证据基准：`bff6a2b351bf5a039cdf7c762ec2693fb330cd00`（`server/` 自该提交起零改动，见 §0）
-> **结论：R0 仍 BLOCK；不授权 R1–R7；PWA 未实施。包 B 已补齐"同一数据集 + 动作级"主集对照，包 D 已有正式 CI run；A/C 仍 BLOCKED。**
+> **结论（已被第五次复核纠偏，见下）**：R0 仍 BLOCK；不授权 R1–R7；PWA 未实施。本回执原文把 **B / D 标为 PASS 属过宽**，第五次复核改判 **B = PARTIAL、D = PARTIAL**；A / C 仍 BLOCKED。历史执行事实全部保留，不抹除。
+
+---
+
+## 0. 第三方独立复核纠偏（第五次整改，2026-11-05）
+
+> 本回执原为第四次交付记录，**原文保留**。以下为第三方第四次独立复核后的纠偏，权威状态以 `docs/FastLedger-R0-第五次最小整改-执行回执.md` 与主报告 §8 为准。
+
+| 项 | 本回执原文 | 纠偏后 | 依据 |
+|---|---|---|---|
+| 包 B | **PASS（同数据主集）** | **PARTIAL** | 截图数量/采集成功 ≠ 同数据同角色同状态；仅 owner 一个角色，loading/empty/error/permission/offline/conflict 未覆盖，invest/members 数据未对齐 |
+| 包 D | **PASS（正式 CI + 全仓 race）** | **PARTIAL** | CI 元数据错配（job id 与 `-race` 耗时取自另一次 run）；13 条路由中覆盖 3 / 部分 5 / 未覆盖 5，未覆盖路由缺独立断言 |
+| 包 A / C | BLOCKED | **BLOCKED（不变）** | 未做 Owner/CI 独立复跑；228 条运行时未执行 |
+
+另修正：分类兜底顺序致 4 笔交易（t007/t009/t010/t017）映射到父类，已在第五次整改修复并重采；本回执 §3.2 的 104 张证据已被同数据修复版替换，旧校验和保留为 `SHA256SUMS-4th-round.txt`。
 
 ---
 
@@ -26,9 +40,9 @@
 | 工作包 | 状态 | 执行主体 | 本轮实际 | 证据 | 遗留/解除条件 |
 |---|---|---|---|---|---|
 | **A. R0-E-35 / RV-01 独立复验** | **BLOCKED** | 需 Owner/CI | 未执行独立复跑 | 既有 `docs/r0-screenshots/runtime/` | Owner/CI 独立环境复跑多场景 |
-| **B. 13 页原型×实现同数据对照** | **PASS（同数据主集）** | WorkBuddy（Owner 授权） | 两侧各 **52 张**（13 页×4 视口）；**同一数据集**；含 impl 登录页 + 记一笔弹层动作级 | `docs/r0-screenshots/pairs/`（104 PNG + 2 manifest + seed-manifest + SHA256SUMS 108 行 + README） | 仍缺 loading/empty/error/permission/offline/conflict 态；`invest`/`members` 数据未对齐 |
+| **B. 13 页原型×实现同数据对照** | **PARTIAL**（原文写 PASS，第五次复核改判） | WorkBuddy（Owner 授权） | 两侧各 **52 张**（13 页×4 视口）；**同一数据集**；含 impl 登录页 + 记一笔弹层动作级 | `docs/r0-screenshots/pairs/`（104 PNG + 2 manifest + seed-manifest + SHA256SUMS 108 行 + README） | 仍缺 loading/empty/error/permission/offline/conflict 态；`invest`/`members` 数据未对齐 |
 | **C. 228 条控件/动作运行时验收** | **BLOCKED** | QA | 未填充运行时结果 | 主报告 §3.1（228 行） | 逐条运行时证据或 N/A |
-| **D. API/后台逐路由测试证据** | **PASS（正式 CI + 全仓 race）** | GitHub Actions + WorkBuddy（服务器） | CI run `41954006789` success（含 `go test ./...` 与 `-race`）；服务器补全仓 `-race` | `docs/r0-evidence-4th/`（ci-run/ + env/plain/race/exit + SHA256） | 未覆盖路由仍缺关键断言 |
+| **D. API/后台逐路由测试证据** | **PARTIAL**（原文写 PASS，第五次复核改判） | GitHub Actions + WorkBuddy（服务器） | CI run `41954006789` success（含 `go test ./...` 与 `-race`）；服务器补全仓 `-race` | `docs/r0-evidence-4th/`（ci-run/ + env/plain/race/exit + SHA256） | 未覆盖路由仍缺关键断言 |
 
 ---
 

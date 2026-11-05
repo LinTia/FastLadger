@@ -1,6 +1,6 @@
 {
   "purpose": "R0 第四次证据补齐 · 包 B：原型×实现同视口成对截图",
-  "generatedAt": "2026-11-05T02:09:14.973Z",
+  "generatedAt": "2026-11-05T05:39:48.813Z",
   "sides": [
     "proto"
   ],
@@ -14,7 +14,9 @@
   "appUrl": "http://127.0.0.1:8080/",
   "bookId": null,
   "txId": null,
-  "role": "r0-pair-user",
+  "whoami": "r0-pair-user",
+  "role": "unresolved",
+  "roleSource": "unresolved",
   "standalone": "同一脚本、同一浏览器、同一会话；prototype 与实现分别采集，按 page+viewport 配对",
   "items": [
     {
@@ -31,9 +33,9 @@
       "actualHash": "",
       "hasToken": false,
       "title": "家庭智能记账",
-      "bytes": 38164,
-      "sha256": "de9a9404e78807940c9bf89b4050df271213e5b78373ec5bbbce9a1122e11616",
-      "capturedAt": "2026-11-05T02:09:19.935Z",
+      "bytes": 35645,
+      "sha256": "a8db02ef4df1167e878d81e0e607c75aceb088e75d6e3b7ce6ec9b69ff53ef72",
+      "capturedAt": "2026-11-05T05:39:53.774Z",
       "dataset": "same-dataset",
       "actionMeta": null,
       "note": "两侧均为未登录状态页：清会话后访问根路径"
@@ -54,7 +56,7 @@
       "title": "家庭智能记账",
       "bytes": 125380,
       "sha256": "77e9ab0a828aa5bc3ab3f8a07ac2ef45e98ec2bc4b3f5fc499999b26e2ebceaa",
-      "capturedAt": "2026-11-05T02:09:21.215Z",
+      "capturedAt": "2026-11-05T05:39:55.030Z",
       "dataset": "same-dataset",
       "actionMeta": null,
       "note": ""
@@ -73,9 +75,9 @@
       "actualHash": "",
       "hasToken": false,
       "title": "家庭智能记账",
-      "bytes": 56931,
-      "sha256": "5fd76b91ba7c6b7b6c57d07ac6d5229357e68fff2e2d4299bb3683fec3ea97e6",
-      "capturedAt": "2026-11-05T02:09:23.200Z",
+      "bytes": 52317,
+      "sha256": "ab150b346677c016764225187faba684b75de0a9e8067b84d5a360acd366e1ec",
+      "capturedAt": "2026-11-05T05:39:57.003Z",
       "dataset": "same-dataset",
       "actionMeta": {
         "click": "no-fab",
@@ -101,7 +103,7 @@
       "title": "家庭智能记账",
       "bytes": 27208,
       "sha256": "9b77644d4397bc2a56443350fd5ccce9ff5a2874b7994857e6e7c8eff537e42c",
-      "capturedAt": "2026-11-05T02:09:24.433Z",
+      "capturedAt": "2026-11-05T05:39:58.261Z",
       "dataset": "same-dataset",
       "actionMeta": null,
       "note": ""
@@ -122,7 +124,7 @@
       "title": "家庭智能记账",
       "bytes": 111480,
       "sha256": "c9edca6ed73fe2d5a48f46f083baa844d14b7286a6cf75260a0adeae738d4cbf",
-      "capturedAt": "2026-11-05T02:09:25.700Z",
+      "capturedAt": "2026-11-05T05:39:59.525Z",
       "dataset": "same-dataset",
       "actionMeta": null,
       "note": ""
@@ -143,7 +145,7 @@
       "title": "家庭智能记账",
       "bytes": 61562,
       "sha256": "62ae39ce389d41755e4e9d2941240e171a4029f4bacf724c6c330ae58020c48e",
-      "capturedAt": "2026-11-05T02:09:26.936Z",
+      "capturedAt": "2026-11-05T05:40:00.781Z",
       "dataset": "same-dataset",
       "actionMeta": null,
       "note": ""
@@ -164,7 +166,7 @@
       "title": "家庭智能记账",
       "bytes": 122050,
       "sha256": "42b3fbe5f71f8480bc43514e5c68c816a2789d526174522408680b1fcd05a10f",
-      "capturedAt": "2026-11-05T02:09:28.202Z",
+      "capturedAt": "2026-11-05T05:40:02.047Z",
       "dataset": "same-dataset",
       "actionMeta": null,
       "note": ""
@@ -185,7 +187,7 @@
       "title": "家庭智能记账",
       "bytes": 94435,
       "sha256": "cee61b01d5391151298b54a531b76a10b38d4342e7395c34d8c5c80a060b3e4f",
-      "capturedAt": "2026-11-05T02:09:29.462Z",
+      "capturedAt": "2026-11-05T05:40:03.289Z",
       "dataset": "same-dataset",
       "actionMeta": null,
       "note": ""
@@ -204,9 +206,9 @@
       "actualHash": "",
       "hasToken": false,
       "title": "家庭智能记账",
-      "bytes": 54276,
-      "sha256": "2af3e29ebbac0b93b38c8b36dfee3e0da70b0701e4ed413a55994ae1fd1fc5d5",
-      "capturedAt": "2026-11-05T02:09:30.752Z",
+      "bytes": 54281,
+      "sha256": "db7562b950c13ea20e461977ada18c02d47d9a384c62391f152fd50a3dd6f7a9",
+      "capturedAt": "2026-11-05T05:40:04.596Z",
       "dataset": "same-dataset",
       "actionMeta": null,
       "note": ""
@@ -227,7 +229,7 @@
       "title": "家庭智能记账",
       "bytes": 58578,
       "sha256": "1b969cd9f522820ff10e2ea1aec4ae46259a8b44fdae3fbc9ca5b5a567f9be16",
-      "capturedAt": "2026-11-05T02:09:31.987Z",
+      "capturedAt": "2026-11-05T05:40:05.830Z",
       "dataset": "same-dataset",
       "actionMeta": null,
       "note": ""
@@ -248,7 +250,7 @@
       "title": "家庭智能记账",
       "bytes": 57766,
       "sha256": "6d1034aab987b4516d69124175c7baadd44586617a5c3eb386fe481028b97043",
-      "capturedAt": "2026-11-05T02:09:33.234Z",
+      "capturedAt": "2026-11-05T05:40:07.062Z",
       "dataset": "same-dataset",
       "actionMeta": null,
       "note": ""
@@ -269,7 +271,7 @@
       "title": "家庭智能记账",
       "bytes": 85302,
       "sha256": "a090f7d5983eae4c9fece187ea2c3405d8e0a0c8f400f61dd56b2b49393d5487",
-      "capturedAt": "2026-11-05T02:09:34.492Z",
+      "capturedAt": "2026-11-05T05:40:08.319Z",
       "dataset": "same-dataset",
       "actionMeta": null,
       "note": ""
@@ -290,7 +292,7 @@
       "title": "家庭智能记账",
       "bytes": 85302,
       "sha256": "a090f7d5983eae4c9fece187ea2c3405d8e0a0c8f400f61dd56b2b49393d5487",
-      "capturedAt": "2026-11-05T02:09:35.726Z",
+      "capturedAt": "2026-11-05T05:40:09.570Z",
       "dataset": "same-dataset",
       "actionMeta": null,
       "note": "原型设置入口在「我的」二级菜单"
@@ -311,7 +313,7 @@
       "title": "家庭智能记账",
       "bytes": 35996,
       "sha256": "fe81f8498289cb52c8e372cf8b7d0b6524386224cc3ffd8d379a388d57b273e2",
-      "capturedAt": "2026-11-05T02:09:37.581Z",
+      "capturedAt": "2026-11-05T05:40:11.425Z",
       "dataset": "same-dataset",
       "actionMeta": null,
       "note": "两侧均为未登录状态页：清会话后访问根路径"
@@ -332,7 +334,7 @@
       "title": "家庭智能记账",
       "bytes": 139302,
       "sha256": "0c5ccdcb3c0128395e7e71aae7759039f0368f6c795d92c69a7754335375a91c",
-      "capturedAt": "2026-11-05T02:09:38.836Z",
+      "capturedAt": "2026-11-05T05:40:12.681Z",
       "dataset": "same-dataset",
       "actionMeta": null,
       "note": ""
@@ -351,9 +353,9 @@
       "actualHash": "",
       "hasToken": false,
       "title": "家庭智能记账",
-      "bytes": 60949,
-      "sha256": "da5df5b451ed31f2646b5671005f156485cf3c2f4e5826bca4039a9ab268d2f6",
-      "capturedAt": "2026-11-05T02:09:40.787Z",
+      "bytes": 61062,
+      "sha256": "e3a80de5ebc92e00bb9950515eb7bfa7708269cb4aa03b589988800c365df628",
+      "capturedAt": "2026-11-05T05:40:14.631Z",
       "dataset": "same-dataset",
       "actionMeta": {
         "click": "no-fab",
@@ -379,7 +381,7 @@
       "title": "家庭智能记账",
       "bytes": 28199,
       "sha256": "9ac9d0c0d7f58dcac9739e0d8bce996f0024c74db509a8f8fd527af8090fc365",
-      "capturedAt": "2026-11-05T02:09:42.032Z",
+      "capturedAt": "2026-11-05T05:40:15.860Z",
       "dataset": "same-dataset",
       "actionMeta": null,
       "note": ""
@@ -400,7 +402,7 @@
       "title": "家庭智能记账",
       "bytes": 116318,
       "sha256": "ce4cef4c3b790e583dcd4e126cbf2dc1d191b59c8ae3aa925858f9effb0d8b04",
-      "capturedAt": "2026-11-05T02:09:43.284Z",
+      "capturedAt": "2026-11-05T05:40:17.128Z",
       "dataset": "same-dataset",
       "actionMeta": null,
       "note": ""
@@ -421,7 +423,7 @@
       "title": "家庭智能记账",
       "bytes": 62264,
       "sha256": "2a0e5370c847f2dcce73deb04d3e00cfbf20a98c0ec568fec6b09edd739dc53f",
-      "capturedAt": "2026-11-05T02:09:44.521Z",
+      "capturedAt": "2026-11-05T05:40:18.363Z",
       "dataset": "same-dataset",
       "actionMeta": null,
       "note": ""
@@ -442,7 +444,7 @@
       "title": "家庭智能记账",
       "bytes": 129698,
       "sha256": "4f3bc31902b77dfe5986283d52a665f571e27ef608632e8a0c9fca1304f32afb",
-      "capturedAt": "2026-11-05T02:09:45.789Z",
+      "capturedAt": "2026-11-05T05:40:19.617Z",
       "dataset": "same-dataset",
       "actionMeta": null,
       "note": ""
@@ -463,7 +465,7 @@
       "title": "家庭智能记账",
       "bytes": 100809,
       "sha256": "07e53cdf73390685d123bb51a9d86b88672b3f17285c0a606c71cb9741c921bc",
-      "capturedAt": "2026-11-05T02:09:47.046Z",
+      "capturedAt": "2026-11-05T05:40:20.873Z",
       "dataset": "same-dataset",
       "actionMeta": null,
       "note": ""
@@ -482,9 +484,9 @@
       "actualHash": "",
       "hasToken": false,
       "title": "家庭智能记账",
-      "bytes": 58612,
-      "sha256": "954e3faf68429e79f95026a160789e218afb8ca3e0902716887f160b92488cdc",
-      "capturedAt": "2026-11-05T02:09:48.335Z",
+      "bytes": 58606,
+      "sha256": "e751a5aeb6daab83f63333d86b764afc94f72a2f23bcdcf7f2f8db21a24cca61",
+      "capturedAt": "2026-11-05T05:40:22.163Z",
       "dataset": "same-dataset",
       "actionMeta": null,
       "note": ""
@@ -505,7 +507,7 @@
       "title": "家庭智能记账",
       "bytes": 66742,
       "sha256": "92e38da91275e56a5a8b227c0c3de0133475a618204a01944aef3fca22b63c5e",
-      "capturedAt": "2026-11-05T02:09:49.570Z",
+      "capturedAt": "2026-11-05T05:40:23.396Z",
       "dataset": "same-dataset",
       "actionMeta": null,
       "note": ""
@@ -526,7 +528,7 @@
       "title": "家庭智能记账",
       "bytes": 58771,
       "sha256": "d82cadf7e45e3fdfc10a1cdd3fb7492e9a2244db3f29b0a5005edf2a85f01020",
-      "capturedAt": "2026-11-05T02:09:50.817Z",
+      "capturedAt": "2026-11-05T05:40:24.629Z",
       "dataset": "same-dataset",
       "actionMeta": null,
       "note": ""
@@ -547,7 +549,7 @@
       "title": "家庭智能记账",
       "bytes": 92129,
       "sha256": "26d238e13a060b66bb777718a5323362724fab77c9a469aca3532c285dfb26d1",
-      "capturedAt": "2026-11-05T02:09:52.077Z",
+      "capturedAt": "2026-11-05T05:40:25.872Z",
       "dataset": "same-dataset",
       "actionMeta": null,
       "note": ""
@@ -568,7 +570,7 @@
       "title": "家庭智能记账",
       "bytes": 92129,
       "sha256": "26d238e13a060b66bb777718a5323362724fab77c9a469aca3532c285dfb26d1",
-      "capturedAt": "2026-11-05T02:09:53.327Z",
+      "capturedAt": "2026-11-05T05:40:27.120Z",
       "dataset": "same-dataset",
       "actionMeta": null,
       "note": "原型设置入口在「我的」二级菜单"
@@ -589,7 +591,7 @@
       "title": "家庭智能记账",
       "bytes": 36230,
       "sha256": "180d1ea31101b36f224f69dd067091faff4b2bf52bc2e2bd84629c97f024f57c",
-      "capturedAt": "2026-11-05T02:09:55.181Z",
+      "capturedAt": "2026-11-05T05:40:28.976Z",
       "dataset": "same-dataset",
       "actionMeta": null,
       "note": "两侧均为未登录状态页：清会话后访问根路径"
@@ -610,7 +612,7 @@
       "title": "家庭智能记账",
       "bytes": 152529,
       "sha256": "6394850268072a5c037c4da53f7540cfb78dee2f7a1fe2226e7f7038b8322af9",
-      "capturedAt": "2026-11-05T02:09:56.438Z",
+      "capturedAt": "2026-11-05T05:40:30.233Z",
       "dataset": "same-dataset",
       "actionMeta": null,
       "note": ""
@@ -629,9 +631,9 @@
       "actualHash": "",
       "hasToken": false,
       "title": "家庭智能记账",
-      "bytes": 66469,
-      "sha256": "06ceebe5395bc83874fa1c6c0e01047a57a4a9f0bc522edae395079c29c1fc27",
-      "capturedAt": "2026-11-05T02:09:58.403Z",
+      "bytes": 66573,
+      "sha256": "6097e5b9ff0d8c2cb6c6813749aecd61ccef7e2c420d1b419501ac6d36099fc6",
+      "capturedAt": "2026-11-05T05:40:32.198Z",
       "dataset": "same-dataset",
       "actionMeta": {
         "click": "no-fab",
@@ -657,7 +659,7 @@
       "title": "家庭智能记账",
       "bytes": 30094,
       "sha256": "17a11bd04f983b8e3d8bdc150672f3e0e84bd1ae657d29ff4e2fd3e050f30e17",
-      "capturedAt": "2026-11-05T02:09:59.649Z",
+      "capturedAt": "2026-11-05T05:40:33.443Z",
       "dataset": "same-dataset",
       "actionMeta": null,
       "note": ""
@@ -678,7 +680,7 @@
       "title": "家庭智能记账",
       "bytes": 121952,
       "sha256": "ec516e7bd4c2da202cc8cbb49faac78c067095c6b43ee79f166122e83101bc38",
-      "capturedAt": "2026-11-05T02:10:00.904Z",
+      "capturedAt": "2026-11-05T05:40:34.715Z",
       "dataset": "same-dataset",
       "actionMeta": null,
       "note": ""
@@ -699,7 +701,7 @@
       "title": "家庭智能记账",
       "bytes": 64333,
       "sha256": "d76ea3b0e672dd4e7ccac10327e2400de5f6ed4cb9faf83fcd98172fe313b0bc",
-      "capturedAt": "2026-11-05T02:10:02.153Z",
+      "capturedAt": "2026-11-05T05:40:35.965Z",
       "dataset": "same-dataset",
       "actionMeta": null,
       "note": ""
@@ -720,7 +722,7 @@
       "title": "家庭智能记账",
       "bytes": 142844,
       "sha256": "e23c7f4945c05d3128cf9c2dd5c0527cae935980b48bf9d4bb02ad6dea4dda0a",
-      "capturedAt": "2026-11-05T02:10:03.424Z",
+      "capturedAt": "2026-11-05T05:40:37.235Z",
       "dataset": "same-dataset",
       "actionMeta": null,
       "note": ""
@@ -741,7 +743,7 @@
       "title": "家庭智能记账",
       "bytes": 104124,
       "sha256": "74614da9f6470ab551112569fe00330324c4cc8534c17e3ea6d9a83cc29a6c16",
-      "capturedAt": "2026-11-05T02:10:04.682Z",
+      "capturedAt": "2026-11-05T05:40:38.492Z",
       "dataset": "same-dataset",
       "actionMeta": null,
       "note": ""
@@ -762,7 +764,7 @@
       "title": "家庭智能记账",
       "bytes": 63643,
       "sha256": "1dbedde8e68cbea27870b12fb4e63f037e4cd8dbfbd5635ebc007b84e62eb7f3",
-      "capturedAt": "2026-11-05T02:10:05.969Z",
+      "capturedAt": "2026-11-05T05:40:39.780Z",
       "dataset": "same-dataset",
       "actionMeta": null,
       "note": ""
@@ -783,7 +785,7 @@
       "title": "家庭智能记账",
       "bytes": 79963,
       "sha256": "f008a164f8c0834fd6f6e0dbe7ae4a0d13faaa5796a11d95c8a5576a5ce7c180",
-      "capturedAt": "2026-11-05T02:10:07.204Z",
+      "capturedAt": "2026-11-05T05:40:41.016Z",
       "dataset": "same-dataset",
       "actionMeta": null,
       "note": ""
@@ -804,7 +806,7 @@
       "title": "家庭智能记账",
       "bytes": 60755,
       "sha256": "bf31fb938eff81bf639a4150239ccfbe33f88be03867e54cf88e6e99dd66b754",
-      "capturedAt": "2026-11-05T02:10:08.451Z",
+      "capturedAt": "2026-11-05T05:40:42.262Z",
       "dataset": "same-dataset",
       "actionMeta": null,
       "note": ""
@@ -825,7 +827,7 @@
       "title": "家庭智能记账",
       "bytes": 99507,
       "sha256": "2784e15e85ac09d0cfa2bd003f4b70e7d2cb4c1e38d26a2ef44d474acae98524",
-      "capturedAt": "2026-11-05T02:10:09.712Z",
+      "capturedAt": "2026-11-05T05:40:43.507Z",
       "dataset": "same-dataset",
       "actionMeta": null,
       "note": ""
@@ -846,7 +848,7 @@
       "title": "家庭智能记账",
       "bytes": 99507,
       "sha256": "2784e15e85ac09d0cfa2bd003f4b70e7d2cb4c1e38d26a2ef44d474acae98524",
-      "capturedAt": "2026-11-05T02:10:10.961Z",
+      "capturedAt": "2026-11-05T05:40:44.756Z",
       "dataset": "same-dataset",
       "actionMeta": null,
       "note": "原型设置入口在「我的」二级菜单"
@@ -867,7 +869,7 @@
       "title": "家庭智能记账",
       "bytes": 42548,
       "sha256": "88e2fb7270e56fed52dd84d4631f4f0486a9fc53c7d15f143e0b78ce906c18d1",
-      "capturedAt": "2026-11-05T02:10:12.839Z",
+      "capturedAt": "2026-11-05T05:40:46.632Z",
       "dataset": "same-dataset",
       "actionMeta": null,
       "note": "两侧均为未登录状态页：清会话后访问根路径"
@@ -888,7 +890,7 @@
       "title": "家庭智能记账",
       "bytes": 343239,
       "sha256": "c7cd170d8f96be0b1fef6fd5a838cc95d8a040a9645541c226887f5e0419203d",
-      "capturedAt": "2026-11-05T02:10:14.171Z",
+      "capturedAt": "2026-11-05T05:40:47.966Z",
       "dataset": "same-dataset",
       "actionMeta": null,
       "note": ""
@@ -909,7 +911,7 @@
       "title": "家庭智能记账",
       "bytes": 272105,
       "sha256": "6673bb3166fbe3956cbecf0ee3a9c872de7d2c8e3f046e3528374afc38084cda",
-      "capturedAt": "2026-11-05T02:10:16.191Z",
+      "capturedAt": "2026-11-05T05:40:49.975Z",
       "dataset": "same-dataset",
       "actionMeta": {
         "click": "no-fab",
@@ -935,7 +937,7 @@
       "title": "家庭智能记账",
       "bytes": 239570,
       "sha256": "0c5f1501ae005fecf9f59738d8d6fab8cb1010ccaff73aa8a44062bc3c2fd56c",
-      "capturedAt": "2026-11-05T02:10:17.493Z",
+      "capturedAt": "2026-11-05T05:40:51.299Z",
       "dataset": "same-dataset",
       "actionMeta": null,
       "note": ""
@@ -956,7 +958,7 @@
       "title": "家庭智能记账",
       "bytes": 325546,
       "sha256": "3dd9e0289f515638924587888b9a1bdbf8d0931efcaf31c7e05babe759cd439b",
-      "capturedAt": "2026-11-05T02:10:18.817Z",
+      "capturedAt": "2026-11-05T05:40:52.631Z",
       "dataset": "same-dataset",
       "actionMeta": null,
       "note": ""
@@ -977,7 +979,7 @@
       "title": "家庭智能记账",
       "bytes": 279095,
       "sha256": "d2bd98a36f8c1e8b60277aa5d03494a90ef75c9ee842ba667ef54c441ac1877a",
-      "capturedAt": "2026-11-05T02:10:20.122Z",
+      "capturedAt": "2026-11-05T05:40:53.947Z",
       "dataset": "same-dataset",
       "actionMeta": null,
       "note": ""
@@ -998,7 +1000,7 @@
       "title": "家庭智能记账",
       "bytes": 346478,
       "sha256": "cf97df9f3be5c08f8347c4f8564ac81b91a020228aa233ac2ecc33249ec2c527",
-      "capturedAt": "2026-11-05T02:10:21.467Z",
+      "capturedAt": "2026-11-05T05:40:55.288Z",
       "dataset": "same-dataset",
       "actionMeta": null,
       "note": ""
@@ -1019,7 +1021,7 @@
       "title": "家庭智能记账",
       "bytes": 309419,
       "sha256": "373261ab953d75db6d7e7c88acf67c59535c28a9dfb5f5569825c0d9ace6d6bb",
-      "capturedAt": "2026-11-05T02:10:22.801Z",
+      "capturedAt": "2026-11-05T05:40:56.609Z",
       "dataset": "same-dataset",
       "actionMeta": null,
       "note": ""
@@ -1038,9 +1040,9 @@
       "actualHash": "",
       "hasToken": false,
       "title": "家庭智能记账",
-      "bytes": 266426,
-      "sha256": "a7afcf2ce3af9ec32c922c612c927fb4c234dde7916ecdc5e96752d15505922e",
-      "capturedAt": "2026-11-05T02:10:24.171Z",
+      "bytes": 266375,
+      "sha256": "6d17f13e07b5d80517d62c701727ffe7ce6c96ac5490e8d518b4e09caab0b488",
+      "capturedAt": "2026-11-05T05:40:57.964Z",
       "dataset": "same-dataset",
       "actionMeta": null,
       "note": ""
@@ -1061,7 +1063,7 @@
       "title": "家庭智能记账",
       "bytes": 272633,
       "sha256": "18925d5afed3fa737975740ac554e0cfb9956e5310b24a123c2aaf9fd257d470",
-      "capturedAt": "2026-11-05T02:10:25.498Z",
+      "capturedAt": "2026-11-05T05:40:59.260Z",
       "dataset": "same-dataset",
       "actionMeta": null,
       "note": ""
@@ -1082,7 +1084,7 @@
       "title": "家庭智能记账",
       "bytes": 273624,
       "sha256": "117691b8a47c9348aca7d679d624daedb3f75e6a085bece87d54e32f6c4b8580",
-      "capturedAt": "2026-11-05T02:10:26.843Z",
+      "capturedAt": "2026-11-05T05:41:00.586Z",
       "dataset": "same-dataset",
       "actionMeta": null,
       "note": ""
@@ -1103,7 +1105,7 @@
       "title": "家庭智能记账",
       "bytes": 296177,
       "sha256": "541d9d822e512ef5745ec4482b6c847728da36f7864bdb05a9580c140bfbda41",
-      "capturedAt": "2026-11-05T02:10:28.162Z",
+      "capturedAt": "2026-11-05T05:41:01.906Z",
       "dataset": "same-dataset",
       "actionMeta": null,
       "note": ""
@@ -1124,7 +1126,7 @@
       "title": "家庭智能记账",
       "bytes": 296177,
       "sha256": "541d9d822e512ef5745ec4482b6c847728da36f7864bdb05a9580c140bfbda41",
-      "capturedAt": "2026-11-05T02:10:29.476Z",
+      "capturedAt": "2026-11-05T05:41:03.221Z",
       "dataset": "same-dataset",
       "actionMeta": null,
       "note": "原型设置入口在「我的」二级菜单"
