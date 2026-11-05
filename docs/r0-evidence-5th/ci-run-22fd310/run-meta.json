@@ -1,0 +1,143 @@
+{
+  "retrievedAt": "2026-11-05T06:52:25.023Z",
+  "repository": "LinTia/FastLadger",
+  "workflow": "CI",
+  "workflowPath": ".github/workflows/ci.yml",
+  "runId": 41976312248,
+  "runAttempt": 1,
+  "event": "push",
+  "headSha": "22fd31099065ce0d6f15a899374740b4a56ead06",
+  "headBranch": "main",
+  "status": "completed",
+  "conclusion": "success",
+  "createdAt": "2026-11-05T05:48:22Z",
+  "updatedAt": "2026-11-05T05:53:36Z",
+  "htmlUrl": "https://github.com/LinTia/FastLadger/actions/runs/41976312248",
+  "jobs": [
+    {
+      "id": 127075869907,
+      "name": "build / vet / test / race",
+      "status": "completed",
+      "conclusion": "success",
+      "startedAt": "2026-11-05T05:48:25Z",
+      "completedAt": "2026-11-05T05:50:41Z",
+      "steps": [
+        {
+          "number": 1,
+          "name": "Set up job",
+          "conclusion": "success"
+        },
+        {
+          "number": 2,
+          "name": "Run actions/checkout@v4",
+          "conclusion": "success"
+        },
+        {
+          "number": 3,
+          "name": "Run actions/setup-go@v5",
+          "conclusion": "success"
+        },
+        {
+          "number": 4,
+          "name": "Toolchain（必须看到 gcc 与 CGO_ENABLED=1）",
+          "conclusion": "success"
+        },
+        {
+          "number": 5,
+          "name": "gofmt（必须无未格式化文件）",
+          "conclusion": "success"
+        },
+        {
+          "number": 6,
+          "name": "go vet",
+          "conclusion": "success"
+        },
+        {
+          "number": 7,
+          "name": "go build",
+          "conclusion": "success"
+        },
+        {
+          "number": 8,
+          "name": "SQLite 驱动冒烟（证明不是 stub）",
+          "conclusion": "success"
+        },
+        {
+          "number": 9,
+          "name": "go test 全量",
+          "conclusion": "success"
+        },
+        {
+          "number": 10,
+          "name": "go test -race（Hub 并发 / 事务边界）",
+          "conclusion": "success"
+        },
+        {
+          "number": 19,
+          "name": "Post Run actions/setup-go@v5",
+          "conclusion": "success"
+        },
+        {
+          "number": 20,
+          "name": "Post Run actions/checkout@v4",
+          "conclusion": "success"
+        },
+        {
+          "number": 21,
+          "name": "Complete job",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "id": 127076627469,
+      "name": "docker build / run / healthz",
+      "status": "completed",
+      "conclusion": "success",
+      "startedAt": "2026-11-05T05:50:44Z",
+      "completedAt": "2026-11-05T05:53:35Z",
+      "steps": [
+        {
+          "number": 1,
+          "name": "Set up job",
+          "conclusion": "success"
+        },
+        {
+          "number": 2,
+          "name": "Run actions/checkout@v4",
+          "conclusion": "success"
+        },
+        {
+          "number": 3,
+          "name": "Build 镜像（CGO + musl 多阶段）",
+          "conclusion": "success"
+        },
+        {
+          "number": 4,
+          "name": "容器内 db migrate 冒烟（子命令入口 + 建库）",
+          "conclusion": "success"
+        },
+        {
+          "number": 5,
+          "name": "容器冒烟（healthz 应报 up + schemaVersion）",
+          "conclusion": "success"
+        },
+        {
+          "number": 6,
+          "name": "清理",
+          "conclusion": "success"
+        },
+        {
+          "number": 12,
+          "name": "Post Run actions/checkout@v4",
+          "conclusion": "success"
+        },
+        {
+          "number": 13,
+          "name": "Complete job",
+          "conclusion": "success"
+        }
+      ]
+    }
+  ]
+}

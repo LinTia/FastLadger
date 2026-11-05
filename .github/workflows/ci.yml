@@ -76,9 +76,15 @@ jobs:
       - name: go test 全量
         run: go test ./... -count=1 -v
 
-      # 阶段 3.3 明确要求：Hub 并发必须由 race detector 证明
-      - name: go test -race（Hub 并发 / 事务边界）
-        run: go test ./internal/ws/... ./internal/service/... ./internal/api/... -race -count=1
+      # 阶段 3.3 明确要求：Hub 并发必须由 race detector 证明。
+      #
+      # R0 第五次整改（2026-11-05）：作用域由 `ws/service/api` 扩到**全仓**。
+      # 原作用域下，其余包（cmd/server、migrate、database、authzreview、config、
+      # instance、model）只经非 race 的全量测试，"全仓 -race 已过"一直靠"在服务器上
+      # 手动复跑"补充——那属于自测，第三方无法独立核对。改为全仓后，这条结论变成
+      # GitHub 原生、任何人可点开 run URL 复核的证据。
+      - name: go test -race（全仓）
+        run: go test ./... -race -count=1
 
   # WBS 7.1：Docker 单镜像构建 + 容器冒烟（服务器未装 docker，构建证据由 CI 出）
   docker-build:

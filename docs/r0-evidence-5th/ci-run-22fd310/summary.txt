@@ -1,0 +1,44 @@
+# CI run 41976312248 — 关键证明行（自 test-job.log / docker-job.log 原文摘录，未改写结论）
+# head_sha=22fd31099065ce0d6f15a899374740b4a56ead06  event=push  attempt=1  conclusion=success
+# 来源: https://github.com/LinTia/FastLadger/actions/runs/41976312248
+
+## 环境（CGO 前提 + 编译器）
+2026-11-05T05:48:39.8587187Z go version go1.22.12 linux/amd64
+2026-11-05T05:48:39.9539222Z go version go1.22.12 linux/amd64
+2026-11-05T05:48:39.9553590Z gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+
+## 步骤8 SQLite 驱动冒烟（反向门禁：出现 no test files 即失败）
+2026-11-05T05:48:44.4152998Z ok  	fastledger/internal/migrate	0.416s
+2026-11-05T05:48:44.4162851Z ok  	fastledger/internal/database	0.106s
+
+## 步骤9 go test ./... -count=1 -v（全量）
+2026-11-05T05:48:45.8604180Z ok  	fastledger/cmd/server	0.277s
+2026-11-05T05:48:48.9335922Z ?   	fastledger/internal/version	[no test files]
+2026-11-05T05:48:49.9110760Z ok  	fastledger/internal/api	3.769s
+2026-11-05T05:48:49.9111064Z ?   	fastledger/web	[no test files]
+2026-11-05T05:48:56.9625514Z ok  	fastledger/internal/authzreview	10.818s
+2026-11-05T05:48:56.9680047Z ok  	fastledger/internal/config	0.003s
+2026-11-05T05:48:56.9689106Z ok  	fastledger/internal/database	0.030s
+2026-11-05T05:48:56.9707843Z ok  	fastledger/internal/instance	0.029s
+2026-11-05T05:48:56.9775464Z ok  	fastledger/internal/migrate	0.630s
+2026-11-05T05:48:56.9778856Z ok  	fastledger/internal/model	0.004s
+2026-11-05T05:49:07.8728871Z ok  	fastledger/internal/service	18.871s
+2026-11-05T05:49:07.8806986Z ok  	fastledger/internal/ws	7.248s
+
+## 步骤10 go test -race（当前作用域：ws / service / api）
+2026-11-05T05:49:19.4410170Z ok  	fastledger/internal/ws	10.995s
+2026-11-05T05:50:38.4030307Z ok  	fastledger/internal/service	86.781s
+2026-11-05T05:50:38.4030680Z ok  	fastledger/internal/api	32.094s
+
+## 容器冒烟 healthz（docker job）
+2026-11-05T05:53:32.4309090Z {"code":0,"data":{"instanceId":"f8e20003fc3438642c5bcb8bb674920e","restoreEpoch":1,"schemaVersion":8,"status":"up"},"msg":"ok"}
+
+## 计数（应为 0）
+--- FAIL 行数: 0
+DATA RACE 行数: 0
+
+## 作用域说明（不得据此宣称全仓 race）
+步骤10 的 -race 仅覆盖 internal/ws、internal/service、internal/api 三个包；
+其它包（cmd/server、internal/migrate、database、authzreview、config、instance、model）
+在本 run 中只经步骤9 的非 race 全量测试。全仓 -race 由服务器复跑（docs/r0-evidence-4th/race.log）补充，
+或见后续 run（ci.yml 已扩展为全仓 -race）。
