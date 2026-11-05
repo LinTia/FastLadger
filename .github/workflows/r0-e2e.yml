@@ -61,6 +61,13 @@ jobs:
       - name: 分类解析合成测试（B 的补充整改）
         run: node --test tools/r0/test-resolve-category.js
 
+      # P1 安全整改（K1-K3）：凭据扫描器负向合成测试门禁。
+      # 30 项用例覆盖 K1(UTF-16LE/BE/NUL插入/无法解码) / K2(短Token/短Key/短密码/业务字段不误报)
+      # / K3(x-api-key/apiKey变体/Base64/JSON嵌套/大小写分隔符)，全部合成凭据、真实断言。
+      # 任一失败即 job 失败，确保绕过无法再通过。
+      - name: 凭据扫描器负向合成测试（K1-K3，30 项）
+        run: node --test tools/r0/e2e/test-scan-artifacts.js
+
       - name: 分类映射回归审计（B · 22 笔）
         env:
           R0_SERVER_BIN: ${{ github.workspace }}/server/fastledger
@@ -122,6 +129,43 @@ jobs:
         if: ${{ always() && steps.artifact_prepare.outcome == 'success' }}
         run: node tools/r0/e2e/scripts/scan-artifacts.js artifacts/r0-e2e-upload
 
+      # P1 安全整改（K1-K3）失败关闭集成验证：用合成凭据样本直接证明
+      # 「扫描失败/命中 → 退出码非 0 → 上传 step 的 if: outcome==success 不触发 → 不上传」。
+      # 与上面 artifact_scan 共用同一把扫描器，因此本步是上传闸门的前置可行性证据。
+      - name: 失败关闭（fail-closed）集成验证
+        id: fail_closed_check
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          SCANNER="tools/r0/e2e/scripts/scan-artifacts.js"
+
+          # 含合成凭据的样本（x-api-key + 一段 UTF-16LE Bearer），须被阻断。
+          CRED_DIR="$(mktemp -d)"
+          printf 'x-api-key: SYNTHETIC-FAKE-FC-KEY-000000000000\n' > "$CRED_DIR/leak.txt"
+          printf 'Bearer %s' 'SYNTHETICFAKEUTF16LE000000000000' | iconv -t UTF-16LE > "$CRED_DIR/leak16.txt" || \
+            printf 'Bearer SYNTHETICFAKEUTF16LE000000000000' > "$CRED_DIR/leak16.txt"
+          set +e
+          node "$SCANNER" "$CRED_DIR"; CRED_RC=$?
+          set -e
+          if [ "$CRED_RC" -eq 0 ]; then
+            echo "::error::FAIL-OPEN: 含凭据样本竟被判定 CLEAN (rc=0)，上传闸门失效"
+            exit 1
+          fi
+          echo "FAIL-CLOSED OK: 含凭据样本被阻断 (rc=$CRED_RC)，上传 step 的 if: outcome==success 不会触发"
+
+          # 干净样本，须放行（rc=0）。
+          CLEAN_DIR="$(mktemp -d)"
+          printf 'unit: kg\nnote: groceries\nstatus: ok\n' > "$CLEAN_DIR/biz.json"
+          set +e
+          node "$SCANNER" "$CLEAN_DIR"; CLEAN_RC=$?
+          set -e
+          if [ "$CLEAN_RC" -ne 0 ]; then
+            echo "::error::干净样本被误阻断 (rc=$CLEAN_RC)"
+            exit 1
+          fi
+          echo "CLEAN OK: 干净样本放行 (rc=0)"
+          rm -rf "$CRED_DIR" "$CLEAN_DIR"
+
       # 关键：上传只在扫描 step 的 outcome 为 success 时发生。
       # 原先的 if: always() 会让"扫描失败即退出"的防护完全失效，故必须改为依赖 outcome。
       - name: 上传证据（日志/截图/报告/校验和）
@@ -147,6 +191,7 @@ jobs:
             echo ""
             echo "- 白名单准备 outcome: ${{ steps.artifact_prepare.outcome }}"
             echo "- 上传前安全扫描 outcome: ${{ steps.artifact_scan.outcome }}"
+            echo "- 失败关闭集成验证 outcome: ${{ steps.fail_closed_check.outcome }}"
             echo "- 上传证据 outcome: ${{ steps.artifact_upload.outcome }}"
             echo "- 扫描通过且允许上传: ${{ steps.artifact_scan.outcome == 'success' }}"
             if [ "${{ steps.artifact_upload.outcome }}" != "success" ]; then

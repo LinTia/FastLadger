@@ -226,3 +226,13 @@ checkout → setup-go 1.22 → go build ./cmd/server
 - **D**：维持 **PARTIAL**（3/5/5），本轮未碰。
 - **RV-05**：未触碰。
 - **R0 整体：仍 BLOCK**，不授权 R1–R7，PWA 未启动。
+
+## 10. P1 凭据扫描器 K1-K3 安全绕过修复（新增，独立于 §1-§7）
+
+第三方在 `659c0c3` 上复现的 K1（编码绕过）/ K2（短值低熵漏报）/ K3（字段名与 Base64 绕过）已由独立任务单整改，详见 `docs/r0-evidence-7th-fix/p1/k1-k3-remediation.md`。要点：
+
+- 修复前：12 个可复现绕过样本在 `659c0c3` 扫描器上全部判 CLEAN（绕过实证）；修复后全部 BLOCKED，正常业务字段仍 CLEAN（无误报）。
+- 新增 13 项负向合成测试（case-18~30），本地 30/30 通过；CI 新增「凭据扫描器负向合成测试」门禁与「失败关闭（fail-closed）集成验证」step。
+- 上传闸门维持 fail-closed：`artifact_upload` 仅当 `artifact_scan.outcome == 'success'`，无 `continue-on-error`，扫描失败不执行上传。
+- 本轮不合并 main、不宣布 R0 通过；CI Run / SHA / Artifact 独立扫描见 §9-§10 回填记录。
+- 不在本轮范围：OBS-ACCT-VIS-390、13 条历史控件 ID 映射、RV-05 旧 SHA 公开历史、仓库 Private 决策。

@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * FastLedger R0 E2E —— scan-artifacts.js 负向合成测试（P1 安全整改 / Round 2 自证）。
+ * FastLedger R0 E2E —— scan-artifacts.js 负向合成测试（P1 安全整改 / Round 3，覆盖 K1–K3）。
  *
  * 运行：node --test tools/r0/e2e/test-scan-artifacts.js
  *
@@ -12,9 +12,17 @@
  *
  * 每组都会打印期望与实际退出码，并断言扫描输出不含匹配值本身。
  *
- * Round 2 修订：case-09 由「跳过二进制内容扫描 → 0」改为「文本伪装 .png → 2」；
- * 新增 NUL 前缀白名单文本、合法业务字段假阳性、真实 PNG 魔数、
- * 鉴权头 Bearer + JWT、Cookie 长值、符号链接等回归用例。
+ * Round 2（case-01~17）：干净集 / JWT / 黑名单文件名 / Bearer / Cookie / server.log /
+ *   密钥赋值 / 目录缺失 / 文本伪装 PNG / 二进制名敏感词 / NUL 前缀 / 合法业务字段假阳性 /
+ *   真实 PNG 魔数 / Bearer+JWT / Cookie 长值 / 符号链接 / 真实 PNG+内嵌 JWT。
+ *
+ * Round 3（case-18~30，本次 K1–K3 修复专测）：
+ *   K1 编码绕过：UTF-16LE（K1-01）/ UTF-16BE（K1-02）/ 零散 NUL 插入（K1-03）/
+ *     无法可靠解码（K1-04）均须 BLOCK，绝不降级 CLEAN。
+ *   K2 短值 / 低熵：短 Token（K2-01）/ 短 API Key（K2-02）/ 短密码（K2-03）均须 BLOCK；
+ *     普通短业务字段（K2-04）仍须 CLEAN（无误报）。
+ *   K3 字段名 / Base64：x-api-key（K3-01）/ apiKey 与 API_KEY 变体（K3-02）/
+ *     Base64 编码凭据（K3-03）/ JSON 嵌套凭据（K3-04）/ 大小写与分隔符变体（K3-05）均须 BLOCK。
  */
 
 const { test } = require('node:test');
@@ -50,6 +58,21 @@ function syntheticJwt() {
   const body = ['SYNTHETIC', 'FAKE', 'PAYLOAD', '0001'].join('');
   const sig = ['SYNTHETIC', 'FAKE', 'SIGNATURE', '0002'].join('');
   return [head, body, sig].join('.');
+}
+
+/**
+ * 手动大端（UTF-16BE）编码：Node Buffer 不支持 'utf16be'，测试侧自实现。
+ * @param {string} s 输入字符串。
+ * @return {Buffer} UTF-16BE 字节（无 BOM）。
+ */
+function encodeUtf16BE(s) {
+  const out = Buffer.alloc(s.length * 2);
+  for (let i = 0; i < s.length; i += 1) {
+    const c = s.charCodeAt(i);
+    out[i * 2] = (c >> 8) & 0xff;
+    out[i * 2 + 1] = c & 0xff;
+  }
+  return out;
 }
 
 /**
@@ -312,4 +335,160 @@ test('case-17 真实 PNG 魔数 + 内容内嵌合成 JWT → 退出码 2（证�
   assert.match(result.stdout, /JWT_LITERAL/);
   // 魔数本身是通过的，因此阻断完全来自文本规则，而非魔数不符。
   assert.doesNotMatch(result.stdout, /SUSPICIOUS_BINARY/);
+});
+
+// ===== Round 3: K1-K3 security bypass tests =====
+
+test('case-18 [K1-01] UTF-16LE encoded Bearer credential -> exit 2', (t) => {
+  const dir = makeTmp(t, 'k1-01');
+  writeCleanSet(dir);
+  const bearerValue = syntheticValue('UTF16LE');
+  // Written with null bytes between characters (UTF-16LE, no BOM) to bypass
+  // scanners that only inspect latin1/UTF-8 text.
+  fs.writeFileSync(
+    path.join(dir, 'leak.txt'),
+    Buffer.from(['Bearer', ' ', bearerValue].join(''), 'utf16le'),
+  );
+  const result = runScanner('case-18 [K1-01] UTF-16LE Bearer', dir, EXIT_BLOCKED, [bearerValue]);
+  assert.match(result.stdout, /BEARER_TOKEN/);
+});
+
+test('case-19 [K1-02] UTF-16BE encoded auth header credential -> exit 2', (t) => {
+  const dir = makeTmp(t, 'k1-02');
+  writeCleanSet(dir);
+  const bearerValue = syntheticValue('UTF16BE');
+  // UTF-16BE big-endian encoding (no BOM) must also be reliably decoded and blocked.
+  fs.writeFileSync(
+    path.join(dir, 'leak.txt'),
+    encodeUtf16BE(['Authorization', ': Bearer ', bearerValue].join('')),
+  );
+  const result = runScanner('case-19 [K1-02] UTF-16BE auth header', dir, EXIT_BLOCKED, [bearerValue]);
+  assert.match(result.stdout, /BEARER_TOKEN/);
+});
+
+test('case-20 [K1-03] scattered NUL insertion into token value -> exit 2', (t) => {
+  const dir = makeTmp(t, 'k1-03');
+  writeCleanSet(dir);
+  const tokenValue = syntheticValue('NULINJ');
+  // A stray NUL injected between "Bearer " and the token keeps the file
+  // "reliably UTF-8" yet breaks the plain Bearer regex; the NUL-squeeze rescan
+  // must recover the continuous run and catch it via BEARER_TOKEN.
+  fs.writeFileSync(
+    path.join(dir, 'leak.txt'),
+    ['Bearer ', String.fromCharCode(0), tokenValue].join(''),
+    'latin1',
+  );
+  const result = runScanner('case-20 [K1-03] NUL insertion', dir, EXIT_BLOCKED, [tokenValue]);
+  assert.match(result.stdout, /BEARER_TOKEN/);
+});
+
+test('case-21 [K1-04] undecodable text-like file -> exit 2 (never CLEAN)', (t) => {
+  const dir = makeTmp(t, 'k1-04');
+  writeCleanSet(dir);
+  // Deterministic invalid-UTF8 / non-binary buffer >= 16 bytes that cannot be
+  // reliably decoded by latin1/UTF-8/UTF-16LE/UTF-16BE. Must be BLOCKED, not CLEAN.
+  const buf = Buffer.alloc(64);
+  for (let i = 0; i < buf.length; i += 1) buf[i] = (i * 37 + 11) % 256;
+  fs.writeFileSync(path.join(dir, 'random.bin'), buf);
+  const result = runScanner('case-21 [K1-04] undecodable', dir, EXIT_BLOCKED);
+  assert.match(result.stdout, /UNDECODABLE/);
+});
+
+test('case-22 [K2-01] short token -> exit 2', (t) => {
+  const dir = makeTmp(t, 'k2-01');
+  writeCleanSet(dir);
+  const value = 'token: ab12';
+  fs.writeFileSync(path.join(dir, 'env.txt'), value + '\n', 'utf8');
+  const result = runScanner('case-22 [K2-01] short token', dir, EXIT_BLOCKED, ['ab12']);
+  assert.match(result.stdout, /SENSITIVE_ASSIGN/);
+});
+
+test('case-23 [K2-02] short api key -> exit 2', (t) => {
+  const dir = makeTmp(t, 'k2-02');
+  writeCleanSet(dir);
+  const value = 'api_key: xy78';
+  fs.writeFileSync(path.join(dir, 'env.txt'), value + '\n', 'utf8');
+  const result = runScanner('case-23 [K2-02] short api key', dir, EXIT_BLOCKED, ['xy78']);
+  assert.match(result.stdout, /SENSITIVE_ASSIGN/);
+});
+
+test('case-24 [K2-03] short password / low entropy -> exit 2', (t) => {
+  const dir = makeTmp(t, 'k2-03');
+  writeCleanSet(dir);
+  const value = 'password: pw9';
+  fs.writeFileSync(path.join(dir, 'env.txt'), value + '\n', 'utf8');
+  const result = runScanner('case-24 [K2-03] short password', dir, EXIT_BLOCKED, ['pw9']);
+  assert.match(result.stdout, /SENSITIVE_ASSIGN/);
+});
+
+test('case-25 [K2-04] normal short business fields -> exit 0 (no false positive)', (t) => {
+  const dir = makeTmp(t, 'k2-04');
+  writeCleanSet(dir);
+  const business = JSON.stringify({ unit: 'kg', qty: 2, note: 'milk', code: 'A1', status: 'ok' });
+  fs.writeFileSync(path.join(dir, 'biz.json'), business + '\n', 'utf8');
+  const result = runScanner('case-25 [K2-04] business fields', dir, EXIT_CLEAN);
+  assert.match(result.stdout, /\[scan\] 结论：CLEAN/);
+  assert.doesNotMatch(result.stdout, /SENSITIVE_ASSIGN/);
+});
+
+test('case-26 [K3-01] x-api-key header -> exit 2', (t) => {
+  const dir = makeTmp(t, 'k3-01');
+  writeCleanSet(dir);
+  const value = syntheticValue('XAPIKEY');
+  fs.writeFileSync(
+    path.join(dir, 'headers.txt'),
+    ['x-api-key: ', value].join('') + '\n',
+    'utf8',
+  );
+  const result = runScanner('case-26 [K3-01] x-api-key', dir, EXIT_BLOCKED, [value]);
+  assert.match(result.stdout, /SENSITIVE_ASSIGN/);
+});
+
+test('case-27 [K3-02] apiKey and API_KEY variants -> exit 2', (t) => {
+  const dir = makeTmp(t, 'k3-02');
+  writeCleanSet(dir);
+  const v1 = syntheticValue('APIKEY');
+  const v2 = syntheticValue('APIKEY2');
+  fs.writeFileSync(
+    path.join(dir, 'keys.txt'),
+    ['apiKey: ', v1, '\nAPI_KEY=', v2].join('') + '\n',
+    'utf8',
+  );
+  const result = runScanner('case-27 [K3-02] apiKey/API_KEY', dir, EXIT_BLOCKED, [v1, v2]);
+  assert.match(result.stdout, /SENSITIVE_ASSIGN/);
+});
+
+test('case-28 [K3-03] Base64 encoded credential -> exit 2', (t) => {
+  const dir = makeTmp(t, 'k3-03');
+  writeCleanSet(dir);
+  const jwt = syntheticJwt();
+  const embedded = ['Authorization: Bearer ', jwt].join('');
+  const b64 = Buffer.from(embedded, 'utf8').toString('base64');
+  fs.writeFileSync(path.join(dir, 'data.txt'), ['data=', b64].join('') + '\n', 'utf8');
+  const result = runScanner('case-28 [K3-03] Base64 credential', dir, EXIT_BLOCKED, [jwt, b64]);
+  assert.match(result.stdout, /BASE64_CREDENTIAL/);
+});
+
+test('case-29 [K3-04] JSON nested credential (quoted key) -> exit 2', (t) => {
+  const dir = makeTmp(t, 'k3-04');
+  writeCleanSet(dir);
+  const value = 'SYNTHETIC-NESTED-TOKEN-99887766';
+  const nested = JSON.stringify({ config: { auth: { token: value } } });
+  fs.writeFileSync(path.join(dir, 'nested.json'), nested + '\n', 'utf8');
+  const result = runScanner('case-29 [K3-04] JSON nested', dir, EXIT_BLOCKED, [value]);
+  assert.match(result.stdout, /SENSITIVE_ASSIGN/);
+});
+
+test('case-30 [K3-05] case and separator variants -> exit 2', (t) => {
+  const dir = makeTmp(t, 'k3-05');
+  writeCleanSet(dir);
+  const v1 = syntheticValue('VARKEY');
+  const v2 = syntheticValue('VARSECRET');
+  fs.writeFileSync(
+    path.join(dir, 'variants.txt'),
+    ['X_Api_Key: ', v1, '\nclient-secret=', v2].join('') + '\n',
+    'utf8',
+  );
+  const result = runScanner('case-30 [K3-05] variants', dir, EXIT_BLOCKED, [v1, v2]);
+  assert.match(result.stdout, /SENSITIVE_ASSIGN/);
 });
