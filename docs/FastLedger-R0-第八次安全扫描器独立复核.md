@@ -220,3 +220,75 @@ case-21 直接调用 scanner，因此证明 scanner 能阻断该 `.bin` 文件�
 - PR #3 保持 Open；**R0 继续 BLOCK；不启动 R1–R7 / PWA。**
 
 **最终结论：WorkBuddy 本轮 K1–K3 修复值得肯定，但扫描器安全闭环尚未成立。应先完成本报告 RV-07–RV-12，再进行第三方复核。**
+
+
+## 8. R0 E2E 完成后的追加复核（2026-11-06）
+
+后续重新读取 GitHub 官方 run、job steps、job logs，并下载 Artifact 13441565324（名称 r0-e2e-evidence-4cb41db8d3a63f2e589ae72a920babadecaeebb9，3,647,442 bytes）。该 run 的最终状态为 success，HEAD 为 PR 分支 c95ff094300e6e629886edfa6a3a61161dfa4351；报告 JSON 中的 gitSha=4cb41db... 是 GitHub PR workflow 的 synthetic merge SHA（refs/pull/3/merge），不是 PR head SHA。两者必须区分。
+
+### 8.1 最终运行结果
+
+| 包 / step | 最终结果 | 独立判断 |
+|---|---|---|
+| 普通 CI 42079445701 | success | 全仓 Go race、Docker/healthz 通过 |
+| B 分类解析合成测试 | success | 本轮 step 成功 |
+| K1–K3 扫描器 30 项测试 | success | CI step 真实执行成功 |
+| A | 11/11 PASS | 仍 PARTIAL：A05 的代码只按 elapsed >= 800 判 PASS；读取了 midText 但未断言 pending 文案/disabled。Artifact 中 A05 虽记录中途文案「登录中…」，仍不能证明 PASS 条件有效 |
+| D | 39/39 PASS | 本轮授权的三项业务修复及交易总表回归通过；账户名称 390px 可见性另项仍 FAIL |
+| C | PASS 164 / FAIL 4 / BLOCKED 59 / N/A 1 | 仍 PARTIAL；四条 FAIL 为 I-LOGIN-04、I-LOGIN-11、I-LOGIN-12、I-HOME-01；59 BLOCKED 未清零，不能把 job success 解释成 C 通过 |
+| Artifact 上传前扫描 | success，scanner 输出 CLEAN | 本轮扫描器对准备上传目录返回 CLEAN |
+| fail-closed 集成验证 | success | 合成 x-api-key + UTF-16LE Bearer 样本返回 rc=2；干净样本 rc=0 |
+| Artifact upload | success | 上传了 101 个条目；原始 trace/HAR/network/数据库文件未出现在 Artifact |
+
+A05 的当前代码证据：tools/r0/e2e/specs/a-scenarios.js L181–190；第 188 行仍为 status: elapsed >= 800 ? 'PASS' : 'FAIL'。第 183 行读取 midText，但该值未进入 PASS 判定，也没有 disabled 状态断言。故 A05 仍是假阳性风险，A 不得改 PASS。
+
+### 8.2 Artifact 下载后独立检查
+
+Artifact 13441565324 已实际下载并解压：
+
+- 文件条目：101。
+- 三份 SHA256SUMS.txt。
+- 原始 .zip/.trace/.network/.har/.db/.sqlite* 文件：0。
+- 文件名含 trace/network 的仅有 network-abort.png、slow-network.png 两张截图，不是原始网络记录。
+- 对所有文件做了独立常见模式扫描：未发现 JWT 三段式、Bearer、Authorization、API Key、PEM 私钥头等命中。该扫描是补充核验，不等于通用 DLP 的绝对保证。
+- Artifact 中 CI scanner 日志记录：文件全量扫描、跳过内容扫描=0、命中=0、结论 CLEAN；upload outcome success。
+
+### RV-13 · P2：白名单过滤后没有重建 SHA256SUMS，导致 Artifact 校验清单引用不存在的 trace 文件
+
+**状态：Artifact 下载后字节级核验确认。**
+
+位置：
+
+- tools/r0/e2e/scripts/prepare-upload.js：L37 白名单；L117–134 分类；文件复制逻辑在 main() 中将白名单文件复制到目标目录。
+- Artifact 内三份 SHA256SUMS.txt。
+
+实测：
+
+- 三份 checksum 清单共 110 条记录。
+- 其中 12 条引用了白名单准备阶段已排除的原始 trace 文件（A01–A08、A09 的 admin/member/owner、A10）。
+- 这 12 个文件在最终 Artifact 中不存在，因此 sha256sum -c 无法完成。
+- 其余 98 条实际存在文件的 SHA256 均匹配。
+
+根因：prepare-upload.js 将源目录已有的 SHA256SUMS.txt 当作普通 .txt 文件复制，没有针对最终白名单目录重新生成校验清单。
+
+影响：安全过滤确实排除了 trace，但 Artifact 的完整性清单不再对应最终上传内容，后续无法用该清单完整复验 Artifact。
+
+修复要求：
+
+1. 白名单收敛完成后，在目标目录重新生成 SHA256SUMS，清单只包含最终实际上传的文件。
+2. 生成时排除 SHA256SUMS 自身，避免递归。
+3. 上传前执行一次 sha256sum -c（或等价跨平台校验），必须 0 missing / 0 mismatch。
+4. 对 prepare-upload 加集成测试：源目录包含一个白名单文件和一个被排除的 trace.zip；最终清单只包含白名单文件，且校验全部成功。
+5. 旧清单保留为历史证据，不可静默改写历史 artifact。
+
+## 9. 最终综合状态
+
+- K1–K3：主体规则与 30 项测试有明显改善，但因 RV-07–RV-12 尚未修复，仍 PARTIAL / 安全 BLOCK。
+- RV-13：新增证据完整性问题，需一并修复。
+- A：仍 PARTIAL（A05 PASS 条件未修）。
+- B：仍 PARTIAL（t021 Owner 决策仍待确认）。
+- C：仍 PARTIAL（164/4/59/1）。
+- D：本轮 39/39 缺陷回归通过，但整体 D 仍 PARTIAL，且 OBS-ACCT-VIS-390 仍 FAIL。
+- RV-05：Owner ACTION REQUIRED。
+- PR #3：Open，未合并。
+- **R0：BLOCK；不启动 R1–R7 / PWA。**
