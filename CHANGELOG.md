@@ -4,13 +4,15 @@
 
 ## [1.82] - 2026-11-06
 
-### R0 第八次安全扫描器独立复核：K1–K3 修复 PARTIAL，新增 RV-07–RV-12
+### R0 第八次安全扫描器独立复核：K1–K3 修复 PARTIAL，新增 RV-07–RV-13
 
-- 独立复核 WorkBuddy PR #3 最新提交 `c95ff094`：UTF-16LE/BE、NUL 复扫、短凭据、敏感键名和标准 Base64 的主要整改已落地；30 项扫描器测试的 CI step success，普通 CI（全仓 race / Docker healthz）success。
-- 新发现并登记 RV-07–RV-12：明文 PEM 私钥可经 `.txt` 上传白名单漏检；fail-closed 集成验证未成为 Artifact upload 必要条件且接受任意非零退出码；少量非法 UTF-8 字节可能在宽松 2% 替换阈值下破坏凭据关键词；Base64URL 未覆盖；K1-03 注入位置描述不符；K1-04 使用上传白名单之外的 `.bin`，未验证真实 prepare→scan 链路。
-- R0 E2E run `42079445817` 审查时仍 in_progress（A 11 项与 D 39 项门禁已 success，C 仍运行，Artifact 扫描与上传尚未执行）；不得提前宣称本轮完整 CI / Artifact 验收通过。
-- 新增 [第八次安全扫描器独立复核报告](docs/FastLedger-R0-第八次安全扫描器独立复核.md)，要求 WorkBuddy 按 RV-07–RV-12 最小整改并回填最终 CI / Artifact 独立扫描证据。
+- 独立复核 WorkBuddy PR #3 最新提交 c95ff094：UTF-16LE/BE、NUL 复扫、短凭据、敏感键名和标准 Base64 的主要整改已落地；30 项扫描器测试 CI step success，普通 CI run 42079445701 success。
+- 新发现并登记 RV-07–RV-13：明文 PEM 私钥可经 .txt 上传白名单漏检；fail-closed 集成验证未成为 Artifact upload 必要条件且接受任意非零退出码；宽松 UTF-8 替换阈值可能允许关键词被非法字节打断；Base64URL 未覆盖；K1-03 注入位置描述不符；K1-04 使用上传白名单之外的 .bin；白名单过滤后未重建 SHA256SUMS。
+- R0 E2E run 42079445817 最终 success（head c95ff094；PR synthetic merge SHA 4cb41db...）：A 11/11、D 39/39；C 为 164/4/59/1，仍 PARTIAL。A05 仍只按耗时判 PASS，pending/disabled 未纳入断言。
+- Artifact 13441565324 已实际下载：101 个条目，无原始 trace/HAR/network/数据库文件；CI scanner 结论 CLEAN，独立常见凭据模式扫描未发现命中。但三份 SHA256SUMS 共 110 条记录，其中 12 条引用已排除的 trace.zip，98 条实际存在文件校验通过，新增 RV-13。
+- 新增 [第八次安全扫描器独立复核报告](docs/FastLedger-R0-第八次安全扫描器独立复核.md)，要求 WorkBuddy 按 RV-07–RV-13 整改并回填最终证据。
 - 状态：K1–K3 主体修复 PARTIAL；RV-05 仍 Owner ACTION REQUIRED；PR #3 不合并；R0 仍 BLOCK，不授权 R1–R7 / PWA。
+
 
 ## [1.81] - 2026-11-05
 
