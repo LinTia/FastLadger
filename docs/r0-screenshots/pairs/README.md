@@ -126,4 +126,6 @@ R0_BOOK_ID=1 R0_TX_ID=1 \
 | `manifest-prototype.json` | 原型侧逐张元数据：URL/实际路径/视口/字节/SHA256/时间/注入数据集信息 |
 | `manifest-impl.json` | 实现侧逐张元数据：同上 + `hasToken`/`action`/`actionMeta`（弹层尺寸与打开状态） |
 | `seed-manifest.json` | 数据集映射（原型 id → 实现 id）、余额回填值、字段差异清单、分类兜底记录 |
-| `SHA256SUMS.txt` | 上述全部文件校验和（107 行） |
+| `SHA256SUMS.txt` | 上述全部文件校验和（108 行） |
+
+> **校验和说明**：`SHA256SUMS.txt` 基于 LF 工作树计算。Windows 上 `core.autocrlf=true` 的 clone 会把 `*.json` / `*.md` / `*.txt` 检出为 CRLF，文本文件哈希据此不同（**PNG 哈希不受影响**）；这是行尾规范化，不是内容篡改。需要逐字节复核时用 `git -c core.autocrlf=false clone`。

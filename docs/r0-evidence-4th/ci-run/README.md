@@ -8,15 +8,15 @@
 |---|---|
 | 仓库 | `LinTia/FastLadger` |
 | 工作流 | `CI`（`.github/workflows/ci.yml`） |
-| run id | `41951501832` |
-| run URL | https://github.com/LinTia/FastLadger/actions/runs/41951501832 |
+| run id | `41954006789` |
+| run URL | https://github.com/LinTia/FastLadger/actions/runs/41954006789 |
 | 触发事件 | `push` → `main` |
-| head commit | `31716b0d51a12ee6c705cc670059b2e129c1e37f` |
+| head commit | `9d083f62bf80e0ba7cdb444e57940eb432c1d5f3`（**即包含本证据目录的提交**） |
 | attempt | `1` |
 | 结论 | **success**（两个 job 全部 success） |
-| 时间 | 2026-11-05T01:53:08Z 创建 → 01:56:40Z 完成 |
+| 时间 | 2026-11-05T02:19Z 前后（精确值见 `run-meta.json`） |
 
-> `31716b0` 是**文档 + 证据提交**；业务代码自 `bff6a2b` 起零改动（`server/` 无 diff），因此该 run 的测试结论适用于业务代码基准 `bff6a2b`。
+> 前一次提交 `31716b0` 的 run `41951501832` 同样 **success**（结论一致）。本目录以**包含证据自身的提交**为准，避免"日志与提交错位"。两次 run 的业务代码均为 `bff6a2b`（`server/` 自该提交起零改动）。
 
 ## 2. 两个 job 的逐步骤结论
 
@@ -52,7 +52,7 @@
 
 | 证据 | 覆盖范围 | 性质 |
 |---|---|---|
-| 本目录（run 41951501832） | `go test ./...`（全量）、`-race`（ws/service/api）、gofmt/vet/build、docker 冒烟 | **正式 CI**，有 run URL 与官方日志 |
+| 本目录（run 41954006789） | `go test ./...`（全量）、`-race`（ws/service/api）、gofmt/vet/build、docker 冒烟 | **正式 CI**，有 run URL 与官方日志 |
 | `../plain.log` / `../race.log`（服务器 `bff6a2b`） | `go test ./...`、`go test -race ./... -p 1`（**全仓库** race） | 手工复跑，补齐 CI 未覆盖的全仓 race |
 
 两者互补：CI 未对全仓跑 `-race`，服务器手工复跑补齐了这一点。
@@ -61,12 +61,12 @@
 
 ```bash
 # GitHub CLI
-gh run view 41951501832 --repo LinTia/FastLadger
-gh run download 41951501832 --repo LinTia/FastLadger -D ./ci-logs
+gh run view 41954006789 --repo LinTia/FastLadger
+gh run download 41954006789 --repo LinTia/FastLadger -D ./ci-logs
 
 # 或 REST API（需 token）
 curl -L -H "Authorization: token $GITHUB_TOKEN" \
-  https://api.github.com/repos/LinTia/FastLadger/actions/runs/41951501832/logs -o ci.zip
+  https://api.github.com/repos/LinTia/FastLadger/actions/runs/41954006789/logs -o ci.zip
 ```
 
 ## 6. 文件清单
@@ -84,3 +84,4 @@ curl -L -H "Authorization: token $GITHUB_TOKEN" \
 - CI 通过 **不等于** R0 通过：R0 门禁仍包含截图基线、逐控件运行时验收、R0-E-35 独立复跑等，本目录仅关闭"测试执行证据"一项。
 - 本 run 触发时仓库仍为 **Public**；转 Private 后 Actions 记录仍在，但外部匿名访问将受限（Owner 待办 RV-05）。
 - 日志中的路径/容器 ID 属 GitHub 托管 runner 环境，与生产服务器无关。
+- **校验和说明**：`SHA256SUMS.txt` 基于 LF 工作树计算。Windows 上 `core.autocrlf=true` 的 clone 会把文本文件检出为 CRLF，届时文本文件的哈希会不同（PNG 不受影响）——这是行尾规范化，不是内容篡改；需要逐字节复核时用 `git -c core.autocrlf=false clone`。

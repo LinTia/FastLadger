@@ -1,281 +1,274 @@
-﻿2026-11-05T01:55:02.3599674Z Current runner version: '2.338.2'
-2026-11-05T01:55:02.3625857Z ##[group]Runner Image Provisioner
-2026-11-05T01:55:02.3626810Z Hosted Compute Agent
-2026-11-05T01:55:02.3627822Z Version: 20261021.618
-2026-11-05T01:55:02.3628701Z Commit: 21505ad2541d5be6135ed84fc33697146cf75b8e
-2026-11-05T01:55:02.3629459Z Build Date: 2026-10-21T00:45:21Z
-2026-11-05T01:55:02.3630193Z Worker ID: {66568f3e-5288-4ebd-aa5f-2d250fa3165c}
-2026-11-05T01:55:02.3631074Z Region: westus3
-2026-11-05T01:55:02.3631660Z Cloud: Azure
-2026-11-05T01:55:02.3632269Z ##[endgroup]
-2026-11-05T01:55:02.3633787Z ##[group]Operating System
-2026-11-05T01:55:02.3634511Z Ubuntu
-2026-11-05T01:55:02.3635099Z 24.04.5
-2026-11-05T01:55:02.3635615Z LTS
-2026-11-05T01:55:02.3636182Z ##[endgroup]
-2026-11-05T01:55:02.3636754Z ##[group]Runner Image
-2026-11-05T01:55:02.3637713Z Image: ubuntu-24.04
-2026-11-05T01:55:02.3638496Z Version: 20261025.353.1
-2026-11-05T01:55:02.3639740Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20261025.353/images/ubuntu/Ubuntu2404-Readme.md
-2026-11-05T01:55:02.3641402Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20261025.353
-2026-11-05T01:55:02.3642381Z ##[endgroup]
-2026-11-05T01:55:02.3643615Z ##[group]GITHUB_TOKEN Permissions
-2026-11-05T01:55:02.3645791Z Contents: read
-2026-11-05T01:55:02.3646456Z Metadata: read
-2026-11-05T01:55:02.3647137Z ##[endgroup]
-2026-11-05T01:55:02.3650051Z Secret source: Actions
-2026-11-05T01:55:02.3651099Z Cache mode: write
-2026-11-05T01:55:02.3651898Z Prepare workflow directory
-2026-11-05T01:55:02.3994026Z Prepare all required actions
-2026-11-05T01:55:02.4042660Z Getting action download info
-2026-11-05T01:55:02.7181092Z Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
-2026-11-05T01:55:02.9677111Z Complete job name: docker build / run / healthz
-2026-11-05T01:55:03.0710674Z ##[group]Run actions/checkout@v4
-2026-11-05T01:55:03.0711837Z with:
-2026-11-05T01:55:03.0712304Z   repository: LinTia/FastLadger
-2026-11-05T01:55:03.0716113Z   token: ***
-2026-11-05T01:55:03.0716562Z   ssh-strict: true
-2026-11-05T01:55:03.0717055Z   ssh-user: git
-2026-11-05T01:55:03.0717878Z   persist-credentials: true
-2026-11-05T01:55:03.0718444Z   clean: true
-2026-11-05T01:55:03.0718956Z   sparse-checkout-cone-mode: true
-2026-11-05T01:55:03.0719544Z   fetch-depth: 1
-2026-11-05T01:55:03.0720046Z   fetch-tags: false
-2026-11-05T01:55:03.0720564Z   show-progress: true
-2026-11-05T01:55:03.0721018Z   lfs: false
-2026-11-05T01:55:03.0721435Z   submodules: false
-2026-11-05T01:55:03.0721893Z   set-safe-directory: true
-2026-11-05T01:55:03.0722411Z   allow-unsafe-pr-checkout: false
-2026-11-05T01:55:03.0723260Z ##[endgroup]
-2026-11-05T01:55:03.4421337Z Syncing repository: LinTia/FastLadger
-2026-11-05T01:55:03.4424160Z ##[group]Getting Git version info
-2026-11-05T01:55:03.4425500Z Working directory is '/home/runner/work/FastLadger/FastLadger'
-2026-11-05T01:55:03.4427768Z [command]/usr/bin/git version
-2026-11-05T01:55:03.4573011Z git version 2.56.0
-2026-11-05T01:55:03.4621306Z ##[endgroup]
-2026-11-05T01:55:03.4635639Z Temporarily overriding HOME='/home/runner/work/_temp/3efa6332-4110-44f4-8386-b2ba3ac5b547' before making global git config changes
-2026-11-05T01:55:03.4638406Z Adding repository directory to the temporary git global config as a safe directory
-2026-11-05T01:55:03.4645342Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/FastLadger/FastLadger
-2026-11-05T01:55:03.4767935Z Deleting the contents of '/home/runner/work/FastLadger/FastLadger'
-2026-11-05T01:55:03.4779536Z ##[group]Initializing the repository
-2026-11-05T01:55:03.4788612Z [command]/usr/bin/git init /home/runner/work/FastLadger/FastLadger
-2026-11-05T01:55:03.4929377Z hint: Using 'master' as the name for the initial branch. This default branch name
-2026-11-05T01:55:03.4931690Z hint: will change to "main" in Git 3.0. To configure the initial branch name
-2026-11-05T01:55:03.4933534Z hint: to use in all of your new repositories, which will suppress this warning,
-2026-11-05T01:55:03.4935348Z hint: call:
-2026-11-05T01:55:03.4936343Z hint:
-2026-11-05T01:55:03.4937525Z hint: 	git config --global init.defaultBranch <name>
-2026-11-05T01:55:03.4938377Z hint:
-2026-11-05T01:55:03.4939072Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
-2026-11-05T01:55:03.4940021Z hint: 'development'. The just-created branch can be renamed via this command:
-2026-11-05T01:55:03.4940774Z hint:
-2026-11-05T01:55:03.4941196Z hint: 	git branch -m <name>
-2026-11-05T01:55:03.4941670Z hint:
-2026-11-05T01:55:03.4942425Z hint: Disable this message with "git config set advice.defaultBranchName false"
-2026-11-05T01:55:03.4945827Z Initialized empty Git repository in /home/runner/work/FastLadger/FastLadger/.git/
-2026-11-05T01:55:03.4960665Z [command]/usr/bin/git remote add origin https://github.com/LinTia/FastLadger
-2026-11-05T01:55:03.5017049Z ##[endgroup]
-2026-11-05T01:55:03.5018670Z ##[group]Disabling automatic garbage collection
-2026-11-05T01:55:03.5023597Z [command]/usr/bin/git config --local gc.auto 0
-2026-11-05T01:55:03.5059264Z ##[endgroup]
-2026-11-05T01:55:03.5060597Z ##[group]Setting up auth
-2026-11-05T01:55:03.5067480Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
-2026-11-05T01:55:03.5121063Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
-2026-11-05T01:55:03.5588745Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
-2026-11-05T01:55:03.5633495Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
-2026-11-05T01:55:03.5878480Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
-2026-11-05T01:55:03.5922436Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
-2026-11-05T01:55:03.6164340Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
-2026-11-05T01:55:03.6212209Z ##[endgroup]
-2026-11-05T01:55:03.6225301Z ##[group]Fetching the repository
-2026-11-05T01:55:03.6226876Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +31716b0d51a12ee6c705cc670059b2e129c1e37f:refs/remotes/origin/main
-2026-11-05T01:55:04.7872520Z From https://github.com/LinTia/FastLadger
-2026-11-05T01:55:04.7875482Z  * [new ref]         31716b0d51a12ee6c705cc670059b2e129c1e37f -> origin/main
-2026-11-05T01:55:04.7881973Z ##[endgroup]
-2026-11-05T01:55:04.7884244Z ##[group]Determining the checkout info
-2026-11-05T01:55:04.7886781Z ##[endgroup]
-2026-11-05T01:55:04.7888950Z [command]/usr/bin/git sparse-checkout disable
-2026-11-05T01:55:04.7953288Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
-2026-11-05T01:55:04.7996199Z ##[group]Checking out the ref
-2026-11-05T01:55:04.8001304Z [command]/usr/bin/git checkout --progress --force -B main refs/remotes/origin/main
-2026-11-05T01:55:04.9028832Z Switched to a new branch 'main'
-2026-11-05T01:55:04.9034411Z branch 'main' set up to track 'origin/main'.
-2026-11-05T01:55:04.9045623Z ##[endgroup]
-2026-11-05T01:55:04.9100102Z [command]/usr/bin/git log -1 --format=%H
-2026-11-05T01:55:04.9135977Z 31716b0d51a12ee6c705cc670059b2e129c1e37f
-2026-11-05T01:55:04.9425920Z ##[group]Run docker build -f deploy/Dockerfile -t fastledger:ci .
-2026-11-05T01:55:04.9428458Z [36;1mdocker build -f deploy/Dockerfile -t fastledger:ci .[0m
-2026-11-05T01:55:04.9454140Z shell: /usr/bin/bash -e {0}
-2026-11-05T01:55:04.9455376Z ##[endgroup]
-2026-11-05T01:55:08.3050205Z #0 building with "default" instance using docker driver
-2026-11-05T01:55:08.3050623Z 
-2026-11-05T01:55:08.3050800Z #1 [internal] load build definition from Dockerfile
-2026-11-05T01:55:08.3051232Z #1 transferring dockerfile: 2.33kB 0.0s done
-2026-11-05T01:55:08.3052087Z #1 DONE 0.0s
-2026-11-05T01:55:08.3052234Z 
-2026-11-05T01:55:08.3052466Z #2 [internal] load metadata for docker.io/library/alpine:3.20
-2026-11-05T01:55:08.5133010Z #2 ...
-2026-11-05T01:55:08.5133351Z 
-2026-11-05T01:55:08.5133750Z #3 [auth] library/golang:pull token for registry-1.docker.io
-2026-11-05T01:55:08.5134500Z #3 DONE 0.0s
-2026-11-05T01:55:08.5134833Z 
-2026-11-05T01:55:08.5135294Z #4 [auth] library/alpine:pull token for registry-1.docker.io
-2026-11-05T01:55:08.5136113Z #4 DONE 0.0s
-2026-11-05T01:55:08.6626177Z 
-2026-11-05T01:55:08.6626533Z #5 [internal] load metadata for docker.io/library/golang:1.22-alpine
-2026-11-05T01:55:08.9738343Z #5 DONE 0.8s
-2026-11-05T01:55:08.9738676Z 
-2026-11-05T01:55:08.9738888Z #2 [internal] load metadata for docker.io/library/alpine:3.20
-2026-11-05T01:55:09.1094810Z #2 DONE 0.8s
-2026-11-05T01:55:09.1095479Z 
-2026-11-05T01:55:09.1097544Z #6 [internal] load .dockerignore
-2026-11-05T01:55:09.1098128Z #6 transferring context: 248B done
-2026-11-05T01:55:09.1098863Z #6 DONE 0.0s
-2026-11-05T01:55:09.1099145Z 
-2026-11-05T01:55:09.1099371Z #7 [internal] load build context
-2026-11-05T01:55:09.1099957Z #7 transferring context: 797.11kB 0.0s done
-2026-11-05T01:55:09.1100502Z #7 DONE 0.0s
-2026-11-05T01:55:09.1100727Z 
-2026-11-05T01:55:09.1101563Z #8 [builder 1/7] FROM docker.io/library/golang:1.22-alpine@sha256:1699c10032ca2582ec89a24a1312d986a3f094aed3d5c1147b19880afe40e052
-2026-11-05T01:55:09.1103316Z #8 resolve docker.io/library/golang:1.22-alpine@sha256:1699c10032ca2582ec89a24a1312d986a3f094aed3d5c1147b19880afe40e052 done
-2026-11-05T01:55:09.1104835Z #8 sha256:1f3e46996e2966e4faa5846e56e76e3748b7315e2ded61476c24403d592134f0 0B / 3.64MB 0.1s
-2026-11-05T01:55:09.1106071Z #8 sha256:4d75fd4b73869ed224045c010cdec78756eefb6752a5a8e4804294009eac11e9 294.90kB / 294.90kB 0.1s done
-2026-11-05T01:55:09.1107633Z #8 sha256:afa154b433c7f72db064d19e1bcfa84ee196ad29120328f6bdb2c5fbd7b8eeac 0B / 69.36MB 0.1s
-2026-11-05T01:55:09.1108822Z #8 sha256:5f837c998576dcb54bc285997f33fcc2166dff6aa48fe3a374da92474efd5fe8 0B / 126B 0.1s
-2026-11-05T01:55:09.1110022Z #8 sha256:1699c10032ca2582ec89a24a1312d986a3f094aed3d5c1147b19880afe40e052 10.30kB / 10.30kB done
-2026-11-05T01:55:09.1111249Z #8 sha256:6d405dfc5fdf3a45df1529cf060b920041f52ce523487e0f36f02765af294a51 1.92kB / 1.92kB done
-2026-11-05T01:55:09.1112405Z #8 sha256:4129f51f28c9ae5de799b958ba2aaa8f92f26cc7bf47c107891673fe4b516c03 2.08kB / 2.08kB done
-2026-11-05T01:55:09.2286133Z #8 sha256:afa154b433c7f72db064d19e1bcfa84ee196ad29120328f6bdb2c5fbd7b8eeac 31.46MB / 69.36MB 0.2s
-2026-11-05T01:55:09.2287626Z #8 sha256:5f837c998576dcb54bc285997f33fcc2166dff6aa48fe3a374da92474efd5fe8 126B / 126B 0.2s
-2026-11-05T01:55:09.2288633Z #8 extracting sha256:1f3e46996e2966e4faa5846e56e76e3748b7315e2ded61476c24403d592134f0
-2026-11-05T01:55:09.3408221Z #8 sha256:1f3e46996e2966e4faa5846e56e76e3748b7315e2ded61476c24403d592134f0 3.64MB / 3.64MB 0.2s done
-2026-11-05T01:55:09.3410618Z #8 sha256:afa154b433c7f72db064d19e1bcfa84ee196ad29120328f6bdb2c5fbd7b8eeac 69.36MB / 69.36MB 0.3s done
-2026-11-05T01:55:09.3413845Z #8 sha256:5f837c998576dcb54bc285997f33fcc2166dff6aa48fe3a374da92474efd5fe8 126B / 126B 0.2s done
-2026-11-05T01:55:09.3416078Z #8 extracting sha256:1f3e46996e2966e4faa5846e56e76e3748b7315e2ded61476c24403d592134f0 0.1s done
-2026-11-05T01:55:09.3417479Z #8 sha256:4f4fb700ef54461cfa02571ae0db9a0dc1e0cdb5577484a6d75e68dc38e8acc1 32B / 32B 0.3s done
-2026-11-05T01:55:09.4420541Z #8 extracting sha256:4d75fd4b73869ed224045c010cdec78756eefb6752a5a8e4804294009eac11e9 0.1s done
-2026-11-05T01:55:09.5670030Z #8 ...
-2026-11-05T01:55:09.5671246Z 
-2026-11-05T01:55:09.5672351Z #9 [stage-1 1/4] FROM docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
-2026-11-05T01:55:09.5674719Z #9 resolve docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc done
-2026-11-05T01:55:09.5676976Z #9 sha256:c64c687cbea9300178b30c95835354e34c4e4febc4badfe27102879de0483b5e 1.02kB / 1.02kB done
-2026-11-05T01:55:09.5679641Z #9 sha256:bf8527eb54c3680e728d5b4b383a8ba730d72dae7236fbc8dff97ed6b224a731 612B / 612B done
-2026-11-05T01:55:09.5681102Z #9 sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc 9.23kB / 9.23kB done
-2026-11-05T01:55:09.5682837Z #9 extracting sha256:25f1d6b1951ac8eb3740558fe94cb83d377bdadf95fd9f98b50d2e1b96130471 0.1s done
-2026-11-05T01:55:09.5684063Z #9 sha256:25f1d6b1951ac8eb3740558fe94cb83d377bdadf95fd9f98b50d2e1b96130471 3.63MB / 3.63MB 0.3s done
-2026-11-05T01:55:09.5685007Z #9 DONE 0.4s
-2026-11-05T01:55:09.5685240Z 
-2026-11-05T01:55:09.5685928Z #8 [builder 1/7] FROM docker.io/library/golang:1.22-alpine@sha256:1699c10032ca2582ec89a24a1312d986a3f094aed3d5c1147b19880afe40e052
-2026-11-05T01:55:09.5687360Z #8 extracting sha256:afa154b433c7f72db064d19e1bcfa84ee196ad29120328f6bdb2c5fbd7b8eeac
-2026-11-05T01:55:10.7967799Z #8 ...
-2026-11-05T01:55:10.7968450Z 
-2026-11-05T01:55:10.7968963Z #10 [stage-1 2/4] RUN apk add --no-cache ca-certificates &&     addgroup -S fl && adduser -S fl -G fl
-2026-11-05T01:55:10.7969829Z #10 0.205 fetch https://dl-cdn.alpinelinux.org/alpine/v3.20/main/x86_64/APKINDEX.tar.gz
-2026-11-05T01:55:10.7971053Z #10 0.499 fetch https://dl-cdn.alpinelinux.org/alpine/v3.20/community/x86_64/APKINDEX.tar.gz
-2026-11-05T01:55:10.7971921Z #10 0.905 (1/1) Installing ca-certificates (20261020-r0)
-2026-11-05T01:55:10.7972439Z #10 0.942 Executing busybox-1.36.1-r31.trigger
-2026-11-05T01:55:10.7973103Z #10 0.950 Executing ca-certificates-20261020-r0.trigger
-2026-11-05T01:55:10.7973543Z #10 0.992 OK: 8 MiB in 15 packages
-2026-11-05T01:55:10.7973976Z #10 DONE 1.2s
-2026-11-05T01:55:10.8345832Z 
-2026-11-05T01:55:10.8347334Z #8 [builder 1/7] FROM docker.io/library/golang:1.22-alpine@sha256:1699c10032ca2582ec89a24a1312d986a3f094aed3d5c1147b19880afe40e052
-2026-11-05T01:55:13.5853470Z #8 extracting sha256:afa154b433c7f72db064d19e1bcfa84ee196ad29120328f6bdb2c5fbd7b8eeac 4.0s done
-2026-11-05T01:55:13.9651416Z #8 extracting sha256:5f837c998576dcb54bc285997f33fcc2166dff6aa48fe3a374da92474efd5fe8
-2026-11-05T01:55:14.1094052Z #8 extracting sha256:5f837c998576dcb54bc285997f33fcc2166dff6aa48fe3a374da92474efd5fe8 done
-2026-11-05T01:55:14.1095110Z #8 extracting sha256:4f4fb700ef54461cfa02571ae0db9a0dc1e0cdb5577484a6d75e68dc38e8acc1 done
-2026-11-05T01:55:14.1095654Z #8 DONE 5.0s
-2026-11-05T01:55:14.1095797Z 
-2026-11-05T01:55:14.1095963Z #11 [builder 2/7] RUN apk add --no-cache gcc musl-dev
-2026-11-05T01:55:14.1096718Z #11 0.111 fetch https://dl-cdn.alpinelinux.org/alpine/v3.21/main/x86_64/APKINDEX.tar.gz
-2026-11-05T01:55:14.2412362Z #11 0.243 fetch https://dl-cdn.alpinelinux.org/alpine/v3.21/community/x86_64/APKINDEX.tar.gz
-2026-11-05T01:55:14.5086613Z #11 0.511 (1/14) Upgrading musl (1.2.5-r8 -> 1.2.5-r12)
-2026-11-05T01:55:14.6537746Z #11 0.527 (2/14) Installing libgcc (14.2.0-r4)
-2026-11-05T01:55:14.6538217Z #11 0.538 (3/14) Installing jansson (2.14-r4)
-2026-11-05T01:55:14.6538612Z #11 0.549 (4/14) Installing libstdc++ (14.2.0-r4)
-2026-11-05T01:55:14.6538989Z #11 0.571 (5/14) Installing zstd-libs (1.5.6-r2)
-2026-11-05T01:55:14.6539391Z #11 0.586 (6/14) Installing binutils (2.43.1-r3)
-2026-11-05T01:55:14.6539759Z #11 0.656 (7/14) Installing libgomp (14.2.0-r4)
-2026-11-05T01:55:14.8963174Z #11 0.669 (8/14) Installing libatomic (14.2.0-r4)
-2026-11-05T01:55:14.8963685Z #11 0.679 (9/14) Installing gmp (6.3.0-r2)
-2026-11-05T01:55:14.8964335Z #11 0.691 (10/14) Installing isl26 (0.26-r1)
-2026-11-05T01:55:14.8965595Z #11 0.712 (11/14) Installing mpfr4 (4.2.1-r0)
-2026-11-05T01:55:14.8966271Z #11 0.733 (12/14) Installing mpc1 (1.3.1-r1)
-2026-11-05T01:55:14.8966860Z #11 0.748 (13/14) Installing gcc (14.2.0-r4)
-2026-11-05T01:55:15.4729067Z #11 1.475 (14/14) Installing musl-dev (1.2.5-r12)
-2026-11-05T01:55:15.6961234Z #11 1.541 Executing busybox-1.37.0-r9.trigger
-2026-11-05T01:55:15.6961660Z #11 1.548 OK: 171 MiB in 29 packages
-2026-11-05T01:55:15.7788414Z #11 DONE 1.8s
-2026-11-05T01:55:15.9873401Z 
-2026-11-05T01:55:15.9874039Z #12 [builder 3/7] WORKDIR /src
-2026-11-05T01:55:15.9874678Z #12 DONE 0.0s
-2026-11-05T01:55:15.9875364Z 
-2026-11-05T01:55:15.9875663Z #13 [builder 4/7] COPY server/go.mod server/go.sum ./
-2026-11-05T01:55:15.9876301Z #13 DONE 0.0s
-2026-11-05T01:55:15.9876545Z 
-2026-11-05T01:55:15.9876746Z #14 [builder 5/7] RUN go mod download
-2026-11-05T01:55:26.8775082Z #14 DONE 11.0s
-2026-11-05T01:55:27.0541087Z 
-2026-11-05T01:55:27.0541999Z #15 [builder 6/7] COPY server/ ./
-2026-11-05T01:55:27.0542483Z #15 DONE 0.0s
-2026-11-05T01:55:27.0542670Z 
-2026-11-05T01:55:27.0543087Z #16 [builder 7/7] RUN go build -trimpath -ldflags "-s -w" -o /out/fastledger ./cmd/server
-2026-11-05T01:56:34.1893406Z #16 DONE 67.3s
-2026-11-05T01:56:34.3540561Z 
-2026-11-05T01:56:34.3548000Z #17 [stage-1 3/4] COPY --from=builder /out/fastledger /usr/local/bin/fastledger
-2026-11-05T01:56:34.3548739Z #17 DONE 0.0s
-2026-11-05T01:56:34.3548947Z 
-2026-11-05T01:56:34.3549166Z #18 [stage-1 4/4] RUN mkdir -p /data && chown fl:fl /data
-2026-11-05T01:56:34.3549640Z #18 DONE 0.1s
-2026-11-05T01:56:34.5060408Z 
-2026-11-05T01:56:34.5060781Z #19 exporting to image
-2026-11-05T01:56:34.5061306Z #19 exporting layers
-2026-11-05T01:56:35.0103336Z #19 exporting layers 0.7s done
-2026-11-05T01:56:35.0301436Z #19 writing image sha256:fe8cc13e81dbabeb1d67b437d882d3bb02afdd52d008a55e00fbe027f41966cf done
-2026-11-05T01:56:35.0302035Z #19 naming to docker.io/library/fastledger:ci done
-2026-11-05T01:56:35.0302343Z #19 DONE 0.7s
-2026-11-05T01:56:35.0486894Z ##[group]Run docker run --rm -v fl-ci-data:/data -e EBK_JWT_SECRET=ci-smoke-secret-0123456789abcdef012345 fastledger:ci db migrate
-2026-11-05T01:56:35.0488137Z [36;1mdocker run --rm -v fl-ci-data:/data -e EBK_JWT_SECRET=ci-smoke-secret-0123456789abcdef012345 fastledger:ci db migrate[0m
-2026-11-05T01:56:35.0509062Z shell: /usr/bin/bash -e {0}
-2026-11-05T01:56:35.0509315Z ##[endgroup]
-2026-11-05T01:56:35.6098784Z 2026/11/05 01:56:35 已收紧进程 umask：0022 → 0077（新建数据文件默认 0600）
-2026-11-05T01:56:35.6116888Z 2026/11/05 01:56:35 数据库已初始化：/data/fastledger.db（WAL / foreign_keys=on / synchronous=FULL / MaxOpenConns=1）
-2026-11-05T01:56:35.6279574Z 2026/11/05 01:56:35 迁移完成：本次应用 8 个，当前 schema v8
-2026-11-05T01:56:35.7269826Z ##[group]Run docker run -d --name fl-ci \
-2026-11-05T01:56:35.7270229Z [36;1mdocker run -d --name fl-ci \[0m
-2026-11-05T01:56:35.7270534Z [36;1m  -v fl-ci-data:/data -p 18080:8080 \[0m
-2026-11-05T01:56:35.7270922Z [36;1m  -e EBK_JWT_SECRET=ci-smoke-secret-0123456789abcdef012345 \[0m
-2026-11-05T01:56:35.7271291Z [36;1m  fastledger:ci[0m
-2026-11-05T01:56:35.7271526Z [36;1mfor i in $(seq 1 20); do[0m
-2026-11-05T01:56:35.7271863Z [36;1m  body=$(curl -s http://127.0.0.1:18080/healthz || true)[0m
-2026-11-05T01:56:35.7272229Z [36;1m  echo "$body"[0m
-2026-11-05T01:56:35.7272510Z [36;1m  echo "$body" | grep -q '"status":"up"' && exit 0[0m
-2026-11-05T01:56:35.7272819Z [36;1m  sleep 1[0m
-2026-11-05T01:56:35.7273022Z [36;1mdone[0m
-2026-11-05T01:56:35.7273234Z [36;1mecho "::error::容器 healthz 未就绪"[0m
-2026-11-05T01:56:35.7273537Z [36;1mdocker logs fl-ci[0m
-2026-11-05T01:56:35.7273757Z [36;1mexit 1[0m
-2026-11-05T01:56:35.7293898Z shell: /usr/bin/bash -e {0}
-2026-11-05T01:56:35.7294206Z ##[endgroup]
-2026-11-05T01:56:35.7624051Z 2a5282ca6530d049715265984b9202b4c38fd7771676f71d8cce7190d1d70d57
-2026-11-05T01:56:36.0062954Z {"code":0,"data":{"instanceId":"9e4ee1c3c6c42eee7440a9648549a700","restoreEpoch":1,"schemaVersion":8,"status":"up"},"msg":"ok"}
-2026-11-05T01:56:36.0118068Z ##[group]Run docker rm -f fl-ci 2>/dev/null || true
-2026-11-05T01:56:36.0118512Z [36;1mdocker rm -f fl-ci 2>/dev/null || true[0m
-2026-11-05T01:56:36.0138562Z shell: /usr/bin/bash -e {0}
-2026-11-05T01:56:36.0138825Z ##[endgroup]
-2026-11-05T01:56:36.1243776Z fl-ci
-2026-11-05T01:56:36.1390171Z Post job cleanup.
-2026-11-05T01:56:36.2292013Z [command]/usr/bin/git version
-2026-11-05T01:56:36.2340753Z git version 2.56.0
-2026-11-05T01:56:36.2386070Z Temporarily overriding HOME='/home/runner/work/_temp/c59311a9-afc2-4ee3-afa6-9fa4e621c383' before making global git config changes
-2026-11-05T01:56:36.2387434Z Adding repository directory to the temporary git global config as a safe directory
-2026-11-05T01:56:36.2392622Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/FastLadger/FastLadger
-2026-11-05T01:56:36.2434101Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
-2026-11-05T01:56:36.2494923Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
-2026-11-05T01:56:36.2786258Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
-2026-11-05T01:56:36.2822271Z http.https://github.com/.extraheader
-2026-11-05T01:56:36.2846307Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
-2026-11-05T01:56:36.2879925Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
-2026-11-05T01:56:36.3182034Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
-2026-11-05T01:56:36.3243409Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
-2026-11-05T01:56:36.3742085Z Cleaning up orphan processes
-2026-11-05T01:56:36.4223081Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+﻿2026-11-05T02:18:03.9771514Z Current runner version: '2.338.2'
+2026-11-05T02:18:03.9799873Z ##[group]Runner Image Provisioner
+2026-11-05T02:18:03.9800857Z Hosted Compute Agent
+2026-11-05T02:18:03.9801521Z Version: 20261021.618
+2026-11-05T02:18:03.9802451Z Commit: 21505ad2541d5be6135ed84fc33697146cf75b8e
+2026-11-05T02:18:03.9803262Z Build Date: 2026-10-21T00:45:21Z
+2026-11-05T02:18:03.9803971Z Worker ID: {61962dfa-df43-4136-bb89-5f505ae5120a}
+2026-11-05T02:18:03.9804678Z Region: eastus
+2026-11-05T02:18:03.9805413Z Cloud: Azure
+2026-11-05T02:18:03.9805960Z ##[endgroup]
+2026-11-05T02:18:03.9807875Z ##[group]Operating System
+2026-11-05T02:18:03.9808574Z Ubuntu
+2026-11-05T02:18:03.9809177Z 24.04.5
+2026-11-05T02:18:03.9809774Z LTS
+2026-11-05T02:18:03.9810285Z ##[endgroup]
+2026-11-05T02:18:03.9810875Z ##[group]Runner Image
+2026-11-05T02:18:03.9811480Z Image: ubuntu-24.04
+2026-11-05T02:18:03.9812235Z Version: 20261025.353.1
+2026-11-05T02:18:03.9813654Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20261025.353/images/ubuntu/Ubuntu2404-Readme.md
+2026-11-05T02:18:03.9815254Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20261025.353
+2026-11-05T02:18:03.9816292Z ##[endgroup]
+2026-11-05T02:18:03.9817502Z ##[group]GITHUB_TOKEN Permissions
+2026-11-05T02:18:03.9819758Z Contents: read
+2026-11-05T02:18:03.9822278Z Metadata: read
+2026-11-05T02:18:03.9822991Z ##[endgroup]
+2026-11-05T02:18:03.9825297Z Secret source: Actions
+2026-11-05T02:18:03.9826504Z Cache mode: write
+2026-11-05T02:18:03.9827461Z Prepare workflow directory
+2026-11-05T02:18:04.0166339Z Prepare all required actions
+2026-11-05T02:18:04.0215861Z Getting action download info
+2026-11-05T02:18:04.2235278Z Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+2026-11-05T02:18:04.4296634Z Complete job name: docker build / run / healthz
+2026-11-05T02:18:04.5371449Z ##[group]Run actions/checkout@v4
+2026-11-05T02:18:04.5372635Z with:
+2026-11-05T02:18:04.5373102Z   repository: LinTia/FastLadger
+2026-11-05T02:18:04.5377019Z   token: ***
+2026-11-05T02:18:04.5377466Z   ssh-strict: true
+2026-11-05T02:18:04.5377905Z   ssh-user: git
+2026-11-05T02:18:04.5378349Z   persist-credentials: true
+2026-11-05T02:18:04.5378829Z   clean: true
+2026-11-05T02:18:04.5379281Z   sparse-checkout-cone-mode: true
+2026-11-05T02:18:04.5379812Z   fetch-depth: 1
+2026-11-05T02:18:04.5380245Z   fetch-tags: false
+2026-11-05T02:18:04.5380691Z   show-progress: true
+2026-11-05T02:18:04.5381140Z   lfs: false
+2026-11-05T02:18:04.5381555Z   submodules: false
+2026-11-05T02:18:04.5382451Z   set-safe-directory: true
+2026-11-05T02:18:04.5383075Z   allow-unsafe-pr-checkout: false
+2026-11-05T02:18:04.5383922Z ##[endgroup]
+2026-11-05T02:18:04.8406912Z Syncing repository: LinTia/FastLadger
+2026-11-05T02:18:04.8410114Z ##[group]Getting Git version info
+2026-11-05T02:18:04.8412122Z Working directory is '/home/runner/work/FastLadger/FastLadger'
+2026-11-05T02:18:04.8414290Z [command]/usr/bin/git version
+2026-11-05T02:18:04.8501164Z git version 2.56.0
+2026-11-05T02:18:04.8529247Z ##[endgroup]
+2026-11-05T02:18:04.8546046Z Temporarily overriding HOME='/home/runner/work/_temp/42968ada-7d18-41f1-96f5-fa0dfae51fa6' before making global git config changes
+2026-11-05T02:18:04.8548820Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-05T02:18:04.8553043Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/FastLadger/FastLadger
+2026-11-05T02:18:04.8632806Z Deleting the contents of '/home/runner/work/FastLadger/FastLadger'
+2026-11-05T02:18:04.8642291Z ##[group]Initializing the repository
+2026-11-05T02:18:04.8651944Z [command]/usr/bin/git init /home/runner/work/FastLadger/FastLadger
+2026-11-05T02:18:04.8795420Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-11-05T02:18:04.8797834Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-11-05T02:18:04.8799776Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-11-05T02:18:04.8801917Z hint: call:
+2026-11-05T02:18:04.8802757Z hint:
+2026-11-05T02:18:04.8803780Z hint: 	git config --global init.defaultBranch <name>
+2026-11-05T02:18:04.8804980Z hint:
+2026-11-05T02:18:04.8806104Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-11-05T02:18:04.8807948Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-11-05T02:18:04.8809403Z hint:
+2026-11-05T02:18:04.8810212Z hint: 	git branch -m <name>
+2026-11-05T02:18:04.8811189Z hint:
+2026-11-05T02:18:04.8812697Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-11-05T02:18:04.8814857Z Initialized empty Git repository in /home/runner/work/FastLadger/FastLadger/.git/
+2026-11-05T02:18:04.8824609Z [command]/usr/bin/git remote add origin https://github.com/LinTia/FastLadger
+2026-11-05T02:18:04.8909548Z ##[endgroup]
+2026-11-05T02:18:04.8911221Z ##[group]Disabling automatic garbage collection
+2026-11-05T02:18:04.8914234Z [command]/usr/bin/git config --local gc.auto 0
+2026-11-05T02:18:04.8973657Z ##[endgroup]
+2026-11-05T02:18:04.8975292Z ##[group]Setting up auth
+2026-11-05T02:18:04.8976632Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-11-05T02:18:04.9012676Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-11-05T02:18:04.9458081Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-05T02:18:04.9515810Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-11-05T02:18:04.9785037Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-05T02:18:04.9837662Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-11-05T02:18:05.0132999Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-11-05T02:18:05.0196081Z ##[endgroup]
+2026-11-05T02:18:05.0197003Z ##[group]Fetching the repository
+2026-11-05T02:18:05.0216098Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +9d083f62bf80e0ba7cdb444e57940eb432c1d5f3:refs/remotes/origin/main
+2026-11-05T02:18:05.8527504Z From https://github.com/LinTia/FastLadger
+2026-11-05T02:18:05.8530982Z  * [new ref]         9d083f62bf80e0ba7cdb444e57940eb432c1d5f3 -> origin/main
+2026-11-05T02:18:05.8536215Z ##[endgroup]
+2026-11-05T02:18:05.8537531Z ##[group]Determining the checkout info
+2026-11-05T02:18:05.8538943Z ##[endgroup]
+2026-11-05T02:18:05.8543279Z [command]/usr/bin/git sparse-checkout disable
+2026-11-05T02:18:05.8609653Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-11-05T02:18:05.8655105Z ##[group]Checking out the ref
+2026-11-05T02:18:05.8669133Z [command]/usr/bin/git checkout --progress --force -B main refs/remotes/origin/main
+2026-11-05T02:18:05.9749308Z Switched to a new branch 'main'
+2026-11-05T02:18:05.9754219Z branch 'main' set up to track 'origin/main'.
+2026-11-05T02:18:05.9765572Z ##[endgroup]
+2026-11-05T02:18:05.9823530Z [command]/usr/bin/git log -1 --format=%H
+2026-11-05T02:18:05.9861493Z 9d083f62bf80e0ba7cdb444e57940eb432c1d5f3
+2026-11-05T02:18:06.0203112Z ##[group]Run docker build -f deploy/Dockerfile -t fastledger:ci .
+2026-11-05T02:18:06.0205373Z [36;1mdocker build -f deploy/Dockerfile -t fastledger:ci .[0m
+2026-11-05T02:18:06.0232266Z shell: /usr/bin/bash -e {0}
+2026-11-05T02:18:06.0233502Z ##[endgroup]
+2026-11-05T02:18:06.6563245Z #0 building with "default" instance using docker driver
+2026-11-05T02:18:06.6563917Z 
+2026-11-05T02:18:06.6564204Z #1 [internal] load build definition from Dockerfile
+2026-11-05T02:18:06.6564837Z #1 transferring dockerfile: 2.33kB done
+2026-11-05T02:18:06.6565923Z #1 DONE 0.0s
+2026-11-05T02:18:06.6566137Z 
+2026-11-05T02:18:06.6566436Z #2 [auth] library/alpine:pull token for registry-1.docker.io
+2026-11-05T02:18:06.6567044Z #2 DONE 0.0s
+2026-11-05T02:18:06.6567260Z 
+2026-11-05T02:18:06.6567547Z #3 [auth] library/golang:pull token for registry-1.docker.io
+2026-11-05T02:18:06.6568169Z #3 DONE 0.0s
+2026-11-05T02:18:06.6568441Z 
+2026-11-05T02:18:06.6568836Z #4 [internal] load metadata for docker.io/library/alpine:3.20
+2026-11-05T02:18:06.8875679Z #4 DONE 0.4s
+2026-11-05T02:18:06.8875926Z 
+2026-11-05T02:18:06.8876158Z #5 [internal] load metadata for docker.io/library/golang:1.22-alpine
+2026-11-05T02:18:07.0170668Z #5 DONE 0.4s
+2026-11-05T02:18:07.0175078Z 
+2026-11-05T02:18:07.0175452Z #6 [internal] load .dockerignore
+2026-11-05T02:18:07.0177155Z #6 transferring context: 248B done
+2026-11-05T02:18:07.0182828Z #6 DONE 0.0s
+2026-11-05T02:18:07.0183587Z 
+2026-11-05T02:18:07.0185097Z #7 [internal] load build context
+2026-11-05T02:18:07.0187171Z #7 transferring context: 797.11kB 0.0s done
+2026-11-05T02:18:07.0194000Z #7 DONE 0.0s
+2026-11-05T02:18:07.0194996Z 
+2026-11-05T02:18:07.0197867Z #8 [builder 1/7] FROM docker.io/library/golang:1.22-alpine@sha256:1699c10032ca2582ec89a24a1312d986a3f094aed3d5c1147b19880afe40e052
+2026-11-05T02:18:07.0206673Z #8 resolve docker.io/library/golang:1.22-alpine@sha256:1699c10032ca2582ec89a24a1312d986a3f094aed3d5c1147b19880afe40e052 done
+2026-11-05T02:18:07.0209504Z #8 extracting sha256:1f3e46996e2966e4faa5846e56e76e3748b7315e2ded61476c24403d592134f0
+2026-11-05T02:18:07.0211497Z #8 sha256:1699c10032ca2582ec89a24a1312d986a3f094aed3d5c1147b19880afe40e052 10.30kB / 10.30kB done
+2026-11-05T02:18:07.0214989Z #8 sha256:6d405dfc5fdf3a45df1529cf060b920041f52ce523487e0f36f02765af294a51 1.92kB / 1.92kB done
+2026-11-05T02:18:07.0217974Z #8 sha256:4129f51f28c9ae5de799b958ba2aaa8f92f26cc7bf47c107891673fe4b516c03 2.08kB / 2.08kB done
+2026-11-05T02:18:07.0221828Z #8 sha256:1f3e46996e2966e4faa5846e56e76e3748b7315e2ded61476c24403d592134f0 3.64MB / 3.64MB 0.0s done
+2026-11-05T02:18:07.0233559Z #8 sha256:4d75fd4b73869ed224045c010cdec78756eefb6752a5a8e4804294009eac11e9 294.90kB / 294.90kB 0.0s done
+2026-11-05T02:18:07.0234955Z #8 sha256:afa154b433c7f72db064d19e1bcfa84ee196ad29120328f6bdb2c5fbd7b8eeac 16.78MB / 69.36MB 0.1s
+2026-11-05T02:18:07.0236259Z #8 sha256:5f837c998576dcb54bc285997f33fcc2166dff6aa48fe3a374da92474efd5fe8 126B / 126B 0.1s done
+2026-11-05T02:18:07.0238747Z #8 sha256:4f4fb700ef54461cfa02571ae0db9a0dc1e0cdb5577484a6d75e68dc38e8acc1 32B / 32B 0.1s done
+2026-11-05T02:18:07.1249572Z #8 extracting sha256:1f3e46996e2966e4faa5846e56e76e3748b7315e2ded61476c24403d592134f0 0.1s done
+2026-11-05T02:18:07.1250960Z #8 sha256:afa154b433c7f72db064d19e1bcfa84ee196ad29120328f6bdb2c5fbd7b8eeac 57.67MB / 69.36MB 0.2s
+2026-11-05T02:18:07.3699121Z #8 ...
+2026-11-05T02:18:07.3699497Z 
+2026-11-05T02:18:07.3700232Z #9 [stage-1 1/4] FROM docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
+2026-11-05T02:18:07.3701896Z #9 resolve docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc done
+2026-11-05T02:18:07.3703288Z #9 sha256:25f1d6b1951ac8eb3740558fe94cb83d377bdadf95fd9f98b50d2e1b96130471 3.63MB / 3.63MB 0.1s done
+2026-11-05T02:18:07.3704628Z #9 sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc 9.23kB / 9.23kB done
+2026-11-05T02:18:07.3706715Z #9 sha256:c64c687cbea9300178b30c95835354e34c4e4febc4badfe27102879de0483b5e 1.02kB / 1.02kB done
+2026-11-05T02:18:07.3708289Z #9 sha256:bf8527eb54c3680e728d5b4b383a8ba730d72dae7236fbc8dff97ed6b224a731 612B / 612B done
+2026-11-05T02:18:07.3709712Z #9 extracting sha256:25f1d6b1951ac8eb3740558fe94cb83d377bdadf95fd9f98b50d2e1b96130471 0.1s done
+2026-11-05T02:18:07.3710788Z #9 DONE 0.3s
+2026-11-05T02:18:07.3711059Z 
+2026-11-05T02:18:07.3712096Z #8 [builder 1/7] FROM docker.io/library/golang:1.22-alpine@sha256:1699c10032ca2582ec89a24a1312d986a3f094aed3d5c1147b19880afe40e052
+2026-11-05T02:18:07.3713732Z #8 extracting sha256:4d75fd4b73869ed224045c010cdec78756eefb6752a5a8e4804294009eac11e9 0.1s done
+2026-11-05T02:18:07.6915382Z #8 extracting sha256:afa154b433c7f72db064d19e1bcfa84ee196ad29120328f6bdb2c5fbd7b8eeac
+2026-11-05T02:18:08.5221998Z #8 ...
+2026-11-05T02:18:08.5222747Z 
+2026-11-05T02:18:08.5247773Z #10 [stage-1 2/4] RUN apk add --no-cache ca-certificates &&     addgroup -S fl && adduser -S fl -G fl
+2026-11-05T02:18:08.5263569Z #10 0.488 fetch https://dl-cdn.alpinelinux.org/alpine/v3.20/main/x86_64/APKINDEX.tar.gz
+2026-11-05T02:18:08.5268040Z #10 0.598 fetch https://dl-cdn.alpinelinux.org/alpine/v3.20/community/x86_64/APKINDEX.tar.gz
+2026-11-05T02:18:08.5269235Z #10 1.016 (1/1) Installing ca-certificates (20261020-r0)
+2026-11-05T02:18:08.5272659Z #10 1.041 Executing busybox-1.36.1-r31.trigger
+2026-11-05T02:18:08.5273266Z #10 1.048 Executing ca-certificates-20261020-r0.trigger
+2026-11-05T02:18:08.5273817Z #10 1.103 OK: 8 MiB in 15 packages
+2026-11-05T02:18:08.5274236Z #10 DONE 1.3s
+2026-11-05T02:18:08.6594528Z 
+2026-11-05T02:18:08.6595763Z #8 [builder 1/7] FROM docker.io/library/golang:1.22-alpine@sha256:1699c10032ca2582ec89a24a1312d986a3f094aed3d5c1147b19880afe40e052
+2026-11-05T02:18:11.9459047Z #8 extracting sha256:afa154b433c7f72db064d19e1bcfa84ee196ad29120328f6bdb2c5fbd7b8eeac 4.3s done
+2026-11-05T02:18:12.3601248Z #8 extracting sha256:5f837c998576dcb54bc285997f33fcc2166dff6aa48fe3a374da92474efd5fe8
+2026-11-05T02:18:12.5296561Z #8 extracting sha256:5f837c998576dcb54bc285997f33fcc2166dff6aa48fe3a374da92474efd5fe8 done
+2026-11-05T02:18:12.5297771Z #8 extracting sha256:4f4fb700ef54461cfa02571ae0db9a0dc1e0cdb5577484a6d75e68dc38e8acc1 done
+2026-11-05T02:18:12.5302460Z #8 DONE 5.5s
+2026-11-05T02:18:12.5302721Z 
+2026-11-05T02:18:12.5302995Z #11 [builder 2/7] RUN apk add --no-cache gcc musl-dev
+2026-11-05T02:18:12.5303903Z #11 0.124 fetch https://dl-cdn.alpinelinux.org/alpine/v3.21/main/x86_64/APKINDEX.tar.gz
+2026-11-05T02:18:12.7608109Z #11 0.205 fetch https://dl-cdn.alpinelinux.org/alpine/v3.21/community/x86_64/APKINDEX.tar.gz
+2026-11-05T02:18:12.9405795Z #11 0.535 (1/14) Upgrading musl (1.2.5-r8 -> 1.2.5-r12)
+2026-11-05T02:18:13.0717791Z #11 0.544 (2/14) Installing libgcc (14.2.0-r4)
+2026-11-05T02:18:13.0718377Z #11 0.548 (3/14) Installing jansson (2.14-r4)
+2026-11-05T02:18:13.0718881Z #11 0.553 (4/14) Installing libstdc++ (14.2.0-r4)
+2026-11-05T02:18:13.0719385Z #11 0.571 (5/14) Installing zstd-libs (1.5.6-r2)
+2026-11-05T02:18:13.0719902Z #11 0.579 (6/14) Installing binutils (2.43.1-r3)
+2026-11-05T02:18:13.0720377Z #11 0.666 (7/14) Installing libgomp (14.2.0-r4)
+2026-11-05T02:18:13.2808024Z #11 0.676 (8/14) Installing libatomic (14.2.0-r4)
+2026-11-05T02:18:13.2808684Z #11 0.685 (9/14) Installing gmp (6.3.0-r2)
+2026-11-05T02:18:13.2809188Z #11 0.691 (10/14) Installing isl26 (0.26-r1)
+2026-11-05T02:18:13.2809700Z #11 0.710 (11/14) Installing mpfr4 (4.2.1-r0)
+2026-11-05T02:18:13.2810201Z #11 0.720 (12/14) Installing mpc1 (1.3.1-r1)
+2026-11-05T02:18:13.2810686Z #11 0.725 (13/14) Installing gcc (14.2.0-r4)
+2026-11-05T02:18:13.8703714Z #11 1.465 (14/14) Installing musl-dev (1.2.5-r12)
+2026-11-05T02:18:14.1052756Z #11 1.542 Executing busybox-1.37.0-r9.trigger
+2026-11-05T02:18:14.1053843Z #11 1.549 OK: 171 MiB in 29 packages
+2026-11-05T02:18:14.2045141Z #11 DONE 1.8s
+2026-11-05T02:18:14.3830924Z 
+2026-11-05T02:18:14.3831786Z #12 [builder 3/7] WORKDIR /src
+2026-11-05T02:18:14.3832293Z #12 DONE 0.0s
+2026-11-05T02:18:14.3832447Z 
+2026-11-05T02:18:14.3833151Z #13 [builder 4/7] COPY server/go.mod server/go.sum ./
+2026-11-05T02:18:14.3833571Z #13 DONE 0.0s
+2026-11-05T02:18:14.3833719Z 
+2026-11-05T02:18:14.3833853Z #14 [builder 5/7] RUN go mod download
+2026-11-05T02:18:19.7123669Z #14 DONE 5.5s
+2026-11-05T02:18:19.8907132Z 
+2026-11-05T02:18:19.8907716Z #15 [builder 6/7] COPY server/ ./
+2026-11-05T02:18:19.8908305Z #15 DONE 0.0s
+2026-11-05T02:18:19.8908571Z 
+2026-11-05T02:19:31.5450178Z #16 [builder 7/7] RUN go build -trimpath -ldflags "-s -w" -o /out/fastledger ./cmd/server
+2026-11-05T02:19:31.5450969Z #16 DONE 71.8s
+2026-11-05T02:19:31.7073875Z 
+2026-11-05T02:19:31.7077488Z #17 [stage-1 3/4] COPY --from=builder /out/fastledger /usr/local/bin/fastledger
+2026-11-05T02:19:31.7078671Z #17 DONE 0.0s
+2026-11-05T02:19:31.7079003Z 
+2026-11-05T02:19:31.7079298Z #18 [stage-1 4/4] RUN mkdir -p /data && chown fl:fl /data
+2026-11-05T02:19:31.7080277Z #18 DONE 0.1s
+2026-11-05T02:19:31.8594402Z 
+2026-11-05T02:19:31.8595027Z #19 exporting to image
+2026-11-05T02:19:31.8595562Z #19 exporting layers
+2026-11-05T02:19:32.0131367Z #19 exporting layers 0.3s done
+2026-11-05T02:19:32.0358518Z #19 writing image sha256:59cef7a56905ea1a52915f2ec60f8fad7efa9ecc7580d31a19bb00f4066b8653 done
+2026-11-05T02:19:32.0359291Z #19 naming to docker.io/library/fastledger:ci done
+2026-11-05T02:19:32.0359831Z #19 DONE 0.3s
+2026-11-05T02:19:32.0559793Z ##[group]Run docker run --rm -v fl-ci-data:/data -e EBK_JWT_SECRET=ci-smoke-secret-0123456789abcdef012345 fastledger:ci db migrate
+2026-11-05T02:19:32.0561389Z [36;1mdocker run --rm -v fl-ci-data:/data -e EBK_JWT_SECRET=ci-smoke-secret-0123456789abcdef012345 fastledger:ci db migrate[0m
+2026-11-05T02:19:32.0582970Z shell: /usr/bin/bash -e {0}
+2026-11-05T02:19:32.0583230Z ##[endgroup]
+2026-11-05T02:19:32.2474448Z 2026/11/05 02:19:32 已收紧进程 umask：0022 → 0077（新建数据文件默认 0600）
+2026-11-05T02:19:32.2496590Z 2026/11/05 02:19:32 数据库已初始化：/data/fastledger.db（WAL / foreign_keys=on / synchronous=FULL / MaxOpenConns=1）
+2026-11-05T02:19:32.2698723Z 2026/11/05 02:19:32 迁移完成：本次应用 8 个，当前 schema v8
+2026-11-05T02:19:32.3533537Z ##[group]Run docker run -d --name fl-ci \
+2026-11-05T02:19:32.3533924Z [36;1mdocker run -d --name fl-ci \[0m
+2026-11-05T02:19:32.3534233Z [36;1m  -v fl-ci-data:/data -p 18080:8080 \[0m
+2026-11-05T02:19:32.3534628Z [36;1m  -e EBK_JWT_SECRET=ci-smoke-secret-0123456789abcdef012345 \[0m
+2026-11-05T02:19:32.3535211Z [36;1m  fastledger:ci[0m
+2026-11-05T02:19:32.3535638Z [36;1mfor i in $(seq 1 20); do[0m
+2026-11-05T02:19:32.3536230Z [36;1m  body=$(curl -s http://127.0.0.1:18080/healthz || true)[0m
+2026-11-05T02:19:32.3536860Z [36;1m  echo "$body"[0m
+2026-11-05T02:19:32.3537349Z [36;1m  echo "$body" | grep -q '"status":"up"' && exit 0[0m
+2026-11-05T02:19:32.3537666Z [36;1m  sleep 1[0m
+2026-11-05T02:19:32.3537874Z [36;1mdone[0m
+2026-11-05T02:19:32.3538091Z [36;1mecho "::error::容器 healthz 未就绪"[0m
+2026-11-05T02:19:32.3538377Z [36;1mdocker logs fl-ci[0m
+2026-11-05T02:19:32.3538609Z [36;1mexit 1[0m
+2026-11-05T02:19:32.3559986Z shell: /usr/bin/bash -e {0}
+2026-11-05T02:19:32.3560331Z ##[endgroup]
+2026-11-05T02:19:32.3909694Z 879440c420e2fa99cd255d99ed796eaab7853074a33bb280f6c2ea2f55e98497
+2026-11-05T02:19:32.5621160Z {"code":0,"data":{"instanceId":"1bda1414f2741f5d1f58d0d9b7d2fbdc","restoreEpoch":1,"schemaVersion":8,"status":"up"},"msg":"ok"}
+2026-11-05T02:19:32.5677206Z ##[group]Run docker rm -f fl-ci 2>/dev/null || true
+2026-11-05T02:19:32.5677612Z [36;1mdocker rm -f fl-ci 2>/dev/null || true[0m
+2026-11-05T02:19:32.5697658Z shell: /usr/bin/bash -e {0}
+2026-11-05T02:19:32.5697925Z ##[endgroup]
+2026-11-05T02:19:32.6976468Z fl-ci
+2026-11-05T02:19:32.7119977Z Post job cleanup.
+2026-11-05T02:19:32.8046331Z [command]/usr/bin/git version
+2026-11-05T02:19:32.8095708Z git version 2.56.0
+2026-11-05T02:19:32.8169230Z Temporarily overriding HOME='/home/runner/work/_temp/88fab4a4-7f8c-44a7-8d73-dde93fd9954e' before making global git config changes
+2026-11-05T02:19:32.8170850Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-05T02:19:32.8175370Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/FastLadger/FastLadger
+2026-11-05T02:19:32.8220898Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-11-05T02:19:32.8261823Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-11-05T02:19:32.8536319Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-05T02:19:32.8573597Z http.https://github.com/.extraheader
+2026-11-05T02:19:32.8595343Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-11-05T02:19:32.8637312Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-11-05T02:19:32.9001335Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-05T02:19:32.9068478Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-11-05T02:19:32.9538463Z Cleaning up orphan processes
+2026-11-05T02:19:33.0120198Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

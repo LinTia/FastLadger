@@ -28,7 +28,7 @@
 | **A. R0-E-35 / RV-01 独立复验** | **BLOCKED** | 需 Owner/CI | 未执行独立复跑 | 既有 `docs/r0-screenshots/runtime/` | Owner/CI 独立环境复跑多场景 |
 | **B. 13 页原型×实现同数据对照** | **PASS（同数据主集）** | WorkBuddy（Owner 授权） | 两侧各 **52 张**（13 页×4 视口）；**同一数据集**；含 impl 登录页 + 记一笔弹层动作级 | `docs/r0-screenshots/pairs/`（104 PNG + 2 manifest + seed-manifest + SHA256SUMS 108 行 + README） | 仍缺 loading/empty/error/permission/offline/conflict 态；`invest`/`members` 数据未对齐 |
 | **C. 228 条控件/动作运行时验收** | **BLOCKED** | QA | 未填充运行时结果 | 主报告 §3.1（228 行） | 逐条运行时证据或 N/A |
-| **D. API/后台逐路由测试证据** | **PASS（正式 CI + 全仓 race）** | GitHub Actions + WorkBuddy（服务器） | CI run `41951501832` success（含 `go test ./...` 与 `-race`）；服务器补全仓 `-race` | `docs/r0-evidence-4th/`（ci-run/ + env/plain/race/exit + SHA256） | 未覆盖路由仍缺关键断言 |
+| **D. API/后台逐路由测试证据** | **PASS（正式 CI + 全仓 race）** | GitHub Actions + WorkBuddy（服务器） | CI run `41954006789` success（含 `go test ./...` 与 `-race`）；服务器补全仓 `-race` | `docs/r0-evidence-4th/`（ci-run/ + env/plain/race/exit + SHA256） | 未覆盖路由仍缺关键断言 |
 
 ---
 
@@ -100,13 +100,15 @@ prototype/assets/index-*.js
 
 | 项 | 值 |
 |---|---|
-| run | `41951501832` |
-| URL | https://github.com/LinTia/FastLadger/actions/runs/41951501832 |
-| head | `31716b0d51a12ee6c705cc670059b2e129c1e37f`（文档/证据提交；业务代码仍 `bff6a2b`） |
+| run | `41954006789` |
+| URL | https://github.com/LinTia/FastLadger/actions/runs/41954006789 |
+| head | `9d083f62bf80e0ba7cdb444e57940eb432c1d5f3`（**即包含本证据目录的提交**；业务代码仍 `bff6a2b`） |
 | 结论 | **success**（`build / vet / test / race` + `docker build / run / healthz` 两 job 全绿） |
 | 关键步骤 | gofmt / go vet / go build / SQLite 驱动冒烟 / `go test ./...` / `go test -race`（ws、service、api）全部 success |
 | 环境 | `go1.22.12 linux/amd64`、`gcc 13.3.0`、`CGO_ENABLED=1`、runner `ubuntu-24.04` |
 | 计数 | `ok` 10 个包 / `[no test files]` 2 个；`--- FAIL` **0**；`DATA RACE` **0** |
+
+> 前一次提交 `31716b0` 的 run `41951501832` 结论同为 success。本回执以"包含证据自身的提交"为准，避免日志与提交错位。
 
 原始日志与校验和：`docs/r0-evidence-4th/ci-run/`（`run-meta.json`、`test-job.log`、`docker-job.log`、`summary.txt`、`SHA256SUMS.txt`）。
 
