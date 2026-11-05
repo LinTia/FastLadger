@@ -195,7 +195,11 @@
 ## 7. 提交与 CI
 
 - 分支：`fix/r0-sixth-runtime-defects`，基准 `dadc9a3b9c567cad2bbad7e47361fb774365b949`。
-- 交付 commit SHA（代码/测试/证据主体）：**`0472484b3e57dac4cd05240ac40fb793ad3a2b4d`**。
+- 交付 commit 链（当前 HEAD = **`2182a58`**）：
+  - `0472484b` 业务修复代码/测试/证据主体（66 文件）
+  - `0c62f50` **P1 安全**：阻断 Actions artifact 上传含凭据的 `trace.zip`
+  - `5551d41` **P1R2** 扫描器零跳过修复(N1–N5) + **P2** 控件编号与 `--suite all` 语义
+  - `2182a58` P1/P2 整改证据、QA 独立复核与凭据事件处置留痕
 - PR：**[#3](https://github.com/LinTia/FastLadger/pull/3)** `fix/r0-sixth-runtime-defects` → `main`，状态 open，**未经 ChatGPT 第三方审核不合并**。
 - 凭证扫描：`node tools/r0/scan-credentials.js --strict` 退出码 0（`真实凭证候选命中：0`）；未向仓库引入任何 token、密钥或含 JWT 的原始网络日志。
 
@@ -223,3 +227,61 @@
 
 - 本次回填 CI 链接会产生**第二个仅文档 commit**；`0472484` 是代码/测试/证据主体，也是上表两个 CI run 的 head。第二 commit 会重新触发同样的两个工作流，其 run 可在 PR #3 的 Checks 中查看；**不得**把后一个 run 说成是前一个 commit 的验证。
 - 已知 Windows `core.autocrlf=true` 会导致本机工作树与 LF 仓库内容的 SHA256 不同；`qa/SHA256SUMS.txt` 按本机 LF 工作树口径生成，复现校验请用 `git -c core.autocrlf=false clone`。
+
+### 7.3 独立 CI 证据（head = `2182a58`，含 P1/P2）
+
+| 工作流 | run | 结论 | 链接 |
+|---|---|---|---|
+| **CI**（build / vet / test / 全仓 `-race` / 容器冒烟） | `42040170725` | **success** | https://github.com/LinTia/FastLadger/actions/runs/42040170725 |
+| **R0 E2E**（A 门禁 / D 门禁 / C 报告型 / 上传前凭据扫描） | `42040170808` | **success** | https://github.com/LinTia/FastLadger/actions/runs/42040170808 |
+
+- R0 E2E run `42040170808` 关键 step：构建（CGO 真库）success → 分类解析合成测试 / 22 笔审计 success → 包 A 11 项 success → 包 D 39 条 success → 包 C 228 条报告型（`continue-on-error: true`，实际 `PASS 164 / FAIL 4 / BLOCKED 59 / N/A 1`）→ **上传前凭据扫描（fail-closed）success** → 汇总 / 上传 artifact success。
+- 该 run 产出的证据 artifact：**`13420647572`**（`r0-e2e-evidence-…`，3,636,776 B）。**team-lead 已独立下载该 artifact 并递归扫描，结果 CLEAN**（101 文件全量扫描、0 跳过、0 命中；见 `docs/r0-evidence-7th-fix/p1/independent-artifact-scan-13420647572.md`）。
+- 口径提醒同 §7.1：C 的 step/job success 不等于 C 通过；该 run 中 C 实际仍含 4 条既有 FAIL（`I-LOGIN-04/11/12`、`I-HOME-01`）。D 门禁（无 `continue-on-error`）success 是 4 项业务修复 + P2 控件回归的 CI 硬证明。
+
+---
+
+## 8. 第三方复核后续整改（P1 凭据安全 + P2 测试质量）
+
+> 来源：ChatGPT 第三方复核对「第七次业务缺陷修复」的反馈。本轮仅做 P1/P2 整改，**未改动** §1–§6 已交付的 4 项业务修复边界（不动 `style.css`、不改 228 清单、不合并 main）。
+
+### 8.1 P1 · GitHub Actions artifact 凭据安全事件处置
+
+| 项 | 内容 |
+|---|---|
+| 事件 | 早期 CI 上传的 artifact 含 `trace.zip`，其中 `trace.network` 记录真实 `Authorization: Bearer <JWT>`。仓库为 Public，按既有安全事件口径以**脱敏为最高优先级**处置。 |
+| 整改（commit `0c62f50`） | `.github/workflows/r0-e2e.yml` 新增四步：`artifact_prepare`(always) → `artifact_scan`(always，依赖 prepare success) → `artifact_upload`(`if-no-files-found: error`，**依赖 `steps.artifact_scan.outcome == 'success'` 失败关闭**) → `artifact_upload_summary`(always)；上传 path 改 `artifacts/r0-e2e-upload/**`；**不再上传** `trace.zip`/`.network`/`.har`/`.db`。 |
+| Round 2 扫描器修复（commit `5551d41`） | `tools/r0/e2e/scripts/scan-artifacts.js` 取消一切「跳过内容扫描」分支（N1 NUL 前缀白名单文本 fail-open、N2 伪 `.png` 放行）；新增二进制魔数附加防线（N3 CI summary 含新 step、N4 HEAD 一致已核）；收紧 AUTH/COOKIE 规则消除合法字段假阳性（N5，附带 K2 权衡）。17/17 负向测试通过；自造 NUL `.log` + 伪 `.png` 端到端被阻断（exit 2）。 |
+| 凭据事件处置留痕 | `docs/r0-evidence-7th-fix/P1-artifact-credential-incident.md`：已删除 8 个含凭据 artifact（本轮 4 + 历史 4），均 HTTP 204 回执留痕。 |
+| 独立下载扫描（team-lead 亲验） | `docs/r0-evidence-7th-fix/p1/independent-artifact-scan-13420647572.md`：下载存储态 artifact `13420647572`（commit `2182a58`，3,636,776 B），解压 101 条目，**全量扫描 0 跳过、0 命中、CLEAN**，退出码 0。 |
+| 残余盲点 | 扫描器存在 K1–K7 已知盲点（见 §9），但凭据泄漏源 `trace.zip` 已不再上传，且存储 artifact 实际内容为截图/报告/日志，不含凭据文本。 |
+
+### 8.2 P2 · 测试质量整改（测试编号错位 + 运行器 `all` 语义）
+
+| 项 | 内容 |
+|---|---|
+| 边界 | 与 P1 完全无关；仅改 `c-controls.js` 的 `groupAccounts` 与 `run.js` 的 `all` 语义 + 新建 `tools/r0/e2e/README.md`；**未改** `controls.json`/228 清单/测试编号/`style.css`/`app.js`/Go 后端/PRD。 |
+| `I-ACCT-06` 编号错位修复 | 修复前该编号被「清单外观察项（新增账户 390px 不可见）错占 + 无条件 FAIL」，清单定义的「删除引用保护」从未被测。改为按清单定义真实 409 断言：`DELETE /accounts/{cashId}` → 真实 HTTP `409` + `msg=账户仍存在交易记录，无法删除` + API 回读该 id 仍在且名称一致。三者同成立才 PASS，实测 **PASS**。 |
+| `I-ACCT-10` 假阳性修复 | 修复前用 `innerText` 恒真式判「删除后从列表消失」，实际测的不是清单定义的「币种 `#acctCur`」。改为弹窗内 `#acctCur` 真实 DOM/键入断言（控件数/type/maxlength/disabled/默认 CNY/真实键入回显），实测 **PASS**。 |
+| 第四项视觉可见性仍 FAIL | 作为清单外独立项 `OBS-ACCT-VIS-390`（`status: FAIL`、`closed: false`、`ownerDecision: 待 Owner 裁决`）登记，**不写入 `R`、不占任何 228 编号**；本轮未授权改 `style.css` L331，未以任何形式改成 PASS。 |
+| `run.js --suite all` 语义 | 由 `['a','c']` 改为 `['a','d','c']`（D 在 C 前避免 C 写操作污染 D 回归数据；B 由 workflow 独立 step `node --test tools/r0/test-resolve-category.js` + `reseed-audit.js`）。实测 `all`：`A 11/11`、`D 39/39`、`C PASS 164 / FAIL 4 / BLOCKED 59 / N/A 1`，真实退出码 1（C 既有 4 FAIL 触发，属预期）。 |
+| 不掩盖缺口 | 4 条既有 FAIL（`I-LOGIN-04/11/12`、`I-HOME-01`）与 59 BLOCKED / 1 N/A 全部原样保留；`I-ACCT-01..05/07..09/11..15` 13 条历史编号错位**仅登记、未批量对齐**（见 `p2/iacct-mapping-audit.md`），全面对齐需另提方案供第三方审核。 |
+| 证据 | `docs/r0-evidence-7th-fix/p2/`（p2-report.md、iacct-mapping-audit.md、all-suite-teamlead-verify.log、visibility-observation-independent.json 等）。 |
+
+---
+
+## 9. 扫描器已知盲点 K1–K7（如实披露，不得称已解决）
+
+> 来源：`docs/r0-evidence-7th-fix/p1/qa-verify-round2/qa-p1-round2-report.md` §8。按 team-lead 指令，K1–K7 **全部转 Known Issues 写入本回执，不得描述为「已解决」或「绝对无凭据」**；K1/K2/K3 必须随交付明确告知第三方「仍存在可端到端放行的凭据载体」。
+
+| ID | 严重度 | 盲点 | 是否全新 |
+|---|---|---|---|
+| **K1** | 高 | **UTF-16LE / UTF-16 编码绕过**：`latin1` 1:1 映射无法还原被 NUL 隔开的 ASCII 串，5 条文本规则全部失配。Windows/PowerShell 默认 UTF-16 日志属常见形态 | **是（全新未披露）** |
+| **K2** | 中 | **短值 / 低熵值漏报**：`credentialLikeValue()` 对 `<16` 短值、以及 `≥16` 但纯小写/无数字/无大写的低熵值返回 false | 部分（工程师披露 <16 权衡，未披露 ≥16 低熵纯小写漏报） |
+| **K3** | 中 | **规则未覆盖的凭据形态**：`x-api-key`/`apiKey` 下高熵值、`base64` 编码的 `Authorization: Bearer <JWT>` 均 `0 CLEAN`；5 条规则为已知形态白名单，非通用 DLP | 部分（N6 已声明规则覆盖有限） |
+| **K4** | 提示 | **魔数表仅覆盖 8/24 种扩展名**：`.webp/.woff/.ttf/.mp4/.exe/...` 无校验，依赖文本规则兜底 | 是（round2 残留说明） |
+| **K5** | 提示 | **N3 未经真机 CI 验证**：新 summary step 仅静态确认，其三个 outcome 实际渲染值未在真机回执中验证 | 是 |
+| **K6** | 提示 | **绿色 CI ≠ 证据已安全上传**：`scan` 通过只代表 5 条规则命中 0；上传 step 被跳过时不产生失败信号 | 是 |
+| **K7** | 提示 | 历史 artifact 未追溯；屏幕画面内文字属于 OCR 范畴，不在能力范围；按指令未 push | 是 |
+
+**诚实结论**：本整改**消除了失败开放（fail-open）漏洞 N1–N5**，且凭据泄漏源 `trace.zip` 已不再上传；但扫描器**仍存在 K1/K2/K3 可端到端放行的凭据载体**（`scan=0 CLEAN` 不代表绝对无凭据）。按 2 轮上限不再派发第 3 轮修复。存储 artifact `13420647572` 的独立下载扫描为 CLEAN，但应理解为「5 条规则 + 当前内容形态下无命中」，而非「绝对无凭据」。
