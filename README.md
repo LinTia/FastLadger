@@ -7,7 +7,7 @@
 ## 当前状态（2026-10-31 历史快照，部分已过时）
 
 > 下表是 2026-10-31 的历史快照。schema 版本、测试基线、阶段进度以 `docs/` 最新交付文档、`CHANGELOG.md` 与服务器实测为准；**R0（基准冻结与差异盘点）当前未通过 / 阻塞**，见 [R0 报告](docs/FastLedger-R0-基准冻结与差异盘点.md)。本表不作为 R0 验收依据。
-> **截至 [1.80] 的 R0 收尾状态（第六次整改：A/C 自动化，第三方复核前）**：**A = 具备申请改判条件**（本地 11/11 + 独立 CI 11/11 均 PASS，run `41990345757`；不自行写 PASS，等 Owner 裁决）；**B = PARTIAL**（分类解析改为「冲突/歧义/失败关闭」+14 条合成测试，22 笔审计 AUDIT_OK；截图覆盖缺口未变）；**C = 已逐条执行**（228 条：PASS 144 / FAIL 6 / BLOCKED 77 / N/A 1，逐条带截图与原因）；**D = PARTIAL**（3/5/5 维持，未凑覆盖率）。本轮新发现缺陷：**交易总表整页空白**（`renderTxns` 未 `view.append(card)`）、记一笔分类未按类型过滤、member 仍见邀请按钮、新增账户列表疑似未刷新。RV-05 仍 **Owner ACTION REQUIRED**。**R0 继续 BLOCK，不授权 R1–R7。** 详见 [第六次整改回执](docs/FastLedger-R0-第六次整改-A-C自动化交付回执.md)。
+> **截至 [1.81] 的 R0 收尾状态（第六次自动化交付经第七次独立复核）**：**A = PARTIAL**（独立 CI run `41990345757` 的 11/11 脚本均报告 PASS，但 A05 的 PASS 条件只检查耗时、没有断言 pending 文案/disabled，需修正后重跑）；**B = PARTIAL**（分类解析硬化有效，但 t021 的 `meal → dinner` override 由 WorkBuddy 自行署名，尚待 Owner 裁决）；**C = PARTIAL**（228 条：PASS 144 / FAIL 6 / BLOCKED 77 / N/A 1；发现至少 15 条硬编码 PASS 缺少直接断言或可追溯证据引用，需纠偏）；**D = PARTIAL**（13 路由覆盖 3/5/5 维持）。第六次发现的交易总表空白、记一笔分类未按类型过滤、member 邀请按钮未隐藏、新增账户列表疑似未刷新，均先登记修复提案，未授权改业务代码。RV-05 仍 **Owner ACTION REQUIRED**。**R0 继续 BLOCK，不授权 R1–R7。** 详见 [第六次整改回执](docs/FastLedger-R0-第六次整改-A-C自动化交付回执.md) 与 [第七次测试质量纠偏任务单](docs/FastLedger-R0-第七次测试质量纠偏任务单.md)。
 
 | 项 | 状态 |
 |---|---|
@@ -49,6 +49,7 @@
 | [`docs/FastLedger-R0-第五次最小整改-执行回执.md`](docs/FastLedger-R0-第五次最小整改-执行回执.md) | **R0 第五次最小整改 · 执行回执** | 逐项回执：A BLOCKED / B PARTIAL / C BLOCKED / D PARTIAL；分类映射修复前后、104 PNG 校验、角色/状态覆盖、CI 元数据更正、未覆盖路由处置、RV-05 Owner 待办与文档同步清单 |
 | [`docs/r0-evidence-5th/`](docs/r0-evidence-5th/) | **R0 第五次整改证据** | `seed-mapping-before/after.json`（22 笔分类映射）、`checksum-verification.txt`（104 PNG 逐文件校验）、`api-route-coverage.md`（13 条路由）、`ci-metadata-correction.md`（run/job/耗时与四类 SHA）、`ci-coverage-matrix.md`（CI 能/不能证明什么）、`ci-run-de2fb26/`（全仓 `-race` 的 GitHub 原生 run）、`ci-run-22fd310/`（第五次整改提交的 run） |
 | [`docs/FastLedger-R0-第六次整改-A-C自动化交付回执.md`](docs/FastLedger-R0-第六次整改-A-C自动化交付回执.md) | **R0 第六次整改 · A/C 自动化交付回执** | B 分类解析硬化（14 条合成测试 + 22 笔审计）；A 11/11 本地 PASS（待 CI 复核）；C 228 条 144/6/77/1；4 条新发现缺陷；CI 只需 Owner 三件手机小事 |
+| [`docs/FastLedger-R0-第七次测试质量纠偏任务单.md`](docs/FastLedger-R0-第七次测试质量纠偏任务单.md) | **R0 第七次测试质量纠偏任务单（WorkBuddy）** | 修正 A05 假阳性、C 至少 15 条硬编码 PASS、控制清单 SHA 漂移校验、t021 Owner 裁决；不授权业务代码修改或启动 R1–R7 |
 | [`docs/r0-evidence-6th/`](docs/r0-evidence-6th/) | **R0 第六次整改证据** | `report.json/md`（239 条）、`controls-summary.json`、`unit-resolve-category.log`、`reseed-audit.log`、`screenshots/`、`SHA256SUMS.txt` |
 | [`docs/FastLedger-R0-独立补漏与复核记录.md`](docs/FastLedger-R0-独立补漏与复核记录.md) | **R0 独立补漏与复核记录** | 修正误判、补充 R0-E-20~39、复核 R0 退出条件与 D-1~D-8；静态复核 + 二次整改复核，R0 尚未通过 |
 | [`docs/FastLedger-R0-第三次最小整改任务单-RV-02-RV-05-RV-06.md`](docs/FastLedger-R0-第三次最小整改任务单-RV-02-RV-05-RV-06.md) | **R0 第三次最小整改任务单** | 第三方审阅任务单；[1.68] 已按此执行并推送，待第三方独立复核；Git 历史重写仍须 Owner 授权 |
