@@ -124,21 +124,21 @@ K3-05 variants          | 0            | 2             | CLEAN(bypass)| BLOCKED 
 
 ## 9. CI Run ID / Commit SHA / Artifact ID
 
-- Commit SHA（修复后）：`<TBD-after-push>`
-- CI Run ID：`<TBD-after-push>`
-- Artifact ID / 名称：`r0-e2e-evidence-<sha>`（retention 30 天）
-- 说明：CI 针对最终提交运行；run 链接与 artifact 下载后独立扫描结果回填本条。
-
-> 注：本条在推送并等待 CI 完成后回填（见下方「回填记录」）。
+- Commit SHA（修复后）：`c95ff094300e6e629886edfa6a3a61161dfa4351`
+- CI Run ID（CI 工作流，build/vet/test/全仓 -race/容器冒烟）：`42079445701`（success）
+- CI Run ID（R0 E2E 工作流，A/D 门禁/C 报告型/上传前扫描）：`42079445817`（success）
+- Artifact ID：`13441565324`；名称：`r0-e2e-evidence-4cb41db8d3a63f2e589ae72a920babadecaeebb9`（size 3647442 B，retention 30 天）
+- 说明：CI 针对最终提交运行（PR #3 的 `pull_request` 事件，head = c95ff09）；R0 E2E run `42079445817` 结论 success，已产出并上传 artifact。
 
 ---
 
 ## 10. 最新 Artifact 下载后文件清单与独立扫描
 
-- 下载 Artifact `r0-e2e-evidence-<sha>` 后，对其中全部文件再用当前扫描器独立复扫一遍（`node scan-artifacts.js <解压目录>`），结果：`<TBD-after-download>`。
-- 目的：证明即便 CI 产出的 artifact 本身，经过与上传闸门同一把扫描器独立复扫，也不含可绕过凭据；杜绝「CI 自身落盘即带凭据」的二次风险。
-
-> 注：本条在下载并独立扫描后回填（见下方「回填记录」）。
+- 下载 Artifact（id `13441565324`，101 个文件：A/D/C 三套件 PNG 截图 + report.json/md + fixtures.json + SHA256SUMS.txt + 各类 diagnostics / observations JSON）后，对全部文件用当前扫描器独立复扫：
+  - 文件总数 = 101；内容已全量扫描 = 101；**跳过内容扫描 = 0**；二进制文件 = 80；符号链接 = 0
+  - 编码解码：utf8可靠 = 21；utf16可靠 = 0；无法可靠解码(已阻断) = 0；可疑二进制(魔数不符) = 0
+  - 命中文件/类型组合 = 0；命中总数 = 0；结论：**CLEAN（rc=0）**
+- 目的达成：即便 CI 产出的 artifact 本身，经过与上传闸门同一把扫描器独立复扫，也不含可绕过凭据（**0 命中、0 跳过**），杜绝「CI 自身落盘即带凭据」的二次风险。
 
 ---
 
@@ -153,6 +153,7 @@ K3-05 variants          | 0            | 2             | CLEAN(bypass)| BLOCKED 
 
 ## 回填记录（CI 完成后追加）
 
-- CI Run ID：
-- Commit SHA：
-- Artifact 下载清单与独立扫描结论：
+- CI Run ID：`42079445701`（CI）/ `42079445817`（R0 E2E）
+- Commit SHA：`c95ff094300e6e629886edfa6a3a61161dfa4351`
+- Artifact ID：`13441565324`（name `r0-e2e-evidence-4cb41db8d3a63f2e589ae72a920babadecaeebb9`）
+- Artifact 下载清单与独立扫描结论：101 文件全量扫描、0 跳过、0 命中、CLEAN（rc=0）
