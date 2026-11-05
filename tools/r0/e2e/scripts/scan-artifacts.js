@@ -2,18 +2,25 @@
 'use strict';
 
 /**
- * FastLedger R0 E2E —— 上传前安全扫描器（P1 安全整改，失败关闭）。
+ * FastLedger R0 E2E —— 上传前安全扫描器（P1 安全整改 / Round 2，失败关闭）。
  *
  * 用途：在 actions/upload-artifact 之前对待上传目录做最后一道闸门。只要存在
  * 黑名单文件名或疑似凭据文本，立即以退出码 2 失败；workflow 的上传 step 通过
  * `steps.artifact_scan.outcome == 'success'` 依赖本 step，因此扫描不通过时绝不上传。
  *
+ * Round 2 修订（QA 独立验证发现的失败开放缺口）：
+ *   · 取消一切「跳过内容扫描」分支：不再因扩展名（如 .png）或文件头 NUL 字节
+ *     静默跳过任何文件；所有文件一律读 Buffer 后以 latin1 做 1:1 字节映射，
+ *     再逐条应用 5 条文本规则。ASCII 凭据串在任意字节位置都能被正则命中。
+ *   · 二进制扩展名新增魔数校验附加防线，格式不符记 SUSPICIOUS_BINARY 并阻断。
+ *   · 鉴权头 / Cookie 规则收紧为「值需具备凭据形态」，消除合法业务字段误阻断。
+ *
  * 规则：
  *   A. 文件名/扩展名黑名单：*.zip（含 trace 归档）、*.trace、*.network、*.har、
  *      *.db / *.sqlite*、server.log、文件名含 token|secret|credential；符号链接。
  *   B. 文本内容：JWT 三段式、Bearer 值、鉴权头赋值、Cookie / Set-Cookie 赋值、
- *      EBK_JWT_SECRET 赋值。
- *   C. PNG/JPG 等二进制按扩展名或 NUL 字节判定后跳过内容扫描，但 A 类检查照常执行。
+ *      EBK_JWT_SECRET 赋值。**全部文件一律扫描，无例外**。
+ *   C. 附加防线：二进制扩展名文件的起始魔数不符 → SUSPICIOUS_BINARY。
  *
  * 输出：仅「文件路径 + 命中类型 + 命中数量」与汇总计数；**绝不打印匹配到的值**。
  * 退出码：0 干净 / 2 发现疑似凭据或黑名单文件（阻断上传）/ 1 参数或环境错误（同样阻断上传）。
@@ -34,7 +41,7 @@ const EXIT_CLEAN = 0;
 const EXIT_ERROR = 1;
 const EXIT_BLOCKED = 2;
 
-/** 单文件文本扫描上限；超过即视为环境错误（失败关闭，不静默放过）。 */
+/** 单文件扫描上限；超过即视为环境错误（失败关闭，不静默放过）。 */
 const MAX_TEXT_BYTES = 32 * 1024 * 1024;
 
 /** 命中即阻断的扩展名。 */
@@ -43,12 +50,28 @@ const BLACKLIST_EXT = new Set([
   '.db', '.sqlite', '.sqlite3', '.db-wal', '.db-shm',
 ]);
 
-/** 跳过内容扫描的二进制扩展名（文件名黑名单仍然生效）。 */
+/** 二进制扩展名：只用于附加魔数校验，绝不再用于跳过内容扫描。 */
 const BINARY_EXT = new Set([
   '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.ico', '.pdf',
   '.woff', '.woff2', '.ttf', '.eot', '.mp4', '.webm', '.mp3', '.wav',
   '.gz', '.7z', '.exe', '.dll', '.so', '.dylib', '.class', '.jar',
 ]);
+
+/**
+ * 常见二进制格式的起始魔数（附加防线，不用于跳过内容扫描）。
+ * 未列入表中的二进制扩展名仅依赖统一文本规则把关。
+ * @type {Record<string, Buffer[]>}
+ */
+const BINARY_SIGNATURES = {
+  '.png': [Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])],
+  '.jpg': [Buffer.from([0xff, 0xd8, 0xff])],
+  '.jpeg': [Buffer.from([0xff, 0xd8, 0xff])],
+  '.gif': [Buffer.from('GIF8', 'latin1')],
+  '.pdf': [Buffer.from('%PDF', 'latin1')],
+  '.bmp': [Buffer.from('BM', 'latin1')],
+  '.ico': [Buffer.from([0x00, 0x00, 0x01, 0x00])],
+  '.gz': [Buffer.from([0x1f, 0x8b])],
+};
 
 /** 文件名（basename）命中即阻断。 */
 const SENSITIVE_NAME_RE = /(?:token|secret|credential)/i;
@@ -57,14 +80,44 @@ const SENSITIVE_NAME_RE = /(?:token|secret|credential)/i;
 const SERVER_LOG_NAME = 'server.log';
 
 /**
+ * 判定头值是否具备凭据形态，用于收紧 AUTH_HEADER / COOKIE_HEADER，消除假阳性。
+ * 纯字母 + 连字符的自然语言短语（如 role-based-access）不算命中。
+ * 只返回布尔，绝不把值写入任何输出。
+ * @param {string} raw 正则捕获到的头值。
+ * @return {boolean} 是否按疑似凭据计数。
+ */
+function credentialLikeValue(raw) {
+  const value = String(raw).replace(/^["'`]+|["'`]+$/g, '').trim();
+  if (/^eyJ/.test(value) || /^Bearer\b/i.test(value)) return true;
+  if (value.length < 16) return false;
+  if (/[.=_\+/]/.test(value)) return true;
+  if (!/^[A-Za-z0-9+/=_-]+$/.test(value)) return false;
+  const hasDigit = /[0-9]/.test(value);
+  const hasUpper = /[A-Z]/.test(value);
+  const hasLower = /[a-z]/.test(value);
+  return hasDigit || (hasUpper && hasLower);
+}
+
+/**
  * 文本命中规则。每条正则必须带 g 标志；只统计命中数量，不保留匹配值。
- * @type {{type: string, re: RegExp}[]}
+ * 带 validator 的规则仅对通过凭据形态判定的捕获值计数。
+ * @type {{type: string, re: RegExp, group?: number, validator?: (v: string) => boolean}[]}
  */
 const TEXT_RULES = [
   { type: 'JWT_LITERAL', re: /eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g },
   { type: 'BEARER_TOKEN', re: /\bBearer\s+[A-Za-z0-9._~+/=-]{12,}/gi },
-  { type: 'AUTH_HEADER', re: /["']?authorization["']?\s*[:=]\s*["']?[^\s"',}]{8,}/gi },
-  { type: 'COOKIE_HEADER', re: /["']?(?:set-)?cookie["']?\s*[:=]\s*["']?[^\r\n"']{8,}/gi },
+  {
+    type: 'AUTH_HEADER',
+    re: /["']?authorization["']?\s*[:=]\s*["']?([^\s"',}]{8,})/gi,
+    group: 1,
+    validator: credentialLikeValue,
+  },
+  {
+    type: 'COOKIE_HEADER',
+    re: /["']?(?:set-)?cookie["']?\s*[:=]\s*["']?([^\r\n"']{8,})/gi,
+    group: 1,
+    validator: credentialLikeValue,
+  },
   { type: 'EBK_JWT_SECRET_ASSIGN', re: /EBK_JWT_SECRET\s*[:=]\s*["']?[^\s"',}]{4,}/gi },
 ];
 
@@ -84,8 +137,9 @@ function printHelp() {
   process.stdout.write([
     '用法：node tools/r0/e2e/scripts/scan-artifacts.js [待扫描目录|--dir <dir>] [--help]',
     '',
-    `默认目录：artifacts/r0-e2e-upload`,
+    '默认目录：artifacts/r0-e2e-upload',
     '退出码：0 干净 / 2 发现疑似凭据或黑名单文件 / 1 参数或环境错误',
+    '扫描口径：全部文件以 latin1 逐字节映射后应用 5 条文本规则，无任何内容跳过分支。',
     '输出：仅文件路径、命中类型与命中数量，不输出任何匹配值。',
     '',
   ].join('\n'));
@@ -122,16 +176,22 @@ function parseArgs(argv) {
 
 /**
  * 统计某条规则在文本中的命中次数，使用独立正则副本避免 lastIndex 污染。
- * @param {string} text 待扫描文本。
- * @param {RegExp} re 带 g 标志的规则。
+ * 带 validator 的规则只对通过形态判定的捕获值计数，值本身不外泄。
+ * @param {string} text 待扫描文本（latin1 映射结果）。
+ * @param {{type: string, re: RegExp, group?: number, validator?: (v: string) => boolean}} rule 规则。
  * @return {number} 命中次数。
  */
-function countMatches(text, re) {
-  const copy = new RegExp(re.source, re.flags);
+function countMatches(text, rule) {
+  const copy = new RegExp(rule.re.source, rule.re.flags);
   let count = 0;
   let match;
   while ((match = copy.exec(text)) !== null) {
-    count += 1;
+    if (rule.validator) {
+      const raw = rule.group ? match[rule.group] : match[0];
+      if (raw !== undefined && rule.validator(raw)) count += 1;
+    } else {
+      count += 1;
+    }
     if (copy.lastIndex === match.index) copy.lastIndex += 1;
   }
   return count;
@@ -157,16 +217,17 @@ function fileNameFindings(rel) {
 }
 
 /**
- * 通过 NUL 字节判定二进制内容。
+ * 检查二进制文件起始魔数是否匹配已知格式。
+ * @param {string} ext 小写扩展名。
  * @param {Buffer} buf 文件内容。
- * @return {boolean} 是否为二进制。
+ * @return {boolean} 配置了魔数但不匹配时返回 true。
  */
-function looksBinary(buf) {
-  const limit = Math.min(buf.length, 4096);
-  for (let i = 0; i < limit; i += 1) {
-    if (buf[i] === 0) return true;
-  }
-  return false;
+function binarySignatureMismatch(ext, buf) {
+  const signatures = BINARY_SIGNATURES[ext];
+  if (!signatures) return false;
+  return !signatures.some(
+    (sig) => buf.length >= sig.length && buf.subarray(0, sig.length).equals(sig),
+  );
 }
 
 /**
@@ -243,8 +304,8 @@ function main(argv) {
   }
 
   const tree = { files: [], symlinks: [] };
-  let textScanned = 0;
-  let binarySkipped = 0;
+  let contentScanned = 0;
+  let binaryAlsoScanned = 0;
 
   try {
     walk(targetDir, tree);
@@ -253,23 +314,25 @@ function main(argv) {
       for (const type of fileNameFindings(rel)) addFinding(rel, type, 1);
 
       const ext = path.extname(abs).toLowerCase();
-      if (BINARY_EXT.has(ext)) {
-        binarySkipped += 1;
-        continue;
-      }
       const stat = fs.statSync(abs);
       if (stat.size > MAX_TEXT_BYTES) {
         throw new Error(`文件超过可扫描上限 ${MAX_TEXT_BYTES} 字节：${rel}`);
       }
       const buf = fs.readFileSync(abs);
-      if (looksBinary(buf)) {
-        binarySkipped += 1;
-        continue;
+
+      // 附加防线：二进制扩展名必须匹配已知起始魔数，不符即视为可疑载体。
+      if (BINARY_EXT.has(ext) && binarySignatureMismatch(ext, buf)) {
+        addFinding(rel, 'SUSPICIOUS_BINARY', 1);
       }
-      const text = buf.toString('utf8');
-      textScanned += 1;
+
+      // 统一口径：latin1 保证任意字节 1:1 映射为码位 0–255，
+      // 使 ASCII 凭据串在文件任何字节位置都能被 5 条文本规则命中。
+      // 这里没有任何 continue / 跳过分支。
+      const text = buf.toString('latin1');
+      contentScanned += 1;
+      if (BINARY_EXT.has(ext)) binaryAlsoScanned += 1;
       for (const rule of TEXT_RULES) {
-        const count = countMatches(text, rule.re);
+        const count = countMatches(text, rule);
         if (count > 0) addFinding(rel, rule.type, count);
       }
     }
@@ -289,9 +352,10 @@ function main(argv) {
 
   const lines = [
     `[scan] 待上传目录：${displayPath(targetDir)}`,
-    `[scan] 文件总数=${tree.files.length} 文本已扫描=${textScanned} ` +
-      `二进制跳过内容扫描=${binarySkipped} 符号链接=${tree.symlinks.length}`,
-    `[scan] 命中明细（仅文件路径 + 命中类型 + 命中数量，不输出匹配值）：`,
+    `[scan] 文件总数=${tree.files.length} 内容已全量扫描=${contentScanned} ` +
+      `其中二进制文件=${binaryAlsoScanned} 跳过内容扫描=0 符号链接=${tree.symlinks.length}`,
+    '[scan] 扫描口径：全部文件以 latin1 逐字节映射后应用 5 条文本规则，无任何内容跳过分支',
+    '[scan] 命中明细（仅文件路径 + 命中类型 + 命中数量，不输出匹配值）：',
   ];
   for (const row of rows) lines.push(`[HIT] ${row.file} | ${row.type} | ${row.count}`);
   if (rows.length === 0) lines.push('[HIT] （无） | — | 0');

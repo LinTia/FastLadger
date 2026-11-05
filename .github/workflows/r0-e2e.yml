@@ -125,6 +125,7 @@ jobs:
       # 关键：上传只在扫描 step 的 outcome 为 success 时发生。
       # 原先的 if: always() 会让"扫描失败即退出"的防护完全失效，故必须改为依赖 outcome。
       - name: 上传证据（日志/截图/报告/校验和）
+        id: artifact_upload
         if: ${{ always() && steps.artifact_scan.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
@@ -133,3 +134,22 @@ jobs:
             artifacts/r0-e2e-upload/**
           retention-days: 30
           if-no-files-found: error
+
+      # P1 Round 2：把证据上传链路结论写入 CI summary。
+      # 既有「汇总退出码」step 一字未改；本 step 为独立新增且置于上传 step 之后，
+      # 因此能读到三个新 step 的 outcome，避免绿色 CI 被误读为证据已安全上传。
+      - name: 汇总证据上传安全结论
+        id: artifact_upload_summary
+        if: ${{ always() }}
+        run: |
+          {
+            echo "## R0 E2E 证据上传安全结论"
+            echo ""
+            echo "- 白名单准备 outcome: ${{ steps.artifact_prepare.outcome }}"
+            echo "- 上传前安全扫描 outcome: ${{ steps.artifact_scan.outcome }}"
+            echo "- 上传证据 outcome: ${{ steps.artifact_upload.outcome }}"
+            echo "- 扫描通过且允许上传: ${{ steps.artifact_scan.outcome == 'success' }}"
+            if [ "${{ steps.artifact_upload.outcome }}" != "success" ]; then
+              echo "- 上传被跳过或未成功：本轮无公开 artifact 产出，请勿把绿色 CI 解读为证据已安全上传"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
