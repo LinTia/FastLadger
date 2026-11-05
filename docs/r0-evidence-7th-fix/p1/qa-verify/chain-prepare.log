@@ -1,0 +1,39 @@
+[prepare] 源目录：artifacts/r0-qa-verify/2026-11-05_09-59-36-dadc9a3-a
+[prepare] 目标目录：<仓库外:chain-upload>（运行前已清空）
+[prepare] 白名单：.png .md .json .log .txt
+[prepare] 排除清单（共 12，仅文件名与原因，不含内容）：
+  - A01/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - A02/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - A03/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - A04/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - A05/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - A06/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - A07/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - A08/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - A09/admin-trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - A09/member-trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - A09/owner-trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  - A10/trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+[prepare] 收集清单（共 19，仅文件名，不含内容）：
+  - A01/after-login.png
+  - A01/pending.png
+  - A02/network-abort.png
+  - A03/http-503.png
+  - A04/retry-success.png
+  - A05/slow-network.png
+  - A06/home-with-data.png
+  - A07/empty-book.png
+  - A08/member-members-page.png
+  - A09/members-admin.png
+  - A09/members-member.png
+  - A09/members-owner.png
+  - A10/back-online.png
+  - A10/offline.png
+  - A11/push-results.json
+  - SHA256SUMS.txt
+  - fixtures.json
+  - report.json
+  - report.md
+[prepare] 符号链接跳过：0
+[prepare] 汇总：扫描=31 收集=19 排除=12 符号链接跳过=0
+[prepare] 结论：OK（输出目录已就绪，仍需经 scan-artifacts.js 扫描后方可上传）

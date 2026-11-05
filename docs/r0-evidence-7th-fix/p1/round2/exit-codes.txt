@@ -1,0 +1,4 @@
+negative-tests                     退出码=0
+e2e-verify                         退出码=0
+workflow-structure-check           退出码=0
+strict-scan                        退出码=0

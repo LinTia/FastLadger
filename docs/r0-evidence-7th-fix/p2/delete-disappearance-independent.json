@@ -1,0 +1,25 @@
+{
+  "id": "OBS-ACCT-DEL-390",
+  "registry": "清单外独立观察（outside-228-controls，不占 228 清单任何编号）",
+  "bookId": 1,
+  "name": "E2E 账户 1793884580485",
+  "viewport": {
+    "width": 390,
+    "height": 844
+  },
+  "assertion": "td:first-child textContent 真实断言：精确定位含该名称的行 → 点其删除按钮并确认 → 该名称是否从列表首列 textContent 中消失",
+  "targetRowFound": true,
+  "tdNamesBeforeDel": [
+    "现金",
+    "E2E 账户 1793884580485",
+    "储蓄卡",
+    "信用卡"
+  ],
+  "tdNamesAfterDel": [
+    "现金",
+    "储蓄卡",
+    "信用卡"
+  ],
+  "disappeared": true,
+  "note": "原 innerText 断言恒真已确认为假阳性（390px 下首列 display:none，名称从不在 innerText 中）；且列表按类别排序，旧实现用「删除按钮.last()」实际点到「信用卡」行而非新建账户行，是假阳性的第二个成因。本观察项使用 textContent 绕开 CSS 隐藏列并精确定位目标行，不写入 R、不占任何 228 编号、不改变 228 分布。"
+}

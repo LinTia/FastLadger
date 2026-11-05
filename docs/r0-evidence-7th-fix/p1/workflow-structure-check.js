@@ -110,6 +110,22 @@ check(
   `字节数 HEAD=${headSegment.length} 当前=${nowSegment.length}`,
 );
 
+// Round 2：上传安全结论的 CI 可观测性。既有「汇总退出码」step 一字未改，新增独立 step。
+const iUploadId = lineNo('id: artifact_upload');
+const iUploadSummary = lineNo('name: 汇总证据上传安全结论');
+check('上传 step 具备 id: artifact_upload', iUploadId > 0 && iUploadId < iUpload);
+check('上传安全结论 step 位于上传 step 之后', iUploadSummary > iUpload,
+  `行号 上传=${iUpload} 上传安全结论=${iUploadSummary}`);
+const summaryIfLine = iUploadSummary > 0 ? (lines[iUploadSummary + 1] || '').trim() : '';
+check('上传安全结论 step 带 always() 条件', summaryIfLine === 'if: ${{ always() }}', summaryIfLine);
+check(
+  '上传安全结论 step 记录 prepare / scan / upload 三个 outcome',
+  wf.includes('${{ steps.artifact_prepare.outcome }}') &&
+  wf.includes('${{ steps.artifact_scan.outcome }}') &&
+  wf.includes('${{ steps.artifact_upload.outcome }}'),
+);
+check('上传被跳过时有显式提示', wf.includes('上传被跳过或未成功'));
+
 check('ci.yml 无 upload-artifact 步骤', !ci.includes('upload-artifact'));
 check(
   '.github/workflows 下仅 ci.yml 与 r0-e2e.yml 两个文件',

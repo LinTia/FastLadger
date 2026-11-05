@@ -1,0 +1,21 @@
+total_count=1
+job: A(11 场景) + D(缺陷回归) + C(228 控件) + B(分类审计) | status=completed | conclusion=success
+  step 01: Set up job | status=completed | conclusion=success
+  step 02: Run actions/checkout@v4 | status=completed | conclusion=success
+  step 03: Run actions/setup-go@v5 | status=completed | conclusion=success
+  step 04: 构建服务二进制（CGO 真库） | status=completed | conclusion=success
+  step 05: Run actions/setup-node@v4 | status=completed | conclusion=success
+  step 06: 安装 Playwright（含 chromium） | status=completed | conclusion=success
+  step 07: 分类解析合成测试（B 的补充整改） | status=completed | conclusion=success
+  step 08: 分类映射回归审计（B · 22 笔） | status=completed | conclusion=success
+  step 09: 包 A · 11 项状态/权限/同步场景 | status=completed | conclusion=success
+  step 10: 包 D · 四项业务缺陷回归（门禁） | status=completed | conclusion=success
+  step 11: 包 C · 228 条逐控件运行时验收（报告型） | status=completed | conclusion=success
+  step 12: 汇总退出码 | status=completed | conclusion=success
+  step 13: 准备上传证据（白名单） | status=completed | conclusion=success
+  step 14: 上传前安全扫描（失败即阻断） | status=completed | conclusion=success
+  step 15: 上传证据（日志/截图/报告/校验和） | status=completed | conclusion=success
+  step 28: Post Run actions/setup-node@v4 | status=completed | conclusion=success
+  step 29: Post Run actions/setup-go@v5 | status=completed | conclusion=success
+  step 30: Post Run actions/checkout@v4 | status=completed | conclusion=success
+  step 31: Complete job | status=completed | conclusion=success

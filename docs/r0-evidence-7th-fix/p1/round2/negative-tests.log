@@ -1,0 +1,131 @@
+TAP version 13
+# [负向测试] case-01 干净文件集 | 期望退出码=0 | 实际退出码=0
+# [负向测试] case-02 合成 JWT 三段式 | 期望退出码=2 | 实际退出码=2
+# [负向测试] case-03 trace.zip 黑名单文件名 | 期望退出码=2 | 实际退出码=2
+# [负向测试] case-04 Bearer / 鉴权头 | 期望退出码=2 | 实际退出码=2
+# [负向测试] case-05 Cookie / Set-Cookie | 期望退出码=2 | 实际退出码=2
+# [负向测试] case-06 server.log | 期望退出码=2 | 实际退出码=2
+# [负向测试] case-07 密钥赋值 | 期望退出码=2 | 实际退出码=2
+# [负向测试] case-08 目录不存在 | 期望退出码=1 | 实际退出码=1
+# [负向测试] case-09 文本伪装 .png | 期望退出码=2 | 实际退出码=2
+# [负向测试] case-10 二进制文件名黑名单 | 期望退出码=2 | 实际退出码=2
+# [负向测试] case-11 NUL 前缀白名单文本 | 期望退出码=2 | 实际退出码=2
+# [负向测试] case-12 合法业务字段 | 期望退出码=0 | 实际退出码=0
+# [负向测试] case-13 真实 PNG 魔数 | 期望退出码=0 | 实际退出码=0
+# [负向测试] case-14 鉴权头 Bearer + JWT | 期望退出码=2 | 实际退出码=2
+# [负向测试] case-15 Cookie 长值 | 期望退出码=2 | 实际退出码=2
+# [负向测试] case-16 符号链接 | 期望退出码=2 | 实际退出码=2
+# [负向测试] case-17 真实 PNG 魔数 + 内嵌 JWT | 期望退出码=2 | 实际退出码=2
+# Subtest: case-01 干净文件集 → 退出码 0
+ok 1 - case-01 干净文件集 → 退出码 0
+  ---
+  duration_ms: 101.6677
+  type: 'test'
+  ...
+# Subtest: case-02 合成 JWT 三段式 → 退出码 2
+ok 2 - case-02 合成 JWT 三段式 → 退出码 2
+  ---
+  duration_ms: 87.758
+  type: 'test'
+  ...
+# Subtest: case-03 名为 trace.zip 的归档 → 退出码 2
+ok 3 - case-03 名为 trace.zip 的归档 → 退出码 2
+  ---
+  duration_ms: 86.3978
+  type: 'test'
+  ...
+# Subtest: case-04 Bearer 与鉴权头赋值 → 退出码 2
+ok 4 - case-04 Bearer 与鉴权头赋值 → 退出码 2
+  ---
+  duration_ms: 93.4628
+  type: 'test'
+  ...
+# Subtest: case-05 Cookie 与 Set-Cookie 赋值 → 退出码 2
+ok 5 - case-05 Cookie 与 Set-Cookie 赋值 → 退出码 2
+  ---
+  duration_ms: 92.7829
+  type: 'test'
+  ...
+# Subtest: case-06 server.log 服务原始日志 → 退出码 2
+ok 6 - case-06 server.log 服务原始日志 → 退出码 2
+  ---
+  duration_ms: 85.3006
+  type: 'test'
+  ...
+# Subtest: case-07 JWT 签名密钥赋值 → 退出码 2
+ok 7 - case-07 JWT 签名密钥赋值 → 退出码 2
+  ---
+  duration_ms: 86.2195
+  type: 'test'
+  ...
+# Subtest: case-08 目录不存在（参数/环境错误）→ 退出码 1
+ok 8 - case-08 目录不存在（参数/环境错误）→ 退出码 1
+  ---
+  duration_ms: 77.0128
+  type: 'test'
+  ...
+# Subtest: case-09 纯文本凭据伪装成 .png → 退出码 2（Round 2 修订）
+ok 9 - case-09 纯文本凭据伪装成 .png → 退出码 2（Round 2 修订）
+  ---
+  duration_ms: 90.7701
+  type: 'test'
+  ...
+# Subtest: case-10 二进制文件名含敏感词仍被阻断 → 退出码 2
+ok 10 - case-10 二进制文件名含敏感词仍被阻断 → 退出码 2
+  ---
+  duration_ms: 86.4782
+  type: 'test'
+  ...
+# Subtest: case-11 NUL 前缀白名单 .log 内藏合成 JWT → 退出码 2（N1 回归）
+ok 11 - case-11 NUL 前缀白名单 .log 内藏合成 JWT → 退出码 2（N1 回归）
+  ---
+  duration_ms: 82.7383
+  type: 'test'
+  ...
+# Subtest: case-12 合法业务字段（鉴权与 Cookie 普通值）→ 退出码 0（N5 假阳性回归）
+ok 12 - case-12 合法业务字段（鉴权与 Cookie 普通值）→ 退出码 0（N5 假阳性回归）
+  ---
+  duration_ms: 82.8268
+  type: 'test'
+  ...
+# Subtest: case-13 真实 PNG 魔数 + 干净内容 → 退出码 0
+ok 13 - case-13 真实 PNG 魔数 + 干净内容 → 退出码 0
+  ---
+  duration_ms: 84.9973
+  type: 'test'
+  ...
+# Subtest: case-14 鉴权头携带 Bearer + 合成 JWT → 退出码 2（硬约束）
+ok 14 - case-14 鉴权头携带 Bearer + 合成 JWT → 退出码 2（硬约束）
+  ---
+  duration_ms: 93.9767
+  type: 'test'
+  ...
+# Subtest: case-15 Cookie 携带长随机会话值 → 退出码 2
+ok 15 - case-15 Cookie 携带长随机会话值 → 退出码 2
+  ---
+  duration_ms: 85.8958
+  type: 'test'
+  ...
+# Subtest: case-16 符号链接 → 退出码 2
+ok 16 - case-16 符号链接 → 退出码 2
+  ---
+  duration_ms: 88.7774
+  type: 'test'
+  ...
+# Subtest: case-17 真实 PNG 魔数 + 内容内嵌合成 JWT → 退出码 2（证明零跳过分支）
+ok 17 - case-17 真实 PNG 魔数 + 内容内嵌合成 JWT → 退出码 2（证明零跳过分支）
+  ---
+  duration_ms: 84.6061
+  type: 'test'
+  ...
+1..17
+# tests 17
+# suites 0
+# pass 17
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1590.4939
+
+[negative-tests] 退出码=0

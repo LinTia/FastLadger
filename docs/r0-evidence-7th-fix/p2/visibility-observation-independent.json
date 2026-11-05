@@ -1,0 +1,28 @@
+{
+  "id": "OBS-ACCT-VIS-390",
+  "registry": "清单外独立登记（outside-228-controls，不占 228 清单任何编号）",
+  "status": "FAIL",
+  "closed": false,
+  "bookId": 1,
+  "name": "E2E 账户 1793884580485",
+  "viewport": {
+    "width": 390,
+    "height": 844
+  },
+  "visibleInnerText": false,
+  "firstTdDisplay": "none",
+  "postStatus": 200,
+  "inDom": true,
+  "inApi": true,
+  "domNames": [
+    "现金",
+    "E2E 账户 1793884580485",
+    "储蓄卡",
+    "信用卡"
+  ],
+  "evidence": [
+    "C:\\Users\\47006\\WorkBuddy\\fastledger\\repo_tmp\\artifacts\\r0-p2-c\\2026-11-05_13-15-58-0c62f50-c\\C\\I-ACCT\\OBS-ACCT-VIS-390-visibility.png"
+  ],
+  "conclusion": "视觉可见性未闭环，仍 FAIL，待 Owner 裁决；本轮不改 style.css（L331 在 max-width:640px 下隐藏 td:first-child）。390px 视口下账户名称不在 #view.innerText 中（visibleInnerText=false），命中行首列 computed display=none。本观察项不写入 R，不计入 228 条清单计数，不占用 I-ACCT-06；I-ACCT-06 本轮已按清单定义改为「删除引用保护」真实 409 断言。第四项缺陷仍为 FAIL / 未闭环，本轮未授权改 CSS，不得以任何形式改成 PASS。",
+  "ownerDecision": "待 Owner 裁决"
+}

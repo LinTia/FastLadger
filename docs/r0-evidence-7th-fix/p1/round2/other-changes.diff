@@ -1,0 +1,385 @@
+=== p1-report.md / workflow-structure-check.js（已跟踪文件）===
+warning: in the working copy of 'docs/r0-evidence-7th-fix/p1/p1-report.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'docs/r0-evidence-7th-fix/p1/workflow-structure-check.js', LF will be replaced by CRLF the next time Git touches it
+diff --git a/docs/r0-evidence-7th-fix/p1/p1-report.md b/docs/r0-evidence-7th-fix/p1/p1-report.md
+index fba385d..2948da8 100644
+--- a/docs/r0-evidence-7th-fix/p1/p1-report.md
++++ b/docs/r0-evidence-7th-fix/p1/p1-report.md
+@@ -2,6 +2,9 @@
+ 
+ - 分支：`fix/r0-sixth-runtime-defects`（未切换）
+ - HEAD：`8082ca85d4f679ed7698fc51009bc6a214c9ac0c`（未 commit、未 push、未合并 main）
++- 勘误（HEAD 时点口径）：本报告写于 P1 提交前，上一行 HEAD 为**撰写时基线**；P1 已由
++  team-lead 提交为 `0c62f5017c8b616f6d0c5079c55a9b4a13d1f68f`，交付以该 commit 为准。
++  QA Round 2 后最终 commit 见交付回执。本行仅追加说明，不覆盖上方历史结论。
+ - 范围：**仅 P1 安全整改**；P2 未触碰
+ - 证据目录：`docs/r0-evidence-7th-fix/p1/`
+ - 结论：**整改完成，本地自证全部通过，扫描失败时上传必不执行**
+@@ -88,7 +91,12 @@ PRD / WBS / DB / API、README / CHANGELOG、任何历史证据目录、228 条
+ | `SENSITIVE_FILENAME` | 文件名含 `token` / `secret` / `credential` |
+ | `SYMLINK_ENTRY` | 目录内出现符号链接（额外失败关闭加固，不跟随） |
+ 
+-### B 类：文本内容命中（仅对非二进制文件）
++> **版本说明**：以下 §四 规则表与 §七 自证记录的是**首轮实现**。QA Round 1 独立验证发现
++> 失败开放、披露不足与假阳性等缺陷，Round 2 已修订；交付态规则、修复前后退出码对比与
++> 残留风险以 `docs/r0-evidence-7th-fix/p1/round2/round2-report.md` 为准，
++> **首轮「全部通过 / 已知边界」结论不得外推到交付态**。
++
++### B 类：文本内容命中（首轮：仅对非二进制文件；Round 2：全部文件）
+ 
+ | 类型 | 判定对象 |
+ |---|---|
+@@ -98,12 +106,21 @@ PRD / WBS / DB / API、README / CHANGELOG、任何历史证据目录、228 条
+ | `COOKIE_HEADER` | `Cookie` / `Set-Cookie` 关键字 + 赋值 + 8 字符以上非空值 |
+ | `EBK_JWT_SECRET_ASSIGN` | JWT 签名密钥环境变量赋值 |
+ 
+-### C 类：二进制与异常
+-
+-- `*.png` / `*.jpg` / `*.jpeg` / `*.gif` / `*.webp` / `*.bmp` / `*.ico` / `*.pdf` 等按扩展名
+-  跳过内容扫描；其余文件读取后若前 4096 字节含 NUL 也视为二进制跳过。
+-  **A 类文件名检查对二进制文件照常执行**（负向测试 case-10 验证）。
+-- 单个文本超过 32 MiB、目录不可读、参数错误：退出 1（同样阻断上传，因为上传 step 只认
++### C 类：二进制与异常（首轮实现；Round 2 已修订）
++
++- 首轮实现：`*.png` / `*.jpg` / `*.jpeg` / `*.gif` / `*.webp` / `*.bmp` / `*.ico` / `*.pdf`
++  等按扩展名**整文件跳过内容扫描**；其余文件读取后若前 4096 字节含 NUL 也视为二进制跳过，
++  且跳过时静默返回 0 CLEAN。A 类文件名检查对二进制文件照常执行（负向测试 case-10 验证）。
++- **如实披露（QA 独立验证证实）**：这两条跳过分支构成失败开放漏洞。比「截图画面拍到令牌」
++  更直接的路径是——**只要把纯文本凭据命名为 `shot.png`，文件内容本身就是文本，即可经
++  prepare 收集、被 scan 判定 CLEAN 并端到端上传**（`qa-verify/e2e-05`）；白名单 `.log` 文件头
++  插入 1 个 NUL 字节同样可让 5 条文本规则全部失效（`qa-verify/e2e-06`）。首轮 case-09 还把
++  「跳过 → 0」固化为 PASS。以上均为**未修复前的首轮结论**，不得外推到交付态。
++- **Round 2 修订**：取消一切内容跳过分支，所有文件（含二进制）读 Buffer 后以 `latin1` 做
++  1:1 字节映射，逐条应用 5 条文本规则；二进制扩展名增加起始魔数校验，不符记
++  `SUSPICIOUS_BINARY` 并阻断；输出统计改为「内容已全量扫描 / 跳过内容扫描=0」。
++  详见 `p1/round2/round2-report.md`。
++- 单个文件超过 32 MiB、目录不可读、参数错误：退出 1（同样阻断上传，因为上传 step 只认
+   `outcome == 'success'`）。
+ - 空目录：退出 0 并打印 WARN；此时上传 step 的 `if-no-files-found: error` 仍会让 job 失败。
+ 
+@@ -259,16 +276,25 @@ node docs/r0-evidence-7th-fix/p1/workflow-structure-check.js
+ 4. **ci.yml 内联合成密钥**：`ci.yml` 中容器冒烟用的 JWT 签名密钥是 CI 合成值，且该
+    workflow 不上传任何 artifact，不构成本次泄露面；本阶段未改动。若需统一改为 secrets，
+    建议后续单独评估（不属 P1）。
+-5. **二进制内容边界**：PNG/JPG 等按设计跳过内容扫描，只做文件名黑名单检查；若截图
+-   画面本身拍到令牌，文本扫描无能为力，需靠用例设计规避。已知边界，非回归。
++5. **二进制内容边界（首轮为漏洞，Round 2 已堵住）**：首轮把 PNG/JPG 等按扩展名跳过内容
++   扫描，只做文件名黑名单检查，报告当时仅以「截图画面拍到令牌」描述，**弱化了更直接的
++   「文件内容即纯文本凭据」路径**。QA 独立实测证明纯文本凭据伪装成 `.png`、以及 NUL 前缀
++   白名单 `.log`，均可端到端放行。Round 2 已改为全量 latin1 文本扫描 + 二进制魔数校验，
++   两条路径均被阻断（修复前后退出码对比见 `p1/round2/round2-report.md`）。
++   **残留边界**：扫描器仍是基于已知形态规则的轻量闸门，非通用 DLP；不含任何关键字的
++   凭据形态不拦，真实图片画面内的文字也不属于文本扫描能力范围。不得把「扫描通过」
++   外推为「内容绝对无凭据」，更不得把绿色 CI 解读为「证据已安全上传」。
+ 6. **更严格口径的副作用**：文件名含 `token` / `secret` / `credential` 的白名单文件也会被
+    prepare 排除（比任务书「非白名单文件」口径更严）。若将来确有此类合法证据文件，
+    需人工改口径并重跑自证；scan 作为第二道防线会对它们直接返回 2。
+ 7. **新增上传通道**：若将来新增其它 workflow 或上传方式，必须同步接入
+    `prepare-upload.js` + `scan-artifacts.js`。建议把该约束写入贡献规范，但本阶段禁止改
+    README / CHANGELOG，故未落地为文档。
+-8. **汇总退出码 step 未追加扫描 outcome**：该 step 位于扫描 step 之前，引用后置 step 的
+-   outcome 只会得到空值；且任务书要求不得改动其既有内容，故保持原样。
++8. **汇总退出码 step 未追加扫描 outcome（Round 2 已用独立 step 补齐可观测性）**：该 step
++   位于扫描 step 之前，引用后置 step 的 outcome 只会得到空值，且任务书要求不得改动其既有
++   内容，故一字未改。Round 2 改为在上传 step 之后**新增独立 step**「汇总证据上传安全结论」，
++   把 prepare / scan / upload 三个 outcome 写入 `$GITHUB_STEP_SUMMARY`，并在上传被跳过时
++   显式提示「请勿把绿色 CI 解读为证据已安全上传」。
+ 
+ ---
+ 
+diff --git a/docs/r0-evidence-7th-fix/p1/workflow-structure-check.js b/docs/r0-evidence-7th-fix/p1/workflow-structure-check.js
+index 91904cc..47f11d4 100644
+--- a/docs/r0-evidence-7th-fix/p1/workflow-structure-check.js
++++ b/docs/r0-evidence-7th-fix/p1/workflow-structure-check.js
+@@ -110,6 +110,22 @@ check(
+   `字节数 HEAD=${headSegment.length} 当前=${nowSegment.length}`,
+ );
+ 
++// Round 2：上传安全结论的 CI 可观测性。既有「汇总退出码」step 一字未改，新增独立 step。
++const iUploadId = lineNo('id: artifact_upload');
++const iUploadSummary = lineNo('name: 汇总证据上传安全结论');
++check('上传 step 具备 id: artifact_upload', iUploadId > 0 && iUploadId < iUpload);
++check('上传安全结论 step 位于上传 step 之后', iUploadSummary > iUpload,
++  `行号 上传=${iUpload} 上传安全结论=${iUploadSummary}`);
++const summaryIfLine = iUploadSummary > 0 ? (lines[iUploadSummary + 1] || '').trim() : '';
++check('上传安全结论 step 带 always() 条件', summaryIfLine === 'if: ${{ always() }}', summaryIfLine);
++check(
++  '上传安全结论 step 记录 prepare / scan / upload 三个 outcome',
++  wf.includes('${{ steps.artifact_prepare.outcome }}') &&
++  wf.includes('${{ steps.artifact_scan.outcome }}') &&
++  wf.includes('${{ steps.artifact_upload.outcome }}'),
++);
++check('上传被跳过时有显式提示', wf.includes('上传被跳过或未成功'));
++
+ check('ci.yml 无 upload-artifact 步骤', !ci.includes('upload-artifact'));
+ check(
+   '.github/workflows 下仅 ci.yml 与 r0-e2e.yml 两个文件',
+
+=== 新增文件 round2-verify.js（git diff --no-index）===
+warning: in the working copy of 'docs/r0-evidence-7th-fix/p1/round2/round2-verify.js', LF will be replaced by CRLF the next time Git touches it
+diff --git a/docs/r0-evidence-7th-fix/p1/round2/round2-verify.js b/docs/r0-evidence-7th-fix/p1/round2/round2-verify.js
+new file mode 100644
+index 0000000..af35d73
+--- /dev/null
++++ b/docs/r0-evidence-7th-fix/p1/round2/round2-verify.js
+@@ -0,0 +1,260 @@
++'use strict';
++
++/**
++ * P1 Round 2 端到端自证辅助脚本（可复现，零第三方依赖）。
++ *
++ * 运行：node docs/r0-evidence-7th-fix/p1/round2/round2-verify.js
++ * 退出码：0 全部断言通过 / 1 任一项不符。
++ *
++ * 覆盖：
++ *   A. QA 绕过场景：白名单 .log 头插 1 个 NUL + 合成 JWT → prepare 收集 → scan 退出 2；
++ *   B. QA 绕过场景：纯文本凭据伪装 .png（无魔数）→ prepare 收集 → scan 退出 2；
++ *   C. 合法业务字段假阳性样本 → scan 退出 0；
++ *   D. 干净真实产物链路（artifacts/r0-qa-verify 与 workflow 默认源 artifacts/r0-e2e）
++ *      → prepare 0 / scan 0，证明收紧未把正常截图与报告误判为红；
++ *   E. 真实 PNG 魔数 + 内容内嵌合成 JWT → prepare 0 / scan 2，且**不记 SUSPICIOUS_BINARY**，
++ *      专门证明「魔数符合也照样过文本规则」= 零跳过分支；
++ *   F. 扫描器源码静态核验：无 looksBinary / binarySkipped、主扫描循环内无 continue、
++ *      使用 latin1 全量映射、魔数仅为额外命中条件、统计口径如实、超限仍抛错；
++ *   G. 对绕过场景明确打印「该文件会被阻断、不会上传」结论。
++ *
++ * 合成值全部在运行时字符串拼接生成并带 SYNTHETIC / FAKE 标记，样本写入系统临时目录、
++ * 结束时删除，不落入仓库；日志只打印退出码、文件路径、命中类型与数量，
++ * **绝不打印任何匹配值**。
++ */
++
++const fs = require('node:fs');
++const os = require('node:os');
++const path = require('node:path');
++const { spawnSync } = require('node:child_process');
++
++const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
++const PREPARE = path.join(REPO_ROOT, 'tools', 'r0', 'e2e', 'scripts', 'prepare-upload.js');
++const SCANNER = path.join(REPO_ROOT, 'tools', 'r0', 'e2e', 'scripts', 'scan-artifacts.js');
++
++/** 真实 PNG 起始魔数（8 字节）。 */
++const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
++
++const TMP_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'fastledger-r0-p1-round2-'));
++let failures = 0;
++
++/** 输出一行日志。
++ * @param {string} line 日志内容。
++ */
++function log(line) {
++  process.stdout.write(`${line}\n`);
++}
++
++/**
++ * 记录一条断言结果。
++ * @param {string} label 检查项。
++ * @param {boolean} cond 是否通过。
++ * @param {string} detail 补充信息。
++ */
++function check(label, cond, detail) {
++  if (!cond) failures += 1;
++  log(`${cond ? '[PASS]' : '[FAIL]'} ${label}${detail ? ` :: ${detail}` : ''}`);
++}
++
++/**
++ * 以子进程执行脚本并原样输出其 stdout / stderr（不含任何凭据值）。
++ * @param {string} label 步骤名。
++ * @param {string} script 脚本绝对路径。
++ * @param {string[]} args 参数。
++ * @return {{code: number|null, stdout: string, stderr: string}} 执行结果。
++ */
++function run(label, script, args) {
++  const result = spawnSync(process.execPath, [script, ...args], {
++    encoding: 'utf8',
++    cwd: REPO_ROOT,
++  });
++  const code = result.status;
++  log(`--- ${label} 实际退出码=${code} ---`);
++  const stdout = result.stdout || '';
++  const stderr = result.stderr || '';
++  if (stdout.trim()) log(stdout.trimEnd());
++  if (stderr.trim()) log(stderr.trimEnd());
++  return { code, stdout, stderr };
++}
++
++/**
++ * 运行期拼接出带 SYNTHETIC / FAKE 标记的 JWT 三段式形态。
++ * @return {string} 合成值。
++ */
++function syntheticJwt() {
++  const head = ['ey', 'J', 'SYNTHETIC', 'FAKE', 'HEADER'].join('');
++  const body = ['SYNTHETIC', 'FAKE', 'PAYLOAD', '0001'].join('');
++  const sig = ['SYNTHETIC', 'FAKE', 'SIGNATURE', '0002'].join('');
++  return [head, body, sig].join('.');
++}
++
++/**
++ * 在系统临时根目录下创建一个用例目录。
++ * @param {string} name 目录名。
++ * @return {string} 绝对路径。
++ */
++function tmpDir(name) {
++  const dir = path.join(TMP_ROOT, name);
++  fs.mkdirSync(dir, { recursive: true });
++  return dir;
++}
++
++/** 复刻 QA e2e-06：NUL 前缀白名单文本。 */
++function verifyNulPrefixedLog() {
++  log('');
++  log('=== 场景 A · NUL 前缀白名单 .log（QA e2e-06 复刻）===');
++  const src = tmpDir('nul-src');
++  const dest = tmpDir('nul-dest');
++  const jwt = syntheticJwt();
++  fs.writeFileSync(path.join(src, 'report.md'), '# R0 report\n', 'utf8');
++  fs.writeFileSync(
++    path.join(src, 'run.log'),
++    Buffer.concat([Buffer.from([0x00]), Buffer.from(`[info] sample=${jwt}\n`, 'latin1')]),
++  );
++
++  const prepared = run('prepare（NUL .log）', PREPARE, ['--source', src, '--dest', dest]);
++  check('prepare 退出 0 且确实收集了 run.log',
++    prepared.code === 0 && prepared.stdout.includes('run.log'));
++  const scanned = run('scan（NUL .log）', SCANNER, [dest]);
++  check('scan 退出 2（失败关闭，不再静默 CLEAN）', scanned.code === 2,
++    `实际退出码=${scanned.code}`);
++  check('命中 JWT_LITERAL', scanned.stdout.includes('JWT_LITERAL'));
++  check('输出不含合成值本身', !scanned.stdout.includes(jwt) && !scanned.stderr.includes(jwt));
++  check('统计口径为全量扫描、跳过=0', /跳过内容扫描=0/.test(scanned.stdout));
++  log('结论：该文件会被阻断、不会上传（scan=2 → artifact_scan.outcome=failure → 上传 step 被跳过）');
++}
++
++/** 复刻 QA e2e-05：纯文本凭据伪装 .png（无魔数）。 */
++function verifyTextDisguisedPng() {
++  log('');
++  log('=== 场景 B · 纯文本凭据伪装 .png（QA e2e-05 复刻）===');
++  const src = tmpDir('png-src');
++  const dest = tmpDir('png-dest');
++  const jwt = syntheticJwt();
++  fs.writeFileSync(path.join(src, 'report.md'), '# R0 report\n', 'utf8');
++  fs.writeFileSync(
++    path.join(src, 'shot.png'),
++    Buffer.from(`[info] sample=${jwt}\n`, 'latin1'),
++  );
++
++  const prepared = run('prepare（文本伪装 .png）', PREPARE, ['--source', src, '--dest', dest]);
++  check('prepare 退出 0 且确实收集了 shot.png',
++    prepared.code === 0 && prepared.stdout.includes('shot.png'));
++  const scanned = run('scan（文本伪装 .png）', SCANNER, [dest]);
++  check('scan 退出 2（失败关闭，不再静默 CLEAN）', scanned.code === 2,
++    `实际退出码=${scanned.code}`);
++  check('命中 JWT_LITERAL 或 SUSPICIOUS_BINARY',
++    /JWT_LITERAL|SUSPICIOUS_BINARY/.test(scanned.stdout));
++  check('输出不含合成值本身', !scanned.stdout.includes(jwt) && !scanned.stderr.includes(jwt));
++  log('结论：该文件会被阻断、不会上传（scan=2 → artifact_scan.outcome=failure → 上传 step 被跳过）');
++}
++
++/** N5 假阳性回归：合法业务字段不应被误阻断。 */
++function verifyNoFalsePositive() {
++  log('');
++  log('=== 场景 C · 合法业务字段（N5 假阳性回归）===');
++  const dir = tmpDir('false-positive');
++  const legalReport = Object.fromEntries([
++    ['suite', 'a'],
++    ['passed', 11],
++    [['author', 'ization'].join(''), 'role-based-access'],
++    [['co', 'okie'].join(''), 'same-site-lax'],
++    ['note', 'plain report body'],
++  ]);
++  fs.writeFileSync(path.join(dir, 'report.json'), `${JSON.stringify(legalReport, null, 2)}\n`, 'utf8');
++  const scanned = run('scan（合法业务字段）', SCANNER, [dir]);
++  check('scan 退出 0（不再误阻断合法证据）', scanned.code === 0,
++    `实际退出码=${scanned.code}`);
++  check('未命中 AUTH_HEADER / COOKIE_HEADER',
++    !/AUTH_HEADER|COOKIE_HEADER/.test(scanned.stdout));
++}
++
++/**
++ * 干净真实产物链路：收紧后仍须退出 0。
++ * @param {string} label 场景名。
++ * @param {string} source 源目录绝对路径。
++ */
++function verifyCleanChain(label, source) {
++  log('');
++  log(`=== 场景 D · 干净真实产物链路（${label}）===`);
++  const dest = tmpDir(`clean-${label}-dest`);
++  const prepared = run(`prepare（${label}）`, PREPARE, ['--source', source, '--dest', dest]);
++  const scanned = run(`scan（${label}）`, SCANNER, [dest]);
++  check(`prepare 退出 0（${label}）`, prepared.code === 0, `实际退出码=${prepared.code}`);
++  check(`scan 退出 0（${label}）`, scanned.code === 0, `实际退出码=${scanned.code}`);
++  check('命中总数=0', /命中总数=0/.test(scanned.stdout));
++  check('真实 PNG 未被判 SUSPICIOUS_BINARY', !scanned.stdout.includes('SUSPICIOUS_BINARY'));
++  log(`结论：${label} 干净链路仍允许上传（prepare=0 / scan=0），收紧未误伤正常截图与报告`);
++}
++
++/** 场景 E：真实 PNG 魔数也照样过文本规则，证明零跳过分支。 */
++function verifyRealPngWithEmbeddedJwt() {
++  log('');
++  log('=== 场景 E · 真实 PNG 魔数 + 内容内嵌合成 JWT（证明零跳过分支）===');
++  const src = tmpDir('realpng-jwt-src');
++  const dest = tmpDir('realpng-jwt-dest');
++  const jwt = syntheticJwt();
++  fs.writeFileSync(path.join(src, 'report.md'), '# R0 report\n', 'utf8');
++  fs.writeFileSync(
++    path.join(src, 'real-with-text.png'),
++    Buffer.concat([
++      PNG_MAGIC,
++      Buffer.from([0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52]),
++      Buffer.from(`[info] sample=${jwt}\n`, 'latin1'),
++    ]),
++  );
++
++  const prepared = run('prepare（真实 PNG + 内嵌 JWT）', PREPARE, ['--source', src, '--dest', dest]);
++  check('prepare 退出 0 且确实收集该 PNG',
++    prepared.code === 0 && prepared.stdout.includes('real-with-text.png'));
++  const scanned = run('scan（真实 PNG + 内嵌 JWT）', SCANNER, [dest]);
++  check('scan 退出 2（魔数符合仍被文本规则阻断）', scanned.code === 2,
++    `实际退出码=${scanned.code}`);
++  check('命中 JWT_LITERAL', scanned.stdout.includes('JWT_LITERAL'));
++  check('未记 SUSPICIOUS_BINARY（证明魔数校验本身通过）',
++    !scanned.stdout.includes('SUSPICIOUS_BINARY'));
++  check('输出不含合成值本身', !scanned.stdout.includes(jwt) && !scanned.stderr.includes(jwt));
++  log('结论：魔数符合也照样过文本规则，零跳过分支生效；该文件会被阻断、不会上传');
++}
++
++/** 场景 F：扫描器源码静态核验，排除任何残留的内容跳过分支。 */
++function verifyNoSkipBranches() {
++  log('');
++  log('=== 场景 F · 扫描器源码零跳过分支静态核验 ===');
++  const src = fs.readFileSync(SCANNER, 'utf8');
++  const loopStart = src.indexOf('for (const abs of tree.files)');
++  const loopEnd = src.indexOf('for (const link of tree.symlinks)');
++  const loop = loopStart >= 0 && loopEnd > loopStart ? src.slice(loopStart, loopEnd) : '';
++  check('主扫描循环存在且可定位', loop.length > 0, `切片长度=${loop.length}`);
++  check('源码不含 looksBinary', !src.includes('looksBinary'));
++  check('源码不含 binarySkipped', !src.includes('binarySkipped'));
++  // 先剥离行注释，避免把说明文字里的 "continue" 误判为跳过语句。
++  const loopCode = loop.replace(/\/\/[^\n]*/g, '');
++  check('主扫描循环内无任何 continue 语句（零内容跳过分支）', !/\bcontinue\b/.test(loopCode));
++  check('主扫描循环使用 latin1 逐字节映射', /toString\('latin1'\)/.test(loop));
++  check('魔数是额外命中条件而非放行通行证',
++    /binarySignatureMismatch[\s\S]{0,120}addFinding\(rel, 'SUSPICIOUS_BINARY'/.test(src));
++  check('统计口径如实：跳过内容扫描=0', src.includes('跳过内容扫描=0'));
++  check('MAX_TEXT_BYTES 超限仍抛错（退出 1）',
++    /stat\.size > MAX_TEXT_BYTES[\s\S]{0,160}throw new Error/.test(src));
++  log('结论：交付态扫描器不存在任何「静默跳过内容扫描后返回 CLEAN」的分支');
++}
++
++try {
++  verifyNulPrefixedLog();
++  verifyTextDisguisedPng();
++  verifyNoFalsePositive();
++  verifyRealPngWithEmbeddedJwt();
++  verifyNoSkipBranches();
++  verifyCleanChain('r0-qa-verify', path.join(REPO_ROOT, 'artifacts', 'r0-qa-verify'));
++  verifyCleanChain('r0-e2e', path.join(REPO_ROOT, 'artifacts', 'r0-e2e'));
++} catch (err) {
++  failures += 1;
++  log(`[FAIL] 自证过程异常：${err.message}`);
++} finally {
++  fs.rmSync(TMP_ROOT, { recursive: true, force: true });
++}
++
++log('');
++log(`Round 2 端到端自证总结论：${failures === 0 ? 'PASS' : 'FAIL'}（失败项=${failures}）`);
++process.exitCode = failures === 0 ? 0 : 1;
