@@ -50,7 +50,7 @@
 
 | 核对项 | QA 核验结果 | 判定 |
 |---|---|---|
-| 取的是修复前版本 | `scripts/negative-check.js` L26：`execFileSync('git', ['show','HEAD:server/web/dist/app.js'])`。QA 已独立确认 `HEAD === main === dadc9a3b9…`，且修复全在工作树未提交，因此 `HEAD:app.js` 确为修复前版本 | **是** ✓ |
+| 取的是修复前版本 | `scripts/negative-check.js` L26：`execFileSync('git', ['show','HEAD:server/web/dist/app.js'])`。QA 已独立确认**负向验证执行时点（09:42Z）** `HEAD === main === dadc9a3b9…`、修复全在工作树未提交，因此当时的 `HEAD:app.js` 确为修复前版本 | **是** ✓（该时点） |
 | 有防拿错版本的前置校验 | L29-34：要求旧脚本**含** `fillSelect($("#fCategory"), state.categories);` 且**不含** `view.append(card); // 与 renderHome`，否则抛错 | **有** ✓ |
 | 网络层替换、不动磁盘 | L41-45：`page.route(/\/app\.js$/, route => route.fulfill({status:200, contentType:'application/javascript', body: oldJs}))`；脚本内无任何写 `server/web/dist/app.js` 的代码；Go 后端/API/DB 未动 | **是** ✓ |
 | 确实跑过（非纸面推演） | `after/negative-check.json`：`startedAt=2026-11-05T09:42:41.727Z`、`finishedAt=…09:42:54.594Z`（约 13 秒）、`gitSha=dadc9a3b9…`、`injectedAppJsSha256=32d853df…`、`checks` 4 组、`fatal=(none)`；`after/negative-check.log` 有 `[negative-check] output -> …` 且末尾 `=== EXIT_CODE=0 ===` | **确实执行且无致命异常** ✓ |
@@ -97,3 +97,4 @@
 3. **但它有三处如实标注的局限**：未做用例级 FAIL 实测（仅推断）；md 总结句对 NEG-4 的表述与自身观测矛盾（D-ACCT-01..04 在修复前也会 PASS）；浏览器通道未记入证据。
 4. **QA 新增发现 4 项证据质量/边界问题**（Q-1 截图时点错配、Q-2 A08 陈旧文案、Q-3 trace 含 JWT 故不复制、Q-4 job 名滞后），均**不改变** A/D/C 的任何判定。收尾状态：**Q-1 未解决**（按 team-lead 指示登记、不改框架）、**Q-2 / Q-4 已修复**（仅纯文案）、**Q-3 保持脱敏口径**（不复制 trace），详见 `qa/qa-report.md` 6.5。
 5. **初次独立复核阶段**：QA 未修改任何测试代码、业务代码、CSS 或 workflow，`tools/r0/e2e/` 与 `server/web/dist/app.js` 保持工程师交付原样，以确保独立重跑基线可复现。**后续按 team-lead 明确授权的低风险收尾**：仅两处纯文案修改 + 新增一个证据采集脚本；业务代码、CSS、Go、断言逻辑、status 计算、`step()` 框架始终未动；未重跑全套（按要求），`a-qa.log` 等日志产生于文案修改前，已在 `qa-report.md` 6.5 如实标注时间差。
+6. **提交后可复现性提示（新发现，不影响本轮证据）**：收尾期间 team-lead 创建 commit `0472484`（见 `qa/qa-report.md` 6.6），此后 `HEAD:server/web/dist/app.js` 已是**修复后**版本。若现在重跑 `scripts/negative-check.js`，其 L29-34 的前置校验（要求旧脚本含未过滤的 `fillSelect`、不含 `view.append(card)`）会**正确抛错拦截**，无法得到负向观测。要复现负向验证，须把 `git show HEAD:server/web/dist/app.js` 改为 `git show dadc9a3:server/web/dist/app.js`（基准 main 提交）。这属于脚本对「已提交仓库」的适配问题，**不影响 09:42Z 已采集的负向证据有效性**，也非本轮授权范围，QA 未改动该脚本。
