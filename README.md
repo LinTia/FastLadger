@@ -7,7 +7,7 @@
 ## 当前状态（2026-10-31 历史快照，部分已过时）
 
 > 下表是 2026-10-31 的历史快照。schema 版本、测试基线、阶段进度以 `docs/` 最新交付文档、`CHANGELOG.md` 与服务器实测为准；**R0（基准冻结与差异盘点）当前未通过 / 阻塞**，见 [R0 报告](docs/FastLedger-R0-基准冻结与差异盘点.md)。本表不作为 R0 验收依据。
-> **截至 [1.82] 的 R0 收尾状态（第八次安全扫描器独立复核）**：WorkBuddy 已提交 K1–K3 扫描器整改（UTF-16LE/BE、NUL 复扫、短凭据、敏感键名、标准 Base64）；30 项扫描器测试 CI step 已 success，普通 CI run `42079445701` success。但独立复核新增 **RV-07–RV-12**：明文 PEM 私钥可经 TXT 白名单漏检、fail-closed 集成验证未成为上传门禁、宽松 UTF-8 解码阈值可能允许关键词被非法字节打断、Base64URL 未覆盖，且两项测试未经过真实上传白名单链路。R0 E2E run `42079445817` 在审查时仍 in_progress（A/D 门禁 success，C 与 Artifact 安全扫描/上传未完成），因此 K1–K3 只能判 **PARTIAL**，不能宣称安全闭环。A/B/C/D 状态沿用第七次复核基线（A/B/C/D = PARTIAL；当前 run 结果待回填），RV-05 仍 **Owner ACTION REQUIRED**。**R0 继续 BLOCK，不授权 R1–R7。** 详见 [第八次安全扫描器独立复核](docs/FastLedger-R0-第八次安全扫描器独立复核.md)。
+> **截至 [1.82] 的 R0 收尾状态（第八次安全扫描器独立复核）**：WorkBuddy 已提交 K1–K3 扫描器整改；CI 30 项测试门禁 success，普通 CI run `42079445701` success，R0 E2E run `42079445817` 最终 success（A 11/11、D 39/39）。但 A05 仍只按耗时判 PASS，A 保持 PARTIAL；C 为 **164/4/59/1**，仍 PARTIAL。独立复核新增 **RV-07–RV-13**：明文 PEM 私钥可经 TXT 白名单漏检、fail-closed 集成验证未成为上传门禁、宽松 UTF-8 解码阈值与 Base64URL 覆盖不足、两项负向测试未走真实白名单链路，以及白名单过滤后 SHA256SUMS 仍引用 12 个已排除 trace 文件。Artifact `13441565324` 已下载，101 个条目，无原始 trace/HAR/network/数据库文件；CI scanner CLEAN，独立常见凭据模式检查未发现命中，但 checksum 清单有 12 条缺失引用。B 仍 PARTIAL（t021 Owner 决策待确认）；D 整体仍 PARTIAL，`OBS-ACCT-VIS-390` 账户名称 390px 不可见仍 FAIL；RV-05 仍 **Owner ACTION REQUIRED**。**PR #3 保持 Open、不合并；R0 继续 BLOCK，不授权 R1–R7。** 详见 [第八次安全扫描器独立复核](docs/FastLedger-R0-第八次安全扫描器独立复核.md)。
 
 | 项 | 状态 |
 |---|---|
