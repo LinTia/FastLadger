@@ -913,6 +913,18 @@
 
 **口径**：B 只能判 **PARTIAL**——截图数量与采集成功不等于同数据、同角色、同状态全覆盖。
 
+### 7.8 CI 原生验证证据（2026-11-05）
+
+| run | head | 结论 | `-race` 作用域 | 证据目录 |
+|---|---|---|---|---|
+| `41983447389` | `de2fb26` | success | **全仓 `go test ./... -race`**：10 包 ok，0 FAIL / 0 DATA RACE | `docs/r0-evidence-5th/ci-run-de2fb26/` |
+| `41976312248` | `22fd310` | success | `ws` / `service` / `api` 三包 | `docs/r0-evidence-5th/ci-run-22fd310/` |
+| `41954006789` | `9d083f6` | success | `ws` / `service` / `api` 三包 | `docs/r0-evidence-4th/ci-run/` |
+
+**变化**：`ci.yml` 步骤 10 由"3 个包"扩为"全仓"，因此"全仓竞态已过"由 GitHub 原生流水线执行、run URL 可公开复核，**不再依赖在服务器上手动复跑**（服务器 `race.log` 降为历史旁证）。
+
+**边界（务必不要误读）**：CI 能证明的是"退出码即结论"的那一类——构建、静态检查、全量单测、全仓竞态、容器冒烟。它**不能**证明 A（独立环境下的故障态/多角色复验）、**不能**证明 C（228 条逐控件运行时）、**不能**替代 B 的成对截图，也**不等于** D 通过（逐路由断言仍缺，覆盖 3 / 部分 5 / 未覆盖 5）。逐项对照见 `docs/r0-evidence-5th/ci-coverage-matrix.md`。
+
 
 ---
 
@@ -935,7 +947,7 @@
 > - **Owner 裁决状态（2026-11-05 更新）**：D-1/D-3/D-4/D-5/D-6/D-8 已裁决；D-2 已明确当前 Web R0 排除 PWA 本地 OCR（未来 PWA 阶段另行评估，不授权启动）；RV-04 已裁决不新增首页月份切换。**D-4 / D-8 仅为技术方案已确定，功能仍未实现、无运行时验收，不改变 R0 阻塞。**
 > - **既定范围口径（不得误读）**：D-2 当前 Web R0 排除 PWA 本地 OCR；Web OCR 仍按 PRD §5.2 不做。D-4 期初余额需求已确定；D-7 会话管理需求已确定、仅排期待定；多账本与回收站按既定需求保留。
 > - **R0-E-35 / RV-01**：**本机隔离运行时复验已完成；失败态观察到骨架屏未清理（`.skel`=4、`aria-busy=true`）；待 Owner/CI 独立复跑及慢速网络、有数据态、多角色等场景验证；缺陷尚未关闭。** 隔离运行时证据已登记于 `docs/r0-screenshots/runtime/`（5 张 PNG + `network-log.json`（请求头已脱敏）/ `console-log.json` / `dom-snapshots.json` + README）；单次本机实测不构成缺陷关闭，须 Owner/CI 独立复跑并补齐慢速网络、有数据态、权限、离线 / 同步冲突、多角色等缺口。**不得声称已关闭，也不得倒退回「尚未进行运行时复验」的旧表述。**
-> - **四包状态（经第三方独立复核纠偏，2026-11-05 第五次整改后统一）**：**A = BLOCKED**（R0-E-35 独立复验仍待 Owner/CI 独立环境）；**B = PARTIAL**（104 张同数据集成对图 + 动作级通过，但角色仅 owner、状态维度与 invest/members 未覆盖）；**C = BLOCKED**（228 条逐控件运行时未执行）；**D = PARTIAL**（CI run `41954006789` 两 job success + 服务器全仓 race exit 0，但 13 条路由中覆盖 3 / 部分 5 / 未覆盖 5，未覆盖路由缺独立断言）。详见 `docs/FastLedger-R0-第五次最小整改-执行回执.md`。**不得把 BLOCKED/PARTIAL 写成 PASS。**
+> - **四包状态（经第三方独立复核纠偏，2026-11-05 第五次整改后统一）**：**A = BLOCKED**（R0-E-35 独立复验仍待 Owner/CI 独立环境）；**B = PARTIAL**（104 张同数据集成对图 + 动作级通过，但角色仅 owner、状态维度与 invest/members 未覆盖）；**C = BLOCKED**（228 条逐控件运行时未执行）；**D = PARTIAL**（构建/gofmt/vet/全量单测/**全仓 `-race`**/容器冒烟均已由 GitHub 原生 CI 证明——run `41983447389`（head `de2fb26`，`go test ./... -race` 全仓 10 包 ok、0 DATA RACE）与 `41976312248`（head `22fd310`）；服务器手动复跑已被 CI 取代；**但** 13 条路由中覆盖 3 / 部分 5 / 未覆盖 5，未覆盖路由缺独立断言——这是测试代码缺口，不是 CI 能力缺口）。详见 `docs/FastLedger-R0-第五次最小整改-执行回执.md` §5.5 与 `docs/r0-evidence-5th/ci-coverage-matrix.md`。**不得把 BLOCKED/PARTIAL 写成 PASS，也不得把"CI 全绿"当成 D 通过。**
 > - **RV-05（Owner ACTION REQUIRED）**：旧历史提交 `259bd11` 仍可匿名读取（复核统计到 29 个 JWT 格式值，均已失效/撤销）；仓库当前仍为 Public（`private=false`）。**改为 Private 只是限制可见性，不等于历史对象被物理清除**；切换可见性、匿名旧 SHA 访问复验、后续历史清理评估均为 Owner 专属操作，WorkBuddy 未执行也未代为执行。
 > - **结论**：**R0 未通过 / 阻塞**。Owner 决策项已更新，但截图基线、逐控件运行时验收、R0-E-35 独立复跑、API/race 测试证据等门禁仍须真实完成；完成后再由 Owner 审阅并决定是否放行 R1。**本次裁决与文档更新不代表 R1–R7 已获授权。**
 

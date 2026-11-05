@@ -86,4 +86,5 @@ curl -L -H "Authorization: token $GITHUB_TOKEN" \
 - CI 通过 **不等于** R0 通过：R0 门禁仍包含截图基线、逐控件运行时验收、R0-E-35 独立复跑等，本目录仅关闭"测试执行证据"一项。
 - 本 run 触发时仓库仍为 **Public**；转 Private 后 Actions 记录仍在，但外部匿名访问将受限（Owner 待办 RV-05）。
 - 日志中的路径/容器 ID 属 GitHub 托管 runner 环境，与生产服务器无关。
+- **已被取代（2026-11-05）**：本 run 的步骤 10 `-race` 只覆盖 `ws` / `service` / `api`。`ci.yml` 之后已改为 `go test ./... -race`（全仓），现行权威记录见 `docs/r0-evidence-5th/ci-run-de2fb26/`（run `41983447389`，head `de2fb26`）。本目录保留为历史证据，不再作为"全仓 race"的依据。
 - **校验和说明**：`SHA256SUMS.txt` 基于 LF 工作树计算。Windows 上 `core.autocrlf=true` 的 clone 会把文本文件检出为 CRLF，届时文本文件的哈希会不同（PNG 不受影响）——这是行尾规范化，不是内容篡改；需要逐字节复核时用 `git -c core.autocrlf=false clone`。

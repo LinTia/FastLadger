@@ -1,0 +1,53 @@
+# CI run 41983447389 — 关键证明行（自 test-job.log / docker-job.log 原文摘录，未改写结论）
+# head_sha=de2fb261c0c5a7aafdf7892fe8da5e9e1c59050b  event=push  attempt=1  conclusion=success
+# 来源: https://github.com/LinTia/FastLadger/actions/runs/41983447389
+
+## 环境（CGO 前提 + 编译器）
+2026-11-05T06:53:49.5066492Z go version go1.22.12 linux/amd64
+2026-11-05T06:53:49.6292139Z go version go1.22.12 linux/amd64
+2026-11-05T06:53:49.6305072Z gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+
+## 步骤8 SQLite 驱动冒烟（反向门禁：出现 no test files 即失败）
+2026-11-05T06:53:53.6060809Z ok  	fastledger/internal/migrate	0.464s
+2026-11-05T06:53:53.6066981Z ok  	fastledger/internal/database	0.103s
+
+## 步骤9 go test ./... -count=1 -v（全量，非 race）
+2026-11-05T06:53:55.1683964Z ok  	fastledger/cmd/server	0.236s
+2026-11-05T06:53:58.7333146Z ?   	fastledger/internal/version	[no test files]
+2026-11-05T06:54:01.2511472Z ok  	fastledger/internal/api	5.947s
+2026-11-05T06:54:01.2511800Z ?   	fastledger/web	[no test files]
+2026-11-05T06:54:14.2114208Z ok  	fastledger/internal/authzreview	18.908s
+2026-11-05T06:54:14.2143649Z ok  	fastledger/internal/config	0.005s
+2026-11-05T06:54:14.2149987Z ok  	fastledger/internal/database	0.202s
+2026-11-05T06:54:14.2162324Z ok  	fastledger/internal/instance	0.400s
+2026-11-05T06:54:14.2209251Z ok  	fastledger/internal/migrate	1.784s
+2026-11-05T06:54:14.2211275Z ok  	fastledger/internal/model	0.002s
+2026-11-05T06:54:29.8418792Z ok  	fastledger/internal/service	31.050s
+2026-11-05T06:54:29.8450494Z ok  	fastledger/internal/ws	7.458s
+
+## 步骤10 go test ./... -race -count=1（★本轮扩展为全仓）
+2026-11-05T06:54:33.1073562Z ok  	fastledger/cmd/server	1.110s
+2026-11-05T06:55:00.9727100Z ok  	fastledger/internal/api	26.401s
+2026-11-05T06:55:05.8495285Z ?   	fastledger/internal/version	[no test files]
+2026-11-05T06:55:05.8496100Z ?   	fastledger/web	[no test files]
+2026-11-05T06:56:41.1761195Z ok  	fastledger/internal/authzreview	99.487s
+2026-11-05T06:56:41.1763005Z ok  	fastledger/internal/config	1.021s
+2026-11-05T06:56:41.1763360Z ok  	fastledger/internal/database	1.056s
+2026-11-05T06:56:41.1763672Z ok  	fastledger/internal/instance	1.075s
+2026-11-05T06:56:41.1764063Z ok  	fastledger/internal/migrate	1.411s
+2026-11-05T06:56:41.1764457Z ok  	fastledger/internal/model	1.016s
+2026-11-05T06:56:41.1764851Z ok  	fastledger/internal/service	81.241s
+2026-11-05T06:56:41.1765289Z ok  	fastledger/internal/ws	11.751s
+
+## 容器冒烟 healthz（docker job）
+2026-11-05T06:57:59.6381660Z {"code":0,"data":{"instanceId":"be9dcb2cebff28fee87878bb8cc1e16f","restoreEpoch":1,"schemaVersion":8,"status":"up"},"msg":"ok"}
+
+## 计数（应为 0）
+--- FAIL 行数: 0
+DATA RACE 行数: 0
+
+## 与 run 41976312248 的差别
+该 run 的步骤10 作用域仅为 internal/ws、internal/service、internal/api 三个包；
+本 run 起改为 go test ./... -race，因此 cmd/server、migrate、database、authzreview、
+config、instance、model 也纳入了竞态检测。全仓 -race 结论自此由 GitHub CI 原生证明，
+不再依赖服务器手动复跑（docs/r0-evidence-4th/race.log 作为历史旁证保留）。

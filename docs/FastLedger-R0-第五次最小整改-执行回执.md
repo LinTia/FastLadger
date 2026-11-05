@@ -25,7 +25,7 @@
 | **A. R0-E-35 / RV-01 独立复验** | 保持 BLOCKED | 未做任何独立复跑，未改动既有运行时证据 | **BLOCKED** | `docs/r0-screenshots/runtime/`（历史，未改） |
 | **B. 13 页原型×实现对照** | PARTIAL，不得标 PASS | 修复分类映射并重跑种子 + 两侧重采 104 张 + 逐文件校验 + 角色改真实读取 | **PARTIAL** | `docs/r0-screenshots/pairs/`、`docs/r0-evidence-5th/` |
 | **C. 228 条控件运行时验收** | 保持 BLOCKED | 未执行任何一条真实交互，未用截图/静态映射替代 | **BLOCKED** | 主报告 §3.1（228 行静态清单） |
-| **D. 逐路由测试证据** | PARTIAL，不得标 PASS | 更正 CI 元数据、拆清四类 SHA、逐路由复核 13 条并逐条处置 | **PARTIAL** | `docs/r0-evidence-5th/ci-metadata-correction.md`、`api-route-coverage.md`、`docs/r0-evidence-4th/ci-run/` |
+| **D. 逐路由测试证据** | PARTIAL，不得标 PASS | 更正 CI 元数据、拆清四类 SHA、逐路由复核 13 条并逐条处置；**追加**：`-race` 扩到全仓并由 GitHub CI 原生证明 | **PARTIAL**（构建/静态检查/全量单测/全仓 race 缺口已由 CI 关闭；**逐路由断言仍缺**） | `docs/r0-evidence-5th/ci-metadata-correction.md`、`api-route-coverage.md`、`ci-coverage-matrix.md`、`ci-run-de2fb26/`、`ci-run-22fd310/` |
 
 ---
 
@@ -157,6 +157,13 @@
 
 **更正说明**：第四次文档写的 job id `126996266896`/`126996901301` 与耗时 `10.4s/66.4s/24.0s` 属**另一次 run**（`41951501832`），本轮已按官方 API/日志改正，详见 `docs/r0-evidence-5th/ci-metadata-correction.md`。
 
+**后续两次 run（同一工作流，均为 GitHub 原生，可直接点开核对）**
+
+| run | head commit | 结论 | `-race` 作用域 | 证据 |
+|---|---|---|---|---|
+| `41976312248` | `22fd310`（第五次整改提交） | success | `ws` / `service` / `api`（10.995s / 86.781s / 32.094s） | `docs/r0-evidence-5th/ci-run-22fd310/` |
+| `41983447389` | `de2fb26`（扩 `-race` 作用域的提交） | success | **全仓 `go test ./... -race`**（authzreview 99.487s / service 81.241s / api 26.401s / cmd/server 1.110s / 其余 5 包均 ok） | `docs/r0-evidence-5th/ci-run-de2fb26/` |
+
 ### 5.2 四类 SHA 分开记录
 
 | 名称 | 值 |
@@ -168,12 +175,14 @@
 
 ### 5.3 全仓 race 证据边界
 
-| 证据 | 主体 | 覆盖 | 可追溯 |
-|---|---|---|---|
-| CI `-race` | GitHub Actions | 仅 `ws` / `service` / `api` 三包 | run/job id + 日志 + head SHA |
-| 服务器全仓 race | **WorkBuddy（Owner 授权），非 CI** | `go test -race ./... -p 1` 全仓，`RACE_EXIT=0` | `docs/r0-evidence-4th/env.txt`（commit/Go/OS/CGO）、`race.log`、`race.exit`、`SHA256SUMS.txt` |
+| 证据 | 主体 | 覆盖 | 可追溯 | 地位 |
+|---|---|---|---|---|
+| **CI 全仓 `-race`（run `41983447389`）** | **GitHub Actions** | `go test ./... -race -count=1` 全仓 10 包，`--- FAIL 0`、`DATA RACE 0` | run/job/step id + 原始日志 + head `de2fb26` | **现行权威证据** |
+| CI `-race`（run `41976312248`/`41954006789`） | GitHub Actions | 仅 `ws` / `service` / `api` 三包 | run/job id + 日志 + head SHA | 历史，作用域小于现行 |
+| 服务器全仓 race | **WorkBuddy（Owner 授权），非 CI** | `go test -race ./... -p 1` 全仓，`RACE_EXIT=0` | `docs/r0-evidence-4th/env.txt`、`race.log`、`race.exit`、`SHA256SUMS.txt` | **已被 CI 取代**，仅作历史旁证 |
 
-两者不可互相替代或混称。
+> 自 `de2fb26` 起，"全仓 race 已过"不再依赖我在服务器上手动复跑——它由 GitHub 原生流水线执行，任何有读权限的人都能点开 run URL 复核。三者不可互相替代或混称。
+
 
 ### 5.4 未覆盖路由逐条处置（13 条 → 覆盖 3 / 部分 5 / 未覆盖 5）
 
@@ -198,6 +207,27 @@
 **与主报告旧口径的差异（已更正）**：`GET /healthz`、`GET /users/me` 原写"未覆盖"，实为有命名用例；`GET /accounts/:aid` 原写"未覆盖"，实为部分覆盖（仅 pathID 解析）。
 
 **责任人**：后端 + QA（R0 之后的测试补强批次）；本轮不补测的理由见 `api-route-coverage.md` §3。
+
+### 5.5 「点 3 · 用 GitHub 自带 CI 做验证并留 run URL」交付记录（已完成）
+
+原始目标：把包 D 里"非正式 CI / 本机自测"的口径，换成**有 run URL、第三方可独立核对**的正式记录。
+
+| 项 | 结果 |
+|---|---|
+| 是否使用 GitHub 自带 CI | **是**。仓库一直有 `.github/workflows/ci.yml`（`push: [main]` + `pull_request` + `workflow_dispatch`），历史 166 次 run，无需另建流水线 |
+| 代表性 run | `41983447389`（head `de2fb26`）、`41976312248`（head `22fd310`）、`41954006789`（head `9d083f6`），**均 success** |
+| 本次补强 | `ci.yml` 步骤 10 由 `ws/service/api` 扩为 `go test ./... -race`：**全仓竞态由 CI 原生证明**，不再依赖服务器手动复跑 |
+| 证据形态 | 每次 run 落盘 `run-meta.json`（run/job/step 原样）、`test-job.log`、`docker-job.log`、`summary.txt`、`SHA256SUMS.txt`、`README.md`（能力边界） |
+| 变更范围 | 仅 `.github/workflows/ci.yml` 一行作用域 + 证据文档；**未改业务代码/PRD/WBS/API/DB** |
+
+**这条"完成"指什么、不指什么**
+
+- ✅ 指：**"构建 / gofmt / vet / 全量单测 / 全仓 race / 容器冒烟"** 这类退出码即结论的验证，已全部由 GitHub 原生 CI 执行并留证，第三方可点开 run URL 复核。
+- ❌ 不指：**包 D 升为 PASS**。D 仍为 **PARTIAL**，缺口是**逐路由独立断言**（13 条中覆盖 3 / 部分 5 / 未覆盖 5）——那是测试代码缺口，补断言后 CI 会自动覆盖，但本轮按任务单方案 B 未补。
+- ❌ 不指：**A / C 有任何进展**。A（R0-E-35 独立复验）要求独立环境与故障态构造，C（228 条逐控件运行时）要求真实交互；两者都**无法**由 Go 测试 CI 替代，仍 **BLOCKED**。
+- ❌ 不指：B 的成对截图已接入 CI。B 仍靠本地 `tools/r0/capture-pairs.js` 采集，状态 **PARTIAL**。
+
+逐项能力边界（哪项 CI 能证明、哪项不能、为什么）见 `docs/r0-evidence-5th/ci-coverage-matrix.md`。
 
 ---
 
@@ -248,7 +278,7 @@ Owner 待办（WorkBuddy 不代做）：
 | 项 | 验证方式 | 结果 |
 |---|---|---|
 | 业务代码 | `git diff --stat bff6a2b 72cbab7 -- server/ client/` | 0 行（空输出） |
-| 本轮工作区 | `git status --short` | 仅 `CHANGELOG.md`、`README.md`、`docs/**`、`tools/r0/*.js`；**无 `server/`、`client/`、`server/web/dist/`** |
+| 本轮工作区 | `git status --short` | 仅 `CHANGELOG.md`、`README.md`、`docs/**`、`tools/r0/*.js`、`.github/workflows/ci.yml`（仅步骤 10 的 `-race` 作用域，见 §5.5）；**无 `server/`、`client/`、`server/web/dist/`** |
 | PRD / WBS / 落地方案 / 枚举字典 | 未打开写入 | 未改 |
 | API / 数据库 / 迁移 | 未改 | 未改 |
 | R1–R7 / PWA | 未启动 | 未实施 |
@@ -260,4 +290,5 @@ Owner 待办（WorkBuddy 不代做）：
 - **R0 仍 BLOCK**：A/C 未通过；B/D 仅 PARTIAL。
 - **无任何 R1 授权**，PWA 未启动，未改业务代码。
 - 本轮价值集中在三点：**分类映射缺陷修复并重采**（使两侧数据真正可比）、**CI 元数据与四类 SHA 更正**（消除"run head 即最终提交"的误述）、**逐路由覆盖复核**（把"全绿"拆成 3/5/5 的可核查清单）。
+- 追加一项已完成项（§5.5）：**验证口径正式交给 GitHub 自带 CI**——`-race` 扩到全仓后，构建/静态检查/全量单测/全仓竞态/容器冒烟均由 GitHub 原生执行并留 run URL，不再依赖本机或服务器手动复跑。**这不改变 D 的 PARTIAL 判定**（逐路由断言仍缺），也不改变 A/C 的 BLOCKED（本就不属 CI 能证明的范围）。
 - 等待第三方独立复核；如对上述任一结论有异议，请指出具体文件与行号，我按证据修正，不硬撑。

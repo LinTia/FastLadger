@@ -2,6 +2,24 @@
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.79] - 2026-11-05
+
+### R0 验证口径正式交给 GitHub 自带 CI（`-race` 扩到全仓）；D 仍判 PARTIAL
+
+- **可用性结论**：GitHub 自带 CI 完全可以用于本项目验证——仓库一直有 `.github/workflows/ci.yml`（`push: [main]` / `pull_request` / `workflow_dispatch`），历史 **166 次 run**，无需另建流水线。凡是"退出码即结论"的验证（gofmt、vet、build、全量单测、竞态检测、容器冒烟），都不应再靠本机或服务器手动复跑。
+- **本次补强**：`ci.yml` 步骤 10 由 `go test ./internal/ws/... ./internal/service/... ./internal/api/... -race` 改为 `go test ./... -race -count=1`，使**全仓竞态**结论由 GitHub 原生执行。
+- **证据（GitHub 原生，run URL 可公开复核）**：
+  - run [`41983447389`](https://github.com/LinTia/FastLadger/actions/runs/41983447389)（head `de2fb26`）**success**：全仓 `-race` 10 包 `ok`（`authzreview 99.487s`、`service 81.241s`、`api 26.401s`、`ws 11.751s`、`cmd/server 1.110s`、`migrate 1.411s`、`database 1.056s`、`instance 1.075s`、`config 1.021s`、`model 1.016s`），`--- FAIL` **0**、`DATA RACE` **0**；docker job 同步 success。
+  - run [`41976312248`](https://github.com/LinTia/FastLadger/actions/runs/41976312248)（head `22fd310`）**success**：第五次整改提交的 CI 记录（`-race` 当时仍为 3 包）。
+  - 两次 run 的 `run-meta.json`、`test-job.log`、`docker-job.log`、`summary.txt`、`SHA256SUMS.txt` 分别落盘于 `docs/r0-evidence-5th/ci-run-de2fb26/` 与 `ci-run-22fd310/`。
+- **口径（不得误读）**：CI 全绿**不等于** D 通过，更不等于 R0 通过。
+  - CI **能**证明：构建、gofmt、vet、全量单测、**全仓竞态**、容器 `db migrate` + `/healthz`。
+  - CI **不能**证明：A（R0-E-35 独立复验，需独立环境与故障态/多角色）、C（228 条逐控件运行时）、B 的成对截图；也**不能**替代逐路由断言（13 条仍覆盖 3 / 部分 5 / 未覆盖 5——属测试代码缺口，补断言后 CI 会自动覆盖）。
+  - 逐项对照见 `docs/r0-evidence-5th/ci-coverage-matrix.md`。
+- **"点 3"标记完成**：原任务为"在 CI 上跑一次留 run URL，把包 D 的'非正式 CI'补成正式"——已完成，记录于第五次回执 §5.5。服务器手动全仓复跑（`docs/r0-evidence-4th/race.log`）自此降为**历史旁证**，不再作为"全仓 race"的证据来源。
+- **文档同步**：第五次回执（§1 D 行、§5.1 后两次 run、§5.3 证据边界、新增 §5.5、§8 范围、§9 结论）、主报告（新增 §7.8、§8 D 行）、`README.md`（状态快照至 [1.79]、导航）、`docs/r0-evidence-5th/README.md`、`docs/r0-evidence-4th/ci-run/README.md`（标注已被取代）、`workbuddy/第三方审阅者导读.md`。
+- **范围**：仅 `.github/workflows/ci.yml`（步骤 10 作用域）与文档/证据；**未改业务代码、PRD、WBS、API、数据库**；未启动 R1–R7，PWA 未实施。**R0 仍未通过 / BLOCK，不授权 R1。**
+
 ## [1.78] - 2026-11-05
 
 ### R0 第五次最小整改执行：B/D 改判 PARTIAL、分类映射修复重采、CI 元数据更正、RV-05 交还 Owner
