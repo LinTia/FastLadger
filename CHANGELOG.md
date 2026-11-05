@@ -1,5 +1,7 @@
 # 更新日志（CHANGELOG）
 
+本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
+
 ## [1.81] - 2026-11-05
 
 ### R0 第七次测试质量纠偏任务单（A05 断言、C PASS 证据、清单漂移、t021 Owner 裁决）
@@ -9,8 +11,6 @@
 - 第六次发现的交易总表空白、记一笔分类未按类型过滤、member 邀请按钮未隐藏、新增账户列表疑似未刷新，先形成修复提案与回归测试，不授权改业务代码。
 - 独立 CI run `41990345757` 确认 A/C 流程真实执行，但 C 的 `continue-on-error` 意味着 job success 不等于 C 通过；A05 测试断言有效性仍需修正。
 - 状态口径：A 暂定 PARTIAL（A05 断言不足）；B PARTIAL；C PARTIAL（144/6/77/1）；D PARTIAL；RV-05 Owner ACTION REQUIRED；R0 仍 BLOCK，不授权 R1–R7。
-
-本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
 ## [1.80] - 2026-11-05
 
