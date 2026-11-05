@@ -2,6 +2,17 @@
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.75] - 2026-11-05
+
+### R0 第四次证据补齐：包 D 服务器 Linux 全量+race 通过；包 B 成对截图骨架与 96 张同视口证据
+
+- **包 D（逐路由/Go 测试）PASS**：Owner 授权，WorkBuddy 在服务器 Linux（`6.8.0-138-generic x86_64`、`go1.22.2`、`CGO=1`）对业务代码 `bff6a2b` 执行 `go test ./...`（`PLAIN_EXIT=0`，10 包 ok / 2 无测试）与 `go test -race ./... -p 1`（`RACE_EXIT=0`，无 DATA RACE）。原始日志与 SHA256：`docs/r0-evidence-4th/`。**非正式 CI，无 run URL；执行主体 WorkBuddy（Owner 授权）**。
+- **包 B（13 页同视口对照）PARTIAL**：新增 `tools/r0/capture-pairs.js`（Edge headless + CDP，可移植、默认输出仓库外、写证据目录双重确认、退出码 0/1/2/3）；实采 `docs/r0-screenshots/pairs/`：**原型 52 张**（13 页×4 视口，0 错误、0 路径偏差）、**实现 44 张**（11 路由×4 视口，0 错误；impl `login`/`add-transaction` 跳过），含 2 份 manifest、`SHA256SUMS.txt`（98 行）、README。
+- **诚实边界**：本轮为**同视口、默认（normal）态**对照；原型演示数据 vs 实现种子数据，**非同数据同状态**；未覆盖 loading/empty/error/permission/offline/conflict；未做像素级 diff。故 B 为 PARTIAL，不满足任务单全量要求。
+- **包 A / C**：仍 BLOCKED（A 需 Owner/CI 独立复跑；C 的 228 条运行时验收未补）。
+- **范围**：新增证据目录、采集脚本、回执更新、CHANGELOG/README；**未改业务代码、数据库、API、PRD/WBS**；未启动 R1–R7；未覆盖历史证据。
+- **状态**：**R0 仍 BLOCK**；不授权 R1。
+
 ## [1.74] - 2026-11-05
 
 ### R0 第四次证据补齐任务单：四包执行回执（证据/审计，非业务实现）

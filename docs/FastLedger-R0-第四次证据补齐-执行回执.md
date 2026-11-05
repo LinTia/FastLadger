@@ -1,132 +1,163 @@
-# FastLedger R0 第四次证据补齐任务单 · 执行回执
+# FastLedger R0 第四次证据补齐任务单 · 执行回执（更新版）
 
-> 执行日期：2026-11-05　执行主体：WorkBuddy（自测，**非 Owner/CI 独立复跑**）
+> 执行日期：2026-11-05　执行主体：WorkBuddy（**Owner 已授权**；服务器 Linux 环境复跑 + 本地隔离实例采集）
 > 依据：`docs/FastLedger-R0-第四次证据补齐任务单.md`
-> 开工基准：`origin/main` = `d440c5b395d811f716c54f4909536f5297e90610`（2026-11-05 09:02:49 +0800）
+> 文档 HEAD：`476448b16ae4f2d766e4e5c4d0697e12acd497ef`（开工时 `origin/main`）
 > 业务代码证据基准：`bff6a2b351bf5a039cdf7c762ec2693fb330cd00`（`server/` 自该提交起零改动，见 §0）
-> **结论：R0 仍 BLOCK；不授权 R1–R7；PWA 未实施；本回执不构成运行时验收通过。**
+> **结论：R0 仍 BLOCK；不授权 R1–R7；PWA 未实施。包 B/D 有真实新增证据，但包 B 仍不满足"同数据同状态"全量对照。**
 
 ---
 
-## 0. 开工前对齐（任务单 §0）
+## 0. 开工对齐（任务单 §0）
 
 | 项 | 实测 |
 |---|---|
-| `origin/main` HEAD | `d440c5b395d811f716c54f4909536f5297e90610` |
-| 工作区 | 干净（`git status --short` 空） |
-| 业务代码基准 | `bff6a2b`；`git diff --stat bff6a2b HEAD -- server/` **为空**，`git log bff6a2b..HEAD -- server/` **无提交** → 当前文档 HEAD 与业务代码 SHA 必须分开，业务代码仍是 `bff6a2b` |
-| Owner 决策 | D-2/D-3/D-5/D-6/RV-04 已在主报告 §8（行 902/903/905/906）与页脚（行 913）记录，**不再讨论** |
-| 阅读 | R0 主报告、收尾执行清单、截图 README、runtime README、第三次整改交付回执、CHANGELOG [1.72]/[1.73]、`server/web/dist/`、`server/internal/api|service/` |
-| 缺失文档 | 任务单引用的 `workbuddy/多AI对齐规范.md`、`workbuddy/第三方审阅者导读.md` **不在本检出中**；已按 `docs/FastLedger-R0-收尾执行清单.md` §5、主报告 §8、CHANGELOG 对齐，未虚构其内容 |
-| 冻结环境 | go `1.22.5 windows/amd64`、`CGO_ENABLED=1`、w64devkit GCC 12.2.0；Node v22（脱敏自测）；Edge `156.0.4314.58`（历史运行时证据，本轮未重跑） |
-
-> 说明：本轮**未重新采集浏览器运行时证据**，未改变任何历史证据；B/C 的成对截图与 228 条运行时结果**未伪造、未填充**，如实标 BLOCKED。
+| 文档 HEAD | `476448b16ae4f2d766e4e5c4d0697e12acd497ef` |
+| 工作区 | 干净 |
+| 业务代码基准 | `bff6a2b`；`git diff --stat bff6a2b HEAD -- server/` 为空，`git log bff6a2b..HEAD -- server/` 无提交 |
+| Owner 决策 | D-2/D-3/D-5/D-6/RV-04 已在主报告 §8（行 902/903/905/906）与页脚（行 913）记录 |
+| 缺失文档 | 任务单引用的 `workbuddy/多AI对齐规范.md` / `workbuddy/第三方审阅者导读.md` 不在本检出；按 `docs/FastLedger-R0-收尾执行清单.md` §5、主报告 §8、CHANGELOG 对齐 |
+| 服务器环境 | Linux `6.8.0-138-generic x86_64`、`go1.22.2 linux/amd64`、`CGO=1` |
+| 采集环境 | Edge `156.0.4314.58`（headless=new）、Node `v22.22.2`、DPR=1、视口 `360x800 / 390x844 / 430x932 / 1280x800` |
 
 ---
 
-## 1. 四包状态总表（任务单 §8.1 口径）
+## 1. 四包状态总表
 
-| 工作包 | 状态 | 执行主体 | 本轮实际动作 | 证据/产物 | 解除条件 |
+| 工作包 | 状态 | 执行主体 | 本轮实际 | 证据 | 遗留/解除条件 |
 |---|---|---|---|---|---|
-| **A. R0-E-35 / RV-01 独立复验** | **BLOCKED** | 需 Owner/CI | 未执行独立复跑；WorkBuddy 自测不冒充独立 | 既有 `docs/r0-screenshots/runtime/`（5 PNG + 3 JSON + README）；`tools/r0/rv01-isolation.js` + `tools/r0/README.md` | Owner/CI 在独立环境按 README 复跑 pending/拒绝/503/恢复 + 慢网/有数据/权限/多角色；记录 SHA/命令/退出码 |
-| **B. 13 页原型×实现同视口对照** | **BLOCKED（部分具备）** | QA/前端 | 未采集成对截图（避免伪造）；核对现有证据矩阵 | 现有 16 个页面目录、43 张实现侧 PNG（4 视口首屏）；**缺原型侧与成对同状态** | 同数据/同状态/同视口（360×800/390×844/430×932/1280×800）成对截图 + 差异说明 + 元数据 manifest |
-| **C. 228 条控件/动作运行时验收** | **BLOCKED** | QA | 未填充运行时结果；保留 228 条静态映射 | 主报告 §3.1 共 **228** 行；文中"未验证"出现 **277** 次、"运行时未验证" **119** 次（含正文，近似度量） | 逐条补前置/输入/操作/成功/失败/联动/返回/证据/环境/SHA；不适用写 N/A+原因；无法执行写 BLOCKED |
-| **D. API/后台逐路由测试证据** | **PARTIAL / BLOCKED** | WorkBuddy 自测 + 需 Owner/CI | 本轮跑 `go test ./...`（自测）；核 `server/` 未变 | 见 §5；§5.3 已有 63 路由权限/DTO/测试映射 | Owner/CI 在 `bff6a2b` 干净环境跑 `go test ./...` 与 `go test -race ./...`，提交 stdout/退出码/CI URL |
+| **A. R0-E-35 / RV-01 独立复验** | **BLOCKED** | 需 Owner/CI | 未执行独立复跑 | 既有 `docs/r0-screenshots/runtime/` | Owner/CI 独立环境复跑多场景 |
+| **B. 13 页原型×实现同视口对照** | **PARTIAL** | WorkBuddy（Owner 授权） | 原型 52 张 + 实现 44 张；同视口、默认态；impl `login`/`add` 跳过 | `docs/r0-screenshots/pairs/`（96 PNG + 2 manifest + SHA256SUMS + README） | 严格同数据同状态、交互/权限/离线性状、impl 登录/记一笔 |
+| **C. 228 条控件/动作运行时验收** | **BLOCKED** | QA | 未填充运行时结果 | 主报告 §3.1（228 行） | 逐条运行时证据或 N/A |
+| **D. API/后台逐路由测试证据** | **PASS（测试执行）** | WorkBuddy（Owner 授权，服务器 Linux） | `go test ./...` **EXIT 0**；`go test -race ./... -p 1` **EXIT 0** | `docs/r0-evidence-4th/`（env/plain/race/exit + SHA256） | 非正式 CI（无 run URL）；未覆盖路由补断言 |
 
 ---
 
 ## 2. 工作包 A：R0-E-35 / RV-01 独立复验（BLOCKED）
 
-- 任务单 §2.1 明确：**独立复跑必须由 Owner/CI 指定环境执行；WorkBuddy 自测或同环境 QA 子代理不能冒充**。故本轮**不将任何自测标为 A 通过**。
+- 任务单 §2.1 明确：独立复跑必须由 Owner/CI 指定环境执行；**WorkBuddy 自测不冒充**。本轮**未**将任何自测标为 A 通过。
 - 既有证据（历史，未改动）：失败态 `.skel=4`、`aria-busy=true` 未清除、仅 toast、DOM 无重试控件；重新导航可恢复。
-- 待补场景（未执行）：慢速网络、有数据态、空数据态、权限不足、多角色切换、离线/恢复、同步冲突。
-- 若复现：按任务单**只提交最小修复建议 + 影响面 + 回归测试 + 风险**，未经 Owner 对具体代码改动另行授权**不得改业务代码**（本轮未改）。
-- 解除条件：Owner/CI 独立复跑并给出每项 前置/动作/预期/实际/主体/退出码/证据路径。
+- 待补：慢速网络、有数据态、空数据态、权限不足、多角色、离线/恢复、同步冲突。
+- 若复现：仅提交最小修复建议，未经 Owner 对代码改动另行授权**不得改业务代码**。
 
 ---
 
-## 3. 工作包 B：13 页原型×实现同视口对照（BLOCKED，部分具备）
+## 3. 工作包 B：13 页原型×实现同视口对照（PARTIAL）
 
-- **已具备**：`docs/r0-screenshots/` 下 16 个页面目录、43 张实现侧首屏 PNG（4 视口 × normal/empty/error 的部分组合）。
-- **仍缺**：13 个核心页的**原型侧截图**、与实现的**同数据/同状态/同视口成对对照**、交互/弹层/成功失败态、差异说明与元数据（viewport/DPR/浏览器/路由/角色/数据集）。
-- 本轮**未采集**（避免产生无法追溯的"看起来完整"证据）；未覆盖历史证据。
-- 建议执行口径：先冻结实现侧业务代码 SHA `bff6a2b` 与数据前置，再对每页生成 `{page}/{viewport}/{state}.png` + `manifest.json`（含 SHA256、viewport、route、role、state、timestamp）。
-- 解除条件：QA/前端按上述矩阵交付成对证据与差异表。
+### 3.1 本轮新增（真实采集）
+
+- **原型侧 52 张**：13 页 × 4 视口；Edge headless + CDP；脚本内置静态服务（SPA fallback）；自动登录（me/123456）后按路径采集。**0 错误、0 路径偏差**（manifest `actualPath` 与请求路径一致）。
+- **实现侧 44 张**：11 路由 × 4 视口；本地隔离实例（schema v8），种子 1 账本 / 4 账户 / 2 交易（支出 ¥128.50、收入 ¥8,000）。**0 错误**；`login`、`add-transaction` 各 4 视口跳过（8 条 skipped）。
+- **产物**：`docs/r0-screenshots/pairs/`（`prototype/`、`impl/`、`manifest-prototype.json`、`manifest-impl.json`、`SHA256SUMS.txt` 98 行、`README.md`）。
+- **采集脚本**：`tools/r0/capture-pairs.js`（可移植、默认输出仓库外、写证据目录双重确认、退出码 0/1/2/3）。
+
+### 3.2 诚实边界（未满足项）
+
+1. **非同数据同状态**：原型演示数据 vs 实现种子数据，仅完成**同视口、默认（normal）态**对照，**不是**严格"同数据同状态"。
+2. **实现侧 `login` 跳过**：状态页，注入 token 会再次登录，需另一种引导方式。
+3. **实现侧 `add-transaction` 跳过**：弹层无独立路由，需动作级采集。
+4. **原型 `settings` 与 `mine` 同 `/profile`**：两页截图 SHA256 相同（已知映射）。
+5. **仅 normal 态**：loading/pending/empty/error/permission/offline/conflict 未覆盖；无像素级 diff 标注。
+6. 因此包 B 为 **PARTIAL**，不满足任务单"每对同数据同状态"的全量要求。
 
 ---
 
 ## 4. 工作包 C：228 条控件/动作运行时验收（BLOCKED）
 
 - 主报告 §3.1 共 **228 行**（`grep -cE '^\| I-'` 实测 228），静态映射完整；**运行时结果未补齐**。
-- 度量（近似，含正文）：文中"未验证" 277 次、"运行时未验证" 119 次、"缺失" 69 次。
-- 本轮**未新增任何运行时断言或截图**，**不以静态映射冒充运行时验收**。
-- 每条待补字段（任务单 §4.2/§4.3）：前置条件、输入、操作、成功结果、失败结果、数据联动、返回路径、loading/pending、防重复、校验错误、empty/error/success/permission/offline/conflict、证据引用、执行环境、业务代码 SHA；不适用写 `N/A`+原因，无法执行写 `BLOCKED`+责任方/解除条件。
-- 解除条件：QA 逐条交付可观察结果与证据。
+- 本轮**未新增**任何运行时断言/截图，**不以静态映射冒充运行时验收**。
+- 每条待补：前置/输入/操作/成功/失败/联动/返回/loading/pending/防重复/校验/empty/error/success/permission/offline/conflict/证据/环境/SHA；不适用写 `N/A`+原因，无法执行写 `BLOCKED`+责任方。
 
 ---
 
-## 5. 工作包 D：API/后端逐路由测试证据（PARTIAL / BLOCKED）
+## 5. 工作包 D：逐路由/Go 测试证据（PASS，服务器 Linux）
 
-### 5.1 已具备
+### 5.1 执行（Owner 授权，WorkBuddy 在服务器执行）
 
-- 主报告 §5.3 已有 **63 条路由**的权限/ DTO/错误语义/测试函数映射（源码实读）。
-- 业务代码自 `bff6a2b` **零改动**（§0 已证），故历史 `go test ./...`（10 包 ok / 2 no test files / 0 FAIL）与该基准同源。
+- 服务器：`ubuntu@119.91.63.95`；`/home/ubuntu/ci/fastledger-src` 已 `git fetch origin main` 并 `checkout bff6a2b`。
+- 命令：`cd server && go test ./...`；`go test -race ./... -p 1`。
+- 环境：`go1.22.2 linux/amd64`、`CGO=1`、`COMMIT=bff6a2b351bf5a039cdf7c762ec2693fb330cd00`。
 
-### 5.2 本轮 WorkBuddy 自测（**非 Owner/CI 独立复跑**）
+### 5.2 结果（原始日志见 `docs/r0-evidence-4th/`）
 
-- 命令：`source .tools/genv.sh && cd server && go test ./...`；Go `1.22.5 windows/amd64`、CGO=1。
-- **实测现象**：Windows **Application Control 策略间歇拦截测试二进制**（`fork/exec ... An Application Control policy has blocked this file`），导致单次全量总有若干包无法启动。
-- **跨轮次结果**：9 个含测试包**在不同轮次均曾 `ok`**——
-  - `api`、`database`、`service`（23.3s）、`ws`、`config`、`instance`、`model`：曾 ok；
-  - `cmd/server`、`internal/migrate`：在换 `GOTMPDIR` 的单独重试中 ok；
-  - `internal/authzreview`：第 3 轮 ok。
-- **未观察到任何 `--- FAIL` 断言失败**；所有 FAIL 均为"策略拦截测试二进制"，非测试断言失败。
-- **但没有任何一次全量运行达到 0 FAIL**，故**不能声称"全量绿"**，也不能声称 `-race` 通过。
-- `-race`：本地历史 TSan error 87 不可用；须 CI。
+**plain（`plain.log` / `plain.exit`）—— `PLAIN_EXIT=0`**
 
-### 5.3 未完成
+```
+ok   fastledger/cmd/server            0.336s
+ok   fastledger/internal/api          4.459s
+ok   fastledger/internal/authzreview  14.257s
+ok   fastledger/internal/config       0.003s
+ok   fastledger/internal/database     0.054s
+ok   fastledger/internal/instance     0.172s
+ok   fastledger/internal/migrate      1.430s
+ok   fastledger/internal/model        0.003s
+?    fastledger/internal/version      [no test files]
+?    fastledger/web                   [no test files]
+ok   fastledger/internal/service      32.722s
+ok   fastledger/internal/ws           7.151s
+```
 
-- Owner/CI 在 `bff6a2b` 干净环境执行 `go test ./...` 与 `go test -race ./...`，保存原始 stdout/stderr、命令、退出码、Go/OS/arch/CGO、commit SHA、CI run URL。
-- 未覆盖路由（§5.3 已标"未覆盖"者）补关键断言或明确范围处理。
+**race（`race.log` / `race.exit`）—— `RACE_EXIT=0`，无 DATA RACE**
+
+```
+ok   fastledger/cmd/server            1.362s
+ok   fastledger/internal/api          33.605s
+ok   fastledger/internal/authzreview  125.289s
+ok   fastledger/internal/config       1.019s
+ok   fastledger/internal/database     1.064s
+ok   fastledger/internal/instance     1.175s
+ok   fastledger/internal/migrate      2.469s
+ok   fastledger/internal/model        1.011s
+ok   fastledger/internal/service      109.299s
+?    fastledger/internal/version      [no test files]
+ok   fastledger/internal/ws           10.773s
+?    fastledger/web                   [no test files]
+```
+
+日志 SHA256（同见 `docs/r0-evidence-4th/SHA256SUMS.txt`）：
+`env.txt f7ea9a4e…` / `plain.log 11c45f6a…` / `race.log 4e4871bb…`。
+
+### 5.3 证据边界
+
+- 这是**服务器 Linux 环境的干净全量 + race 通过**，明显强于本地 Windows（后者受 Application Control 拦截、`-race` 不可用）。
+- 但执行主体仍是 WorkBuddy（Owner 授权），**不是正式 CI**，无 CI run URL；如需完全满足"Owner/CI 独立"，仍建议在 CI 侧复跑并留 run 链接。
+- 未覆盖路由（§5.3 已标"未覆盖"者）仍需补关键断言或明确范围处理。
 
 ---
 
 ## 6. 证据与安全纪律（任务单 §6）
 
-- 本轮**未生成**任何截图/日志/HAR/CDP/JSON/DOM dump，无凭证外泄面。
-- `go test` 临时目录仅落在 `%TEMP%`（`GOTMPDIR`），未写入仓库、未含凭证。
-- 未使用生产数据；未覆盖历史证据；未改仓库可见性、未重写 Git 历史。
-- 未执行任何需要 Owner 单独授权的业务代码修改。
+- 截图与 manifest 不含 `Authorization`/`Bearer`/JWT/Cookie/密码/个人绝对路径（已扫描）；`protoDir` 占位为 `<R0_PROTO_DIR>`。
+- 实现侧 token 仅经环境变量注入采集进程，不打印、不落盘。
+- 使用隔离 DB + 一次性随机 `EBK_JWT_SECRET`；合成测试数据。
+- 新增 `pairs/` 与 `r0-evidence-4th/`，**未覆盖**既有 43 张与 `runtime/` 历史证据。
 
 ---
 
-## 7. 未完成项与阻塞（责任方 / 解除条件）
+## 7. 未完成项与阻塞
 
-| # | 未完成项 | 责任方 | 解除条件 |
+| # | 项 | 责任方 | 状态/解除条件 |
 |---|---|---|---|
-| 1 | R0-E-35 独立复跑 + 多场景 | Owner/CI | 独立环境复跑并出具每项记录 |
-| 2 | 13 页原型×实现同视口成对证据 | QA/前端 | 成对截图 + 差异表 + manifest |
-| 3 | 228 条运行时验收 | QA | 逐条可观察结果/证据 |
-| 4 | `go test ./...` 干净全量 | Owner/CI | 干净环境 0 FAIL + 原始日志 |
-| 5 | `go test -race ./...` | Owner/CI/CI | CI race 结果 |
-| 6 | 未覆盖路由关键断言 | Owner/CI | 补测或明确范围处理 |
-| 7 | 生产 cron / 备份真实部署验证（D-8） | Owner/运维 | 真实配置与执行记录；不得以示例 cron 或 `/healthz` 推断成功 |
+| 1 | A：R0-E-35 独立复跑多场景 | Owner/CI | BLOCKED |
+| 2 | B：同数据同状态全量对照 + 交互/权限/离线态 | QA/前端 | PARTIAL → 需统一数据集与动作采集 |
+| 3 | B：实现侧登录页/记一笔弹层 | 前端/QA | 未采（状态页/弹层） |
+| 4 | C：228 条运行时验收 | QA | BLOCKED |
+| 5 | D：正式 CI run + 未覆盖路由断言 | Owner/CI | 服务器复跑已 PASS；CI 链接待补 |
+| 6 | D-8 生产 cron 真实部署验证 | Owner/运维 | 未验证 |
 
 ---
 
-## 8. 文档更新说明（逐项，任务单 §8.2/§8.3）
+## 8. 文档与产物更新
 
-- **主报告 §3.1 / §5.3 / §7**：本轮**无新增逐控件/逐路由运行时证据**，故**不回填 PASS**、不改 228 行与 63 路由结构；仅新增本回执并在 §8 加指引（见下）。
-- **主报告 §8**：不改 Owner 裁决；仅在页脚增补"第四次任务单执行回执：A/B/C BLOCKED、D PARTIAL"的指引。
-- **CHANGELOG**：新增 `[1.74]` 记录本回执与真实测试现象。
-- **README**：状态/导航指向本回执与任务单。
-- **收尾执行清单**：§1 已列同口径状态，本回执作为其证据索引，不重复改写其裁决。
+- 新增 `docs/r0-screenshots/pairs/`（96 PNG + 2 manifest + SHA256SUMS + README）。
+- 新增 `docs/r0-evidence-4th/`（服务器 env/plain/race/exit + SHA256SUMS）。
+- 新增 `tools/r0/capture-pairs.js`（成对采集骨架）。
+- 主报告 §8 加回执指引（不改 Owner 裁决）；CHANGELOG、README 导航更新。
 
 ---
 
 ## 9. 结论与诚实边界
 
-- **R0 仍 BLOCK**；本任务单交付**不代表 R0 通过，更不代表 R1 获准**。
-- 本回执中 A/B/C 为**未执行/未完成（BLOCKED）**，D 为**部分完成（PARTIAL）**；**未把任何未执行测试写成 PASS**。
-- WorkBuddy 自测与 Owner/CI 独立复跑**分别标注**；相同工程环境不等于独立。
-- 后续仅在 Owner 对具体事项授权后推进；本轮回执后停止，不自行开启下一阶段。
+- **R0 仍 BLOCK**；本回执不代表 R0 通过，也不代表 R1 获准。
+- 包 D **测试执行 PASS**（服务器 Linux，plain + race 均 exit 0）；包 B **PARTIAL**（同视口默认态已成对，非同数据、impl 两页未采）；包 A/C 仍 BLOCKED。
+- 未把任何未执行测试写成 PASS；WorkBuddy 执行与 Owner/CI 独立复跑分别标注。

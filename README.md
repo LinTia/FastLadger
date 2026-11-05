@@ -54,6 +54,8 @@
 | [`docs/r0-screenshots/security-scan.md`](docs/r0-screenshots/security-scan.md) | **凭证安全扫描报告（脱敏）** | `--strict` 真实凭证候选 0；只含路径 / 类型 / 数量 / 脱敏上下文，无敏感值 |
 | [`docs/FastLedger-R0-独立复核补充-RV-01至04.md`](docs/FastLedger-R0-独立复核补充-RV-01至04.md) | **R0 二次整改后的独立复核补充** | R0-RV-01~04：骨架屏失败态证据、SHA 基准、逐控件字段语义、首页月份切换需求依据；R0 仍阻塞 |
 | [`docs/r0-screenshots/`](docs/r0-screenshots/) | **R0 真实截图基线（43 张 PNG）+ 索引 / 阻塞清单** | Edge headless 采集的 normal / empty / error 首屏；见目录内 `README.md`。**截图基线未完成，R0 未通过** |
+| [`docs/r0-screenshots/pairs/`](docs/r0-screenshots/pairs/) | **R0 包 B 成对截图（96 张）** | 原型 52 + 实现 44，4 视口；同视口默认态、**非同数据同状态**；含 manifest / SHA256SUMS / README |
+| [`docs/r0-evidence-4th/`](docs/r0-evidence-4th/) | **R0 包 D 服务器测试证据** | 服务器 Linux `go test ./...` 与 `go test -race` 原始日志、退出码、环境与 SHA256 |
 | [`docs/r0-screenshots/runtime/`](docs/r0-screenshots/runtime/) | **R0-RV-01 隔离运行时复验证据（5 PNG + 3 JSON）** | 仅拦截交易列表请求后的 pending / rejected / 恢复态截图与真实 CDP Network/Console 日志；见目录内 `README.md`。**本机隔离运行时复验已完成；失败态观察到骨架屏未清理（`.skel`=4、`aria-busy=true`）；待 Owner/CI 独立复跑及慢速网络、有数据态、多角色等场景验证；缺陷尚未关闭，R0 未通过** |
 | [`docs/FastLedger-新手开发完整指南.md`](docs/FastLedger-新手开发完整指南.md) | 新手开发完整指南（含可照敲代码骨架） | 应届生照着做即可开发 |
 | [`docs/FastLedger-枚举字典.md`](docs/FastLedger-枚举字典.md) | 统一枚举字典（唯一权威来源） | 各端枚举值对齐 |

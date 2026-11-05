@@ -1,0 +1,12 @@
+ok  	fastledger/cmd/server	0.336s
+ok  	fastledger/internal/api	4.459s
+ok  	fastledger/internal/authzreview	14.257s
+ok  	fastledger/internal/config	0.003s
+ok  	fastledger/internal/database	0.054s
+ok  	fastledger/internal/instance	0.172s
+ok  	fastledger/internal/migrate	1.430s
+ok  	fastledger/internal/model	0.003s
+?   	fastledger/internal/version	[no test files]
+?   	fastledger/web	[no test files]
+ok  	fastledger/internal/service	32.722s
+ok  	fastledger/internal/ws	7.151s
