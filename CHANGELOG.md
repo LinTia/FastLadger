@@ -2,6 +2,16 @@
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.82] - 2026-11-06
+
+### R0 第八次安全扫描器独立复核：K1–K3 修复 PARTIAL，新增 RV-07–RV-12
+
+- 独立复核 WorkBuddy PR #3 最新提交 `c95ff094`：UTF-16LE/BE、NUL 复扫、短凭据、敏感键名和标准 Base64 的主要整改已落地；30 项扫描器测试的 CI step success，普通 CI（全仓 race / Docker healthz）success。
+- 新发现并登记 RV-07–RV-12：明文 PEM 私钥可经 `.txt` 上传白名单漏检；fail-closed 集成验证未成为 Artifact upload 必要条件且接受任意非零退出码；少量非法 UTF-8 字节可能在宽松 2% 替换阈值下破坏凭据关键词；Base64URL 未覆盖；K1-03 注入位置描述不符；K1-04 使用上传白名单之外的 `.bin`，未验证真实 prepare→scan 链路。
+- R0 E2E run `42079445817` 审查时仍 in_progress（A 11 项与 D 39 项门禁已 success，C 仍运行，Artifact 扫描与上传尚未执行）；不得提前宣称本轮完整 CI / Artifact 验收通过。
+- 新增 [第八次安全扫描器独立复核报告](docs/FastLedger-R0-第八次安全扫描器独立复核.md)，要求 WorkBuddy 按 RV-07–RV-12 最小整改并回填最终 CI / Artifact 独立扫描证据。
+- 状态：K1–K3 主体修复 PARTIAL；RV-05 仍 Owner ACTION REQUIRED；PR #3 不合并；R0 仍 BLOCK，不授权 R1–R7 / PWA。
+
 ## [1.81] - 2026-11-05
 
 ### R0 第七次测试质量纠偏任务单（A05 断言、C PASS 证据、清单漂移、t021 Owner 裁决）
