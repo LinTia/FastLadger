@@ -41,6 +41,7 @@
 | [`docs/FastLedger-落地方案.md`](docs/FastLedger-落地方案.md) | 软件开发 8 环节落地方案 | 整体技术方案、数据模型、API、版本规划 |
 | [`docs/FastLedger-手机PWA实施指导书.md`](docs/FastLedger-手机PWA实施指导书.md) | 手机 PWA 实施指导书 | 完整移动端、完整离线、IndexedDB、同步、离线分析与本地备份恢复；指导后续 PRD / 落地方案 / WBS 修订 |
 | [`docs/FastLadger-Web-PWA视觉设计规范.md`](docs/FastLadger-Web-PWA视觉设计规范.md) | **Web / PWA 视觉设计规范** | 以 Panda-995/homeledger 为视觉参考的设计令牌、桌面/手机布局、组件与验收标准 |
+| [`docs/FastLadger-UI-DESIGN-01-独立复核报告.md`](docs/FastLadger-UI-DESIGN-01-独立复核报告.md) | **UI-DESIGN-01 独立复核报告** | 对 WorkBuddy 页面/组件盘点的独立复核、UIREV-01~06 整改要求；当前结论 PARTIAL |
 | [`docs/FastLedger-原型还原与PWA分阶段实施总方案.md`](docs/FastLedger-原型还原与PWA分阶段实施总方案.md) | **原型还原与 PWA 分阶段实施总方案** | R0–R7 总路线、原型差异盘点、AI 分批实施纪律、移动端/PWA/离线/备份验收门禁 |
 | [`docs/FastLedger-R0-基准冻结与差异盘点.md`](docs/FastLedger-R0-基准冻结与差异盘点.md) | **R0 基准冻结与差异盘点（第三次整改后）** | 13 页/逐控件交互矩阵（228 条）、两版原型差异、当前实现与后端 API 权限/DTO/错误码/测试映射、差异根因、截图基线执行结果与阻塞清单、Owner 裁决清单；**R0 未通过 / 阻塞** |
 | [`docs/FastLedger-R0-收尾执行清单.md`](docs/FastLedger-R0-收尾执行清单.md) | **R0 收尾执行清单（2026-11-05）** | 统一区分 R0 审计门槛与后续业务实现；汇总 RV 状态、D-4/D-8 待补、Owner 决策、截图/运行时/API 测试缺口与最终放行条件 |
