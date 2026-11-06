@@ -3,14 +3,17 @@
 - 权威审计：`docs/FastLedger-R0-第九次安全扫描器交付独立复核.md`（ChatGPT 提交到 main @ `0d8f909`，**结论未改动**）
 - 审计对象 PR #3 HEAD：`2699c9c3db2e40915082da2acbe2392ad40650de`
 - 修复分支：`fix/r0-sixth-runtime-defects`（**不提交 main、不合并 PR、不宣布 R0 通过**）
-- 本轮 PR 最新 HEAD SHA：`ea6eda923de38dd9f7558c2a54a32d965b2857e3`（**最终文档回填后**）
+- **代码 / workflow 最终提交**：`1e2d70c0fc7d57d830b86411bc5fbdcedac527ae`
+- **PR 交付时的确切 HEAD SHA：见 PR #3 描述与本报告交付回执**（报告不能自引用自身提交 SHA，故不在此写死）；`1e2d70c` 之后的提交**全部是纯文档回填**（`docs/r0-evidence-9th-fix/` 报告与证据），不改任何代码、测试判定或 workflow。
 - 本轮新增提交（按时间顺序）：
   - `991ab09b8409a17984ced91737cabbffc6c9b0f5`（RV-13/14/15 代码、测试、workflow、本地原始证据日志）
   - `1e2d70c0fc7d57d830b86411bc5fbdcedac527ae`（gate workflow 注册触发器 / 分场景 dispatch 准备）
-  - `ea6eda923de38dd9f7558c2a54a32d965b2857e3`（**仅文档**：整改报告 + 真实 CI/Artifact 证据回填，不改代码/workflow）
+  - `ea6eda923de38dd9f7558c2a54a32d965b2857e3`（仅文档：整改报告 + 真实 CI/Artifact 证据回填）
+  - 其后若仍有提交，均为 `docs/r0-evidence-9th-fix/` 纯文档回填（HEAD 对应说明 / 最终 HEAD CI 证据）。
 - **HEAD 与 CI 对应关系（准确表述，避免第八轮被复核指出的歧义）**：
   - 代码与 workflow 在 `991ab09` / `1e2d70c` 上完成全部 CI（R0 E2E run `42211926674` head=`991ab09`；RV-15 gate 四场景 + CI 全仓 `-race` run `42213272740` head=`1e2d70c`）。
-  - 最终 HEAD `ea6eda9` 只新增 `docs/r0-evidence-9th-fix/` 文档与证据文件，不改任何代码、测试判定或 workflow；已在该最终 HEAD 上**重跑 R0 E2E / RV-15 gate / CI 全仓 `-race`** 三个工作流再次证明全绿（见 §4）。
+  - 在文档回填提交 `ea6eda9` 上**重跑 R0 E2E / RV-15 gate positive / CI 全仓 `-race`** 三条工作流（run `42214133869` / `42214137411` / `42214140547`）全部 success。
+  - **最终 HEAD 上再次重跑同样三条工作流**（run 见 `final-head-ci-evidence.txt` 与 PR #3 描述）；最终 HEAD 与 `ea6eda9` 的差异仅为纯文档。
 - 审计结论处置：本轮只处理 RV-13 / RV-14 / RV-15；A05、C 硬编码 PASS、t021、OBS-ACCT-VIS-390、RV-05 **均未改判，保持原状态**。
 
 ---
