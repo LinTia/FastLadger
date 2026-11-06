@@ -47,13 +47,14 @@ RV-14-07 PNG Authorization 关键词内部 NUL
   new(fixed)  rc=2 verdict=BLOCKED hits=sample.png | AUTH_HEADER | 1 | sample.png | BEARER_TOKEN | 3
 PASS | RV-14-07 PNG Authorization 关键词内部 NUL → 修复后 BLOCKED（rc=2） | rc=2
 PASS | RV-14-07 PNG Authorization 关键词内部 NUL → 扫描输出不含匹配值
-  ---- Round 6 指定反例补充明细 ----
+PASS | RV-14-07 PNG Authorization 关键词内部 NUL → 必需命中类型 AUTH_HEADER | types=AUTH_HEADER, BEARER_TOKEN
+  ---- 指定反例补充明细（Round 6 / Round 7） ----
   输入构造：["Authori", <NUL>, "zation", ": ", "Bearer ", <TOKEN>].join("") → tEXt 负载
   旧扫描器 rc=2 verdict=BLOCKED hits=sample.png | BEARER_TOKEN | 1
   新扫描器 rc=2 verdict=BLOCKED 命中类型=AUTH_HEADER, BEARER_TOKEN
   新扫描器 hits 明细=sample.png | AUTH_HEADER | 1 | sample.png | BEARER_TOKEN | 3
   新扫描器完整原始 stdout（逐行以 | 前缀呈现）：
-  | [scan] 待上传目录：<仓库外:case-o7uEqB>
+  | [scan] 待上传目录：<仓库外:case-ERazro>
   | [scan] 文件总数=1 内容已全量扫描=1 其中二进制文件=1 跳过内容扫描=0 符号链接=0
   | [scan] 编码解码：utf8可靠=0 utf16可靠=0 无法可靠解码(已阻断)=0 可疑二进制(魔数不符)=0
   | [scan] 扫描口径：latin1 全量 + UTF-8/UTF-16LE/UTF-16BE 可靠解码复扫 + 强敏感键名联合判定 + Base64 解码复扫 + 噪声归一化复扫（文本型全文件 / 已知二进制可打印文本片段桥接，RV-14 无跳过分支）；任何无法可靠解码的文本型文件一律 BLOCK
@@ -70,13 +71,13 @@ RV-14-08 PNG x-api-key 关键词内部 NUL
 PASS | RV-14-08 PNG x-api-key 关键词内部 NUL → 修复后 BLOCKED（rc=2） | rc=2
 PASS | RV-14-08 PNG x-api-key 关键词内部 NUL → 扫描输出不含匹配值
   [绕过实证] 修复前 CLEAN(rc=0)，修复后 BLOCKED(rc=2)
-  ---- Round 6 指定反例补充明细 ----
+  ---- 指定反例补充明细（Round 6 / Round 7） ----
   输入构造：["x-api-", <NUL>, "key", ": ", <TOKEN>].join("") → tEXt 负载
   旧扫描器 rc=0 verdict=CLEAN(bypass) hits=(none)
   新扫描器 rc=2 verdict=BLOCKED 命中类型=SENSITIVE_ASSIGN
   新扫描器 hits 明细=sample.png | SENSITIVE_ASSIGN | 1
   新扫描器完整原始 stdout（逐行以 | 前缀呈现）：
-  | [scan] 待上传目录：<仓库外:case-SAVxa5>
+  | [scan] 待上传目录：<仓库外:case-tuqGbI>
   | [scan] 文件总数=1 内容已全量扫描=1 其中二进制文件=1 跳过内容扫描=0 符号链接=0
   | [scan] 编码解码：utf8可靠=0 utf16可靠=0 无法可靠解码(已阻断)=0 可疑二进制(魔数不符)=0
   | [scan] 扫描口径：latin1 全量 + UTF-8/UTF-16LE/UTF-16BE 可靠解码复扫 + 强敏感键名联合判定 + Base64 解码复扫 + 噪声归一化复扫（文本型全文件 / 已知二进制可打印文本片段桥接，RV-14 无跳过分支）；任何无法可靠解码的文本型文件一律 BLOCK
@@ -92,13 +93,13 @@ RV-14-09 PNG x-api-key 值内部 NUL
 PASS | RV-14-09 PNG x-api-key 值内部 NUL → 修复后 BLOCKED（rc=2） | rc=2
 PASS | RV-14-09 PNG x-api-key 值内部 NUL → 扫描输出不含匹配值
   [绕过实证] 修复前 CLEAN(rc=0)，修复后 BLOCKED(rc=2)
-  ---- Round 6 指定反例补充明细 ----
+  ---- 指定反例补充明细（Round 6 / Round 7） ----
   输入构造：["x-api-key", ": ", "SYN", <NUL>, "THETIC", <TOKEN>].join("") → tEXt 负载
   旧扫描器 rc=0 verdict=CLEAN(bypass) hits=(none)
   新扫描器 rc=2 verdict=BLOCKED 命中类型=SENSITIVE_ASSIGN
   新扫描器 hits 明细=sample.png | SENSITIVE_ASSIGN | 1
   新扫描器完整原始 stdout（逐行以 | 前缀呈现）：
-  | [scan] 待上传目录：<仓库外:case-dMsP16>
+  | [scan] 待上传目录：<仓库外:case-SeXTzk>
   | [scan] 文件总数=1 内容已全量扫描=1 其中二进制文件=1 跳过内容扫描=0 符号链接=0
   | [scan] 编码解码：utf8可靠=0 utf16可靠=0 无法可靠解码(已阻断)=0 可疑二进制(魔数不符)=0
   | [scan] 扫描口径：latin1 全量 + UTF-8/UTF-16LE/UTF-16BE 可靠解码复扫 + 强敏感键名联合判定 + Base64 解码复扫 + 噪声归一化复扫（文本型全文件 / 已知二进制可打印文本片段桥接，RV-14 无跳过分支）；任何无法可靠解码的文本型文件一律 BLOCK
@@ -108,7 +109,31 @@ PASS | RV-14-09 PNG x-api-key 值内部 NUL → 扫描输出不含匹配值
   | [scan] 结论：BLOCKED —— 禁止上传，请先清除上述命中项
   ---- 补充明细结束 ----
 
-PASS | 修复前 CLEAN 绕过样本数 >= 2（RV-14 盲区真实可复现） | count=5
+RV-14-10 PNG Authorization 关键词内部 NUL（隔离样本，无授权前缀）
+  old(2699c9c) rc=0 verdict=CLEAN(bypass) hits=(none)
+  new(fixed)  rc=2 verdict=BLOCKED hits=sample.png | AUTH_HEADER | 1
+PASS | RV-14-10 PNG Authorization 关键词内部 NUL（隔离样本，无授权前缀） → 修复后 BLOCKED（rc=2） | rc=2
+PASS | RV-14-10 PNG Authorization 关键词内部 NUL（隔离样本，无授权前缀） → 扫描输出不含匹配值
+PASS | RV-14-10 PNG Authorization 关键词内部 NUL（隔离样本，无授权前缀） → 必需命中类型 AUTH_HEADER | types=AUTH_HEADER
+PASS | RV-14-10 PNG Authorization 关键词内部 NUL（隔离样本，无授权前缀） → 隔离证明：不得命中 BEARER_TOKEN | types=AUTH_HEADER
+  [绕过实证] 修复前 CLEAN(rc=0)，修复后 BLOCKED(rc=2)
+  ---- 指定反例补充明细（Round 6 / Round 7） ----
+  输入构造：["Authori", <NUL>, "zation", ": ", <TOKEN>].join("") → tEXt 负载（隔离：仅关键词桥接）
+  旧扫描器 rc=0 verdict=CLEAN(bypass) hits=(none)
+  新扫描器 rc=2 verdict=BLOCKED 命中类型=AUTH_HEADER
+  新扫描器 hits 明细=sample.png | AUTH_HEADER | 1
+  新扫描器完整原始 stdout（逐行以 | 前缀呈现）：
+  | [scan] 待上传目录：<仓库外:case-GFmBaq>
+  | [scan] 文件总数=1 内容已全量扫描=1 其中二进制文件=1 跳过内容扫描=0 符号链接=0
+  | [scan] 编码解码：utf8可靠=0 utf16可靠=0 无法可靠解码(已阻断)=0 可疑二进制(魔数不符)=0
+  | [scan] 扫描口径：latin1 全量 + UTF-8/UTF-16LE/UTF-16BE 可靠解码复扫 + 强敏感键名联合判定 + Base64 解码复扫 + 噪声归一化复扫（文本型全文件 / 已知二进制可打印文本片段桥接，RV-14 无跳过分支）；任何无法可靠解码的文本型文件一律 BLOCK
+  | [scan] 命中明细（仅文件路径 + 命中类型 + 命中数量，不输出匹配值）：
+  | [HIT] sample.png | AUTH_HEADER | 1
+  | [scan] 命中文件/类型组合=1 命中总数=1
+  | [scan] 结论：BLOCKED —— 禁止上传，请先清除上述命中项
+  ---- 补充明细结束 ----
+
+PASS | 修复前 CLEAN 绕过样本数 >= 2（RV-14 盲区真实可复现） | count=6
 === 验收断言汇总 ===
   PASS | RV-14-01 PNG 明文 Authorization/Bearer → 修复后 BLOCKED（rc=2）
   PASS | RV-14-01 PNG 明文 Authorization/Bearer → 扫描输出不含匹配值
@@ -124,10 +149,15 @@ PASS | 修复前 CLEAN 绕过样本数 >= 2（RV-14 盲区真实可复现） | c
   PASS | RV-14-06 PNG 普通业务文字（不误报） → 扫描输出不含匹配值
   PASS | RV-14-07 PNG Authorization 关键词内部 NUL → 修复后 BLOCKED（rc=2）
   PASS | RV-14-07 PNG Authorization 关键词内部 NUL → 扫描输出不含匹配值
+  PASS | RV-14-07 PNG Authorization 关键词内部 NUL → 必需命中类型 AUTH_HEADER
   PASS | RV-14-08 PNG x-api-key 关键词内部 NUL → 修复后 BLOCKED（rc=2）
   PASS | RV-14-08 PNG x-api-key 关键词内部 NUL → 扫描输出不含匹配值
   PASS | RV-14-09 PNG x-api-key 值内部 NUL → 修复后 BLOCKED（rc=2）
   PASS | RV-14-09 PNG x-api-key 值内部 NUL → 扫描输出不含匹配值
+  PASS | RV-14-10 PNG Authorization 关键词内部 NUL（隔离样本，无授权前缀） → 修复后 BLOCKED（rc=2）
+  PASS | RV-14-10 PNG Authorization 关键词内部 NUL（隔离样本，无授权前缀） → 扫描输出不含匹配值
+  PASS | RV-14-10 PNG Authorization 关键词内部 NUL（隔离样本，无授权前缀） → 必需命中类型 AUTH_HEADER
+  PASS | RV-14-10 PNG Authorization 关键词内部 NUL（隔离样本，无授权前缀） → 隔离证明：不得命中 BEARER_TOKEN
   PASS | 修复前 CLEAN 绕过样本数 >= 2（RV-14 盲区真实可复现）
-  合计：19 项，PASS 19，FAIL 0
+  合计：24 项，PASS 24，FAIL 0
   证据脚本退出码：0

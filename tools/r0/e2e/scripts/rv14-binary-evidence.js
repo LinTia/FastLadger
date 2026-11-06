@@ -7,8 +7,9 @@
  * 从 git 基线 commit（默认 2699c9c，第九次复核时的 PR HEAD）用 `git show` 取出
  * 修复前扫描器，与当前修复后扫描器对同一批「合法 PNG 魔数」合成样本运行，
  * 打印两者的原始退出码与命中类型，证明：
- *   · 修复前：knownBinary 跳过噪声复扫 → CLEAN（rc=0，绕过成立）
- *   · 修复后：全部 BLOCKED（rc=2）
+ *   · 修复前：knownBinary 跳过噪声复扫 → 部分 NUL 插入样本 CLEAN（rc=0，绕过成立）；
+ *     含连续 Bearer/token 的明文样本旧版 latin1 已能捕获（rc=2），不笼统宣称全部绕过。
+ *   · 修复后：全部阻断样本 BLOCKED（rc=2）
  *   · 正常 PNG / 普通业务文字 PNG：修复前后都 CLEAN（无误报放大）
  *   · 扫描输出绝不含合成匹配值
  *
@@ -44,6 +45,9 @@ const samples = [
   ['RV-14-07 PNG Authorization 关键词内部 NUL', makePng({ text: ['Authori', NUL, 'zation', ': ', 'Bearer ', TOK].join('') }), 2],
   ['RV-14-08 PNG x-api-key 关键词内部 NUL', makePng({ text: ['x-api-', NUL, 'key', ': ', TOK].join('') }), 2],
   ['RV-14-09 PNG x-api-key 值内部 NUL', makePng({ text: ['x-api-key', ': ', 'SYN', NUL, 'THETIC', TOK].join('') }), 2],
+  // Round 7（RV-14-T01）：隔离样本，负载完全不含 "Bearer"，只依赖 Authorization 关键词桥接。
+  ['RV-14-10 PNG Authorization 关键词内部 NUL（隔离样本，无授权前缀）',
+    makePng({ text: ['Authori', NUL, 'zation', ': ', TOK].join('') }), 2],
 ];
 
 /** 运行扫描器，返回退出码与输出。 */
@@ -57,7 +61,7 @@ function run(scanner, dir) {
 }
 
 /**
- * Round 6 三个指定反例的「输入构造描述」。这些描述会原样写入证据日志，
+ * Round 6 / Round 7 指定反例的「输入构造描述」。这些描述会原样写入证据日志，
  * 而证据日志目录本身会被扫描器复扫，因此必须遵守以下安全约束：
  *   · NUL 渲染为字面量 <NUL>，合成 token 渲染为字面量 <TOKEN>（绝不写真实合成串）；
  *   · 敏感键名 / 分隔符 / 值一律作为独立数组元素，由引号与逗号分隔，
@@ -72,6 +76,23 @@ const CONSTRUCTION_DESCRIPTIONS = new Map([
     '["x-api-", <NUL>, "key", ": ", <TOKEN>].join("") → tEXt 负载'],
   ['RV-14-09 PNG x-api-key 值内部 NUL',
     '["x-api-key", ": ", "SYN", <NUL>, "THETIC", <TOKEN>].join("") → tEXt 负载'],
+  ['RV-14-10 PNG Authorization 关键词内部 NUL（隔离样本，无授权前缀）',
+    '["Authori", <NUL>, "zation", ": ", <TOKEN>].join("") → tEXt 负载（隔离：仅关键词桥接）'],
+]);
+
+/**
+ * RV-14-T01：指定样本在新扫描器上的「必需命中类型」失败关闭断言。
+ * case-51 / RV-14-07 原为 AUTH_HEADER|BEARER_TOKEN 二选一，桥接逻辑失效仍可能靠
+ * 连续 Bearer/token 通过；这里把 AUTH_HEADER 固化为必须条件，隔离样本同理。
+ */
+const REQUIRED_HIT_TYPES = new Map([
+  ['RV-14-07 PNG Authorization 关键词内部 NUL', ['AUTH_HEADER']],
+  ['RV-14-10 PNG Authorization 关键词内部 NUL（隔离样本，无授权前缀）', ['AUTH_HEADER']],
+]);
+
+/** 隔离样本禁止出现的命中类型：出现即说明隔离失效（被连续 Bearer/token 规则替代）。 */
+const FORBIDDEN_HIT_TYPES = new Map([
+  ['RV-14-10 PNG Authorization 关键词内部 NUL（隔离样本，无授权前缀）', ['BEARER_TOKEN']],
 ]);
 
 /**
@@ -132,17 +153,27 @@ function main() {
       // 输出绝不含真实/合成匹配值本身
       const leaked = [TOK, 'SYNTHETIC', 'FAKE', 'x-api-key'].some((v) => newR.out.includes(v));
       check(`${name} → 扫描输出不含匹配值`, !leaked);
+      // RV-14-T01：AUTH_HEADER 失败关闭断言 + 隔离证明，全部计入尾部合计。
+      const newTypes = hitTypes(newR.hits);
+      for (const required of REQUIRED_HIT_TYPES.get(name) || []) {
+        check(`${name} → 必需命中类型 ${required}`, newTypes.includes(required),
+          `types=${newTypes.join(', ') || '(none)'}`);
+      }
+      for (const forbidden of FORBIDDEN_HIT_TYPES.get(name) || []) {
+        check(`${name} → 隔离证明：不得命中 ${forbidden}`, !newTypes.includes(forbidden),
+          `types=${newTypes.join(', ') || '(none)'}`);
+      }
       // 对阻断场景，额外记录修复前是否为 CLEAN（绕过实证；不强制，因明文样本旧版 latin1 可能已捕获）
       if (expectedNew === 2 && oldR.rc === 0) {
         process.stdout.write(`  [绕过实证] 修复前 CLEAN(rc=0)，修复后 BLOCKED(rc=2)\n`);
       }
-      // Round 6：三个指定反例额外打印 (a) 输入构造描述、(b) 旧 rc/verdict/hits、
+      // Round 6 / Round 7 指定反例额外打印 (a) 输入构造描述、(b) 旧 rc/verdict/hits、
       // (c) 新 rc/verdict/命中类型、(d) 新扫描器完整原始 stdout。原有 6 项不受影响。
       if (CONSTRUCTION_DESCRIPTIONS.has(name)) {
         const oldHitStr = oldR.hits.join(' | ') || '(none)';
         const newHitStr = newR.hits.join(' | ') || '(none)';
         const types = hitTypes(newR.hits).join(', ') || '(none)';
-        process.stdout.write('  ---- Round 6 指定反例补充明细 ----\n');
+        process.stdout.write('  ---- 指定反例补充明细（Round 6 / Round 7） ----\n');
         process.stdout.write(`  输入构造：${CONSTRUCTION_DESCRIPTIONS.get(name)}\n`);
         process.stdout.write(`  旧扫描器 rc=${oldR.rc} verdict=${oldVerdict} hits=${oldHitStr}\n`);
         process.stdout.write(`  新扫描器 rc=${newR.rc} verdict=${newVerdict} 命中类型=${types}\n`);

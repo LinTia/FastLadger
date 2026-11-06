@@ -41,9 +41,15 @@
  * Round 6（case-51~53，第九次复核 RV-14 PARTIAL 收口 —— 三个指定反例）：
  *   仅补齐反例测试与修复前后对照证据，不改扫描器本体 / RV-13 / RV-15 / workflow。
  *   合法 PNG 魔数下：Authorization 关键词内部 NUL（case-51）/ x-api-key 关键词内部
- *   NUL（case-52）/ x-api-key 值内部 NUL（case-53）均须 BLOCKED（rc=2），且分别断言
- *   AUTH_HEADER|BEARER_TOKEN / SENSITIVE_ASSIGN / SENSITIVE_ASSIGN 命中类型；
+ *   NUL（case-52）/ x-api-key 值内部 NUL（case-53）均须 BLOCKED（rc=2）；case-51 的命中类型
+ *   断言在 Round 7 由 OR 收紧为强制 AUTH_HEADER，case-52/53 仍断言 SENSITIVE_ASSIGN。
  *   case-46（正常 PNG 高熵）与 case-47（普通业务文字 PNG）两个 CLEAN 样本原样保留且继续通过。
+ *
+ * Round 7（case-54，第十一次独立复核 RV-14-T01）：
+ *   case-51 的组合负载含连续 Bearer/token，若关键词桥接回归失效仍可能靠 BEARER_TOKEN 通过。
+ *   新增隔离样本 case-54：合法 PNG 魔数 + Authori[NUL]zation: <TOKEN>，负载完全不含 "Bearer"，
+ *   真实调用扫描器要求 rc=2、必须命中 AUTH_HEADER、且不得命中 BEARER_TOKEN，
+ *   从而单独证明「Authorization 关键词内部 NUL 桥接」这条检测路径。
  */
 
 const { test } = require('node:test');
@@ -813,7 +819,8 @@ test('case-51 [RV-14-07] 合法 PNG 魔数 + Authorization 关键词内部插入
     EXIT_BLOCKED,
     [RV14_TOKEN, payload],
   );
-  assert.match(result.stdout, /(AUTH_HEADER|BEARER_TOKEN)/);
+  // Round 7（RV-14-T01）：去掉 OR 断言，强制 AUTH_HEADER；组合样本本身保留作为回归。
+  assert.match(result.stdout, /AUTH_HEADER/, 'case-51 必须命中 AUTH_HEADER，不得由 BEARER_TOKEN 替代');
 });
 
 test('case-52 [RV-14-08] 合法 PNG 魔数 + x-api-key 关键词内部插入 NUL → BLOCK', (t) => {
@@ -840,4 +847,24 @@ test('case-53 [RV-14-09] 合法 PNG 魔数 + x-api-key 值内部插入 NUL → B
     [RV14_TOKEN, payload],
   );
   assert.match(result.stdout, /SENSITIVE_ASSIGN/);
+});
+
+// ===== Round 7: 第十一次独立复核 RV-14-T01 —— 隔离 Authorization 桥接路径 =====
+
+test('case-54 [RV-14-10] 隔离样本：PNG Authorization 关键词内 NUL 且无授权前缀 → 必须命中 AUTH_HEADER', (t) => {
+  const dir = makeTmp(t, 'rv14-10');
+  // 隔离：负载中完全没有 "Bearer"，也没有连续 Bearer/token 串。
+  // authorization 不在 SENSITIVE_KEY_SOURCE 中，因此 AUTH_HEADER 只能来自
+  // "Authori<NUL>zation" 的短噪声桥接，不可能由 BEARER_TOKEN 规则替代。
+  const payload = ['Authori', NUL, 'zation', ': ', RV14_TOKEN].join('');
+  assert.ok(!payload.includes('Bearer'), '隔离样本不得含连续 Bearer/token 串');
+  fs.writeFileSync(path.join(dir, 'embedded.png'), rv14Png(payload));
+  const result = runScanner(
+    'case-54 [RV-14-10] PNG Authorization 关键词内 NUL（隔离，无 Bearer）',
+    dir,
+    EXIT_BLOCKED,
+    [RV14_TOKEN, payload],
+  );
+  assert.match(result.stdout, /AUTH_HEADER/, '必须命中 AUTH_HEADER（不得由 BEARER_TOKEN 替代）');
+  assert.doesNotMatch(result.stdout, /BEARER_TOKEN/, '隔离样本不得靠连续 Bearer/token 规则通过');
 });

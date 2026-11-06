@@ -64,14 +64,15 @@ jobs:
         run: node --test tools/r0/test-resolve-category.js
 
       # P1 安全整改（K1-K3 + RV-07~RV-15）：凭据扫描器负向合成测试门禁。
-      # 53 项用例覆盖 K1(UTF-16LE/BE/NUL插入/无法解码) / K2(短Token/短Key/短密码/业务字段不误报)
+      # 54 项用例覆盖 K1(UTF-16LE/BE/NUL插入/无法解码) / K2(短Token/短Key/短密码/业务字段不误报)
       # / K3(x-api-key/apiKey变体/Base64/JSON嵌套/大小写分隔符) / RV-07~RV-13 /
       # 第九次复核 RV-13(多层清单递归校验 + 篡改/删除负向) 与 RV-14(合法 PNG 魔数二进制盲区)，
       # Round 6 追加 case-51~53：Authorization 关键词内 NUL / x-api-key 关键词内 NUL /
-      # x-api-key 值内 NUL 三个指定反例（仅补测试与证据，不改扫描器本体）。
+      # x-api-key 值内 NUL 三个指定反例；Round 7（RV-14-T01）把 case-51 收紧为强制
+      # AUTH_HEADER 断言，并新增 case-54 隔离样本（不含 Bearer，只依赖关键词桥接）。
       # 全部合成凭据、真实断言（调用真实扫描器 / prepare / 校验器子进程）。
       # 任一失败即 job 失败，确保绕过无法再通过。
-      - name: 凭据扫描器负向合成测试（K1-K3 + RV-07~RV-15，53 项）
+      - name: 凭据扫描器负向合成测试（K1-K3 + RV-07~RV-15，54 项）
         run: node --test tools/r0/e2e/test-scan-artifacts.js
 
       # 第九次复核 RV-13 / RV-14 原始证据：可复现脚本，输出原始日志 / 退出码 / 最终目录清单。
