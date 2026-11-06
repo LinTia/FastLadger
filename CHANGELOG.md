@@ -14,7 +14,7 @@
 - 状态：RV-07 基本修复成立但 PEM 类型覆盖仍可补；RV-08 上传双条件代码已加但真实负向集成验收 PARTIAL；RV-09 PARTIAL；RV-10/11/12 修复成立；RV-13 未修复；RV-14 P1 / RV-15 P2 未修复。
 - A/B/C/D 仍 PARTIAL：A05 仍只按耗时判 PASS；B 的 t021 override 待 Owner；C 为 164/4/59/1；D 的 `OBS-ACCT-VIS-390` 仍 FAIL。RV-05 仍 Owner ACTION REQUIRED。
 - 新增 [第十次安全扫描器整改独立复核报告](docs/FastLedger-R0-第十次安全扫描器整改独立复核.md)。要求 WorkBuddy 仅整改 RV-13/14/15 并提供真实 Artifact 与 workflow 负向证据；不合并 PR、不启动 R1–R7/PWA。
-- PR #3 OPEN、未合并；main 与 PR 分支 ahead 13 / behind 9 / diverged。R0 继续 BLOCK。
+- PR #3 OPEN、未合并；main 与 PR 分支 diverged（PR ahead 13；main 在本次独立审计文档提交后继续前进，behind 数随之变化）。R0 继续 BLOCK。
 
 ## [1.83] - 2026-11-06
 
