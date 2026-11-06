@@ -24,6 +24,14 @@
 name: R0 Upload Gate (RV-15)
 
 on:
+  # GitHub 只允许「已注册」的 workflow 被 REST workflow_dispatch 触发；新文件若不在默认分支
+  # 按文件名 dispatch 会 404。故加一条路径过滤的 push 触发器，使本文件随分支推送自动注册并
+  # 产生一次正向 run；注册后即可按 numeric workflow id + ref=分支 单独 dispatch 每个负向场景，
+  # 从而让「每个负向 run 的 Artifact 数量 = 0」可被 Artifact API 直接证明。
+  push:
+    branches: [fix/r0-sixth-runtime-defects]
+    paths:
+      - '.github/workflows/r0-upload-gate.yml'
   workflow_dispatch:
     inputs:
       scenario:
@@ -42,9 +50,12 @@ permissions:
 
 jobs:
   gate:
-    name: "RV-15 gate / ${{ inputs.scenario }}"
+    name: "RV-15 gate / ${{ inputs.scenario || 'positive' }}"
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      # push 事件无 inputs → 默认正向；workflow_dispatch 用输入值。
+      RV15_SCENARIO: ${{ inputs.scenario || 'positive' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -59,7 +70,7 @@ jobs:
         if: ${{ always() }}
         run: |
           node tools/r0/e2e/scripts/rv15-gate-fixture.js prepare \
-            --scenario "${{ inputs.scenario }}" \
+            --scenario "$RV15_SCENARIO" \
             --source artifacts/r0-gate-src \
             --dest artifacts/r0-gate-upload
 
@@ -77,7 +88,7 @@ jobs:
         if: ${{ always() }}
         run: |
           node tools/r0/e2e/scripts/rv15-gate-fixture.js gate \
-            --scenario "${{ inputs.scenario }}"
+            --scenario "$RV15_SCENARIO"
 
       # 真实上传 step：if 条件与生产 r0-e2e.yml 完全一致。
       # 任一前置 step 非 success → 本 step 被 skipped → 本次 run 不产生任何 Artifact。
@@ -86,7 +97,7 @@ jobs:
         if: ${{ always() && steps.artifact_scan.outcome == 'success' && steps.fail_closed_check.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
-          name: r0-gate-${{ inputs.scenario }}-${{ github.run_id }}
+          name: r0-gate-${{ inputs.scenario || 'positive' }}-${{ github.run_id }}
           path: artifacts/r0-gate-upload/**
           if-no-files-found: error
           retention-days: 7
@@ -96,7 +107,7 @@ jobs:
         id: gate_assert
         if: ${{ always() }}
         env:
-          RV15_SCENARIO: ${{ inputs.scenario }}
+          # RV15_SCENARIO 来自 job 级 env（push 默认 positive / dispatch 用输入值）。
           RV15_OUTCOME_PREPARE: ${{ steps.artifact_prepare.outcome }}
           RV15_OUTCOME_SCAN: ${{ steps.artifact_scan.outcome }}
           RV15_OUTCOME_FC: ${{ steps.fail_closed_check.outcome }}
@@ -107,7 +118,7 @@ jobs:
         if: ${{ always() }}
         run: |
           {
-            echo "## RV-15 / scenario=${{ inputs.scenario }}"
+            echo "## RV-15 / scenario=$RV15_SCENARIO"
             echo ""
             echo "- commit: ${{ github.sha }}"
             echo "- 真实 step outcome（GitHub Actions 实测，非本地模拟）："
