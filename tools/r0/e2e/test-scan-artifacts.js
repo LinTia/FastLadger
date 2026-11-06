@@ -31,6 +31,12 @@
  *   RV-11 NUL 修正：保留 case-20（分隔符处 NUL），新增 token 值内部 NUL（case-37）。
  *   RV-12 上传链路：不可解码样本伪装成 random.txt，经 prepare→scan 证明进入上传目录后被 BLOCK。
  *   RV-13 SHA256SUMS：源含 trace.zip 时最终清单只含实际上传文件（prepare-upload 内重生成 + 校验）。
+ *
+ * Round 5（case-42~50，第九次独立复核 RV-13 / RV-14 整改专测）：
+ *   RV-14 已知二进制盲区：合法 PNG 魔数 + 明文凭据 / token 值内部 NUL /
+ *     Bearer 关键词内部 NUL / x-api-key 均须 BLOCK；正常 PNG 与含普通业务文字的 PNG 仍 CLEAN。
+ *   RV-13 多层清单：根/A/D/C 各级旧清单 + trace.zip，prepare 后递归校验 0 missing / 0 mismatch；
+ *     篡改 / 删除最终文件后校验必须失败（调用真实 verify-upload-manifest.js）。
  */
 
 const { test } = require('node:test');
@@ -43,9 +49,14 @@ const crypto = require('node:crypto');
 
 const SCANNER = path.resolve(__dirname, 'scripts', 'scan-artifacts.js');
 const PREPARE = path.resolve(__dirname, 'scripts', 'prepare-upload.js');
+const VERIFY_MANIFEST = path.resolve(__dirname, 'scripts', 'verify-upload-manifest.js');
+const manifestLib = require('./scripts/lib/manifest');
+const { makePng, highEntropyBytes } = require('./scripts/lib/png-fixture');
+const { buildSource } = require('./scripts/lib/rv13-fixture');
 const EXIT_CLEAN = 0;
 const EXIT_ERROR = 1;
 const EXIT_BLOCKED = 2;
+const EXIT_VERIFY_FAILED = 2;
 
 /** 真实 PNG 起始魔数（8 字节）。 */
 const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
@@ -655,3 +666,128 @@ test('case-41 [RV-13] 源含 trace.zip 时最终 SHA256SUMS 只含实际上传�
   const actual = crypto.createHash('sha256').update(fs.readFileSync(path.join(dest, 'report.md'))).digest('hex');
   assert.equal(actual, m[1], 'report.md 实际哈希应与清单一致（0 missing / 0 mismatch）');
 });
+
+// ===== Round 5: 第九次独立复核 RV-13 / RV-14 整改专测 =====
+
+const NUL = String.fromCharCode(0);
+const RV14_TOKEN = ['SYNTHETIC', 'FAKE', '000000000000'].join('');
+
+/** 生成一张结构完整、合法 PNG 魔数的样本，并把合成文本负载放进 tEXt chunk。 */
+function rv14Png(text, extra = {}) {
+  return makePng({ text, ...extra });
+}
+
+test('case-42 [RV-14-01] 合法 PNG 魔数 + 明文 Authorization/Bearer → BLOCK', (t) => {
+  const dir = makeTmp(t, 'rv14-01');
+  fs.writeFileSync(path.join(dir, 'embedded.png'), rv14Png(['Authorization', ': ', 'Bearer', ' ', RV14_TOKEN].join('')));
+  const result = runScanner('case-42 [RV-14] PNG 明文 Authorization/Bearer', dir, EXIT_BLOCKED, [RV14_TOKEN]);
+  assert.match(result.stdout, /(BEARER_TOKEN|AUTH_HEADER)/);
+});
+
+test('case-43 [RV-14-02] 合法 PNG 魔数 + token 值内部 NUL → BLOCK', (t) => {
+  const dir = makeTmp(t, 'rv14-02');
+  // NUL 位于 Bearer 值前 12 个可匹配字符内：旧 knownBinary 分支跳过噪声复扫 → CLEAN 绕过。
+  const payload = ['Bearer ', 'SYN', NUL, 'THETIC', RV14_TOKEN].join('');
+  fs.writeFileSync(path.join(dir, 'embedded.png'), rv14Png(payload));
+  const result = runScanner('case-43 [RV-14] PNG token 值内 NUL', dir, EXIT_BLOCKED, [RV14_TOKEN, payload]);
+  assert.match(result.stdout, /BEARER_TOKEN/);
+});
+
+test('case-44 [RV-14-03] 合法 PNG 魔数 + Bearer 关键词内部 NUL → BLOCK', (t) => {
+  const dir = makeTmp(t, 'rv14-03');
+  const payload = ['Bea', NUL, 'rer ', RV14_TOKEN].join('');
+  fs.writeFileSync(path.join(dir, 'embedded.png'), rv14Png(payload));
+  const result = runScanner('case-44 [RV-14] PNG Bearer 关键词内 NUL', dir, EXIT_BLOCKED, [RV14_TOKEN, payload]);
+  assert.match(result.stdout, /BEARER_TOKEN/);
+});
+
+test('case-45 [RV-14-04] 合法 PNG 魔数 + x-api-key → BLOCK', (t) => {
+  const dir = makeTmp(t, 'rv14-04');
+  const payload = ['x-api-key', ': ', RV14_TOKEN].join('');
+  fs.writeFileSync(path.join(dir, 'embedded.png'), rv14Png(payload));
+  const result = runScanner('case-45 [RV-14] PNG x-api-key', dir, EXIT_BLOCKED, [RV14_TOKEN, payload]);
+  assert.match(result.stdout, /SENSITIVE_ASSIGN/);
+});
+
+test('case-46 [RV-14-05] 正常 PNG 图片（无凭据、含高熵压缩数据）→ CLEAN', (t) => {
+  const dir = makeTmp(t, 'rv14-05');
+  // 结构完整 PNG + 4 KiB 高熵二进制尾（模拟真实压缩数据），不含任何凭据。
+  fs.writeFileSync(path.join(dir, 'normal.png'), makePng({ highEntropyTail: highEntropyBytes(4096) }));
+  const result = runScanner('case-46 [RV-14] 正常 PNG 无凭据', dir, EXIT_CLEAN);
+  assert.match(result.stdout, /\[scan\] 结论：CLEAN/);
+  assert.doesNotMatch(result.stdout, /SUSPICIOUS_BINARY/);
+});
+
+test('case-47 [RV-14-06] 合法 PNG 含普通业务文字 → CLEAN（不误报）', (t) => {
+  const dir = makeTmp(t, 'rv14-06');
+  const business = 'unit: kg\nnote: groceries\nstatus: ok\nqty: 2\n';
+  fs.writeFileSync(path.join(dir, 'business.png'), rv14Png(business));
+  fs.writeFileSync(path.join(dir, 'report.md'), '# report\nstatus: ok\n', 'utf8');
+  const result = runScanner('case-47 [RV-14] PNG 普通业务文字', dir, EXIT_CLEAN);
+  assert.match(result.stdout, /\[scan\] 结论：CLEAN/);
+});
+
+test('case-48 [RV-13] 多层目录（根/A/D/C 旧清单 + trace.zip）→ 单一根清单递归覆盖，0 missing / 0 mismatch', (t) => {
+  const src = makeTmp(t, 'rv13-multi-src');
+  const dest = makeTmp(t, 'rv13-multi-dest');
+  const fixture = buildSource(src);
+
+  const prep = runPrepare(src, dest);
+  assert.equal(prep.status, EXIT_CLEAN, `prepare 失败: ${prep.stderr}`);
+
+  // 真实调用独立递归校验器（而非只检查清单格式）。
+  const verify = spawnSync(process.execPath, [VERIFY_MANIFEST, dest], { encoding: 'utf8' });
+  assert.equal(verify.status, EXIT_CLEAN, `递归校验失败: ${verify.stdout}${verify.stderr}`);
+
+  const r = manifestLib.verifyUploadTree(dest);
+  assert.equal(r.missing.length, 0, '0 missing');
+  assert.equal(r.mismatch.length, 0, '0 mismatch');
+  assert.equal(r.uncovered.length, 0, '所有实际文件均有可验证 SHA256');
+  assert.equal(r.staleRefs.length, 0, '无指向已排除文件的引用');
+  assert.equal(r.nestedManifests.length, 0, '无嵌套/旧清单残留');
+  assert.equal(r.selfRef, false, '根清单不自引用');
+  assert.ok(!rootManifestListsSelf(dest), '根清单不列出自身');
+
+  // 所有预期普通文件都进入最终目录，且被根清单覆盖。
+  const files = manifestLib.walkFiles(dest).files;
+  for (const rel of fixture.expectedFiles) assert.ok(files.includes(rel), `${rel} 应被上传`);
+  const rootText = fs.readFileSync(path.join(dest, manifestLib.MANIFEST_NAME), 'utf8');
+  for (const ref of fixture.staleRefs) assert.ok(!rootText.includes(ref), `根清单不得含失效引用 ${ref}`);
+  assert.ok(!rootText.includes('trace.zip'), '根清单不得含 trace.zip');
+  assert.ok(!rootText.includes('app.db'), '根清单不得含被排除的 db 引用');
+  for (const rel of fixture.excludedFiles) assert.ok(!files.includes(rel), `被排除文件 ${rel} 不得进入上传目录`);
+  assert.equal(r.entries, files.length - 1, '根清单条目数 = 最终文件数 - 1（根清单自身为唯一例外）');
+});
+
+test('case-49 [RV-13] 故意篡改一个最终文件 → 递归字节校验必须失败', (t) => {
+  const src = makeTmp(t, 'rv13-tamper-src');
+  const dest = makeTmp(t, 'rv13-tamper-dest');
+  buildSource(src);
+  assert.equal(runPrepare(src, dest).status, EXIT_CLEAN, 'prepare 应成功');
+
+  const target = path.join(dest, 'A', 'a-report.md');
+  fs.appendFileSync(target, '\nTAMPERED-FOR-NEGATIVE-TEST\n');
+  const verify = spawnSync(process.execPath, [VERIFY_MANIFEST, dest], { encoding: 'utf8' });
+  assert.equal(verify.status, EXIT_VERIFY_FAILED, '篡改后校验必须退出码 2');
+  assert.match(verify.stdout, /MISMATCH/);
+  assert.equal(manifestLib.verifyUploadTree(dest).mismatch.length >= 1, true);
+});
+
+test('case-50 [RV-13] 故意删除一个最终文件 → 递归字节校验必须失败', (t) => {
+  const src = makeTmp(t, 'rv13-delete-src');
+  const dest = makeTmp(t, 'rv13-delete-dest');
+  buildSource(src);
+  assert.equal(runPrepare(src, dest).status, EXIT_CLEAN, 'prepare 应成功');
+
+  fs.rmSync(path.join(dest, 'D', 'd-report.md'));
+  const verify = spawnSync(process.execPath, [VERIFY_MANIFEST, dest], { encoding: 'utf8' });
+  assert.equal(verify.status, EXIT_VERIFY_FAILED, '删除后校验必须退出码 2');
+  assert.match(verify.stdout, /MISSING/);
+  assert.equal(manifestLib.verifyUploadTree(dest).missing.length >= 1, true);
+});
+
+/** 根清单是否列出了自身（自引用 / 循环引用检查）。 */
+function rootManifestListsSelf(dest) {
+  const text = fs.readFileSync(path.join(dest, manifestLib.MANIFEST_NAME), 'utf8');
+  return text.split('\n').some((l) => l.endsWith(`  ${manifestLib.MANIFEST_NAME}`));
+}

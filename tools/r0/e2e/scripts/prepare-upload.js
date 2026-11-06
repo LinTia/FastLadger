@@ -16,7 +16,10 @@
  *      （敏感词规则采用更严格口径：即便扩展名在白名单内也一律排除。）
  *   4. 每次运行先清空目标目录，避免上一轮残留被再次上传；
  *   5. 不跟随符号链接，避免目录逃逸；
- *   6. 日志只输出数量、相对文件名与排除原因，**绝不输出文件内容**。
+ *   6. 日志只输出数量、相对文件名与排除原因，**绝不输出文件内容**；
+ *   7. （RV-13 第九次复核）最终目录采用「单一权威根清单」：任何层级的 SHA256SUMS.txt
+ *      都不从源目录复制（杜绝旧清单残留 / 失效引用），收敛后重新遍历最终目录生成根清单，
+ *      递归覆盖每一个实际文件（根清单自身为唯一例外），并做递归实际字节校验。
  *
  * 用法：
  *   node tools/r0/e2e/scripts/prepare-upload.js
@@ -28,7 +31,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const crypto = require('node:crypto');
+const manifest = require('./lib/manifest');
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 const DEFAULT_SOURCE = path.join(REPO_ROOT, 'artifacts', 'r0-e2e');
@@ -120,6 +123,13 @@ function classify(rel) {
   const lower = base.toLowerCase();
   const ext = path.extname(lower);
 
+  // RV-13：任何层级的 SHA256SUMS.txt 都是「上一轮生成的派生产物」，不是证据本体。
+  // 一律不复制进上传目录，从根上杜绝「残留旧清单」与「指向已过滤文件的失效引用」。
+  // 替代校验方式：收敛完成后由 buildRootManifest() 生成唯一权威根清单，
+  // 递归覆盖最终目录里的每一个实际文件（含原本被嵌套清单描述的子目录文件）。
+  if (manifest.isManifestName(rel)) {
+    return { allowed: false, reason: '旧/嵌套校验清单（由唯一权威根清单统一重建）' };
+  }
   if (ext === '.zip' && lower.includes('trace')) {
     return { allowed: false, reason: 'Playwright trace 归档（可能含网络请求明文）' };
   }
@@ -233,7 +243,7 @@ function main(argv) {
   /** @type {{rel: string, reason: string}[]} */
   const excluded = [];
   /** @type {string[]} */
-  const collected = [];
+  let collected = [];
 
   try {
     // 先清空，保证上传目录只含本轮白名单结果，杜绝上一轮残留。
@@ -259,48 +269,32 @@ function main(argv) {
 
   collected.sort();
 
-  // RV-13：白名单收敛完成后，在目标目录「重新生成」SHA256SUMS，清单只包含最终实际上传的
-  // 文件（排除 SHA256SUMS.txt 自身，避免递归；也不包含任何被排除的原始 trace / db 等文件）。
-  // 若源目录已带 SHA256SUMS.txt，此处会用新清单覆盖，杜绝遗留已排除文件的引用。
-  // 生成后立即做一次完整校验：要求 0 missing / 0 mismatch，否则视为环境错误（失败关闭，不静默放过）。
+  // RV-13（第九次复核重设计）：最终上传目录采用「单一权威根清单」口径。
+  //   · 收敛阶段已把源目录任意层级的 SHA256SUMS.txt 全部排除，绝不复制旧清单（无残留、无失效引用）。
+  //   · buildRootManifest() 重新遍历「最终目录」，对每一个实际文件（递归，含任意子目录）
+  //     计算实际字节 SHA256 并写入根 SHA256SUMS.txt；根清单自身是唯一例外，不列出自身。
+  //   · verifyUploadTree() 再次递归遍历最终目录、重新读字节、重新算摘要，逐条比对，
+  //     并检查 missing / mismatch / uncovered / staleRefs / nestedManifests / selfRef / 符号链接。
+  //     任一异常即以 EXIT_ERROR 失败关闭，绝不静默放过。
+  //   · 职责清晰：只有一份清单；嵌套清单无职责；无重复条目、无自引用 / 循环引用。
+  let manifestResult;
+  let verification;
   try {
-    // 仅对真实上传文件（排除即将生成的 SHA256SUMS.txt 自身，以及源目录可能自带的旧清单）
-    // 生成清单，避免把源自带的旧 SHA256SUMS.txt 当成待校验条目（其内容与新清单不一致会误报）。
-    const manifestRels = collected.filter((rel) => path.basename(rel) !== 'SHA256SUMS.txt');
-    const manifestLines = [];
-    for (const rel of manifestRels) {
-      const abs = path.join(dest, ...rel.split('/'));
-      const sum = crypto.createHash('sha256').update(fs.readFileSync(abs)).digest('hex');
-      manifestLines.push(`${sum}  ${rel}`);
-    }
-    const manifest = manifestLines.length ? `${manifestLines.join('\n')}\n` : '';
-    fs.writeFileSync(path.join(dest, 'SHA256SUMS.txt'), manifest, 'utf8');
-
-    // 上传前完整校验：逐行核对 SHA256SUMS 中的条目，要求 0 missing / 0 mismatch。
-    const reCheck = fs.readFileSync(path.join(dest, 'SHA256SUMS.txt'), 'utf8')
-      .split('\n').filter((l) => l.trim().length > 0);
-    let missing = 0;
-    let mismatch = 0;
-    for (const line of reCheck) {
-      const m = line.match(/^([0-9a-f]{64})  (.+)$/);
-      if (!m) { mismatch += 1; continue; }
-      const [, sum, rel] = m;
-      if (path.basename(rel) === 'SHA256SUMS.txt') continue; // 跳过清单自身
-      const abs = path.join(dest, ...rel.split('/'));
-      if (!fs.existsSync(abs)) { missing += 1; continue; }
-      const actual = crypto.createHash('sha256').update(fs.readFileSync(abs)).digest('hex');
-      if (actual !== sum) mismatch += 1;
-    }
-    if (missing > 0 || mismatch > 0) {
-      process.stderr.write(`[prepare][ERROR] SHA256SUMS 校验失败：missing=${missing} mismatch=${mismatch}\n`);
-      return EXIT_ERROR;
-    }
-    // 登记 SHA256SUMS 自身进入收集清单展示（不进入上面的缺失/不一致判定循环）。
-    collected.push('SHA256SUMS.txt');
+    manifestResult = manifest.buildRootManifest(dest);
+    verification = manifest.verifyUploadTree(dest);
   } catch (err) {
-    process.stderr.write(`[prepare][ERROR] 生成/校验 SHA256SUMS 失败：${err.message}\n`);
+    process.stderr.write(`[prepare][ERROR] 生成/校验根清单失败：${err.message}\n`);
     return EXIT_ERROR;
   }
+  if (!verification.ok) {
+    process.stderr.write('[prepare][ERROR] 最终上传目录递归字节校验失败：\n');
+    for (const line of manifest.formatVerification(verification)) {
+      process.stderr.write(`  ${line}\n`);
+    }
+    return EXIT_ERROR;
+  }
+  // 展示清单以「最终目录实际文件」为准（含唯一权威根清单自身），而非收集阶段的中间列表。
+  collected = manifest.walkFiles(dest).files;
   excluded.sort((a, b) => a.rel.localeCompare(b.rel));
 
   const lines = [
@@ -319,6 +313,10 @@ function main(argv) {
     `[prepare] 汇总：扫描=${tree.files.length} 收集=${collected.length} ` +
     `排除=${excluded.length} 符号链接跳过=${tree.links.length}`,
   );
+  lines.push(`[prepare] 根清单（唯一权威）：${manifest.MANIFEST_NAME}，递归覆盖全部实际文件；` +
+    '根清单自身为唯一例外，不哈希自身、不列出自身');
+  lines.push(`[prepare] 根清单生成：覆盖 ${manifestResult.targets.length} 个实际文件（递归，含任意子目录）`);
+  for (const line of manifest.formatVerification(verification)) lines.push(`[prepare] 递归字节校验：${line}`);
   lines.push('[prepare] 结论：OK（输出目录已就绪，仍需经 scan-artifacts.js 扫描后方可上传）');
   process.stdout.write(`${lines.join('\n')}\n`);
   return EXIT_OK;

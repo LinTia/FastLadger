@@ -1,0 +1,185 @@
+=== RV-13 原始证据（合成数据，递归实际字节校验） ===
+
+--- [1] 构造的多层源目录 ---
+  源文件总数=24
+  - A/SHA256SUMS.txt
+  - A/a-report.md
+  - A/shot.png
+  - C/SHA256SUMS.txt
+  - C/c-report.md
+  - C/controls.json
+  - D/SHA256SUMS.txt
+  - D/controls.json
+  - D/d-report.md
+  - README.md
+  - SHA256SUMS.txt
+  - app.db
+  - app.sqlite3
+  - capture.har
+  - net.trace
+  - network.har
+  - photo.bmp
+  - report.json
+  - run.log
+  - secret-token.txt
+  - server.log
+  - session.dump
+  - shot.png
+  - trace.zip
+  旧清单（应全部被排除）：根 SHA256SUMS.txt + A/D/C/SHA256SUMS.txt 共 4 份
+  失效引用（指向已排除 trace.zip，镜像复核报告 A 子目录 12 条）：12 条
+  被排除文件：app.db, app.sqlite3, capture.har, net.trace, network.har, photo.bmp, secret-token.txt, server.log, session.dump, trace.zip
+
+--- [2] 真实执行 prepare-upload.js（白名单收敛 + 根清单生成 + 递归字节校验） ---
+  [prepare.stdout] [prepare] 源目录：<仓库外:source>
+  [prepare.stdout] [prepare] 目标目录：<仓库外:upload>（运行前已清空）
+  [prepare.stdout] [prepare] 白名单：.png .md .json .log .txt
+  [prepare.stdout] [prepare] 排除清单（共 14，仅文件名与原因，不含内容）：
+  [prepare.stdout]   - A/SHA256SUMS.txt  [旧/嵌套校验清单（由唯一权威根清单统一重建）]
+  [prepare.stdout]   - app.db  [禁止扩展名 .db]
+  [prepare.stdout]   - app.sqlite3  [禁止扩展名 .sqlite3]
+  [prepare.stdout]   - C/SHA256SUMS.txt  [旧/嵌套校验清单（由唯一权威根清单统一重建）]
+  [prepare.stdout]   - capture.har  [禁止扩展名 .har]
+  [prepare.stdout]   - D/SHA256SUMS.txt  [旧/嵌套校验清单（由唯一权威根清单统一重建）]
+  [prepare.stdout]   - net.trace  [禁止扩展名 .trace]
+  [prepare.stdout]   - network.har  [禁止扩展名 .har]
+  [prepare.stdout]   - photo.bmp  [非白名单扩展名 .bmp]
+  [prepare.stdout]   - secret-token.txt  [文件名含 token/secret/credential 敏感词]
+  [prepare.stdout]   - server.log  [server.log 服务原始日志]
+  [prepare.stdout]   - session.dump  [非白名单扩展名 .dump]
+  [prepare.stdout]   - SHA256SUMS.txt  [旧/嵌套校验清单（由唯一权威根清单统一重建）]
+  [prepare.stdout]   - trace.zip  [Playwright trace 归档（可能含网络请求明文）]
+  [prepare.stdout] [prepare] 收集清单（共 11，仅文件名，不含内容）：
+  [prepare.stdout]   - A/a-report.md
+  [prepare.stdout]   - A/shot.png
+  [prepare.stdout]   - C/c-report.md
+  [prepare.stdout]   - C/controls.json
+  [prepare.stdout]   - D/controls.json
+  [prepare.stdout]   - D/d-report.md
+  [prepare.stdout]   - README.md
+  [prepare.stdout]   - SHA256SUMS.txt
+  [prepare.stdout]   - report.json
+  [prepare.stdout]   - run.log
+  [prepare.stdout]   - shot.png
+  [prepare.stdout] [prepare] 符号链接跳过：0
+  [prepare.stdout] [prepare] 汇总：扫描=24 收集=11 排除=14 符号链接跳过=0
+  [prepare.stdout] [prepare] 根清单（唯一权威）：SHA256SUMS.txt，递归覆盖全部实际文件；根清单自身为唯一例外，不哈希自身、不列出自身
+  [prepare.stdout] [prepare] 根清单生成：覆盖 10 个实际文件（递归，含任意子目录）
+  [prepare.stdout] [prepare] 递归字节校验：根清单：SHA256SUMS.txt（唯一权威清单，递归覆盖全目录；根清单自身为唯一例外，不哈希自身）
+  [prepare.stdout] [prepare] 递归字节校验：清单条目数=10 实际文件数=10 实际字节校验通过=10
+  [prepare.stdout] [prepare] 递归字节校验：missing=0 mismatch=0 uncovered=0
+  [prepare.stdout] [prepare] 递归字节校验：staleRefs=0 nestedManifests=0 malformed=0 selfRef=false symlinks=0
+  [prepare.stdout] [prepare] 递归字节校验：结论：OK（0 missing / 0 mismatch / 全部文件可验证）
+  [prepare.stdout] [prepare] 结论：OK（输出目录已就绪，仍需经 scan-artifacts.js 扫描后方可上传）
+  [prepare.stdout] 
+  [prepare.exit_code] 0
+PASS | prepare-upload.js 退出码 = 0 | rc=0
+
+--- [3] 最终上传目录递归文件清单 ---
+  最终文件总数=11
+  - A/a-report.md
+  - A/shot.png
+  - C/c-report.md
+  - C/controls.json
+  - D/controls.json
+  - D/d-report.md
+  - README.md
+  - SHA256SUMS.txt
+  - report.json
+  - run.log
+  - shot.png
+  根清单内容（10 行，仅相对路径 + 摘要）：
+    22e2a5231aefcc6a6ccd191ed0575c6eb0d918e3484ecbfa364911f31d92929b  A/a-report.md
+    02a3e298f1533f62558c58e4c70edcab9af5a50d62d925fd5390942020fb0fb8  A/shot.png
+    7d9c14a7fe487b5c39af9775cea74bd888dc66432f7e6ebd9c33d0350b709146  C/c-report.md
+    4ff5f7065b43de1aa6268f67848d26f71392d1135bbd80112999b2ddaeb07514  C/controls.json
+    5af80984eb921d0cd7a968b685104a7535b6785c0f36133f169d14c1b0587e1c  D/controls.json
+    20edd24e4503ba439421ee860ac481f56e69097d6cb8bf9bfd3afeabe6f05709  D/d-report.md
+    3031ca30fdb0de46bfbe1063d7c27c24c9cfb948e205e94a44930c931e5fab8f  README.md
+    4650e3f61bf69a9b100fdbbe929801a9103fbed7eee4a37188115da43ad3ded1  report.json
+    8fba215c8edbd93c75ccaf34f8636d79619672e3e5aff6e2d24f1edaa146c659  run.log
+    02a3e298f1533f62558c58e4c70edcab9af5a50d62d925fd5390942020fb0fb8  shot.png
+  根清单自身处理规则：SHA256SUMS.txt 为唯一例外，不列出自身、不哈希自身
+
+--- [4] 独立执行 verify-upload-manifest.js（递归实际字节校验） ---
+  [verify-initial.stdout] [verify] 待校验目录：C:\Users\47006\AppData\Local\Temp\rv13-evidence-jmujgG\upload
+  [verify-initial.stdout] [verify] 根清单：SHA256SUMS.txt（唯一权威清单，递归覆盖全目录；根清单自身为唯一例外，不哈希自身）
+  [verify-initial.stdout] [verify] 清单条目数=10 实际文件数=10 实际字节校验通过=10
+  [verify-initial.stdout] [verify] missing=0 mismatch=0 uncovered=0
+  [verify-initial.stdout] [verify] staleRefs=0 nestedManifests=0 malformed=0 selfRef=false symlinks=0
+  [verify-initial.stdout] [verify] 结论：OK（0 missing / 0 mismatch / 全部文件可验证）
+  [verify-initial.stdout] [verify] 退出码：0（0 missing / 0 mismatch / 全部实际文件均有可验证 SHA256）
+  [verify-initial.stdout] 
+  [verify-initial.exit_code] 0
+PASS | 初始递归校验退出码 = 0 | rc=0
+PASS | 0 missing | missing=0
+PASS | 0 mismatch | mismatch=0
+PASS | 0 uncovered（所有实际文件均有可验证 SHA256） | uncovered=0
+PASS | 0 staleRefs（无指向 trace.zip / 其它被排除文件的引用） | staleRefs=0
+PASS | 0 nestedManifests（无嵌套/旧清单残留） | nested=0
+PASS | 无自引用 / 循环引用 | selfRef=false
+PASS | 无 trace.zip / .db / .har / server.log 等被排除文件进入最终目录 | excluded_present=none
+PASS | 预期普通文件全部进入最终目录 | expected=10
+PASS | 根清单条目数 = 最终文件数 - 1（根清单自身为唯一例外） | entries=10 files=11
+
+--- [5] 负向：故意篡改一个最终文件 → 递归字节校验必须失败 ---
+  篡改文件：A/a-report.md（追加一行文本，改变实际字节）
+  [verify-tampered.stdout] [verify] 待校验目录：C:\Users\47006\AppData\Local\Temp\rv13-evidence-jmujgG\upload
+  [verify-tampered.stdout] [verify] 根清单：SHA256SUMS.txt（唯一权威清单，递归覆盖全目录；根清单自身为唯一例外，不哈希自身）
+  [verify-tampered.stdout] [verify] 清单条目数=10 实际文件数=10 实际字节校验通过=9
+  [verify-tampered.stdout] [verify] missing=0 mismatch=1 uncovered=0
+  [verify-tampered.stdout] [verify] staleRefs=0 nestedManifests=0 malformed=0 selfRef=false symlinks=0
+  [verify-tampered.stdout] [verify]   [MISMATCH] A/a-report.md
+  [verify-tampered.stdout] [verify] 结论：FAILED（禁止上传）
+  [verify-tampered.stdout] [verify] 退出码：2（校验失败，禁止上传）
+  [verify-tampered.stdout] 
+  [verify-tampered.exit_code] 2
+PASS | 篡改后校验退出码 = 2（失败，禁止上传） | rc=2
+PASS | 篡改后 mismatch >= 1 | mismatch=1
+
+--- [6] 负向：故意删除一个最终文件 → 递归字节校验必须失败 ---
+  删除文件：D/d-report.md（清单仍保留其条目 → 应报 missing，且文件不再被覆盖）
+  [verify-deleted.stdout] [verify] 待校验目录：C:\Users\47006\AppData\Local\Temp\rv13-evidence-jmujgG\upload
+  [verify-deleted.stdout] [verify] 根清单：SHA256SUMS.txt（唯一权威清单，递归覆盖全目录；根清单自身为唯一例外，不哈希自身）
+  [verify-deleted.stdout] [verify] 清单条目数=10 实际文件数=9 实际字节校验通过=9
+  [verify-deleted.stdout] [verify] missing=1 mismatch=0 uncovered=0
+  [verify-deleted.stdout] [verify] staleRefs=0 nestedManifests=0 malformed=0 selfRef=false symlinks=0
+  [verify-deleted.stdout] [verify]   [MISSING] D/d-report.md
+  [verify-deleted.stdout] [verify] 结论：FAILED（禁止上传）
+  [verify-deleted.stdout] [verify] 退出码：2（校验失败，禁止上传）
+  [verify-deleted.stdout] 
+  [verify-deleted.exit_code] 2
+PASS | 删除后校验退出码 = 2（失败，禁止上传） | rc=2
+PASS | 删除后 missing >= 1 | missing=1
+
+--- [7] 恢复后再次独立校验 ---
+  [verify-restored.stdout] [verify] 待校验目录：C:\Users\47006\AppData\Local\Temp\rv13-evidence-jmujgG\upload
+  [verify-restored.stdout] [verify] 根清单：SHA256SUMS.txt（唯一权威清单，递归覆盖全目录；根清单自身为唯一例外，不哈希自身）
+  [verify-restored.stdout] [verify] 清单条目数=10 实际文件数=10 实际字节校验通过=10
+  [verify-restored.stdout] [verify] missing=0 mismatch=0 uncovered=0
+  [verify-restored.stdout] [verify] staleRefs=0 nestedManifests=0 malformed=0 selfRef=false symlinks=0
+  [verify-restored.stdout] [verify] 结论：OK（0 missing / 0 mismatch / 全部文件可验证）
+  [verify-restored.stdout] [verify] 退出码：0（0 missing / 0 mismatch / 全部实际文件均有可验证 SHA256）
+  [verify-restored.stdout] 
+  [verify-restored.exit_code] 0
+PASS | 恢复后校验退出码 = 0 | rc=0
+
+=== 验收断言汇总 ===
+  PASS | prepare-upload.js 退出码 = 0
+  PASS | 初始递归校验退出码 = 0
+  PASS | 0 missing
+  PASS | 0 mismatch
+  PASS | 0 uncovered（所有实际文件均有可验证 SHA256）
+  PASS | 0 staleRefs（无指向 trace.zip / 其它被排除文件的引用）
+  PASS | 0 nestedManifests（无嵌套/旧清单残留）
+  PASS | 无自引用 / 循环引用
+  PASS | 无 trace.zip / .db / .har / server.log 等被排除文件进入最终目录
+  PASS | 预期普通文件全部进入最终目录
+  PASS | 根清单条目数 = 最终文件数 - 1（根清单自身为唯一例外）
+  PASS | 篡改后校验退出码 = 2（失败，禁止上传）
+  PASS | 篡改后 mismatch >= 1
+  PASS | 删除后校验退出码 = 2（失败，禁止上传）
+  PASS | 删除后 missing >= 1
+  PASS | 恢复后校验退出码 = 0
+  合计：16 项，PASS 16，FAIL 0
+  证据脚本退出码：0

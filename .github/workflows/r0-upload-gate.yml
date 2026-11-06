@@ -1,0 +1,123 @@
+# R0 上传门禁真实 workflow 级负向验证（RV-15）
+#
+# 与 r0-e2e.yml 的分工：
+#   · r0-e2e.yml       —— 正式 E2E 验收 + 证据上传（生产门禁）
+#   · r0-upload-gate.yml —— 专用于证明「真实 actions/upload-artifact step 在任一前置条件
+#                          失败时被 skipped 且不产生 Artifact」的独立测试 workflow。
+#
+# 为什么需要独立 workflow：
+#   第九次复核 RV-15 指出，r0-e2e.yml 里的 fail_closed_negative 只驱动了 helper 脚本的
+#   内部布尔值，既没有让作为 upload 前置条件的真实 step 失败，也没有读取真实
+#   steps.artifact_upload.outcome，更没有核对本次 run 的 Artifact 数量。
+#   本 workflow 用 workflow_dispatch 输入 scenario 精确控制「哪一个真实前置 step 失败」，
+#   每个 scenario 单独成一次 run，因此可以直接用 GitHub Artifact API 证明：
+#     · positive        → 真实 upload 执行，产生 1 个 Artifact
+#     · scan_fail       → 真实 upload skipped，该 run Artifact 数量 = 0
+#     · fail_closed_fail→ 真实 upload skipped，该 run Artifact 数量 = 0
+#     · prepare_fail    → 真实 upload skipped，该 run Artifact 数量 = 0
+#
+# upload step 的 if 条件与生产 r0-e2e.yml 完全一致（双条件 artifact_scan + fail_closed_check），
+# 没有任何旁路 helper 参与 gate 判定；assert step 读取的是 GitHub Actions 实测
+# `${{ steps.<id>.outcome }}`，不是本地模拟值。
+#
+# 安全：全部为运行期生成的 SYNTHETIC/FAKE 合成数据；不上传 trace / HAR / 数据库 / 真实 token。
+name: R0 Upload Gate (RV-15)
+
+on:
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: 'positive | scan_fail | fail_closed_fail | prepare_fail'
+        required: true
+        default: 'positive'
+        type: choice
+        options:
+          - positive
+          - scan_fail
+          - fail_closed_fail
+          - prepare_fail
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: "RV-15 gate / ${{ inputs.scenario }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # 真实前置 step 1：白名单收敛 + 根清单生成。
+      # prepare_fail 场景下会让真实 prepare-upload.js 对不存在的源目录返回 rc=1 → step 真实失败。
+      - name: 准备上传证据（白名单，真实 prepare-upload.js）
+        id: artifact_prepare
+        if: ${{ always() }}
+        run: |
+          node tools/r0/e2e/scripts/rv15-gate-fixture.js prepare \
+            --scenario "${{ inputs.scenario }}" \
+            --source artifacts/r0-gate-src \
+            --dest artifacts/r0-gate-upload
+
+      # 真实前置 step 2：上传前安全扫描。
+      # scan_fail 场景下源目录含合成凭据，真实扫描器 rc=2 → step 真实失败。
+      - name: 上传前安全扫描（真实 scan-artifacts.js，失败即阻断）
+        id: artifact_scan
+        if: ${{ always() && steps.artifact_prepare.outcome == 'success' }}
+        run: node tools/r0/e2e/scripts/scan-artifacts.js artifacts/r0-gate-upload
+
+      # 真实前置 step 3：失败关闭集成验证（正向 gate）。
+      # fail_closed_fail 场景下 gate 指向破损扫描器替身 → 真实 gate 判 FAIL-OPEN rc=1 → step 真实失败。
+      - name: 失败关闭集成验证（真实 verify-fail-closed-gate.js）
+        id: fail_closed_check
+        if: ${{ always() }}
+        run: |
+          node tools/r0/e2e/scripts/rv15-gate-fixture.js gate \
+            --scenario "${{ inputs.scenario }}"
+
+      # 真实上传 step：if 条件与生产 r0-e2e.yml 完全一致。
+      # 任一前置 step 非 success → 本 step 被 skipped → 本次 run 不产生任何 Artifact。
+      - name: 上传证据（真实 actions/upload-artifact@v4）
+        id: artifact_upload
+        if: ${{ always() && steps.artifact_scan.outcome == 'success' && steps.fail_closed_check.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: r0-gate-${{ inputs.scenario }}-${{ github.run_id }}
+          path: artifacts/r0-gate-upload/**
+          if-no-files-found: error
+          retention-days: 7
+
+      # 读取「真实 step outcome」并断言：失败路径 upload 必须 skipped；正向路径必须 success。
+      - name: 断言真实 step outcome（RV-15）
+        id: gate_assert
+        if: ${{ always() }}
+        env:
+          RV15_SCENARIO: ${{ inputs.scenario }}
+          RV15_OUTCOME_PREPARE: ${{ steps.artifact_prepare.outcome }}
+          RV15_OUTCOME_SCAN: ${{ steps.artifact_scan.outcome }}
+          RV15_OUTCOME_FC: ${{ steps.fail_closed_check.outcome }}
+          RV15_OUTCOME_UPLOAD: ${{ steps.artifact_upload.outcome }}
+        run: node tools/r0/e2e/scripts/rv15-gate-assert.js
+
+      - name: 汇总真实 outcome 到 CI summary
+        if: ${{ always() }}
+        run: |
+          {
+            echo "## RV-15 / scenario=${{ inputs.scenario }}"
+            echo ""
+            echo "- commit: ${{ github.sha }}"
+            echo "- 真实 step outcome（GitHub Actions 实测，非本地模拟）："
+            echo "  - artifact_prepare: ${{ steps.artifact_prepare.outcome }}"
+            echo "  - artifact_scan: ${{ steps.artifact_scan.outcome }}"
+            echo "  - fail_closed_check: ${{ steps.fail_closed_check.outcome }}"
+            echo "  - artifact_upload: ${{ steps.artifact_upload.outcome }}"
+            echo "  - gate_assert: ${{ steps.gate_assert.outcome }}"
+            echo "- 上传条件（与生产一致）: artifact_scan==success && fail_closed_check==success"
+            echo "  => ${{ steps.artifact_scan.outcome == 'success' && steps.fail_closed_check.outcome == 'success' }}"
+            echo ""
+            echo "负向场景请用 GitHub Artifact API 核对本次 run 的 Artifact 数量应为 0。"
+          } >> "$GITHUB_STEP_SUMMARY"

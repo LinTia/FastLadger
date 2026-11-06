@@ -22,6 +22,12 @@
  *     带 / 无 padding 两种形态，识别 Base64 编码后的凭据。
  *   RV-07 明文 PEM 私钥：明文文本直接识别 PRIVATE KEY / RSA / EC / OPENSSH / ENCRYPTED PRIVATE
  *     KEY 标记，命中一律 BLOCK，绝不输出密钥内容。
+ *   RV-14 已知二进制盲区：不再因合法 PNG/JPEG/PDF 魔数跳过噪声归一化复扫。
+ *     对已知二进制文件提取「可打印文本片段」，桥接片段内短噪声（NUL / 非法字节，
+ *     连续 <= MAX_BRIDGE_NOISE_BYTES）以恢复被打断的关键词与 token 值，再施加全套文本规则；
+ *     为控制误报，仅当片段含「凭据锚点词」时才施加规则（正常压缩随机字节不产生锚点）。
+ *     文本型文件沿用全文件噪声剔除复扫；任一文件都经过噪声归一化复扫，无跳过分支。
+ *     绝不把二进制文件一律判 BLOCKED（UNDECODABLE 仍只针对文本型文件）。
  *
  * 输出：仅「文件路径 + 命中类型 + 命中数量 + 编码解码统计」，绝不打印匹配到的值。
  * 退出码：0 干净 / 2 发现疑似凭据、黑名单文件或无法可靠解码（阻断上传）/ 1 参数或环境错误。
@@ -43,6 +49,29 @@ const MAX_TEXT_BYTES = 32 * 1024 * 1024;
 
 /** 文本型文件低于此字节数时不触发「无法可靠解码 → BLOCK」，避免误伤极小文件。 */
 const MIN_UNDECODABLE_BYTES = 16;
+
+/**
+ * RV-14：二进制「可打印文本片段」提取参数。
+ * 片段内允许桥接的连续噪声字节上限；超过则视为片段边界（避免把相距很远的
+ * 可打印字节硬拼成误报串）。NUL / 高位非法字节插入关键词或 token 值通常只有 1~2 字节，
+ * 因此 4 字节足以覆盖审计给出的绕过形态，同时保持误报可控。
+ */
+const MAX_BRIDGE_NOISE_BYTES = 4;
+/** 片段最小长度（低于此长度不单独施加规则，避免短随机串误报）。 */
+const MIN_TEXT_FRAGMENT_BYTES = 8;
+
+/**
+ * 凭据锚点词（大小写不敏感）：已知二进制文本片段必须含至少一个锚点才施加文本规则。
+ * 这是「保留对正常二进制文件误报控制」的核心：真实 PNG 压缩数据的随机可打印字节
+ * 不会自然拼出这些词；而嵌入的凭据 / 被打断的关键词桥接后必然带锚点。
+ */
+const BINARY_CREDENTIAL_ANCHOR_RE = new RegExp(
+  ['bearer', 'authoriz', 'api[-_]?key', 'apikey', 'x[-_]?api[-_]?key',
+    'token', 'secret', 'password', 'passwd', 'credential', 'private[-_]?key',
+    'eyJ', 'BEGIN (?:RSA |EC |OPENSSH |ENCRYPTED |DSA )?PRIVATE KEY',
+    'EBK_JWT_SECRET', 'cookie', 'session'].join('|'),
+  'i',
+);
 
 /** 命中即阻断的扩展名。 */
 const BLACKLIST_EXT = new Set([
@@ -237,6 +266,82 @@ function isKnownBinary(buf) {
   return KNOWN_BINARY_SIGNATURES.some(
     (sig) => buf.length >= sig.length && buf.subarray(0, sig.length).equals(sig),
   );
+}
+
+/**
+ * RV-14：从字节流提取「可打印文本片段」，并桥接片段内短噪声。
+ *
+ * 设计要点（明确的二进制检测策略）：
+ *   · 以 latin1 逐字节视图扫描，仅保留可打印 ASCII（0x20–0x7e）与 \t \r \n；
+ *   · 连续 <= MAX_BRIDGE_NOISE_BYTES 个不可打印字节（NUL / 控制符 / 高位非法字节）
+ *     被「桥接」（丢弃），因此 `Bearer SYN\0THETIC...` 会恢复成连续 `Bearer SYNTHETIC...`；
+ *   · 连续 > MAX_BRIDGE_NOISE_BYTES 个不可打印字节视为片段边界，切分片段，
+ *     避免把 PNG 压缩数据里相距很远的可打印字节硬拼成误报串；
+ *   · 过短片段（< MIN_TEXT_FRAGMENT_BYTES）丢弃。
+ *
+ * @param {Buffer} buf 原始字节。
+ * @return {string[]} 桥接归一化后的文本片段。
+ */
+function extractTextFragments(buf) {
+  const latin1 = buf.toString('latin1');
+  const fragments = [];
+  let current = '';
+  let noiseRun = 0;
+  const push = () => {
+    if (current.length >= MIN_TEXT_FRAGMENT_BYTES) fragments.push(current);
+    current = '';
+  };
+  for (let i = 0; i < latin1.length; i += 1) {
+    const code = latin1.charCodeAt(i);
+    const printable = (code >= 0x20 && code <= 0x7e)
+      || code === 0x09 || code === 0x0a || code === 0x0d;
+    if (printable) {
+      current += latin1[i];
+      noiseRun = 0;
+    } else {
+      noiseRun += 1;
+      // 仅在噪声运行「刚好超过」桥接上限时切分一次，避免长噪声段反复 push 空片段。
+      if (noiseRun === MAX_BRIDGE_NOISE_BYTES + 1) push();
+    }
+  }
+  push();
+  return fragments;
+}
+
+/**
+ * RV-14：对「已知二进制的可打印文本片段」施加规则。
+ *
+ * 与 scanText 的差别：噪声桥接会把片段两端原本不相邻的字节拼在一起
+ * （例如 PNG tEXt 块的 "Comment\0Bearer ..." → "CommentBearer ..."），
+ * 导致依赖 `\b` 词边界 / 分隔符前缀的规则失效。因此这里在标准规则之外，
+ * 追加一组「不要求词边界、但仍要求完整凭据形态」的桥接规则：
+ *   · 必须含明确锚点词（由调用方 BINARY_CREDENTIAL_ANCHOR_RE 闸门保证）；
+ *   · Bearer 必须后接 >=12 位 token 字符；赋值必须有强敏感键名 + [:=/=] + 值；
+ *   · 复用 credentialLikeValue / sensitiveAssignValue 抑制占位值与自然语言误报。
+ * 绝不把「含 PNG 魔数」本身当作命中条件，也绝不把二进制文件一律判 BLOCKED。
+ *
+ * @param {string} text 桥接归一化后的文本片段。
+ * @return {Map<string, number>} 命中计数。
+ */
+function scanBinaryFragment(text) {
+  const out = scanText(text);
+  const add = (type, n) => { if (n > 0) out.set(type, (out.get(type) || 0) + n); };
+
+  // 桥接后无词边界的 Bearer（`Comment\0Bearer SYN\0THETIC...` → `CommentBearer SYNTHETIC...`）。
+  add('BEARER_TOKEN', countOf(text, /Bearer[ \t]+[A-Za-z0-9._~+/=-]{12,}/gi));
+  // 桥接后无词边界的 Authorization/Bearer 赋值。
+  for (const m of text.matchAll(/authorization["']?\s*[:=]\s*["']?Bearer[ \t]+([A-Za-z0-9._~+/=-]{12,})/gi)) {
+    if (credentialLikeValue(m[1])) add('AUTH_HEADER', 1);
+  }
+  // 桥接后无分隔符前缀的强敏感键名赋值（`Comment\0x-api-key: <值>`）。
+  const bridgedAssignRe = new RegExp(
+    '["\']?(' + SENSITIVE_KEY_SOURCE + ')["\']?\\s*[:=]\\s*["\']?([^"\',"}\\s]{1,256})',
+    'gi',
+  );
+  for (const m of text.matchAll(bridgedAssignRe)) {
+    if (sensitiveAssignValue(m[1], m[2])) add('SENSITIVE_ASSIGN', 1);
+  }
+  return out;
 }
 
 /**
@@ -497,15 +602,30 @@ function main(argv) {
         for (const [type, n] of res) addFinding(rel, type, n);
       }
 
-      // K1-03 / RV-09 / RV-11：噪声字节复扫。把 latin1 视图里所有「非可打印 ASCII
-      // 与制表/换行/回车」的字节（NUL、控制符、DEL、高位噪声字节）一并剔除后再扫一次，
-      // 以捕获被插入噪声打断的关键词 / token 值（含 NUL 位于 token 值内部、关键词内部等形态）。
-      // 仅对「非已知二进制」施行，避免压缩二进制被挤压缩连产生偶发字符串造成误 BLOCK
-      // （已知二进制已有魔数 + 内容双校验）。此复扫不扩大关键词正则，仅做噪声归一化。
+      // K1-03 / RV-09 / RV-11 / RV-14：噪声归一化复扫 —— 对所有文件施行，无跳过分支。
+      //
+      // 文本型文件（!knownBinary）：沿用全文件噪声剔除复扫，把 latin1 视图里所有
+      //   「非可打印 ASCII 与制表/换行/回车」字节剔除后再扫一次，捕获被噪声打断的
+      //   关键词 / token 值（NUL 位于 token 值内部、关键词内部、字段名内部等形态）。
+      //
+      // 已知二进制文件（knownBinary，RV-14 修复）：不再跳过！
+      //   第九次复核 RV-14 指出：旧实现 `if (!knownBinary)` 使合法 PNG 魔数文件
+      //   完全跳过噪声复扫，攻击者可把 NUL 插入 Bearer / token 前 12 字符内，
+      //   而 NUL 是合法 UTF-8 字节（u8.reliable=true）不触发 UNDECODABLE，
+      //   原始 latin1/UTF-8 扫描因关键词被打断而不命中 → 以 CLEAN 放行。
+      //   新策略：提取「可打印文本片段」并桥接片段内短噪声（<=4 字节）恢复连续串，
+      //   仅对含凭据锚点词的片段施加全套文本规则（误报可控，正常 PNG 不误 BLOCK）。
+      //   绝不简单把所有二进制判 BLOCKED。
       if (!knownBinary) {
         const squeezed = buf.toString('latin1').replace(/[^\x20-\x7e\t\r\n]/g, '');
         const squeezedRes = scanText(squeezed);
         for (const [type, n] of squeezedRes) addFinding(rel, type, n);
+      } else {
+        for (const fragment of extractTextFragments(buf)) {
+          if (!BINARY_CREDENTIAL_ANCHOR_RE.test(fragment)) continue; // 误报控制
+          const fragRes = scanBinaryFragment(fragment);
+          for (const [type, n] of fragRes) addFinding(rel, type, n);
+        }
       }
 
       contentScanned += 1;
@@ -541,7 +661,8 @@ function main(argv) {
     `[scan] 编码解码：utf8可靠=${utf8Reliable} utf16可靠=${utf16Reliable} ` +
       `无法可靠解码(已阻断)=${undecodableFiles} 可疑二进制(魔数不符)=${suspiciousBinary}`,
     '[scan] 扫描口径：latin1 全量 + UTF-8/UTF-16LE/UTF-16BE 可靠解码复扫 + ' +
-      '强敏感键名联合判定 + Base64 解码复扫；任何无法可靠解码的文本型文件一律 BLOCK',
+      '强敏感键名联合判定 + Base64 解码复扫 + 噪声归一化复扫（文本型全文件 / ' +
+      '已知二进制可打印文本片段桥接，RV-14 无跳过分支）；任何无法可靠解码的文本型文件一律 BLOCK',
     '[scan] 命中明细（仅文件路径 + 命中类型 + 命中数量，不输出匹配值）：',
   ];
   for (const row of rows) lines.push(`[HIT] ${row.file} | ${row.type} | ${row.count}`);

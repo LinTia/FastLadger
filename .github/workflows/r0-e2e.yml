@@ -63,12 +63,25 @@ jobs:
       - name: 分类解析合成测试（B 的补充整改）
         run: node --test tools/r0/test-resolve-category.js
 
-      # P1 安全整改（K1-K3）：凭据扫描器负向合成测试门禁。
-      # 30 项用例覆盖 K1(UTF-16LE/BE/NUL插入/无法解码) / K2(短Token/短Key/短密码/业务字段不误报)
-      # / K3(x-api-key/apiKey变体/Base64/JSON嵌套/大小写分隔符)，全部合成凭据、真实断言。
+      # P1 安全整改（K1-K3 + RV-07~RV-15）：凭据扫描器负向合成测试门禁。
+      # 50 项用例覆盖 K1(UTF-16LE/BE/NUL插入/无法解码) / K2(短Token/短Key/短密码/业务字段不误报)
+      # / K3(x-api-key/apiKey变体/Base64/JSON嵌套/大小写分隔符) / RV-07~RV-13 /
+      # 第九次复核 RV-13(多层清单递归校验 + 篡改/删除负向) 与 RV-14(合法 PNG 魔数二进制盲区)，
+      # 全部合成凭据、真实断言（调用真实扫描器 / prepare / 校验器子进程）。
       # 任一失败即 job 失败，确保绕过无法再通过。
-      - name: 凭据扫描器负向合成测试（K1-K3 + RV-07~RV-13，41 项）
+      - name: 凭据扫描器负向合成测试（K1-K3 + RV-07~RV-15，50 项）
         run: node --test tools/r0/e2e/test-scan-artifacts.js
+
+      # 第九次复核 RV-13 / RV-14 原始证据：可复现脚本，输出原始日志 / 退出码 / 最终目录清单。
+      # 写入 artifacts/r0-e2e/ 后随白名单证据一同上传（合成数据，无凭据值）。
+      - name: 生成 RV-13 / RV-14 原始证据日志
+        if: ${{ always() }}
+        run: |
+          mkdir -p artifacts/r0-e2e
+          node tools/r0/e2e/scripts/rv13-manifest-evidence.js > artifacts/r0-e2e/rv13-manifest-evidence.txt 2>&1
+          node tools/r0/e2e/scripts/rv14-binary-evidence.js > artifacts/r0-e2e/rv14-binary-evidence.txt 2>&1
+          node --test tools/r0/e2e/test-scan-artifacts.js > artifacts/r0-e2e/scan-tests-round5.log 2>&1
+          echo "generated evidence logs:"; ls -l artifacts/r0-e2e/*.txt artifacts/r0-e2e/*.log
 
       # 修复前后负向样本对照（证据 §二-4）：用 659c0c3 基线的旧扫描器与当前修复后扫描器
       # 跑同一批合成样本，输出对照表。依赖 fetch-depth:0（actions/checkout）以取到基线 commit。
@@ -135,11 +148,19 @@ jobs:
         if: ${{ always() }}
         run: node tools/r0/e2e/scripts/prepare-upload.js --source artifacts/r0-e2e --dest artifacts/r0-e2e-upload
 
+      # RV-13（第九次复核）：对「最终上传目录」独立递归执行实际字节校验。
+      # prepare 内部已生成唯一权威根清单并自校验；本步用独立 CLI 再验一次，
+      # 证明最终目录全部文件 0 missing / 0 mismatch、无失效引用、无嵌套清单残留。
+      - name: 最终目录递归字节校验（RV-13，独立 CLI）
+        id: manifest_verify
+        if: ${{ always() && steps.artifact_prepare.outcome == 'success' }}
+        run: node tools/r0/e2e/scripts/verify-upload-manifest.js artifacts/r0-e2e-upload
+
       # 失败关闭闸门：命中黑名单文件名或疑似凭据即以退出码 2 失败。
       # prepare 未成功时本 step 被跳过，outcome=skipped，同样不会触发上传。
       - name: 上传前安全扫描（失败即阻断）
         id: artifact_scan
-        if: ${{ always() && steps.artifact_prepare.outcome == 'success' }}
+        if: ${{ always() && steps.artifact_prepare.outcome == 'success' && steps.manifest_verify.outcome == 'success' }}
         run: node tools/r0/e2e/scripts/scan-artifacts.js artifacts/r0-e2e-upload
 
       # P1 安全整改（K1-K3）失败关闭集成验证：用合成凭据样本直接证明
@@ -203,6 +224,7 @@ jobs:
             echo "## R0 E2E 证据上传安全结论"
             echo ""
             echo "- 白名单准备 outcome: ${{ steps.artifact_prepare.outcome }}"
+            echo "- 最终目录递归字节校验 outcome（RV-13）: ${{ steps.manifest_verify.outcome }}"
             echo "- 上传前安全扫描 outcome: ${{ steps.artifact_scan.outcome }}"
             echo "- 失败关闭集成验证 outcome: ${{ steps.fail_closed_check.outcome }}"
             echo "- 失败关闭负向证明 outcome: ${{ steps.fail_closed_negative.outcome }}"
