@@ -28,6 +28,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const crypto = require('node:crypto');
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 const DEFAULT_SOURCE = path.join(REPO_ROOT, 'artifacts', 'r0-e2e');
@@ -257,6 +258,49 @@ function main(argv) {
   }
 
   collected.sort();
+
+  // RV-13：白名单收敛完成后，在目标目录「重新生成」SHA256SUMS，清单只包含最终实际上传的
+  // 文件（排除 SHA256SUMS.txt 自身，避免递归；也不包含任何被排除的原始 trace / db 等文件）。
+  // 若源目录已带 SHA256SUMS.txt，此处会用新清单覆盖，杜绝遗留已排除文件的引用。
+  // 生成后立即做一次完整校验：要求 0 missing / 0 mismatch，否则视为环境错误（失败关闭，不静默放过）。
+  try {
+    // 仅对真实上传文件（排除即将生成的 SHA256SUMS.txt 自身，以及源目录可能自带的旧清单）
+    // 生成清单，避免把源自带的旧 SHA256SUMS.txt 当成待校验条目（其内容与新清单不一致会误报）。
+    const manifestRels = collected.filter((rel) => path.basename(rel) !== 'SHA256SUMS.txt');
+    const manifestLines = [];
+    for (const rel of manifestRels) {
+      const abs = path.join(dest, ...rel.split('/'));
+      const sum = crypto.createHash('sha256').update(fs.readFileSync(abs)).digest('hex');
+      manifestLines.push(`${sum}  ${rel}`);
+    }
+    const manifest = manifestLines.length ? `${manifestLines.join('\n')}\n` : '';
+    fs.writeFileSync(path.join(dest, 'SHA256SUMS.txt'), manifest, 'utf8');
+
+    // 上传前完整校验：逐行核对 SHA256SUMS 中的条目，要求 0 missing / 0 mismatch。
+    const reCheck = fs.readFileSync(path.join(dest, 'SHA256SUMS.txt'), 'utf8')
+      .split('\n').filter((l) => l.trim().length > 0);
+    let missing = 0;
+    let mismatch = 0;
+    for (const line of reCheck) {
+      const m = line.match(/^([0-9a-f]{64})  (.+)$/);
+      if (!m) { mismatch += 1; continue; }
+      const [, sum, rel] = m;
+      if (path.basename(rel) === 'SHA256SUMS.txt') continue; // 跳过清单自身
+      const abs = path.join(dest, ...rel.split('/'));
+      if (!fs.existsSync(abs)) { missing += 1; continue; }
+      const actual = crypto.createHash('sha256').update(fs.readFileSync(abs)).digest('hex');
+      if (actual !== sum) mismatch += 1;
+    }
+    if (missing > 0 || mismatch > 0) {
+      process.stderr.write(`[prepare][ERROR] SHA256SUMS 校验失败：missing=${missing} mismatch=${mismatch}\n`);
+      return EXIT_ERROR;
+    }
+    // 登记 SHA256SUMS 自身进入收集清单展示（不进入上面的缺失/不一致判定循环）。
+    collected.push('SHA256SUMS.txt');
+  } catch (err) {
+    process.stderr.write(`[prepare][ERROR] 生成/校验 SHA256SUMS 失败：${err.message}\n`);
+    return EXIT_ERROR;
+  }
   excluded.sort((a, b) => a.rel.localeCompare(b.rel));
 
   const lines = [

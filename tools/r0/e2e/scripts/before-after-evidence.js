@@ -1,7 +1,8 @@
 'use strict';
-// Before/after evidence harness: runs BOTH the pre-fix (git HEAD) scanner and the
-// current (fixed) scanner against identical synthetic K1-K3 samples, recording exit codes.
+// Before/after evidence harness: runs BOTH the pre-fix (git 659c0c3) scanner and the
+// current (fixed) scanner against identical synthetic K1-K3 / RV-09 samples, recording exit codes.
 // Output is used as evidence in the P1 remediation report. No real credentials are used.
+// 659c0c3 是第三方独立复核的对照基线（PR #3 最新提交），代表修复前状态。
 const { spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -10,11 +11,12 @@ const path = require('node:path');
 const REPO = path.resolve(__dirname, '..', '..', '..', '..');
 const NEW_SCANNER = path.join(REPO, 'tools/r0/e2e/scripts/scan-artifacts.js');
 const OLD_SCANNER = path.join(os.tmpdir(), 'old-scan-artifacts.js');
+const BASELINE = '659c0c3';
 
-// Extract the pre-fix scanner from git HEAD.
-const extract = spawnSync('git', ['show', 'HEAD:tools/r0/e2e/scripts/scan-artifacts.js'], { cwd: REPO, encoding: 'utf8' });
+// Extract the pre-fix scanner from the audit baseline commit.
+const extract = spawnSync('git', ['show', `${BASELINE}:tools/r0/e2e/scripts/scan-artifacts.js`], { cwd: REPO, encoding: 'utf8' });
 if (extract.status !== 0) {
-  console.error('无法从 HEAD 提取旧扫描器：', extract.stderr);
+  console.error(`无法从 ${BASELINE} 提取旧扫描器：`, extract.stderr);
   process.exit(2);
 }
 fs.writeFileSync(OLD_SCANNER, extract.stdout);
@@ -70,9 +72,20 @@ const samples = [
   ['K3-03 Base64 cred', (d) => fs.writeFileSync(path.join(d, 'a.txt'), 'data=' + Buffer.from('Authorization: Bearer ' + jwt()).toString('base64') + '\n', 'utf8')],
   ['K3-04 JSON nested', (d) => fs.writeFileSync(path.join(d, 'a.txt'), JSON.stringify({ config: { auth: { token: 'SYNTHETIC-NESTED-TOKEN-99887766' } } }) + '\n', 'utf8')],
   ['K3-05 variants', (d) => fs.writeFileSync(path.join(d, 'a.txt'), 'X_Api_Key: ' + synthetic('VARKEY') + '\nclient-secret=' + synthetic('VARSECRET') + '\n', 'utf8')],
+  // RV-09：非法 UTF-8 字节打断关键词 / token 值（旧宽松解码会判可靠而漏报；修复后严格解码 → BLOCK）。
+  ['RV-09-01 illegal UTF-8 in Bearer', (d) => {
+    const body = 'Authoriz: Bea' + String.fromCharCode(0xFF) + 'rer ' + synthetic('RV09A') + '\n' + 'x'.repeat(2000) + '\n';
+    fs.writeFileSync(path.join(d, 'a.txt'), body, 'latin1');
+  }],
+  ['RV-09-02 illegal UTF-8 in token', (d) => {
+    // 非法字节位于 token 值「前 12 字符之内」打断：旧宽松解码会判关键词/值为可靠而漏报（CLEAN）；
+    // 修复后严格 UTF-8 失败 → 无法可靠解码 → BLOCK（噪声复扫亦能恢复连续串）。
+    const body = 'Authorization: Bearer abc' + String.fromCharCode(0xFE) + 'def000000000000\n' + 'y'.repeat(2000) + '\n';
+    fs.writeFileSync(path.join(d, 'a.txt'), body, 'latin1');
+  }],
 ];
 
-console.log('sample | old(HEAD) rc | new(fixed) rc | old verdict | new verdict');
+console.log('sample | old(659c0c3) rc | new(fixed) rc | old verdict | new verdict');
 console.log('---');
 let changed = 0;
 for (const [name, build] of samples) {

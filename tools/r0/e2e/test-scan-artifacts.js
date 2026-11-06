@@ -23,6 +23,14 @@
  *     普通短业务字段（K2-04）仍须 CLEAN（无误报）。
  *   K3 字段名 / Base64：x-api-key（K3-01）/ apiKey 与 API_KEY 变体（K3-02）/
  *     Base64 编码凭据（K3-03）/ JSON 嵌套凭据（K3-04）/ 大小写与分隔符变体（K3-05）均须 BLOCK。
+ *
+ * Round 4（case-31~41，第八次独立复核 RV-07~RV-13 整改专测）：
+ *   RV-07 明文 PEM 私钥：private-key.txt / export.txt 伪装 PEM 私钥，经 prepare→scan 全链路 BLOCK。
+ *   RV-09 非法 UTF-8：关键词 / token 值 / 字段名内部插入非法字节，修复后必须 BLOCK（严格解码 + 噪声复扫）。
+ *   RV-10 Base64URL：标准 / URL-safe、带 / 无 padding 均须 BLOCK。
+ *   RV-11 NUL 修正：保留 case-20（分隔符处 NUL），新增 token 值内部 NUL（case-37）。
+ *   RV-12 上传链路：不可解码样本伪装成 random.txt，经 prepare→scan 证明进入上传目录后被 BLOCK。
+ *   RV-13 SHA256SUMS：源含 trace.zip 时最终清单只含实际上传文件（prepare-upload 内重生成 + 校验）。
  */
 
 const { test } = require('node:test');
@@ -31,8 +39,10 @@ const { spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const crypto = require('node:crypto');
 
 const SCANNER = path.resolve(__dirname, 'scripts', 'scan-artifacts.js');
+const PREPARE = path.resolve(__dirname, 'scripts', 'prepare-upload.js');
 const EXIT_CLEAN = 0;
 const EXIT_ERROR = 1;
 const EXIT_BLOCKED = 2;
@@ -124,6 +134,17 @@ function runScanner(caseName, dir, expected, forbiddenValues = []) {
     assert.ok(!output.includes(value), `${caseName}：扫描输出疑似包含匹配值本身`);
   }
   return { code, stdout: result.stdout || '', stderr: result.stderr || '' };
+}
+
+/**
+ * 运行期执行 prepare-upload.js（白名单收敛），返回子进程结果。
+ * @param {string} source 源目录。
+ * @param {string} dest 目标目录。
+ * @return {{status: number|null, stdout: string, stderr: string}} 运行结果。
+ */
+function runPrepare(source, dest) {
+  const result = spawnSync(process.execPath, [PREPARE, '--source', source, '--dest', dest], { encoding: 'utf8' });
+  return { status: result.status, stdout: result.stdout || '', stderr: result.stderr || '' };
 }
 
 test('case-01 干净文件集 → 退出码 0', (t) => {
@@ -366,19 +387,18 @@ test('case-19 [K1-02] UTF-16BE encoded auth header credential -> exit 2', (t) =>
   assert.match(result.stdout, /BEARER_TOKEN/);
 });
 
-test('case-20 [K1-03] scattered NUL insertion into token value -> exit 2', (t) => {
+test('case-20 [K1-03/RV-11] NUL at delimiter boundary (Bearer<SPACE>NUL<token>) -> exit 2', (t) => {
   const dir = makeTmp(t, 'k1-03');
   writeCleanSet(dir);
   const tokenValue = syntheticValue('NULINJ');
-  // A stray NUL injected between "Bearer " and the token keeps the file
-  // "reliably UTF-8" yet breaks the plain Bearer regex; the NUL-squeeze rescan
-  // must recover the continuous run and catch it via BEARER_TOKEN.
+  // NUL 位于 "Bearer " 与 token 值之间的分隔边界；噪声复扫（剔除 NUL）必须恢复连续串并
+  // 经 BEARER_TOKEN 捕获。token 值「内部」NUL 由 case-37 单独覆盖（RV-11）。
   fs.writeFileSync(
     path.join(dir, 'leak.txt'),
     ['Bearer ', String.fromCharCode(0), tokenValue].join(''),
     'latin1',
   );
-  const result = runScanner('case-20 [K1-03] NUL insertion', dir, EXIT_BLOCKED, [tokenValue]);
+  const result = runScanner('case-20 [K1-03] NUL at delimiter boundary', dir, EXIT_BLOCKED, [tokenValue]);
   assert.match(result.stdout, /BEARER_TOKEN/);
 });
 
@@ -491,4 +511,147 @@ test('case-30 [K3-05] case and separator variants -> exit 2', (t) => {
   );
   const result = runScanner('case-30 [K3-05] variants', dir, EXIT_BLOCKED, [v1, v2]);
   assert.match(result.stdout, /SENSITIVE_ASSIGN/);
+});
+
+// ===== Round 4: 第八次独立复核 RV-07 ~ RV-13 整改专测 =====
+
+test('case-31 [RV-09-01] Bearer 关键词内部插入非法 UTF-8 字节 → 修复后必须 BLOCK', (t) => {
+  const dir = makeTmp(t, 'rv09-01');
+  writeCleanSet(dir);
+  const token = 'SYNTHETICFAKE000000000000';
+  // 长文件 + 仅一个非法字节（0xFF）打断 Bearer；若按旧宽松阈值（FFFD<2%）会被判可靠而漏掉关键词。
+  // 修复后严格 UTF-8 解码失败 → 无法可靠解码 → BLOCK（噪声复扫亦能恢复连续串）。
+  const body = ['Authoriz: Bea', String.fromCharCode(0xFF), 'rer ', token, '\n', 'x'.repeat(2000), '\n'].join('');
+  fs.writeFileSync(path.join(dir, 'leak.txt'), body, 'latin1');
+  const result = runScanner('case-31 [RV-09] 关键词内非法字节', dir, EXIT_BLOCKED, [token]);
+  assert.match(result.stdout, /(UNDECODABLE|BEARER_TOKEN)/);
+});
+
+test('case-32 [RV-09-02] token 值内部插入非法 UTF-8 字节 → 修复后必须 BLOCK', (t) => {
+  const dir = makeTmp(t, 'rv09-02');
+  writeCleanSet(dir);
+  const token = ['SYNTHETIC', String.fromCharCode(0xFE), 'FAKE000000000000'].join('');
+  const body = ['Authorization: Bearer ', token, '\n', 'y'.repeat(2000), '\n'].join('');
+  fs.writeFileSync(path.join(dir, 'leak.txt'), body, 'latin1');
+  const result = runScanner('case-32 [RV-09] token 值内非法字节', dir, EXIT_BLOCKED, [token]);
+  assert.match(result.stdout, /(UNDECODABLE|BEARER_TOKEN)/);
+});
+
+test('case-33 [RV-09-03] 敏感字段名内部插入非法 UTF-8 字节 → 修复后必须 BLOCK', (t) => {
+  const dir = makeTmp(t, 'rv09-03');
+  writeCleanSet(dir);
+  const token = 'SYNTHETICFAKE000000000000';
+  const body = ['x-api-', String.fromCharCode(0xFF), 'key: ', token, '\n', 'z'.repeat(2000), '\n'].join('');
+  fs.writeFileSync(path.join(dir, 'leak.txt'), body, 'latin1');
+  const result = runScanner('case-33 [RV-09] 字段名内非法字节', dir, EXIT_BLOCKED, [token]);
+  assert.match(result.stdout, /(UNDECODABLE|SENSITIVE_ASSIGN)/);
+});
+
+test('case-34 [RV-10-01] Base64URL（带 padding）Authorization/Bearer → BLOCK', (t) => {
+  const dir = makeTmp(t, 'rv10-01');
+  writeCleanSet(dir);
+  const jwt = ['eyJ', 'SYNTHETICFAKEHEADER', '.', 'SYNTHETICFAKEPAYLOAD0001', '.', 'SYNTHETICFAKESIGNATURE0002'].join('');
+  const b64 = Buffer.from('Authorization: Bearer ' + jwt).toString('base64')
+    .replace(/\+/g, '-').replace(/\//g, '_'); // 标准转 Base64URL，保留 padding
+  fs.writeFileSync(path.join(dir, 'data.txt'), ['data=', b64, '\n'].join(''), 'utf8');
+  const result = runScanner('case-34 [RV-10] Base64URL 带 padding', dir, EXIT_BLOCKED, [jwt, b64]);
+  assert.match(result.stdout, /BASE64_CREDENTIAL/);
+});
+
+test('case-35 [RV-10-02] Base64URL（无 padding）x-api-key → BLOCK', (t) => {
+  const dir = makeTmp(t, 'rv10-02');
+  writeCleanSet(dir);
+  const jwt = ['eyJ', 'SYNTHETICFAKEHEADER', '.', 'SYNTHETICFAKEPAYLOAD0001', '.', 'SYNTHETICFAKESIGNATURE0002'].join('');
+  const b64 = Buffer.from('x-api-key: ' + jwt).toString('base64')
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); // 去 padding
+  fs.writeFileSync(path.join(dir, 'data.txt'), ['data=', b64, '\n'].join(''), 'utf8');
+  const result = runScanner('case-35 [RV-10] Base64URL 无 padding', dir, EXIT_BLOCKED, [jwt, b64]);
+  assert.match(result.stdout, /BASE64_CREDENTIAL/);
+});
+
+test('case-36 [RV-10-03] Base64URL（无 padding）敏感键名+值 → BLOCK', (t) => {
+  const dir = makeTmp(t, 'rv10-03');
+  writeCleanSet(dir);
+  const secret = 'SYNTHETIC-FAKE-SECRET-99887766';
+  const b64 = Buffer.from('client_secret=' + secret).toString('base64')
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  fs.writeFileSync(path.join(dir, 'data.txt'), ['data=', b64, '\n'].join(''), 'utf8');
+  const result = runScanner('case-36 [RV-10] Base64URL 键名+值', dir, EXIT_BLOCKED, [secret, b64]);
+  assert.match(result.stdout, /BASE64_CREDENTIAL/);
+});
+
+test('case-37 [RV-11-01] token 值内部插入 NUL（补充 case-20 分隔符处 NUL）→ BLOCK', (t) => {
+  const dir = makeTmp(t, 'rv11-01');
+  writeCleanSet(dir);
+  const token = ['SYNTHETIC', String.fromCharCode(0), 'FAKE000000000000'].join(''); // NUL 位于值内部
+  fs.writeFileSync(path.join(dir, 'leak.txt'), ['Bearer ', token].join(''), 'latin1');
+  const result = runScanner('case-37 [RV-11] token 值内 NUL', dir, EXIT_BLOCKED, [token]);
+  assert.match(result.stdout, /BEARER_TOKEN/);
+});
+
+test('case-38 [RV-07] 明文 PEM 私钥伪装成 private-key.txt 经 prepare→scan 全链路阻断', (t) => {
+  const src = makeTmp(t, 'rv07-src');
+  const dest = makeTmp(t, 'rv07-dest');
+  const pem = [
+    '-----BEGIN RSA PRIVATE KEY-----',
+    'MIIEogIBAAKCAQEA0000000000000000000000000000000000000000000000000000000000000000',
+    '-----END RSA PRIVATE KEY-----',
+  ].join('\n');
+  fs.writeFileSync(path.join(src, 'private-key.txt'), pem + '\n', 'utf8');
+  fs.writeFileSync(path.join(src, 'report.md'), '# report\nstatus: ok\n', 'utf8');
+  const prep = runPrepare(src, dest);
+  assert.equal(prep.status, EXIT_CLEAN, `prepare 失败: ${prep.stderr}`);
+  // 白名单 .txt 且文件名不含 token/secret/credential → 必须进入上传目录。
+  assert.ok(fs.existsSync(path.join(dest, 'private-key.txt')), 'private-key.txt 应被白名单放行进入上传目录');
+  const result = runScanner('case-38 [RV-07] PEM private-key.txt 全链路', dest, EXIT_BLOCKED, [pem]);
+  assert.match(result.stdout, /PEM_PRIVATE_KEY/);
+});
+
+test('case-39 [RV-07] 明文 PEM 私钥伪装成 export.txt 经 prepare→scan 全链路阻断', (t) => {
+  const src = makeTmp(t, 'rv07b-src');
+  const dest = makeTmp(t, 'rv07b-dest');
+  const pem = [
+    '-----BEGIN OPENSSH PRIVATE KEY-----',
+    'AAAA0000000000000000000000000000000000000000000000000000000000000000',
+    '-----END OPENSSH PRIVATE KEY-----',
+  ].join('\n');
+  fs.writeFileSync(path.join(src, 'export.txt'), pem + '\n', 'utf8');
+  const prep = runPrepare(src, dest);
+  assert.equal(prep.status, EXIT_CLEAN, `prepare 失败: ${prep.stderr}`);
+  assert.ok(fs.existsSync(path.join(dest, 'export.txt')), 'export.txt 应进入上传目录');
+  const result = runScanner('case-39 [RV-07] PEM export.txt 全链路', dest, EXIT_BLOCKED, [pem]);
+  assert.match(result.stdout, /PEM_PRIVATE_KEY/);
+});
+
+test('case-40 [RV-12] 不可解码样本伪装成 random.txt 经 prepare→scan 全链路阻断', (t) => {
+  const src = makeTmp(t, 'rv12-src');
+  const dest = makeTmp(t, 'rv12-dest');
+  const buf = Buffer.alloc(64);
+  for (let i = 0; i < buf.length; i += 1) buf[i] = (i * 37 + 11) % 256;
+  fs.writeFileSync(path.join(src, 'random.txt'), buf);
+  const prep = runPrepare(src, dest);
+  assert.equal(prep.status, EXIT_CLEAN, `prepare 失败: ${prep.stderr}`);
+  // 白名单 .txt → 进入上传目录；扫描须判定 UNDECODABLE → BLOCKED（证明真实上传链路会拦截）。
+  assert.ok(fs.existsSync(path.join(dest, 'random.txt')), 'random.txt 应进入上传目录');
+  const result = runScanner('case-40 [RV-12] 不可解码全链路', dest, EXIT_BLOCKED);
+  assert.match(result.stdout, /UNDECODABLE/);
+});
+
+test('case-41 [RV-13] 源含 trace.zip 时最终 SHA256SUMS 只含实际上传文件', (t) => {
+  const src = makeTmp(t, 'rv13-src');
+  const dest = makeTmp(t, 'rv13-dest');
+  fs.writeFileSync(path.join(src, 'report.md'), '# report\nstatus: ok\n', 'utf8');
+  fs.writeFileSync(path.join(src, 'trace.zip'), Buffer.from([0x50, 0x4b, 0x03, 0x04]));
+  fs.writeFileSync(path.join(src, 'SHA256SUMS.txt'), 'deadbeef  trace.zip\n', 'utf8'); // 源自带过期清单，应被覆盖
+  const prep = runPrepare(src, dest);
+  assert.equal(prep.status, EXIT_CLEAN, `prepare 失败: ${prep.stderr}`);
+  assert.ok(fs.existsSync(path.join(dest, 'report.md')), 'report.md 应被上传');
+  assert.ok(!fs.existsSync(path.join(dest, 'trace.zip')), 'trace.zip 应被排除，不得进入上传目录');
+  const manifest = fs.readFileSync(path.join(dest, 'SHA256SUMS.txt'), 'utf8');
+  assert.ok(manifest.includes('report.md'), '清单应包含 report.md');
+  assert.ok(!manifest.includes('trace.zip'), '清单不得包含已排除的 trace.zip（不得保留历史引用）');
+  const m = manifest.match(/^([0-9a-f]{64})  report\.md$/m);
+  assert.ok(m, '清单应包含 report.md 的 sha256 条目');
+  const actual = crypto.createHash('sha256').update(fs.readFileSync(path.join(dest, 'report.md'))).digest('hex');
+  assert.equal(actual, m[1], 'report.md 实际哈希应与清单一致（0 missing / 0 mismatch）');
 });

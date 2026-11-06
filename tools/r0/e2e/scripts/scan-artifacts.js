@@ -8,15 +8,20 @@
  * 黑名单文件名或疑似凭据文本，立即以退出码 2 失败；workflow 的上传 step 通过
  * steps.artifact_scan.outcome == 'success' 依赖本 step，因此扫描不通过时绝不上传。
  *
- * 本轮（K1–K3 修复）相对 Round 2 的关键扩展：
- *   K1 编码绕过：对每个文件尝试 UTF-8 / UTF-16LE / UTF-16BE 三种解码（含 BOM 识别），
- *     对每一种「可靠」解码结果都施加文本规则；无法可靠解码的文本型文件直接 BLOCK，
- *     绝不降级为 CLEAN。
+ * 本轮（K1–K3 修复 + 第八次复核 RV-07/09/10 整改）相对 Round 2 的关键扩展：
+ *   K1 编码绕过：对每个文件尝试严格 UTF-8（fatal）/ UTF-16LE / UTF-16BE 三种解码（含 BOM 识别）；
+ *     严格 UTF-8 解码失败且文件无非 UTF-16 BOM 时，文本型文件直接判定为「无法可靠解码 → BLOCK」，
+ *     绝不降级为 CLEAN（RV-09：少量非法字节打断关键词也不能借宽松阈值蒙混过关）；
+ *     仅当存在明确 UTF-16 BOM 时才按 UTF-16 解码，避免把 UTF-8 文件误当 UTF-16 放行。
+ *     无法可靠解码的文本型文件一律 BLOCK。
  *   K2 短值 / 低熵：新增「强敏感键名 + 值」联合判定——凡命中 token / secret / api_key /
- *     password 等强敏感键名，且值非空非明显占位（长度 >= 4），即判定疑似凭据。普通
- *     业务字段（unit / note / status 等）不属于强敏感键名，不会被无理由误报。
+ *     password 等强敏感键名，且值非空非明显占位（占位白名单抑制误报、不靠值长度），即判定疑似凭据。
+ *     普通业务字段（unit / note / status 等）不属于强敏感键名，不会被无理由误报。
  *   K3 字段名 / Base64：敏感键名规则覆盖 x-api-key / apiKey / api_key / API_KEY 等大小写
- *     与分隔符变体（含 JSON 嵌套）；新增 Base64 解码复扫，识别 Base64 编码后的凭据。
+ *     与分隔符变体（含 JSON 嵌套）；新增 Base64 解码复扫，覆盖标准 Base64 与 Base64URL、
+ *     带 / 无 padding 两种形态，识别 Base64 编码后的凭据。
+ *   RV-07 明文 PEM 私钥：明文文本直接识别 PRIVATE KEY / RSA / EC / OPENSSH / ENCRYPTED PRIVATE
+ *     KEY 标记，命中一律 BLOCK，绝不输出密钥内容。
  *
  * 输出：仅「文件路径 + 命中类型 + 命中数量 + 编码解码统计」，绝不打印匹配到的值。
  * 退出码：0 干净 / 2 发现疑似凭据、黑名单文件或无法可靠解码（阻断上传）/ 1 参数或环境错误。
@@ -107,6 +112,13 @@ const DECODED_CRED_MARKER = new RegExp(
 );
 
 /**
+ * 明文 PEM 私钥 / 证书私钥标记（RV-07）。
+ * 覆盖 PRIVATE KEY / RSA PRIVATE KEY / EC PRIVATE KEY / OPENSSH PRIVATE KEY /
+ * ENCRYPTED PRIVATE KEY（及 DSA 等）。命中一律 BLOCK，绝不输出密钥内容。
+ */
+const PEM_PRIVATE_KEY_RE = /-----BEGIN (?:RSA |EC |OPENSSH |ENCRYPTED |DSA |[A-Z0-9]* )?PRIVATE KEY-----/g;
+
+/**
  * 判定头值是否具备凭据形态，用于收紧 AUTH_HEADER / COOKIE_HEADER，消除假阳性。
  * 纯字母 + 连字符的自然语言短语（如 role-based-access）不算命中。
  * 只返回布尔，绝不把值写入任何输出。
@@ -137,11 +149,13 @@ function sensitiveAssignValue(key, raw) {
 }
 
 /**
- * 判定 Base64 字符串解码后是否藏有凭据形态（K3）。
+ * 判定 Base64 字符串解码后是否藏有凭据形态（K3 / RV-10）。
+ * 同时覆盖标准 Base64 与 Base64URL（URL-safe 使用 - 与 _），并兼容有 / 无 padding。
  * 仅当解码文本命中凭据标记时才判定为凭据，避免把任意 base64（图片/哈希）误报。
  */
 function isBase64Credential(b64) {
-  let s = b64;
+  // Base64URL 的 - 与 _ 归一化为标准 + 与 /；无 padding 时补足到 4 的倍数。
+  let s = b64.replace(/-/g, '+').replace(/_/g, '/');
   while (s.length % 4 !== 0) s += '=';
   let bytes;
   try {
@@ -171,14 +185,17 @@ function countOf(text, re) {
 }
 
 /**
- * 解码 UTF-8 并评估可靠性：U+FFFD 占比越低越可靠（< 2% 视为可靠）。
+ * 严格解码 UTF-8（fatal：任何非法字节即失败，不做「少量替换字符继续 CLEAN」的宽松处理）。
+ * 严格解码失败意味着文件不是可靠的 UTF-8 文本——安全扫描必须进入「无法可靠解码 → BLOCK」
+ * 分支，而绝不能忽略错误继续按 CLEAN 放行（RV-09）。
  */
 function decodeUtf8(buf) {
-  const text = buf.toString('utf8').replace(/^\uFEFF/, '');
-  let fffd = 0;
-  for (const ch of text) if (ch === '\uFFFD') fffd += 1;
-  const ratio = text.length ? fffd / text.length : 1;
-  return { text, reliable: ratio < 0.02, ratio };
+  try {
+    const text = new TextDecoder('utf-8', { fatal: true }).decode(buf);
+    return { text: text.replace(/^\uFEFF/, ''), reliable: true, ratio: 0 };
+  } catch (err) {
+    return { text: '', reliable: false, ratio: 1 };
+  }
 }
 
 /**
@@ -257,8 +274,11 @@ function scanText(text) {
   }
   // EBK_JWT_SECRET 赋值
   add('EBK_JWT_SECRET_ASSIGN', countOf(text, /EBK_JWT_SECRET\s*[:=]\s*["']?[^\s"',}]{4,}/gi));
-  // Base64 编码凭据（K3）：解码后命中凭据标记才判定
-  for (const m of text.matchAll(/[A-Za-z0-9+/]{16,}={0,2}/g)) {
+  // PEM 明文私钥 / 证书私钥标记（RV-07）：命中一律 BLOCK，绝不输出密钥内容。
+  add('PEM_PRIVATE_KEY', countOf(text, PEM_PRIVATE_KEY_RE));
+  // Base64 / Base64URL 编码凭据（K3 / RV-10）：字符集覆盖标准 + 与 URL-safe - _，
+  // 带 / 无 padding 均可；解码后命中凭据标记才判定。
+  for (const m of text.matchAll(/[A-Za-z0-9+/_-]{16,}={0,2}/g)) {
     if (isBase64Credential(m[0])) add('BASE64_CREDENTIAL', 1);
   }
   return out;
@@ -442,6 +462,11 @@ function main(argv) {
       const buf = fs.readFileSync(abs);
 
       const knownBinary = isKnownBinary(buf);
+      // 仅当文件起始存在明确 UTF-16 BOM 时，才把 UTF-16 解码结果视为「可靠文本」。
+      // 没有 BOM 却「能解出可读 UTF-16」的，多为 UTF-8 损坏后被错误当成 UTF-16（RV-09 反例），
+      // 必须按「无法可靠解码」处理，绝不能放行为 CLEAN。
+      const hasUtf16Bom = buf.length >= 2 &&
+        ((buf[0] === 0xFF && buf[1] === 0xFE) || (buf[0] === 0xFE && buf[1] === 0xFF));
       if (BINARY_EXT.has(ext) && binarySignatureMismatch(ext, buf)) {
         addFinding(rel, 'SUSPICIOUS_BINARY', 1);
         suspiciousBinary += 1;
@@ -472,11 +497,13 @@ function main(argv) {
         for (const [type, n] of res) addFinding(rel, type, n);
       }
 
-      // K1-03：NUL 插入变体（零散 NUL 注入 token 值，使文件仍为「可靠 UTF-8」却藏匿凭据）。
-      // 对 latin1 文本去除 NUL 后复扫一次；仅对「非已知二进制」施行，避免压缩二进制
-      // 被挤压缩连产生偶发字符串造成误 BLOCK（已知二进制已有魔数+内容双校验）。
+      // K1-03 / RV-09 / RV-11：噪声字节复扫。把 latin1 视图里所有「非可打印 ASCII
+      // 与制表/换行/回车」的字节（NUL、控制符、DEL、高位噪声字节）一并剔除后再扫一次，
+      // 以捕获被插入噪声打断的关键词 / token 值（含 NUL 位于 token 值内部、关键词内部等形态）。
+      // 仅对「非已知二进制」施行，避免压缩二进制被挤压缩连产生偶发字符串造成误 BLOCK
+      // （已知二进制已有魔数 + 内容双校验）。此复扫不扩大关键词正则，仅做噪声归一化。
       if (!knownBinary) {
-        const squeezed = buf.toString('latin1').replace(/\u0000/g, '');
+        const squeezed = buf.toString('latin1').replace(/[^\x20-\x7e\t\r\n]/g, '');
         const squeezedRes = scanText(squeezed);
         for (const [type, n] of squeezedRes) addFinding(rel, type, n);
       }
@@ -485,7 +512,9 @@ function main(argv) {
       if (BINARY_EXT.has(ext)) binaryAlsoScanned += 1;
 
       // K1-04：文本型文件（非已知二进制）却无法可靠解码 → 阻断，绝不 CLEAN。
-      const reliableText = u8.reliable || u16le.reliable || u16be.reliable;
+      // 严格 UTF-8 失败后，仅当存在明确 UTF-16 BOM 时才认可 UTF-16 为「可靠文本」
+      // （RV-09：否则 UTF-8 损坏文件可能被错误当成 UTF-16 而漏报）。
+      const reliableText = u8.reliable || (hasUtf16Bom && (u16le.reliable || u16be.reliable));
       if (!knownBinary && buf.length >= MIN_UNDECODABLE_BYTES && !reliableText) {
         addFinding(rel, 'UNDECODABLE', 1);
         undecodableFiles += 1;

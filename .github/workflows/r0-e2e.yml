@@ -131,46 +131,46 @@ jobs:
 
       # P1 安全整改（K1-K3）失败关闭集成验证：用合成凭据样本直接证明
       # 「扫描失败/命中 → 退出码非 0 → 上传 step 的 if: outcome==success 不触发 → 不上传」。
-      # 与上面 artifact_scan 共用同一把扫描器，因此本步是上传闸门的前置可行性证据。
-      - name: 失败关闭（fail-closed）集成验证
+      # 凭据样本必须严格返回 rc=2；干净样本必须严格返回 rc=0；二者任一不符即判定 FAIL-OPEN。
+      # 与上面 artifact_scan 共用同一把扫描器，因此本步是上传闸门的硬性前置条件（RV-08）。
+      - name: 失败关闭（fail-closed）集成验证（正向）
         id: fail_closed_check
         if: ${{ always() }}
         run: |
           set -euo pipefail
           SCANNER="tools/r0/e2e/scripts/scan-artifacts.js"
-
-          # 含合成凭据的样本（x-api-key + 一段 UTF-16LE Bearer），须被阻断。
+          GATE="tools/r0/e2e/scripts/verify-fail-closed-gate.js"
           CRED_DIR="$(mktemp -d)"
           printf 'x-api-key: SYNTHETIC-FAKE-FC-KEY-000000000000\n' > "$CRED_DIR/leak.txt"
-          printf 'Bearer %s' 'SYNTHETICFAKEUTF16LE000000000000' | iconv -t UTF-16LE > "$CRED_DIR/leak16.txt" || \
+          printf 'Bearer %s' 'SYNTHETICFAKEUTF16LE000000000000' | iconv -t UTF-16LE > "$CRED_DIR/leak16.txt" 2>/dev/null || \
             printf 'Bearer SYNTHETICFAKEUTF16LE000000000000' > "$CRED_DIR/leak16.txt"
-          set +e
-          node "$SCANNER" "$CRED_DIR"; CRED_RC=$?
-          set -e
-          if [ "$CRED_RC" -eq 0 ]; then
-            echo "::error::FAIL-OPEN: 含凭据样本竟被判定 CLEAN (rc=0)，上传闸门失效"
-            exit 1
-          fi
-          echo "FAIL-CLOSED OK: 含凭据样本被阻断 (rc=$CRED_RC)，上传 step 的 if: outcome==success 不会触发"
-
-          # 干净样本，须放行（rc=0）。
           CLEAN_DIR="$(mktemp -d)"
           printf 'unit: kg\nnote: groceries\nstatus: ok\n' > "$CLEAN_DIR/biz.json"
-          set +e
-          node "$SCANNER" "$CLEAN_DIR"; CLEAN_RC=$?
-          set -e
-          if [ "$CLEAN_RC" -ne 0 ]; then
-            echo "::error::干净样本被误阻断 (rc=$CLEAN_RC)"
-            exit 1
-          fi
-          echo "CLEAN OK: 干净样本放行 (rc=0)"
+          node "$GATE" --scanner "$SCANNER" --cred-dir "$CRED_DIR" --clean-dir "$CLEAN_DIR"
           rm -rf "$CRED_DIR" "$CLEAN_DIR"
 
-      # 关键：上传只在扫描 step 的 outcome 为 success 时发生。
-      # 原先的 if: always() 会让"扫描失败即退出"的防护完全失效，故必须改为依赖 outcome。
+      # RV-08 #4：负向集成测试——故意令 fail-closed 验证失败（用「总返回 CLEAN」的破损扫描器替身），
+      # 证明上传闸门被跳过、Artifact 数量 = 0。若破损扫描器仍让上传闸门放行，则本步失败。
+      - name: 失败关闭（fail-closed）负向证明
+        id: fail_closed_negative
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          BROKEN="tools/r0/e2e/scripts/fixtures/broken-scanner.js"
+          GATE="tools/r0/e2e/scripts/verify-fail-closed-gate.js"
+          CRED_DIR="$(mktemp -d)"
+          printf 'x-api-key: SYNTHETIC-FAKE-FC-KEY-000000000000\n' > "$CRED_DIR/leak.txt"
+          CLEAN_DIR="$(mktemp -d)"
+          printf 'unit: kg\n' > "$CLEAN_DIR/biz.json"
+          node "$GATE" --scanner "$BROKEN" --cred-dir "$CRED_DIR" --clean-dir "$CLEAN_DIR" --expect-skip
+          rm -rf "$CRED_DIR" "$CLEAN_DIR"
+
+      # 关键：上传只在「扫描 artifact_scan 成功」且「fail-closed 集成验证 fail_closed_check 成功」时
+      # 发生（RV-08）。fail_closed_check 对凭据样本严格要求 rc==2、干净样本 rc==0；任一不符则上传被跳过，
+      # 绝不会因宽松的「非零即命中」误判而放行。上传前 prepare-upload 已重建并校验 SHA256SUMS（RV-13）。
       - name: 上传证据（日志/截图/报告/校验和）
         id: artifact_upload
-        if: ${{ always() && steps.artifact_scan.outcome == 'success' }}
+        if: ${{ always() && steps.artifact_scan.outcome == 'success' && steps.fail_closed_check.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
           name: r0-e2e-evidence-${{ github.sha }}
@@ -192,8 +192,9 @@ jobs:
             echo "- 白名单准备 outcome: ${{ steps.artifact_prepare.outcome }}"
             echo "- 上传前安全扫描 outcome: ${{ steps.artifact_scan.outcome }}"
             echo "- 失败关闭集成验证 outcome: ${{ steps.fail_closed_check.outcome }}"
+            echo "- 失败关闭负向证明 outcome: ${{ steps.fail_closed_negative.outcome }}"
             echo "- 上传证据 outcome: ${{ steps.artifact_upload.outcome }}"
-            echo "- 扫描通过且允许上传: ${{ steps.artifact_scan.outcome == 'success' }}"
+            echo "- 扫描通过且允许上传: ${{ steps.artifact_scan.outcome == 'success' && steps.fail_closed_check.outcome == 'success' }}"
             if [ "${{ steps.artifact_upload.outcome }}" != "success" ]; then
               echo "- 上传被跳过或未成功：本轮无公开 artifact 产出，请勿把绿色 CI 解读为证据已安全上传"
             fi
