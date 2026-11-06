@@ -1,33 +1,58 @@
-=== 最终 HEAD ea6eda923de38dd9f7558c2a54a32d965b2857e3 上重跑的三条 CI 证据 ===
-（避免第八轮被复核指出的「CI head_sha 不是 PR 最终 HEAD」歧义；本节为最终 HEAD 实测）
+=== HEAD 与 CI 对应证据（按审计口径准确表述） ===
 
-[1] R0 E2E
-run_id=42214133869  URL=https://github.com/LinTia/FastLadger/actions/runs/42214133869
-conclusion=success  head_sha=ea6eda923de38dd9f7558c2a54a32d965b2857e3
-22 个主 step 全 success，含：50 项门禁、生成 RV-13/RV-14 证据日志、修复前后对照、
-  分类映射回归、包 A 11 项、包 D 四项缺陷回归、包 C 228 条报告型、汇总退出码、
-  准备上传证据、RV-13 最终目录递归字节校验、上传前扫描、fail-closed 正向与负向、
-  上传证据、汇总证据上传安全结论。
-Artifact ID=13499964140
-name=r0-e2e-evidence-ea6eda923de38dd9f7558c2a54a32d965b2857e3  size=3641401 B
-下载解压独立复验：102 文件、SHA256SUMS.txt 仅 1 份、根清单 101 条；
-  verify-upload-manifest.js 递归字节校验 101/101 通过、0 missing / 0 mismatch /
-  0 uncovered / 0 staleRefs / 0 nestedManifests / selfRef=false / 退出码 0；
-  最终扫描器独立复扫：102 文件全量、0 命中、CLEAN(rc=0)。
+审计口径（第九次复核 §2 第 3 点）：应准确表述为「代码与 workflow 在 X 上完成 CI；
+其后 Y 仅文档回填」。本节据此列出全部真实 run，并显式标注各自的 head_sha。
 
-[2] R0 Upload Gate (RV-15) positive
-run_id=42214137411  URL=https://github.com/LinTia/FastLadger/actions/runs/42214137411
-conclusion=success  head_sha=ea6eda923de38dd9f7558c2a54a32d965b2857e3
-prepare=success / scan=success / fail_closed_check=success /
-  真实 actions/upload-artifact step=success / gate_assert=success
-Artifact ID=13500302905  name=r0-gate-positive-42214137411  size=909 B
+代码 / workflow 最终提交：1e2d70c0fc7d57d830b86411bc5fbdcedac527ae
+其后 ea6eda9 / 00a5a71 / 6b4b4c1 / （本文件所在提交）全部是纯文档回填，
+只改动 docs/r0-evidence-9th-fix/ 下报告与证据文件，
+不改任何代码、测试判定、扫描器、prepare-upload.js 或 workflow。
 
-[3] CI（build / vet / test / 全仓 -race / 容器冒烟）
-run_id=42214140547  URL=https://github.com/LinTia/FastLadger/actions/runs/42214140547
-conclusion=success  head_sha=ea6eda923de38dd9f7558c2a54a32d965b2857e3
-Toolchain / gofmt / go vet / go build / SQLite 驱动冒烟 / go test 全量 /
-  go test -race（全仓）/ docker build / 容器内 db migrate 冒烟 / 容器 healthz 冒烟
-  全部 success。
+----------------------------------------------------------------------
+[A] 代码 / workflow 提交上的 CI（head_sha = 991ab09 / 1e2d70c）
+----------------------------------------------------------------------
+R0 E2E        run 42211926674  success  head=991ab09b8409a17984ced91737cabbffc6c9b0f5
+              Artifact 13499611257（3,652,445 B）
+              下载独立复验：仅 1 份 SHA256SUMS.txt、101 OK / 0 FAILED、
+              递归字节校验 0 missing / 0 mismatch / 0 uncovered / 0 staleRefs、
+              最终扫描器复扫 102 文件 0 命中 CLEAN(rc=0)
+RV-15 gate    run 42212399478 positive / 42212414373 scan_fail /
+              42212424538 fail_closed_fail / 42212434547 prepare_fail
+              正向 1 个 Artifact（13498773757）；三个负向真实 upload step skipped、
+              Artifact API total_count=0（详见 rv15-gate-ci-evidence.txt）
+CI 全仓 -race run 42213272740  success  head=1e2d70c0fc7d57d830b86411bc5fbdcedac527ae
+              gofmt / go vet / go build / SQLite 驱动冒烟 / go test 全量 /
+              go test -race（全仓）/ docker build+healthz 全部 success
 
-说明：最终 HEAD ea6eda9 只新增 docs/r0-evidence-9th-fix/ 文档与证据文件，
-不改任何代码、测试判定或 workflow；上述三条 CI 证明最终 HEAD 同样全绿。
+----------------------------------------------------------------------
+[B] 文档回填提交 ea6eda9 上的三条工作流重跑
+    head_sha = ea6eda923de38dd9f7558c2a54a32d965b2857e3
+----------------------------------------------------------------------
+R0 E2E              run 42214133869  success  Artifact 13499964140（3,641,401 B）
+RV-15 gate positive run 42214137411  success  Artifact 13500302905
+CI 全仓 -race       run 42214140547  success
+
+----------------------------------------------------------------------
+[C] 文档回填提交 6b4b4c1 上的三条工作流重跑
+    head_sha = 6b4b4c1841a98fa36df1740e49b592342090c830
+----------------------------------------------------------------------
+R0 E2E              run 42215497284  success  Artifact 13499869914
+                    name=r0-e2e-evidence-6b4b4c1841a98fa36df1740e49b592342090c830
+                    size=3,630,058 B；22 主 step 全 success
+RV-15 gate positive run 42215501009  success  Artifact 13500727306
+                    prepare/scan/fail_closed_check 全 success →
+                    真实 actions/upload-artifact step=success → gate_assert=success
+CI 全仓 -race       run 42215504756  success
+                    Toolchain / gofmt / go vet / go build / SQLite 驱动冒烟 /
+                    go test 全量 / go test -race（全仓）/
+                    docker build / 容器内 db migrate / 容器 healthz 全部 success
+
+----------------------------------------------------------------------
+结论
+----------------------------------------------------------------------
+· 三组 CI 全部 success，覆盖代码提交、第一次文档回填与后续文档回填。
+· 交付时 PR 的确切 HEAD SHA 与本文件所在提交 SHA 无法自引用，故以 PR #3 描述
+  与整改报告交付说明为准；PR #3 描述中列出的最终 HEAD run ID 其 head_sha 已经
+  GitHub Actions API 核对，与该 HEAD 完全一致。
+· 最终 HEAD 与 6b4b4c1 的差异仅为 docs/r0-evidence-9th-fix/ 纯文档，
+  代码 / workflow / 测试判定零变化；因此 [C] 组 run 即为最终代码的运行证明。
