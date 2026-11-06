@@ -7,7 +7,7 @@
 ## 当前状态（2026-10-31 历史快照，部分已过时）
 
 > 下表是 2026-10-31 的历史快照。schema 版本、测试基线、阶段进度以 `docs/` 最新交付文档、`CHANGELOG.md` 与服务器实测为准；**R0（基准冻结与差异盘点）当前未通过 / 阻塞**，见 [R0 报告](docs/FastLedger-R0-基准冻结与差异盘点.md)。本表不作为 R0 验收依据。
-> **截至 [1.82] 的 R0 收尾状态（第八次安全扫描器独立复核）**：WorkBuddy 已提交 K1–K3 扫描器整改；CI 30 项测试门禁 success，普通 CI run `42079445701` success，R0 E2E run `42079445817` 最终 success（A 11/11、D 39/39）。但 A05 仍只按耗时判 PASS，A 保持 PARTIAL；C 为 **164/4/59/1**，仍 PARTIAL。独立复核新增 **RV-07–RV-13**：明文 PEM 私钥可经 TXT 白名单漏检、fail-closed 集成验证未成为上传门禁、宽松 UTF-8 解码阈值与 Base64URL 覆盖不足、两项负向测试未走真实白名单链路，以及白名单过滤后 SHA256SUMS 仍引用 12 个已排除 trace 文件。Artifact `13441565324` 已下载，101 个条目，无原始 trace/HAR/network/数据库文件；CI scanner CLEAN，独立常见凭据模式检查未发现命中，但 checksum 清单有 12 条缺失引用。B 仍 PARTIAL（t021 Owner 决策待确认）；D 整体仍 PARTIAL，`OBS-ACCT-VIS-390` 账户名称 390px 不可见仍 FAIL；RV-05 仍 **Owner ACTION REQUIRED**。**PR #3 保持 Open、不合并；R0 继续 BLOCK，不授权 R1–R7。** 详见 [第八次安全扫描器独立复核](docs/FastLedger-R0-第八次安全扫描器独立复核.md)。
+> **截至 [1.83] 的 R0 收尾状态（第九次安全扫描器交付独立复核）**：WorkBuddy 已提交 RV-07–RV-13 整改，R0 E2E run `42147186477` success（41 项扫描器测试 step success；A 11/11、D 39/39、C 164/4/59/1）。但 Artifact `13471225181` 实际下载后发现 RV-13 **未闭环**：根清单 98/98 匹配，A 子目录清单仍有 12 条指向已排除 trace.zip 的失效引用，且根清单未覆盖 3 份嵌套清单。新增 RV-14（knownBinary 跳过噪声复扫的 PNG/NUL 静态漏检路径，待运行时复现）与 RV-15（fail-closed 负向测试未真正验证 workflow upload step 被跳过）。RV-08/09 仍 PARTIAL；RV-10/11/12 修复成立。A05 仍只按耗时判 PASS，A 保持 PARTIAL；C 为 **164/4/59/1**，且硬编码 PASS 证据问题未关闭；B 仍 PARTIAL（t021 Owner 决策待确认）；D 整体仍 PARTIAL，`OBS-ACCT-VIS-390` 账户名称 390px 不可见仍 FAIL。GitHub API 确认仓库仍 Public（private=false），RV-05 仍 **Owner ACTION REQUIRED**。PR #3 保持 Open、不合并，且与当前 main 分叉；**R0 继续 BLOCK，不授权 R1–R7 / PWA。** 详见 [第九次安全扫描器交付独立复核](docs/FastLedger-R0-第九次安全扫描器交付独立复核.md)。
 
 | 项 | 状态 |
 |---|---|
