@@ -2,6 +2,20 @@
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.84] - 2026-11-06
+
+### R0 第十次安全扫描器整改独立复核：RV-13 仍未闭环，RV-14 / RV-15 未通过
+
+- 独立复核 PR #3 当前 HEAD `2699c9c3db2e40915082da2acbe2392ad40650de`；扫描器代码与 workflow 仍对应 `5519b9d`，当前 HEAD 的最新提交仅为文档回填。
+- R0 E2E run `42147186477` 的 20 个 step 均 success，41 项扫描器测试 step success，Artifact `13471225181`（102 个文件条目）确实生成；但绿色 CI 不代表安全验收通过。
+- **RV-13 / P2 未修复**：`prepare-upload.js` 以 basename 排除所有层级的 `SHA256SUMS.txt`，却只重建根清单；嵌套 A/D/C 清单仍原样复制且在自校验时被跳过。Artifact 实测 A 子清单 30 条中 12 条引用已过滤 trace.zip；根清单 98/98 匹配不能证明嵌套清单有效。
+- **RV-14 / P1 新发现**：knownBinary（含合法 PNG 魔数）跳过 NUL/噪声 squeezed 复扫，也跳过 UNDECODABLE 兜底；现有 case-17 仅测连续 JWT，不测 PNG 内关键词/token 值被 NUL 打断。要求补真实 PNG 魔数 + NUL 负向样本及正常 PNG CLEAN 控制。
+- **RV-15 / P2 新发现**：fail-closed 负向 helper 仅根据本地布尔变量打印“Artifact 数量=0”，没有触发 workflow 真实 upload gate。run `42147186477` 日志随后实际执行 upload，显示上传 102 个文件；Artifact API 也确认 Artifact `13471225181` 存在。要求真实负向 workflow run 证明 upload step skipped 且 Artifact API 数量为 0。
+- 状态：RV-07 基本修复成立但 PEM 类型覆盖仍可补；RV-08 上传双条件代码已加但真实负向集成验收 PARTIAL；RV-09 PARTIAL；RV-10/11/12 修复成立；RV-13 未修复；RV-14 P1 / RV-15 P2 未修复。
+- A/B/C/D 仍 PARTIAL：A05 仍只按耗时判 PASS；B 的 t021 override 待 Owner；C 为 164/4/59/1；D 的 `OBS-ACCT-VIS-390` 仍 FAIL。RV-05 仍 Owner ACTION REQUIRED。
+- 新增 [第十次安全扫描器整改独立复核报告](docs/FastLedger-R0-第十次安全扫描器整改独立复核.md)。要求 WorkBuddy 仅整改 RV-13/14/15 并提供真实 Artifact 与 workflow 负向证据；不合并 PR、不启动 R1–R7/PWA。
+- PR #3 OPEN、未合并；main 与 PR 分支 ahead 13 / behind 9 / diverged。R0 继续 BLOCK。
+
 ## [1.83] - 2026-11-06
 
 ### R0 第九次安全扫描器交付独立复核：RV-13 未闭环，新增 RV-14 / RV-15
