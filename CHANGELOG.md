@@ -2,6 +2,19 @@
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.83] - 2026-11-06
+
+### R0 第九次安全扫描器交付独立复核：RV-13 未闭环，新增 RV-14 / RV-15
+
+- 独立复核 PR #3 最新 HEAD `2699c9c3`；扫描器代码 `f1ddc7d`、workflow/CI head `5519b9d`。R0 E2E run `42147186477` success，41 项扫描器测试 step success；该 run 的 head 是 `5519b9d`，其后 `2699c9c` 仅回填报告文档。
+- 实际下载 Artifact `13471225181`（102 条目）：根级 SHA256SUMS 98/98 匹配，但 A 子目录 SHA256SUMS 仍有 12 条已排除 trace.zip 失效引用；D/C 子清单各自匹配。根清单排除所有 basename 为 SHA256SUMS.txt 的文件，未覆盖 3 份嵌套清单，故 RV-13 **未关闭**。
+- 新增 **RV-14（P1，静态路径待运行时复现）**：`scan-artifacts.js` 对 knownBinary 跳过噪声复扫；PNG 魔数文件若在 Bearer 值前 12 个字符内插入 NUL，可能避开连续串规则，且 knownBinary 不触发 UNDECODABLE。
+- 新增 **RV-15（P2）**：fail-closed 负向 helper 只计算 uploadAllowed 并打印“Artifact 数量=0”，没有实际触发 workflow 的 fail_closed_check 失败，也未断言 upload step skipped 或查询 Artifact 数量。双条件上传 gate 的静态逻辑正确，但负向集成证据不足。
+- 41 项测试 CI step success；Artifact A=11/11、D=39/39、C=164/4/59/1。A05 仍只按耗时判 PASS；C 的硬编码 PASS 仍存在；B 的 t021 override 仍待 Owner；D 的 OBS-ACCT-VIS-390 仍 FAIL。
+- GitHub API 当前确认仓库仍 Public（private=false）；RV-05 仍 Owner ACTION REQUIRED。PR #3 OPEN，当前 main 与 PR 分支 ahead 13 / behind 6 / diverged。
+- 新增 [第九次安全扫描器交付独立复核](docs/FastLedger-R0-第九次安全扫描器交付独立复核.md)。要求 WorkBuddy 修复 RV-13/14/15 并提供真实 Artifact/负向 workflow 证据；不合并 PR、不启动 R1–R7/PWA。
+- 状态：RV-07/10/11/12 代码修复成立（测试覆盖边界见报告）；RV-08 PARTIAL；RV-09 PARTIAL；RV-13 BLOCKED；RV-14 P1 待修；RV-15 P2 待补。A/B/C/D 仍 PARTIAL，R0 继续 BLOCK。
+
 ## [1.82] - 2026-11-06
 
 ### R0 第八次安全扫描器独立复核：K1–K3 修复 PARTIAL，新增 RV-07–RV-13
