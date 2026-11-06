@@ -1,3 +1,15 @@
+## [1.85] - 2026-11-07
+
+### R0 第十一次独立复核：RV-14 指定 PNG/NUL 反例补齐仍有断言缺口
+
+- 独立复核 PR #3 最新 HEAD `858b7b453f783eba462017e1e8670e3975f3ae65`。新增 case-51~53，GitHub Actions R0 E2E run `42251837877` 的 53 项扫描器测试全部通过；全仓 `-race` CI run `42251842888` success；最新 Artifact `13521151959` 已下载独立校验。
+- **RV-13 PASS**：最新 Artifact 102 个文件条目；唯一根级 SHA256SUMS 101 条全部按实际字节匹配，0 missing / 0 mismatch / 0 uncovered / 0 嵌套清单。
+- **RV-14 PARTIAL**：case-52（x-api-key 关键词内部 NUL）与 case-53（值内部 NUL）旧扫描器均为 CLEAN(rc=0)，新扫描器 BLOCK(rc=2)；case-51 新扫描器实际同时命中 AUTH_HEADER 与 BEARER_TOKEN，但测试断言使用 OR，且 Bearer/token 连续，未来 Authorization 路径回归仍可能被 BEARER_TOKEN 掩盖。要求新增隔离样本并强制断言 AUTH_HEADER。
+- 正常 PNG 高熵数据与普通业务文字 PNG 仍 CLEAN；未发现将所有二进制一律 BLOCK 的误报扩大。
+- **RV-15 PASS（沿用前轮负向实证）**：最新 HEAD 正向 gate run `42251849969` success；前轮真实 scan/fail_closed/prepare 负向场景 upload skipped 且 Artifact API=0。本轮未改上传条件，未重跑三种负向。
+- R0 仍 BLOCK：A05 慢网 pending 断言仍未验证 disabled；C=164/4/59/1；`OBS-ACCT-VIS-390` 仍 FAIL；t021 待 Owner；RV-05 Owner ACTION REQUIRED。PR #3 OPEN、未合并，不授权 R1–R7/PWA。
+- 新增 [第十一次 RV-14 补齐独立复核报告](docs/FastLedger-R0-第十一次RV-14补齐独立复核.md)，要求 WorkBuddy 仅强化 RV-14 case-51 的 AUTH_HEADER 专项断言，不改扫描器本体/业务范围/其他既有状态。
+
 # 更新日志（CHANGELOG）
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
