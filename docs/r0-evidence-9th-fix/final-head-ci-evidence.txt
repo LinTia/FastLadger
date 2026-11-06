@@ -1,0 +1,33 @@
+=== 最终 HEAD ea6eda923de38dd9f7558c2a54a32d965b2857e3 上重跑的三条 CI 证据 ===
+（避免第八轮被复核指出的「CI head_sha 不是 PR 最终 HEAD」歧义；本节为最终 HEAD 实测）
+
+[1] R0 E2E
+run_id=42214133869  URL=https://github.com/LinTia/FastLadger/actions/runs/42214133869
+conclusion=success  head_sha=ea6eda923de38dd9f7558c2a54a32d965b2857e3
+22 个主 step 全 success，含：50 项门禁、生成 RV-13/RV-14 证据日志、修复前后对照、
+  分类映射回归、包 A 11 项、包 D 四项缺陷回归、包 C 228 条报告型、汇总退出码、
+  准备上传证据、RV-13 最终目录递归字节校验、上传前扫描、fail-closed 正向与负向、
+  上传证据、汇总证据上传安全结论。
+Artifact ID=13499964140
+name=r0-e2e-evidence-ea6eda923de38dd9f7558c2a54a32d965b2857e3  size=3641401 B
+下载解压独立复验：102 文件、SHA256SUMS.txt 仅 1 份、根清单 101 条；
+  verify-upload-manifest.js 递归字节校验 101/101 通过、0 missing / 0 mismatch /
+  0 uncovered / 0 staleRefs / 0 nestedManifests / selfRef=false / 退出码 0；
+  最终扫描器独立复扫：102 文件全量、0 命中、CLEAN(rc=0)。
+
+[2] R0 Upload Gate (RV-15) positive
+run_id=42214137411  URL=https://github.com/LinTia/FastLadger/actions/runs/42214137411
+conclusion=success  head_sha=ea6eda923de38dd9f7558c2a54a32d965b2857e3
+prepare=success / scan=success / fail_closed_check=success /
+  真实 actions/upload-artifact step=success / gate_assert=success
+Artifact ID=13500302905  name=r0-gate-positive-42214137411  size=909 B
+
+[3] CI（build / vet / test / 全仓 -race / 容器冒烟）
+run_id=42214140547  URL=https://github.com/LinTia/FastLadger/actions/runs/42214140547
+conclusion=success  head_sha=ea6eda923de38dd9f7558c2a54a32d965b2857e3
+Toolchain / gofmt / go vet / go build / SQLite 驱动冒烟 / go test 全量 /
+  go test -race（全仓）/ docker build / 容器内 db migrate 冒烟 / 容器 healthz 冒烟
+  全部 success。
+
+说明：最终 HEAD ea6eda9 只新增 docs/r0-evidence-9th-fix/ 文档与证据文件，
+不改任何代码、测试判定或 workflow；上述三条 CI 证明最终 HEAD 同样全绿。

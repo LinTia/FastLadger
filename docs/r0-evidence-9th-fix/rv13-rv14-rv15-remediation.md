@@ -3,10 +3,14 @@
 - 权威审计：`docs/FastLedger-R0-第九次安全扫描器交付独立复核.md`（ChatGPT 提交到 main @ `0d8f909`，**结论未改动**）
 - 审计对象 PR #3 HEAD：`2699c9c3db2e40915082da2acbe2392ad40650de`
 - 修复分支：`fix/r0-sixth-runtime-defects`（**不提交 main、不合并 PR、不宣布 R0 通过**）
-- 本轮 PR 最新 HEAD SHA：`1e2d70c0fc7d57d830b86411bc5fbdcedac527ae`
-- 本轮新增提交：
-  - `991ab09b8409a17984ced91737cabbffc6c9b0f5`（RV-13/14/15 代码、测试、workflow、原始证据日志）
+- 本轮 PR 最新 HEAD SHA：`ea6eda923de38dd9f7558c2a54a32d965b2857e3`（**最终文档回填后**）
+- 本轮新增提交（按时间顺序）：
+  - `991ab09b8409a17984ced91737cabbffc6c9b0f5`（RV-13/14/15 代码、测试、workflow、本地原始证据日志）
   - `1e2d70c0fc7d57d830b86411bc5fbdcedac527ae`（gate workflow 注册触发器 / 分场景 dispatch 准备）
+  - `ea6eda923de38dd9f7558c2a54a32d965b2857e3`（**仅文档**：整改报告 + 真实 CI/Artifact 证据回填，不改代码/workflow）
+- **HEAD 与 CI 对应关系（准确表述，避免第八轮被复核指出的歧义）**：
+  - 代码与 workflow 在 `991ab09` / `1e2d70c` 上完成全部 CI（R0 E2E run `42211926674` head=`991ab09`；RV-15 gate 四场景 + CI 全仓 `-race` run `42213272740` head=`1e2d70c`）。
+  - 最终 HEAD `ea6eda9` 只新增 `docs/r0-evidence-9th-fix/` 文档与证据文件，不改任何代码、测试判定或 workflow；已在该最终 HEAD 上**重跑 R0 E2E / RV-15 gate / CI 全仓 `-race`** 三个工作流再次证明全绿（见 §4）。
 - 审计结论处置：本轮只处理 RV-13 / RV-14 / RV-15；A05、C 硬编码 PASS、t021、OBS-ACCT-VIS-390、RV-05 **均未改判，保持原状态**。
 
 ---
@@ -130,7 +134,9 @@
 | fail_closed_fail | [42212424538](https://github.com/LinTia/FastLadger/actions/runs/42212424538) | success | success | **failure** | **skipped** | success | failure（预期） | **0** |
 | prepare_fail | [42212434547](https://github.com/LinTia/FastLadger/actions/runs/42212434547) | **failure** | skipped | success | **skipped** | success | failure（预期） | **0** |
 
-补充：push 触发注册 run [42212298540](https://github.com/LinTia/FastLadger/actions/runs/42212298540) 为默认 positive，`success`，Artifact API `total_count=1`（ID `13500245578`）。
+补充 1：push 触发注册 run [42212298540](https://github.com/LinTia/FastLadger/actions/runs/42212298540) 为默认 positive，`success`，Artifact API `total_count=1`（ID `13500245578`）。
+
+补充 2（最终 HEAD 复跑）：在最终 HEAD `ea6eda9` 上又重跑 positive 场景 run [42214137411](https://github.com/LinTia/FastLadger/actions/runs/42214137411) `success`，真实 upload `success`，Artifact API `total_count=1`（ID `13500302905`）。负向三场景的结论以 §3 表格中四个独立 run 为准（负向场景无代码变化，最终 HEAD 只增文档）。
 
 > 三个负向 run 的 `conclusion=failure` 是**刻意让真实前置 step 失败**的预期结果，且 `gate_assert` 全部 success 证明实测 outcome 符合门禁预期；这正是「gate 生效」而非「测试失败」。
 
@@ -147,9 +153,12 @@
 |---|---|
 | PR #3 最新 HEAD SHA | `1e2d70c0fc7d57d830b86411bc5fbdcedac527ae`（state=open, merged=false） |
 | 新增提交 SHA | `991ab09b8409a17984ced91737cabbffc6c9b0f5`、`1e2d70c0fc7d57d830b86411bc5fbdcedac527ae` |
-| 生产 R0 E2E CI Run | [42211926674](https://github.com/LinTia/FastLadger/actions/runs/42211926674) **success**（22 个主 step 全 success，含 50 项门禁、证据日志、递归字节校验、A/D/C/B 套件） |
-| CI 全仓 `-race` / 容器冒烟 Run | [42213272740](https://github.com/LinTia/FastLadger/actions/runs/42213272740) **success**（head `1e2d70c`，含 go test -race 全仓） |
-| 生产 Artifact ID | `13499611257`（`r0-e2e-evidence-991ab09…`，3,652,445 B） |
+| **最终 HEAD `ea6eda9` 上的 R0 E2E CI Run** | [42214133869](https://github.com/LinTia/FastLadger/actions/runs/42214133869) **success**（22 个主 step 全 success） |
+| **最终 HEAD 上的 Artifact ID** | `13499964140`（`r0-e2e-evidence-ea6eda9…`，3,641,401 B；独立复验 1 份清单 / 101/101 / CLEAN） |
+| **最终 HEAD 上的 RV-15 gate positive** | [42214137411](https://github.com/LinTia/FastLadger/actions/runs/42214137411) **success**，Artifact `13500302905` |
+| **最终 HEAD 上的 CI 全仓 `-race` / 容器冒烟** | [42214140547](https://github.com/LinTia/FastLadger/actions/runs/42214140547) **success** |
+| 代码/工作流提交上的 R0 E2E CI Run | [42211926674](https://github.com/LinTia/FastLadger/actions/runs/42211926674) **success**（head `991ab09`），Artifact `13499611257` |
+| 代码/工作流提交上的 CI 全仓 `-race` | [42213272740](https://github.com/LinTia/FastLadger/actions/runs/42213272740) **success**（head `1e2d70c`） |
 | RV-15 gate CI Runs | 42212399478 / 42212414373 / 42212424538 / 42212434547（+ 注册 run 42212298540） |
 | 正向 gate Artifact ID | `13498773757` |
 | RV-15 负向 run Artifact 数量 | 全部 `total_count=0` |
@@ -162,6 +171,7 @@
 - `docs/r0-evidence-9th-fix/rv15-gate-ci-evidence.txt`（真实 CI step outcome + Artifact API）
 - `docs/r0-evidence-9th-fix/e2e-regression-ci-evidence.txt`（生产 E2E 全 step）
 - `docs/r0-evidence-9th-fix/ci-race-regression-evidence.txt`（CI 全仓 `-race` / 容器冒烟全 step）
+- `docs/r0-evidence-9th-fix/final-head-ci-evidence.txt`（最终 HEAD 上三条 CI 重跑证据）
 
 ---
 
@@ -203,7 +213,7 @@
 | `tools/r0/e2e/scripts/scan-artifacts.js` | RV-14：去掉 `knownBinary` 噪声复扫跳过分支；新增片段提取 / 锚点闸门 / 桥接规则；扫描口径输出更新 |
 | `tools/r0/e2e/test-scan-artifacts.js` | 新增 case-42~50（RV-14 六项、RV-13 多层 / 篡改 / 删除共三项），测试扩至 50 项 |
 
-### 新增（9 个代码/workflow + 7 个证据文件 + 1 份报告）
+### 新增（9 个代码/workflow + 8 个证据文件 + 1 份报告）
 | 文件 | 说明 |
 |---|---|
 | `.github/workflows/r0-upload-gate.yml` | RV-15 独立测试 workflow（4 场景真实 upload step 负向验证） |
@@ -222,6 +232,7 @@
 | `docs/r0-evidence-9th-fix/rv15-gate-ci-evidence.txt` | RV-15 CI step outcome + Artifact API |
 | `docs/r0-evidence-9th-fix/e2e-regression-ci-evidence.txt` | 生产 E2E 全 step |
 | `docs/r0-evidence-9th-fix/ci-race-regression-evidence.txt` | CI 全仓 `-race` / 容器冒烟全 step |
+| `docs/r0-evidence-9th-fix/final-head-ci-evidence.txt` | 最终 HEAD 上三条 CI 重跑证据 |
 | `docs/r0-evidence-9th-fix/rv13-rv14-rv15-remediation.md` | 本报告 |
 
 ---
