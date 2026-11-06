@@ -1,0 +1,86 @@
+=== RV-15 · 真实 GitHub Actions 上传门禁负向验证原始证据 ===
+workflow 文件：.github/workflows/r0-upload-gate.yml（name: R0 Upload Gate (RV-15)）
+workflow numeric id：409263438
+分支/HEAD：fix/r0-sixth-runtime-defects @ 1e2d70c0fc7d57d830b86411bc5fbdcedac527ae
+触发方式：push（paths 过滤注册）+ REST workflow_dispatch（按 numeric id + ref=分支，inputs.scenario）
+upload step 的 if 条件与生产 r0-e2e.yml 完全一致：
+  always() && steps.artifact_scan.outcome == 'success' && steps.fail_closed_check.outcome == 'success'
+assert step 读取 GitHub Actions 实测 ${{ steps.<id>.outcome }}，非本地模拟布尔值
+
+----------------------------------------------------------------------
+scenario=positive  run_id=42212399478  URL=https://github.com/LinTia/FastLadger/actions/runs/42212399478
+  run status=completed conclusion=success head_sha=1e2d70c0fc7d57d830b86411bc5fbdcedac527ae
+  --- job / step outcome（GitHub Actions 实测） ---
+  job=RV-15 gate / positive conclusion=success
+    [1] Set up job => success
+    [2] Run actions/checkout@v4 => success
+    [3] Run actions/setup-node@v4 => success
+    [4] 准备上传证据（白名单，真实 prepare-upload.js） => success
+    [5] 上传前安全扫描（真实 scan-artifacts.js，失败即阻断） => success
+    [6] 失败关闭集成验证（真实 verify-fail-closed-gate.js） => success
+    [7] 上传证据（真实 actions/upload-artifact@v4） => success
+    [8] 断言真实 step outcome（RV-15） => success
+    [9] 汇总真实 outcome 到 CI summary => success
+  --- Artifact API：GET /actions/runs/42212399478/artifacts ---
+    total_count=1
+    artifact_id=13498773757 name=r0-gate-positive-42212399478 size=909
+----------------------------------------------------------------------
+scenario=scan_fail  run_id=42212414373  URL=https://github.com/LinTia/FastLadger/actions/runs/42212414373
+  run status=completed conclusion=failure head_sha=1e2d70c0fc7d57d830b86411bc5fbdcedac527ae
+  --- job / step outcome（GitHub Actions 实测） ---
+  job=RV-15 gate / scan_fail conclusion=failure
+    [1] Set up job => success
+    [2] Run actions/checkout@v4 => success
+    [3] Run actions/setup-node@v4 => success
+    [4] 准备上传证据（白名单，真实 prepare-upload.js） => success
+    [5] 上传前安全扫描（真实 scan-artifacts.js，失败即阻断） => failure
+    [6] 失败关闭集成验证（真实 verify-fail-closed-gate.js） => success
+    [7] 上传证据（真实 actions/upload-artifact@v4） => skipped
+    [8] 断言真实 step outcome（RV-15） => success
+    [9] 汇总真实 outcome 到 CI summary => success
+  --- Artifact API：GET /actions/runs/42212414373/artifacts ---
+    total_count=0
+----------------------------------------------------------------------
+scenario=fail_closed_fail  run_id=42212424538  URL=https://github.com/LinTia/FastLadger/actions/runs/42212424538
+  run status=completed conclusion=failure head_sha=1e2d70c0fc7d57d830b86411bc5fbdcedac527ae
+  --- job / step outcome（GitHub Actions 实测） ---
+  job=RV-15 gate / fail_closed_fail conclusion=failure
+    [1] Set up job => success
+    [2] Run actions/checkout@v4 => success
+    [3] Run actions/setup-node@v4 => success
+    [4] 准备上传证据（白名单，真实 prepare-upload.js） => success
+    [5] 上传前安全扫描（真实 scan-artifacts.js，失败即阻断） => success
+    [6] 失败关闭集成验证（真实 verify-fail-closed-gate.js） => failure
+    [7] 上传证据（真实 actions/upload-artifact@v4） => skipped
+    [8] 断言真实 step outcome（RV-15） => success
+    [9] 汇总真实 outcome 到 CI summary => success
+  --- Artifact API：GET /actions/runs/42212424538/artifacts ---
+    total_count=0
+----------------------------------------------------------------------
+scenario=prepare_fail  run_id=42212434547  URL=https://github.com/LinTia/FastLadger/actions/runs/42212434547
+  run status=completed conclusion=failure head_sha=1e2d70c0fc7d57d830b86411bc5fbdcedac527ae
+  --- job / step outcome（GitHub Actions 实测） ---
+  job=RV-15 gate / prepare_fail conclusion=failure
+    [1] Set up job => success
+    [2] Run actions/checkout@v4 => success
+    [3] Run actions/setup-node@v4 => success
+    [4] 准备上传证据（白名单，真实 prepare-upload.js） => failure
+    [5] 上传前安全扫描（真实 scan-artifacts.js，失败即阻断） => skipped
+    [6] 失败关闭集成验证（真实 verify-fail-closed-gate.js） => success
+    [7] 上传证据（真实 actions/upload-artifact@v4） => skipped
+    [8] 断言真实 step outcome（RV-15） => success
+    [9] 汇总真实 outcome 到 CI summary => success
+  --- Artifact API：GET /actions/runs/42212434547/artifacts ---
+    total_count=0
+----------------------------------------------------------------------
+补充：push 触发注册 run 42212298540（positive，默认场景）= success，
+  Artifact API total_count=1，artifact_id=13500245578 name=r0-gate-positive-42212298540
+
+=== 结论 ===
+  · positive 42212399478：prepare/scan/fail_closed 全 success → upload success → 1 个 Artifact(13498773757)
+  · scan_fail 42212414373：真实 scan step failure → upload skipped → Artifact 数量 0
+  · fail_closed_fail 42212424538：真实 fail_closed_check step failure → upload skipped → Artifact 数量 0
+  · prepare_fail 42212434547：真实 prepare step failure → scan skipped → upload skipped → Artifact 数量 0
+  · 三个负向 run 的 run conclusion=failure 是预期结果（被刻意前置条件失败触发），
+    但 gate_assert step 全部 success，证明实测 step outcome 符合门禁预期。
+  · 以上均为真实 GitHub Actions 运行 + Artifact API 查询，非本地模拟。

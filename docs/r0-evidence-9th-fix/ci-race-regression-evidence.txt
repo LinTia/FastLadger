@@ -1,0 +1,29 @@
+=== CI（build / vet / test / 全仓 -race）回归证据 ===
+run_id=42213272740  URL=https://github.com/LinTia/FastLadger/actions/runs/42213272740
+workflow=CI (401412981)  event=workflow_dispatch  head_sha=1e2d70c0fc7d57d830b86411bc5fbdcedac527ae
+
+status=completed conclusion=success
+--- 全部 step outcome ---
+JOB build / vet / test / race => success
+  [1] Set up job => success
+  [2] Run actions/checkout@v4 => success
+  [3] Run actions/setup-go@v5 => success
+  [4] Toolchain（必须看到 gcc 与 CGO_ENABLED=1） => success
+  [5] gofmt（必须无未格式化文件） => success
+  [6] go vet => success
+  [7] go build => success
+  [8] SQLite 驱动冒烟（证明不是 stub） => success
+  [9] go test 全量 => success
+  [10] go test -race（全仓） => success
+  [19] Post Run actions/setup-go@v5 => success
+  [20] Post Run actions/checkout@v4 => success
+  [21] Complete job => success
+JOB docker build / run / healthz => success
+  [1] Set up job => success
+  [2] Run actions/checkout@v4 => success
+  [3] Build 镜像（CGO + musl 多阶段） => success
+  [4] 容器内 db migrate 冒烟（子命令入口 + 建库） => success
+  [5] 容器冒烟（healthz 应报 up + schemaVersion） => success
+  [6] 清理 => success
+  [12] Post Run actions/checkout@v4 => success
+  [13] Complete job => success

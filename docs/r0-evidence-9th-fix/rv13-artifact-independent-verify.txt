@@ -1,0 +1,40 @@
+=== 第九次复核 RV-13 · 真实 CI Artifact 13499611257 独立复验 ===
+source run: https://github.com/LinTia/FastLadger/actions/runs/42211926674
+artifact id: 13499611257  name: r0-e2e-evidence-991ab09b8409a17984ced91737cabbffc6c9b0f5  size: 3632445 B
+
+--- [1] 文件与清单结构 ---
+zip entries: 102
+final files: 102
+SHA256SUMS.txt files:
+_art9/x/SHA256SUMS.txt
+root manifest lines: 101
+stale refs (trace/zip/db/sqlite/har/server.log): 0
+
+--- [2] sha256sum -c 完整校验（外部工具，非自研） ---
+2026-11-06_11-41-40-991ab09-c/report.md: OK
+rv13-manifest-evidence.txt: OK
+rv14-binary-evidence.txt: OK
+scan-tests-round5.log: OK
+OK lines: 101
+FAILED lines: 0
+
+--- [3] 独立 CLI 递归字节校验 ---
+[verify] 待校验目录：C:\Users\47006\WorkBuddy\fastledger\repo_tmp\_art9\x
+[verify] 根清单：SHA256SUMS.txt（唯一权威清单，递归覆盖全目录；根清单自身为唯一例外，不哈希自身）
+[verify] 清单条目数=101 实际文件数=101 实际字节校验通过=101
+[verify] missing=0 mismatch=0 uncovered=0
+[verify] staleRefs=0 nestedManifests=0 malformed=0 selfRef=false symlinks=0
+[verify] 结论：OK（0 missing / 0 mismatch / 全部文件可验证）
+[verify] 退出码：0（0 missing / 0 mismatch / 全部实际文件均有可验证 SHA256）
+VERIFY_RC=0
+
+--- [4] 用最终扫描器独立复扫整个 Artifact ---
+[scan] 待上传目录：_art9/x
+[scan] 文件总数=102 内容已全量扫描=102 其中二进制文件=80 跳过内容扫描=0 符号链接=0
+[scan] 编码解码：utf8可靠=22 utf16可靠=0 无法可靠解码(已阻断)=0 可疑二进制(魔数不符)=0
+[scan] 扫描口径：latin1 全量 + UTF-8/UTF-16LE/UTF-16BE 可靠解码复扫 + 强敏感键名联合判定 + Base64 解码复扫 + 噪声归一化复扫（文本型全文件 / 已知二进制可打印文本片段桥接，RV-14 无跳过分支）；任何无法可靠解码的文本型文件一律 BLOCK
+[scan] 命中明细（仅文件路径 + 命中类型 + 命中数量，不输出匹配值）：
+[HIT] （无） | — | 0
+[scan] 命中文件/类型组合=0 命中总数=0
+[scan] 结论：CLEAN —— 允许上传
+RESCAN_RC=0

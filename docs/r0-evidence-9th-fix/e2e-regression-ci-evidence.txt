@@ -1,0 +1,37 @@
+=== 生产 R0 E2E 全量回归 CI 证据（第九轮修复后） ===
+run_id=42211926674  URL=https://github.com/LinTia/FastLadger/actions/runs/42211926674
+workflow=R0 E2E (407856175)  event=workflow_dispatch
+head_sha=991ab09b8409a17984ced91737cabbffc6c9b0f5
+
+status=completed conclusion=success created=2026-11-06T11:40:01Z updated=2026-11-06T11:42:48Z
+--- 全部 job / step outcome ---
+JOB A(11 场景) + D(缺陷回归) + C(228 控件) + B(分类审计) => success
+  [1] Set up job => success
+  [2] Run actions/checkout@v4 => success
+  [3] Run actions/setup-go@v5 => success
+  [4] 构建服务二进制（CGO 真库） => success
+  [5] Run actions/setup-node@v4 => success
+  [6] 安装 Playwright（含 chromium） => success
+  [7] 分类解析合成测试（B 的补充整改） => success
+  [8] 凭据扫描器负向合成测试（K1-K3 + RV-07~RV-15，50 项） => success
+  [9] 生成 RV-13 / RV-14 原始证据日志 => success
+  [10] 修复前后负向样本对照（基线 659c0c3） => success
+  [11] 分类映射回归审计（B · 22 笔） => success
+  [12] 包 A · 11 项状态/权限/同步场景 => success
+  [13] 包 D · 四项业务缺陷回归（门禁） => success
+  [14] 包 C · 228 条逐控件运行时验收（报告型） => success
+  [15] 汇总退出码 => success
+  [16] 准备上传证据（白名单） => success
+  [17] 最终目录递归字节校验（RV-13，独立 CLI） => success
+  [18] 上传前安全扫描（失败即阻断） => success
+  [19] 失败关闭（fail-closed）集成验证（正向） => success
+  [20] 失败关闭（fail-closed）负向证明 => success
+  [21] 上传证据（日志/截图/报告/校验和） => success
+  [22] 汇总证据上传安全结论 => success
+  [42] Post Run actions/setup-node@v4 => success
+  [43] Post Run actions/setup-go@v5 => success
+  [44] Post Run actions/checkout@v4 => success
+  [45] Complete job => success
+--- Artifact API ---
+total_count=1
+artifact_id=13499611257 name=r0-e2e-evidence-991ab09b8409a17984ced91737cabbffc6c9b0f5 size=3632445
