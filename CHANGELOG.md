@@ -1,3 +1,12 @@
+## [1.86] - 2026-11-07
+
+### 新增 HomeLedger 风格 Web / PWA 视觉设计基线
+
+- Owner 确认以 Panda-995/homeledger 的公开 main（审阅 SHA：d6595b3403dba65c701e3361c42fa2581b34e0a2）作为 FastLadger Web / PWA 视觉参考；新增《FastLadger-Web-PWA视觉设计规范》，提炼设计令牌、桌面/手机导航、卡片/表单/选择器/弹层、浅深主题、响应式与状态验收。
+- 将设计基线同步到手机 PWA 实施指导书、原型还原与 PWA 总方案、开发 WBS、多 AI 对齐规范、第三方审阅者导读和 README 导航。
+- 设计迁移只涉及视觉与交互模式，不复制参考仓库源代码/品牌素材/业务逻辑，不改变 FastLadger 业务/API/DB/权限/同步契约；遵守 D-3/D-4/D-5/D-6/D-8。
+- **状态说明**：本轮仅新增设计规范与未来工作指导，未修改 Web/PWA 业务代码，未声称视觉改造已实施；R0 仍 BLOCK，不授权 R1–R7 / PWA 业务实施。
+
 # 更新日志（CHANGELOG）
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
