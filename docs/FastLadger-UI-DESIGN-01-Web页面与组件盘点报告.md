@@ -790,8 +790,8 @@ D-3 / D-6 既定决策（已裁决，无需再次提交 Owner 选择题）
 |---|---|
 | 基线 | `audit/ui-design-01-independent-review-v2` @ `351af9d`（已含独立复核报告与本报告首版 `f7a727a`） |
 | 工作分支 | `docs/ui-design-01-r1` |
-| 内容提交 | `__CONTENT_SHA__` |
-| 分支 HEAD | `__HEAD_SHA__` |
+| 内容提交 | `4a7ef93`（7 files changed, 555 insertions(+), 152 deletions(-)） |
+| 分支 HEAD | `4a7ef93` 之后的 SHA 回填提交；最终 HEAD 见交付回执 `git log -1 --format=%h docs/ui-design-01-r1` |
 | PR 状态 | **未创建 / 未合并任何 PR**（PR #3、PR #4 均未触碰） |
 | 改动文件数 | **7 个，全部为 `.md`** |
 
