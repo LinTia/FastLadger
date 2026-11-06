@@ -1,3 +1,12 @@
+## [1.87] - 2026-11-07
+
+### UI-DESIGN-01 第三方独立复核：主体完成，文档口径需修订
+
+- 独立复核 WorkBuddy 分支 `docs/ui-design-01-inventory` @ `f7a727a2a5982f7f1ffcff0101c12f7e85cd37df`。分支相对 main ahead 9 / behind 0，9 个变更文件均为文档；PR #3 仍 OPEN 未合并，PR #4 仍 OPEN / Draft 未合并。
+- UI-DESIGN-01 页面/组件盘点主体基本完成，但结论为 **PARTIAL**：桌面侧栏建议与已裁决 D-3 的 5 项顶部导航冲突；02a 运行时代码修改与 R0 门禁表述矛盾；移动端 4 Tab 与中央记账主操作需消除重复入口歧义；页面计数口径不一致；图标替换和原生控件清零验收过度绝对化。
+- 新增 [UI-DESIGN-01 独立复核报告](docs/FastLadger-UI-DESIGN-01-独立复核报告.md)，登记 UIREV-01~06，并要求 WorkBuddy 仅修订文档，不改 Web 运行时代码、不修改 D-3/D-6、不合并 PR、不启动 R1–R7/PWA。
+- **状态**：UI-DESIGN-01 主体基本完成，文档一致性 PARTIAL；UI-DESIGN-02 运行时代码改造仍未授权，R0 仍 BLOCK。
+
 ## [1.86] - 2026-11-07
 
 ### 新增 HomeLedger 风格 Web / PWA 视觉设计基线
