@@ -45,312 +45,333 @@ TAP version 13
 # [负向测试] case-45 [RV-14] PNG x-api-key | 期望退出码=2 | 实际退出码=2
 # [负向测试] case-46 [RV-14] 正常 PNG 无凭据 | 期望退出码=0 | 实际退出码=0
 # [负向测试] case-47 [RV-14] PNG 普通业务文字 | 期望退出码=0 | 实际退出码=0
+# [负向测试] case-51 [RV-14-07] PNG Authorization 关键词内 NUL | 期望退出码=2 | 实际退出码=2
+# [负向测试] case-52 [RV-14-08] PNG x-api-key 关键词内 NUL | 期望退出码=2 | 实际退出码=2
+# [负向测试] case-53 [RV-14-09] PNG x-api-key 值内 NUL | 期望退出码=2 | 实际退出码=2
 # Subtest: case-01 干净文件集 → 退出码 0
 ok 1 - case-01 干净文件集 → 退出码 0
   ---
-  duration_ms: 93.6209
+  duration_ms: 99.8754
   type: 'test'
   ...
 # Subtest: case-02 合成 JWT 三段式 → 退出码 2
 ok 2 - case-02 合成 JWT 三段式 → 退出码 2
   ---
-  duration_ms: 90.8418
+  duration_ms: 96.5886
   type: 'test'
   ...
 # Subtest: case-03 名为 trace.zip 的归档 → 退出码 2
 ok 3 - case-03 名为 trace.zip 的归档 → 退出码 2
   ---
-  duration_ms: 89.2809
+  duration_ms: 93.4638
   type: 'test'
   ...
 # Subtest: case-04 Bearer 与鉴权头赋值 → 退出码 2
 ok 4 - case-04 Bearer 与鉴权头赋值 → 退出码 2
   ---
-  duration_ms: 94.5082
+  duration_ms: 100.3451
   type: 'test'
   ...
 # Subtest: case-05 Cookie 与 Set-Cookie 赋值 → 退出码 2
 ok 5 - case-05 Cookie 与 Set-Cookie 赋值 → 退出码 2
   ---
-  duration_ms: 95.27
+  duration_ms: 100.1058
   type: 'test'
   ...
 # Subtest: case-06 server.log 服务原始日志 → 退出码 2
 ok 6 - case-06 server.log 服务原始日志 → 退出码 2
   ---
-  duration_ms: 88.9939
+  duration_ms: 92.2493
   type: 'test'
   ...
 # Subtest: case-07 JWT 签名密钥赋值 → 退出码 2
 ok 7 - case-07 JWT 签名密钥赋值 → 退出码 2
   ---
-  duration_ms: 88.6433
+  duration_ms: 91.4005
   type: 'test'
   ...
 # Subtest: case-08 目录不存在（参数/环境错误）→ 退出码 1
 ok 8 - case-08 目录不存在（参数/环境错误）→ 退出码 1
   ---
-  duration_ms: 77.9391
+  duration_ms: 91.2843
   type: 'test'
   ...
 # Subtest: case-09 纯文本凭据伪装成 .png → 退出码 2（Round 2 修订）
 ok 9 - case-09 纯文本凭据伪装成 .png → 退出码 2（Round 2 修订）
   ---
-  duration_ms: 93.5561
+  duration_ms: 104.7443
   type: 'test'
   ...
 # Subtest: case-10 二进制文件名含敏感词仍被阻断 → 退出码 2
 ok 10 - case-10 二进制文件名含敏感词仍被阻断 → 退出码 2
   ---
-  duration_ms: 87.1276
+  duration_ms: 94.5787
   type: 'test'
   ...
 # Subtest: case-11 NUL 前缀白名单 .log 内藏合成 JWT → 退出码 2（N1 回归）
 ok 11 - case-11 NUL 前缀白名单 .log 内藏合成 JWT → 退出码 2（N1 回归）
   ---
-  duration_ms: 88.0508
+  duration_ms: 90.1778
   type: 'test'
   ...
 # Subtest: case-12 合法业务字段（鉴权与 Cookie 普通值）→ 退出码 0（N5 假阳性回归）
 ok 12 - case-12 合法业务字段（鉴权与 Cookie 普通值）→ 退出码 0（N5 假阳性回归）
   ---
-  duration_ms: 85.7788
+  duration_ms: 89.8321
   type: 'test'
   ...
 # Subtest: case-13 真实 PNG 魔数 + 干净内容 → 退出码 0
 ok 13 - case-13 真实 PNG 魔数 + 干净内容 → 退出码 0
   ---
-  duration_ms: 86.6765
+  duration_ms: 95.0087
   type: 'test'
   ...
 # Subtest: case-14 鉴权头携带 Bearer + 合成 JWT → 退出码 2（硬约束）
 ok 14 - case-14 鉴权头携带 Bearer + 合成 JWT → 退出码 2（硬约束）
   ---
-  duration_ms: 94.6025
+  duration_ms: 108.1148
   type: 'test'
   ...
 # Subtest: case-15 Cookie 携带长随机会话值 → 退出码 2
 ok 15 - case-15 Cookie 携带长随机会话值 → 退出码 2
   ---
-  duration_ms: 92.0895
+  duration_ms: 100.2931
   type: 'test'
   ...
 # Subtest: case-16 符号链接 → 退出码 2
 ok 16 - case-16 符号链接 → 退出码 2
   ---
-  duration_ms: 87.2328
+  duration_ms: 93.2442
   type: 'test'
   ...
 # Subtest: case-17 真实 PNG 魔数 + 内容内嵌合成 JWT → 退出码 2（证明零跳过分支）
 ok 17 - case-17 真实 PNG 魔数 + 内容内嵌合成 JWT → 退出码 2（证明零跳过分支）
   ---
-  duration_ms: 87.3228
+  duration_ms: 92.2516
   type: 'test'
   ...
 # Subtest: case-18 [K1-01] UTF-16LE encoded Bearer credential -> exit 2
 ok 18 - case-18 [K1-01] UTF-16LE encoded Bearer credential -> exit 2
   ---
-  duration_ms: 87.3368
+  duration_ms: 92.69
   type: 'test'
   ...
 # Subtest: case-19 [K1-02] UTF-16BE encoded auth header credential -> exit 2
 ok 19 - case-19 [K1-02] UTF-16BE encoded auth header credential -> exit 2
   ---
-  duration_ms: 88.1477
+  duration_ms: 93.8617
   type: 'test'
   ...
 # Subtest: case-20 [K1-03/RV-11] NUL at delimiter boundary (Bearer<SPACE>NUL<token>) -> exit 2
 ok 20 - case-20 [K1-03/RV-11] NUL at delimiter boundary (Bearer<SPACE>NUL<token>) -> exit 2
   ---
-  duration_ms: 91.8998
+  duration_ms: 95.4398
   type: 'test'
   ...
 # Subtest: case-21 [K1-04] undecodable text-like file -> exit 2 (never CLEAN)
 ok 21 - case-21 [K1-04] undecodable text-like file -> exit 2 (never CLEAN)
   ---
-  duration_ms: 87.2447
+  duration_ms: 92.5424
   type: 'test'
   ...
 # Subtest: case-22 [K2-01] short token -> exit 2
 ok 22 - case-22 [K2-01] short token -> exit 2
   ---
-  duration_ms: 87.8101
+  duration_ms: 91.8459
   type: 'test'
   ...
 # Subtest: case-23 [K2-02] short api key -> exit 2
 ok 23 - case-23 [K2-02] short api key -> exit 2
   ---
-  duration_ms: 85.7482
+  duration_ms: 92.1193
   type: 'test'
   ...
 # Subtest: case-24 [K2-03] short password / low entropy -> exit 2
 ok 24 - case-24 [K2-03] short password / low entropy -> exit 2
   ---
-  duration_ms: 87.0328
+  duration_ms: 91.9419
   type: 'test'
   ...
 # Subtest: case-25 [K2-04] normal short business fields -> exit 0 (no false positive)
 ok 25 - case-25 [K2-04] normal short business fields -> exit 0 (no false positive)
   ---
-  duration_ms: 88.0791
+  duration_ms: 91.487
   type: 'test'
   ...
 # Subtest: case-26 [K3-01] x-api-key header -> exit 2
 ok 26 - case-26 [K3-01] x-api-key header -> exit 2
   ---
-  duration_ms: 90.824
+  duration_ms: 94.9486
   type: 'test'
   ...
 # Subtest: case-27 [K3-02] apiKey and API_KEY variants -> exit 2
 ok 27 - case-27 [K3-02] apiKey and API_KEY variants -> exit 2
   ---
-  duration_ms: 87.1798
+  duration_ms: 90.8545
   type: 'test'
   ...
 # Subtest: case-28 [K3-03] Base64 encoded credential -> exit 2
 ok 28 - case-28 [K3-03] Base64 encoded credential -> exit 2
   ---
-  duration_ms: 88.0695
+  duration_ms: 91.0722
   type: 'test'
   ...
 # Subtest: case-29 [K3-04] JSON nested credential (quoted key) -> exit 2
 ok 29 - case-29 [K3-04] JSON nested credential (quoted key) -> exit 2
   ---
-  duration_ms: 86.7241
+  duration_ms: 90.9216
   type: 'test'
   ...
 # Subtest: case-30 [K3-05] case and separator variants -> exit 2
 ok 30 - case-30 [K3-05] case and separator variants -> exit 2
   ---
-  duration_ms: 87.0349
+  duration_ms: 99.044
   type: 'test'
   ...
 # Subtest: case-31 [RV-09-01] Bearer 关键词内部插入非法 UTF-8 字节 → 修复后必须 BLOCK
 ok 31 - case-31 [RV-09-01] Bearer 关键词内部插入非法 UTF-8 字节 → 修复后必须 BLOCK
   ---
-  duration_ms: 92.5357
+  duration_ms: 100.976
   type: 'test'
   ...
 # Subtest: case-32 [RV-09-02] token 值内部插入非法 UTF-8 字节 → 修复后必须 BLOCK
 ok 32 - case-32 [RV-09-02] token 值内部插入非法 UTF-8 字节 → 修复后必须 BLOCK
   ---
-  duration_ms: 95.0461
+  duration_ms: 104.273
   type: 'test'
   ...
 # Subtest: case-33 [RV-09-03] 敏感字段名内部插入非法 UTF-8 字节 → 修复后必须 BLOCK
 ok 33 - case-33 [RV-09-03] 敏感字段名内部插入非法 UTF-8 字节 → 修复后必须 BLOCK
   ---
-  duration_ms: 91.3506
+  duration_ms: 95.9371
   type: 'test'
   ...
 # Subtest: case-34 [RV-10-01] Base64URL（带 padding）Authorization/Bearer → BLOCK
 ok 34 - case-34 [RV-10-01] Base64URL（带 padding）Authorization/Bearer → BLOCK
   ---
-  duration_ms: 89.0317
+  duration_ms: 91.5657
   type: 'test'
   ...
 # Subtest: case-35 [RV-10-02] Base64URL（无 padding）x-api-key → BLOCK
 ok 35 - case-35 [RV-10-02] Base64URL（无 padding）x-api-key → BLOCK
   ---
-  duration_ms: 89.7135
+  duration_ms: 93.892
   type: 'test'
   ...
 # Subtest: case-36 [RV-10-03] Base64URL（无 padding）敏感键名+值 → BLOCK
 ok 36 - case-36 [RV-10-03] Base64URL（无 padding）敏感键名+值 → BLOCK
   ---
-  duration_ms: 90.5176
+  duration_ms: 91.7332
   type: 'test'
   ...
 # Subtest: case-37 [RV-11-01] token 值内部插入 NUL（补充 case-20 分隔符处 NUL）→ BLOCK
 ok 37 - case-37 [RV-11-01] token 值内部插入 NUL（补充 case-20 分隔符处 NUL）→ BLOCK
   ---
-  duration_ms: 90.6737
+  duration_ms: 91.0847
   type: 'test'
   ...
 # Subtest: case-38 [RV-07] 明文 PEM 私钥伪装成 private-key.txt 经 prepare→scan 全链路阻断
 ok 38 - case-38 [RV-07] 明文 PEM 私钥伪装成 private-key.txt 经 prepare→scan 全链路阻断
   ---
-  duration_ms: 175.5461
+  duration_ms: 180.8161
   type: 'test'
   ...
 # Subtest: case-39 [RV-07] 明文 PEM 私钥伪装成 export.txt 经 prepare→scan 全链路阻断
 ok 39 - case-39 [RV-07] 明文 PEM 私钥伪装成 export.txt 经 prepare→scan 全链路阻断
   ---
-  duration_ms: 166.4618
+  duration_ms: 170.9986
   type: 'test'
   ...
 # Subtest: case-40 [RV-12] 不可解码样本伪装成 random.txt 经 prepare→scan 全链路阻断
 ok 40 - case-40 [RV-12] 不可解码样本伪装成 random.txt 经 prepare→scan 全链路阻断
   ---
-  duration_ms: 169.6228
+  duration_ms: 172.3063
   type: 'test'
   ...
 # Subtest: case-41 [RV-13] 源含 trace.zip 时最终 SHA256SUMS 只含实际上传文件
 ok 41 - case-41 [RV-13] 源含 trace.zip 时最终 SHA256SUMS 只含实际上传文件
   ---
-  duration_ms: 100.8655
+  duration_ms: 104.6873
   type: 'test'
   ...
 # Subtest: case-42 [RV-14-01] 合法 PNG 魔数 + 明文 Authorization/Bearer → BLOCK
 ok 42 - case-42 [RV-14-01] 合法 PNG 魔数 + 明文 Authorization/Bearer → BLOCK
   ---
-  duration_ms: 87.1891
+  duration_ms: 89.1921
   type: 'test'
   ...
 # Subtest: case-43 [RV-14-02] 合法 PNG 魔数 + token 值内部 NUL → BLOCK
 ok 43 - case-43 [RV-14-02] 合法 PNG 魔数 + token 值内部 NUL → BLOCK
   ---
-  duration_ms: 80.4041
+  duration_ms: 81.6707
   type: 'test'
   ...
 # Subtest: case-44 [RV-14-03] 合法 PNG 魔数 + Bearer 关键词内部 NUL → BLOCK
 ok 44 - case-44 [RV-14-03] 合法 PNG 魔数 + Bearer 关键词内部 NUL → BLOCK
   ---
-  duration_ms: 81.8693
+  duration_ms: 83.437
   type: 'test'
   ...
 # Subtest: case-45 [RV-14-04] 合法 PNG 魔数 + x-api-key → BLOCK
 ok 45 - case-45 [RV-14-04] 合法 PNG 魔数 + x-api-key → BLOCK
   ---
-  duration_ms: 82.5872
+  duration_ms: 82.536
   type: 'test'
   ...
 # Subtest: case-46 [RV-14-05] 正常 PNG 图片（无凭据、含高熵压缩数据）→ CLEAN
 ok 46 - case-46 [RV-14-05] 正常 PNG 图片（无凭据、含高熵压缩数据）→ CLEAN
   ---
-  duration_ms: 80.5923
+  duration_ms: 82.8138
   type: 'test'
   ...
 # Subtest: case-47 [RV-14-06] 合法 PNG 含普通业务文字 → CLEAN（不误报）
 ok 47 - case-47 [RV-14-06] 合法 PNG 含普通业务文字 → CLEAN（不误报）
   ---
-  duration_ms: 83.5819
+  duration_ms: 87.9615
   type: 'test'
   ...
 # Subtest: case-48 [RV-13] 多层目录（根/A/D/C 旧清单 + trace.zip）→ 单一根清单递归覆盖，0 missing / 0 mismatch
 ok 48 - case-48 [RV-13] 多层目录（根/A/D/C 旧清单 + trace.zip）→ 单一根清单递归覆盖，0 missing / 0 mismatch
   ---
-  duration_ms: 253.8275
+  duration_ms: 260.4261
   type: 'test'
   ...
 # Subtest: case-49 [RV-13] 故意篡改一个最终文件 → 递归字节校验必须失败
 ok 49 - case-49 [RV-13] 故意篡改一个最终文件 → 递归字节校验必须失败
   ---
-  duration_ms: 252.3533
+  duration_ms: 259.1398
   type: 'test'
   ...
 # Subtest: case-50 [RV-13] 故意删除一个最终文件 → 递归字节校验必须失败
 ok 50 - case-50 [RV-13] 故意删除一个最终文件 → 递归字节校验必须失败
   ---
-  duration_ms: 249.2521
+  duration_ms: 260.0796
   type: 'test'
   ...
-1..50
-# tests 50
+# Subtest: case-51 [RV-14-07] 合法 PNG 魔数 + Authorization 关键词内部插入 NUL → BLOCK
+ok 51 - case-51 [RV-14-07] 合法 PNG 魔数 + Authorization 关键词内部插入 NUL → BLOCK
+  ---
+  duration_ms: 88.5941
+  type: 'test'
+  ...
+# Subtest: case-52 [RV-14-08] 合法 PNG 魔数 + x-api-key 关键词内部插入 NUL → BLOCK
+ok 52 - case-52 [RV-14-08] 合法 PNG 魔数 + x-api-key 关键词内部插入 NUL → BLOCK
+  ---
+  duration_ms: 82.1941
+  type: 'test'
+  ...
+# Subtest: case-53 [RV-14-09] 合法 PNG 魔数 + x-api-key 值内部插入 NUL → BLOCK
+ok 53 - case-53 [RV-14-09] 合法 PNG 魔数 + x-api-key 值内部插入 NUL → BLOCK
+  ---
+  duration_ms: 83.1798
+  type: 'test'
+  ...
+1..53
+# tests 53
 # suites 0
-# pass 50
+# pass 53
 # fail 0
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 5277.0341
+# duration_ms 5791.0032

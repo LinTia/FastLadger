@@ -37,6 +37,13 @@
  *     Bearer 关键词内部 NUL / x-api-key 均须 BLOCK；正常 PNG 与含普通业务文字的 PNG 仍 CLEAN。
  *   RV-13 多层清单：根/A/D/C 各级旧清单 + trace.zip，prepare 后递归校验 0 missing / 0 mismatch；
  *     篡改 / 删除最终文件后校验必须失败（调用真实 verify-upload-manifest.js）。
+ *
+ * Round 6（case-51~53，第九次复核 RV-14 PARTIAL 收口 —— 三个指定反例）：
+ *   仅补齐反例测试与修复前后对照证据，不改扫描器本体 / RV-13 / RV-15 / workflow。
+ *   合法 PNG 魔数下：Authorization 关键词内部 NUL（case-51）/ x-api-key 关键词内部
+ *   NUL（case-52）/ x-api-key 值内部 NUL（case-53）均须 BLOCKED（rc=2），且分别断言
+ *   AUTH_HEADER|BEARER_TOKEN / SENSITIVE_ASSIGN / SENSITIVE_ASSIGN 命中类型；
+ *   case-46（正常 PNG 高熵）与 case-47（普通业务文字 PNG）两个 CLEAN 样本原样保留且继续通过。
  */
 
 const { test } = require('node:test');
@@ -791,3 +798,46 @@ function rootManifestListsSelf(dest) {
   const text = fs.readFileSync(path.join(dest, manifestLib.MANIFEST_NAME), 'utf8');
   return text.split('\n').some((l) => l.endsWith(`  ${manifestLib.MANIFEST_NAME}`));
 }
+
+// ===== Round 6: 第九次复核 RV-14 PARTIAL 补齐 —— 三个指定反例 =====
+
+test('case-51 [RV-14-07] 合法 PNG 魔数 + Authorization 关键词内部插入 NUL → BLOCK', (t) => {
+  const dir = makeTmp(t, 'rv14-07');
+  // 关键词内部插入 NUL：旧 knownBinary 分支跳过噪声复扫会 CLEAN 绕过；
+  // 修复后桥接短噪声恢复连续串，经 AUTH_HEADER / BEARER_TOKEN 捕获 → BLOCK。
+  const payload = ['Authori', NUL, 'zation', ': ', 'Bearer ', RV14_TOKEN].join('');
+  fs.writeFileSync(path.join(dir, 'embedded.png'), rv14Png(payload));
+  const result = runScanner(
+    'case-51 [RV-14-07] PNG Authorization 关键词内 NUL',
+    dir,
+    EXIT_BLOCKED,
+    [RV14_TOKEN, payload],
+  );
+  assert.match(result.stdout, /(AUTH_HEADER|BEARER_TOKEN)/);
+});
+
+test('case-52 [RV-14-08] 合法 PNG 魔数 + x-api-key 关键词内部插入 NUL → BLOCK', (t) => {
+  const dir = makeTmp(t, 'rv14-08');
+  const payload = ['x-api-', NUL, 'key', ': ', RV14_TOKEN].join('');
+  fs.writeFileSync(path.join(dir, 'embedded.png'), rv14Png(payload));
+  const result = runScanner(
+    'case-52 [RV-14-08] PNG x-api-key 关键词内 NUL',
+    dir,
+    EXIT_BLOCKED,
+    [RV14_TOKEN, payload],
+  );
+  assert.match(result.stdout, /SENSITIVE_ASSIGN/);
+});
+
+test('case-53 [RV-14-09] 合法 PNG 魔数 + x-api-key 值内部插入 NUL → BLOCK', (t) => {
+  const dir = makeTmp(t, 'rv14-09');
+  const payload = ['x-api-key', ': ', 'SYN', NUL, 'THETIC', RV14_TOKEN].join('');
+  fs.writeFileSync(path.join(dir, 'embedded.png'), rv14Png(payload));
+  const result = runScanner(
+    'case-53 [RV-14-09] PNG x-api-key 值内 NUL',
+    dir,
+    EXIT_BLOCKED,
+    [RV14_TOKEN, payload],
+  );
+  assert.match(result.stdout, /SENSITIVE_ASSIGN/);
+});

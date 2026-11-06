@@ -40,6 +40,10 @@ const samples = [
   ['RV-14-04 PNG x-api-key', makePng({ text: ['x-api-key', ': ', TOK].join('') }), 2],
   ['RV-14-05 正常 PNG（含 4KiB 高熵压缩数据）', makePng({ highEntropyTail: highEntropyBytes(4096) }), 0],
   ['RV-14-06 PNG 普通业务文字（不误报）', makePng({ text: 'unit: kg\nnote: groceries\nstatus: ok\nqty: 2\n' }), 0],
+  // Round 6：第九次复核 RV-14 PARTIAL 补齐的三个指定反例，构造与 case-51/52/53 完全一致。
+  ['RV-14-07 PNG Authorization 关键词内部 NUL', makePng({ text: ['Authori', NUL, 'zation', ': ', 'Bearer ', TOK].join('') }), 2],
+  ['RV-14-08 PNG x-api-key 关键词内部 NUL', makePng({ text: ['x-api-', NUL, 'key', ': ', TOK].join('') }), 2],
+  ['RV-14-09 PNG x-api-key 值内部 NUL', makePng({ text: ['x-api-key', ': ', 'SYN', NUL, 'THETIC', TOK].join('') }), 2],
 ];
 
 /** 运行扫描器，返回退出码与输出。 */
@@ -49,7 +53,39 @@ function run(scanner, dir) {
   const hits = (r.stdout || '').split('\n')
     .filter((l) => l.startsWith('[HIT]') && !l.includes('（无）'))
     .map((l) => l.replace('[HIT] ', ''));
-  return { rc: r.status, out, hits };
+  return { rc: r.status, out, hits, stdout: r.stdout || '' };
+}
+
+/**
+ * Round 6 三个指定反例的「输入构造描述」。这些描述会原样写入证据日志，
+ * 而证据日志目录本身会被扫描器复扫，因此必须遵守以下安全约束：
+ *   · NUL 渲染为字面量 <NUL>，合成 token 渲染为字面量 <TOKEN>（绝不写真实合成串）；
+ *   · 敏感键名 / 分隔符 / 值一律作为独立数组元素，由引号与逗号分隔，
+ *     绝不出现「敏感键名 + 冒号 + 值」的连续可命中形态。
+ * 修改后须以 `node tools/r0/e2e/scripts/scan-artifacts.js docs/r0-evidence-9th-fix`
+ * 复扫结果为 CLEAN（rc=0）为准。
+ */
+const CONSTRUCTION_DESCRIPTIONS = new Map([
+  ['RV-14-07 PNG Authorization 关键词内部 NUL',
+    '["Authori", <NUL>, "zation", ": ", "Bearer ", <TOKEN>].join("") → tEXt 负载'],
+  ['RV-14-08 PNG x-api-key 关键词内部 NUL',
+    '["x-api-", <NUL>, "key", ": ", <TOKEN>].join("") → tEXt 负载'],
+  ['RV-14-09 PNG x-api-key 值内部 NUL',
+    '["x-api-key", ": ", "SYN", <NUL>, "THETIC", <TOKEN>].join("") → tEXt 负载'],
+]);
+
+/**
+ * 从 [HIT] 明细行提取去重后的命中类型（行形如 "file | TYPE | count"）。
+ * @param {string[]} hits 命中明细行。
+ * @return {string[]} 去重后的命中类型列表。
+ */
+function hitTypes(hits) {
+  const types = [];
+  for (const line of hits) {
+    const parts = line.split(' | ');
+    if (parts.length >= 2 && parts[1] && !types.includes(parts[1])) types.push(parts[1]);
+  }
+  return types;
 }
 
 function main() {
@@ -99,6 +135,24 @@ function main() {
       // 对阻断场景，额外记录修复前是否为 CLEAN（绕过实证；不强制，因明文样本旧版 latin1 可能已捕获）
       if (expectedNew === 2 && oldR.rc === 0) {
         process.stdout.write(`  [绕过实证] 修复前 CLEAN(rc=0)，修复后 BLOCKED(rc=2)\n`);
+      }
+      // Round 6：三个指定反例额外打印 (a) 输入构造描述、(b) 旧 rc/verdict/hits、
+      // (c) 新 rc/verdict/命中类型、(d) 新扫描器完整原始 stdout。原有 6 项不受影响。
+      if (CONSTRUCTION_DESCRIPTIONS.has(name)) {
+        const oldHitStr = oldR.hits.join(' | ') || '(none)';
+        const newHitStr = newR.hits.join(' | ') || '(none)';
+        const types = hitTypes(newR.hits).join(', ') || '(none)';
+        process.stdout.write('  ---- Round 6 指定反例补充明细 ----\n');
+        process.stdout.write(`  输入构造：${CONSTRUCTION_DESCRIPTIONS.get(name)}\n`);
+        process.stdout.write(`  旧扫描器 rc=${oldR.rc} verdict=${oldVerdict} hits=${oldHitStr}\n`);
+        process.stdout.write(`  新扫描器 rc=${newR.rc} verdict=${newVerdict} 命中类型=${types}\n`);
+        process.stdout.write(`  新扫描器 hits 明细=${newHitStr}\n`);
+        process.stdout.write('  新扫描器完整原始 stdout（逐行以 | 前缀呈现）：\n');
+        const stdoutLines = newR.stdout.replace(/\n+$/, '').split('\n');
+        for (const line of stdoutLines) {
+          process.stdout.write(`  | ${line}\n`);
+        }
+        process.stdout.write('  ---- 补充明细结束 ----\n');
       }
       process.stdout.write('\n');
       fs.rmSync(dir, { recursive: true, force: true });
