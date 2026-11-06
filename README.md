@@ -7,7 +7,7 @@
 ## 当前状态（2026-10-31 历史快照，部分已过时）
 
 > 下表是 2026-10-31 的历史快照。schema 版本、测试基线、阶段进度以 `docs/` 最新交付文档、`CHANGELOG.md` 与服务器实测为准；**R0（基准冻结与差异盘点）当前未通过 / 阻塞**，见 [R0 报告](docs/FastLedger-R0-基准冻结与差异盘点.md)。本表不作为 R0 验收依据。
-> **截至 [1.83] 的 R0 收尾状态（第九次安全扫描器交付独立复核）**：WorkBuddy 已提交 RV-07–RV-13 整改，R0 E2E run `42147186477` success（41 项扫描器测试 step success；A 11/11、D 39/39、C 164/4/59/1）。但 Artifact `13471225181` 实际下载后发现 RV-13 **未闭环**：根清单 98/98 匹配，A 子目录清单仍有 12 条指向已排除 trace.zip 的失效引用，且根清单未覆盖 3 份嵌套清单。新增 RV-14（knownBinary 跳过噪声复扫的 PNG/NUL 静态漏检路径，待运行时复现）与 RV-15（fail-closed 负向测试未真正验证 workflow upload step 被跳过）。RV-08/09 仍 PARTIAL；RV-10/11/12 修复成立。A05 仍只按耗时判 PASS，A 保持 PARTIAL；C 为 **164/4/59/1**，且硬编码 PASS 证据问题未关闭；B 仍 PARTIAL（t021 Owner 决策待确认）；D 整体仍 PARTIAL，`OBS-ACCT-VIS-390` 账户名称 390px 不可见仍 FAIL。GitHub API 确认仓库仍 Public（private=false），RV-05 仍 **Owner ACTION REQUIRED**。PR #3 保持 Open、不合并，且与当前 main 分叉；**R0 继续 BLOCK，不授权 R1–R7 / PWA。** 详见 [第九次安全扫描器交付独立复核](docs/FastLedger-R0-第九次安全扫描器交付独立复核.md)。
+> **截至 [1.84] 的 R0 收尾状态（第十次安全扫描器整改独立复核）**：PR #3 当前 HEAD 为 `2699c9c3`，安全扫描器/workflow 实际代码仍对应 `5519b9d`。R0 E2E run `42147186477` 20 steps success、41 项扫描器测试 step success，但不能据此判安全闭环：Artifact `13471225181` 中 A 子清单仍有 12 条失效 trace.zip 引用（RV-13 未修复）；knownBinary PNG 跳过 NUL 噪声复扫，缺少 PNG/NUL 负向测试（RV-14 P1）；fail-closed helper 声称 Artifact 数量 0 后，同一 workflow 实际上传 102 个文件并产生 Artifact（RV-15 P2）。RV-08/09 仍 PARTIAL；RV-10/11/12 修复成立。A05 仍只按耗时判 PASS，A 保持 PARTIAL；C 为 **164/4/59/1**；B 的 t021 Owner 决策待确认；D 的 `OBS-ACCT-VIS-390` 仍 FAIL；RV-05 仍 **Owner ACTION REQUIRED**。PR #3 OPEN、未合并，main 与分支 diverged；**R0 继续 BLOCK，不授权 R1–R7 / PWA。** 详见 [第十次安全扫描器整改独立复核](docs/FastLedger-R0-第十次安全扫描器整改独立复核.md)。
 
 | 项 | 状态 |
 |---|---|
