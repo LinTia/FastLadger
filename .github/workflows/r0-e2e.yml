@@ -31,6 +31,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-go@v5
         with:
@@ -65,8 +67,19 @@ jobs:
       # 30 项用例覆盖 K1(UTF-16LE/BE/NUL插入/无法解码) / K2(短Token/短Key/短密码/业务字段不误报)
       # / K3(x-api-key/apiKey变体/Base64/JSON嵌套/大小写分隔符)，全部合成凭据、真实断言。
       # 任一失败即 job 失败，确保绕过无法再通过。
-      - name: 凭据扫描器负向合成测试（K1-K3，30 项）
+      - name: 凭据扫描器负向合成测试（K1-K3 + RV-07~RV-13，41 项）
         run: node --test tools/r0/e2e/test-scan-artifacts.js
+
+      # 修复前后负向样本对照（证据 §二-4）：用 659c0c3 基线的旧扫描器与当前修复后扫描器
+      # 跑同一批合成样本，输出对照表。依赖 fetch-depth:0（actions/checkout）以取到基线 commit。
+      - name: 修复前后负向样本对照（基线 659c0c3）
+        if: ${{ always() }}
+        run: |
+          {
+            echo "## 修复前后负向样本对照（基线 659c0c3）"
+            echo ""
+            node tools/r0/e2e/scripts/before-after-evidence.js
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: 分类映射回归审计（B · 22 笔）
         env:
