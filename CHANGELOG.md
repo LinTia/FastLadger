@@ -1,3 +1,7 @@
+# 更新日志（CHANGELOG）
+
+本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
+
 ## [1.85] - 2026-11-07
 
 ### R0 第十一次独立复核：RV-14 指定 PNG/NUL 反例补齐仍有断言缺口
@@ -9,10 +13,6 @@
 - **RV-15 PASS（沿用前轮负向实证）**：最新 HEAD 正向 gate run `42251849969` success；前轮真实 scan/fail_closed/prepare 负向场景 upload skipped 且 Artifact API=0。本轮未改上传条件，未重跑三种负向。
 - R0 仍 BLOCK：A05 慢网 pending 断言仍未验证 disabled；C=164/4/59/1；`OBS-ACCT-VIS-390` 仍 FAIL；t021 待 Owner；RV-05 Owner ACTION REQUIRED。PR #3 OPEN、未合并，不授权 R1–R7/PWA。
 - 新增 [第十一次 RV-14 补齐独立复核报告](docs/FastLedger-R0-第十一次RV-14补齐独立复核.md)，要求 WorkBuddy 仅强化 RV-14 case-51 的 AUTH_HEADER 专项断言，不改扫描器本体/业务范围/其他既有状态。
-
-# 更新日志（CHANGELOG）
-
-本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
 ## [1.84] - 2026-11-06
 
@@ -1367,3 +1367,5 @@ run #16（`644ddab`）起连续 4 次失败。**守卫本身是对的，漏登�
 ### 新增
 - 首版 PRD（评审稿）、8 环节落地方案、新手开发完整指南、ezbookkeeping 代码导读。
 - 完整可交互原型（13 个核心页面）。
+
+
