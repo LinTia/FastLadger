@@ -7,7 +7,7 @@
 ## 当前状态（2026-10-31 历史快照，部分已过时）
 
 > 下表是 2026-10-31 的历史快照。schema 版本、测试基线、阶段进度以 `docs/` 最新交付文档、`CHANGELOG.md` 与服务器实测为准；**R0（基准冻结与差异盘点）当前未通过 / 阻塞**，见 [R0 报告](docs/FastLedger-R0-基准冻结与差异盘点.md)。本表不作为 R0 验收依据。
-> **截至 [1.84] 的 R0 收尾状态（第十次安全扫描器整改独立复核）**：PR #3 当前 HEAD 为 `2699c9c3`，安全扫描器/workflow 实际代码仍对应 `5519b9d`。R0 E2E run `42147186477` 20 steps success、41 项扫描器测试 step success，但不能据此判安全闭环：Artifact `13471225181` 中 A 子清单仍有 12 条失效 trace.zip 引用（RV-13 未修复）；knownBinary PNG 跳过 NUL 噪声复扫，缺少 PNG/NUL 负向测试（RV-14 P1）；fail-closed helper 声称 Artifact 数量 0 后，同一 workflow 实际上传 102 个文件并产生 Artifact（RV-15 P2）。RV-08/09 仍 PARTIAL；RV-10/11/12 修复成立。A05 仍只按耗时判 PASS，A 保持 PARTIAL；C 为 **164/4/59/1**；B 的 t021 Owner 决策待确认；D 的 `OBS-ACCT-VIS-390` 仍 FAIL；RV-05 仍 **Owner ACTION REQUIRED**。PR #3 OPEN、未合并，main 与分支 diverged；**R0 继续 BLOCK，不授权 R1–R7 / PWA。** 详见 [第十次安全扫描器整改独立复核](docs/FastLedger-R0-第十次安全扫描器整改独立复核.md)。
+> **截至 [1.85] 的 R0 收尾状态（第十一次独立复核）**：PR #3 最新 HEAD 为 `858b7b45`，仍 OPEN、未合并。RV-13 已 PASS（最新 Artifact `13521151959` 的唯一根清单 101/101 字节校验通过）；RV-15 已 PASS（前轮真实负向 gate 证据仍有效，本轮正向回归成功）；RV-14 仍 PARTIAL：新增 case-51~53 且 53/53 测试通过，但 case-51 的 OR 断言允许 BEARER_TOKEN 掩盖 Authorization 专项检测回归，要求强制 AUTH_HEADER 断言。A05 仍未断言慢网 pending 时 disabled；C 为 **164/4/59/1**；B 的 t021 Owner 决策待确认；D 的 `OBS-ACCT-VIS-390` 仍 FAIL；RV-05 仍 **Owner ACTION REQUIRED**。**R0 继续 BLOCK，不授权 R1–R7 / PWA。** 详见 [第十一次 RV-14 补齐独立复核](docs/FastLedger-R0-第十一次RV-14补齐独立复核.md)。
 
 | 项 | 状态 |
 |---|---|
