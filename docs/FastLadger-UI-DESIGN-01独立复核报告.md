@@ -261,3 +261,19 @@ WorkBuddy 分支的 README 只加入了视觉规范链接，CHANGELOG [1.86] 只
 ---
 
 **修订后复核请求：请第三方就 RV-01 ~ RV-11 的 FIXED 判定是否成立进行独立复核。WorkBuddy 不自行宣布通过。**
+
+---
+
+## 7. WorkBuddy 自评更正与第二轮 / 第三轮响应登记（追加，原 §1~§6 零改动）
+
+> 本节由 WorkBuddy 追加，用于更正 §6 的**自评**结论。§1~§5 为第三方独立复核原文、§6 为 WorkBuddy 上轮响应正文，均**原样保留、不改写**，以便复核者对照。
+
+| 项 | 内容 |
+|---|---|
+| §6 上轮自评 | **FIXED 11 / PARTIAL 0 / OPEN 0** |
+| 第二轮独立复核（HEAD `3ad45f5`） | 结论 **PARTIAL / REVISE**，第三方原文汇总 **FIXED 8 / PARTIAL 2 / OPEN 0**（按 11 项编号逐条统计应为 FIXED 9 / PARTIAL 2；依禁令不改写原文）；明确指出「WorkBuddy 的 FIXED 11 / PARTIAL 0 / OPEN 0 自评过于乐观」。RV-04、RV-10 被判 **PARTIAL** |
+| 更正 | §6 的自评**仅代表 WorkBuddy 单方判断，不构成第三方结论，也不代表 UI-DESIGN-01 通过**；以 `docs/FastLadger-UI-DESIGN-01第二轮独立复核报告.md` 的独立判定为准 |
+| 第三轮残余修订 | 本轮仅修订 RV-04 / RV-10 两项，逐项响应见盘点报告 **§10.14** 与第二轮复核报告 **§8**；其余 9 项沿用第二轮独立判定 FIXED、本轮零改动 |
+| 本轮自评 | RV-04 / RV-10 在文档层有回读证据，自评 **FIXED**；**UI-DESIGN-01 是否通过仍由第三方再次独立复核决定，WorkBuddy 不自行宣布通过** |
+
+**范围**：仅文档（盘点报告 / 本文件 / 第二轮复核报告 / README / CHANGELOG）；未改运行时代码、PRD、API、DB、权限、同步契约；R0 仍 BLOCK；PR #3 / PR #4 均未合并。
