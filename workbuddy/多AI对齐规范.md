@@ -239,3 +239,12 @@
 > - **已知非阻塞遗留**：P2-2（§7.3 可见性过滤，阶段 3）、P3-3（`merchant` 死列，阶段 5）、`creator_uid=0` 历史归属须在阶段 3/4 显式处理（见 WBS 阶段 4 注）；
 > - **⚠️ 分工差异（关键，存量描述保留）**：**D 只能静态审查**（同一构建机，无 gcc），**GPT 有 CGO + 真实 SQLite 运行能力**（见其 `gpt/v1.4/verification/`）。盲区现已改由 **CI 常态化覆盖**，GPT/D 的分工侧重不变——GPT 仍可做更深的事务/并发实测，D 侧重逻辑与契约审查。
 > - **【1.25】之后新增（D 第三轮请注意，勿重复提）**：`MemberService.JoinViaInvite` 签名已变为 **`(bookID, code, username, password, clientIP)`**；邀请入户限流已改为**按 IP 分桶**（原全局 key 属缺陷 `WB-R01`，已修）；`ChangeRole`/`Remove` 已校验 `RowsAffected==1`（`D-R09` 已修）；`D-R07`/`D-R08` 已修。D 第三轮编号从 **`D-R10` 起**。
+
+
+## 12. Web / PWA 视觉任务的额外对齐规则
+
+- Owner 已确认以 Panda-995/homeledger 公开 main 作为 FastLadger Web/PWA 视觉参考；正式规范唯一入口：docs/FastLadger-Web-PWA视觉设计规范.md。
+- 接手任何 Web/PWA UI 任务，除本文件与第三方审阅者导读外，必须阅读该设计规范、手机 PWA 实施指导书和原型还原/PWA 总方案。
+- 参考项目仅用于提炼视觉语言和交互模式；不得复制其源代码/品牌素材/业务逻辑，也不得覆盖 FastLadger 的 PRD、落地方案、枚举字典和 Owner 决策。
+- 视觉验收不等于功能验收；必须同时验证真实 API、权限、会计口径、错误状态、离线/同步状态及手机真机体验。
+- R0 未通过前，设计文档与任务拆分可以进行，但不得以视觉重设计为由启动 R1–R7 / PWA 业务实施。
