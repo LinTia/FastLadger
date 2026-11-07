@@ -1126,8 +1126,8 @@ CHANGELOG 新增条目要点：交付范围、修订项编号、**未改运行�
 | 依据 | `docs/FastLadger-UI-DESIGN-01第二轮独立复核报告.md`（复核 HEAD `3ad45f5`，结论 **PARTIAL / REVISE**） |
 | 工作分支 | `docs/homeledger-inspired-design-system`（**PR #4 既有分支，未新建分支 / 未新建 PR / 未合并**） |
 | 本轮起点 | `d8976c3`（第三方新增 `b9abfd8` 第二轮复核报告 / `d2f6100` README 链接 / `d8976c3` CHANGELOG `[1.91]`）；本轮先 `git fetch` + `git merge --ff-only`，**未覆盖、未改写第三方提交** |
-| 内容提交 | `@@SHA_CONTENT@@` |
-| SHA 回填提交 | `@@SHA_FINAL@@` |
+| 内容提交 | `0c3e1e322b312ea7ec96f83fc680fee18542c6e9`（本轮主体改动，5 个 `.md`） |
+| SHA 回填提交（分支最终 HEAD） | 见交付回执 / `git rev-parse HEAD`；**自身 SHA 无法写入自身内容**，故此处不硬编码 |
 | PR 状态 | PR #4 保持 **Open / Draft / merged=false**；PR #3 保持独立、未受影响 |
 
 ### 12.2 改动文件清单（本轮，仅 5 个 `.md`）
