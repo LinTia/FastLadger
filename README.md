@@ -43,6 +43,7 @@
 | [`docs/FastLadger-Web-PWA视觉设计规范.md`](docs/FastLadger-Web-PWA视觉设计规范.md) | **Web / PWA 视觉设计规范** | 以 Panda-995/homeledger 为视觉参考的设计令牌、桌面/手机布局、组件与验收标准 |
 | [`docs/FastLadger-UI-DESIGN-01-Web页面与组件盘点报告.md`](docs/FastLadger-UI-DESIGN-01-Web页面与组件盘点报告.md) | UI-DESIGN-01 页面与组件盘点（R1 修订版） | WorkBuddy 对当前 Web 的**静态盘点**：**17 个路由视图 / 1 个应用壳层 / 7 个对话框**（分别统计）+ 导航映射表 + **§4.7 已要求但缺失能力矩阵**。已按第三方复核 **UI01-RV-01~11** 逐项修订并逐条标记 FIXED/PARTIAL/OPEN（见报告 §10 与复核报告 §6）；首页结余口径已由 Owner 确认（当前账本本月收入 − 本月支出，转账不计入）。**结论为静态文档/代码层，无浏览器/真机验证**；UI-DESIGN-01 是否通过待第三方复核，R0 仍 BLOCK |
 | [`docs/FastLadger-UI-DESIGN-01独立复核报告.md`](docs/FastLadger-UI-DESIGN-01独立复核报告.md) | UI-DESIGN-01 独立复核 | 复核结论 **PARTIAL / REVISE**：D-3 桌面导航冲突、D-8 区块边界错误、D-7 等需求遗漏、首页结余/净资产口径混淆、02a 违反 R0 门禁等 **UI01-RV-01~11**；R1 已逐项修订，**待再次复核** |
+| [`docs/FastLadger-UI-DESIGN-01第二轮独立复核报告.md`](docs/FastLadger-UI-DESIGN-01第二轮独立复核报告.md) | UI-DESIGN-01 第二轮独立复核 | RV-01~RV-11 中 9 项已修订、2 项仍 PARTIAL；指出首页账户余额合计的保留歧义与待 Owner 确认清单不一致；R0 仍 BLOCK，未做浏览器/真机验证 |
 | [`docs/FastLedger-原型还原与PWA分阶段实施总方案.md`](docs/FastLedger-原型还原与PWA分阶段实施总方案.md) | **原型还原与 PWA 分阶段实施总方案** | R0–R7 总路线、原型差异盘点、AI 分批实施纪律、移动端/PWA/离线/备份验收门禁 |
 | [`docs/FastLedger-R0-基准冻结与差异盘点.md`](docs/FastLedger-R0-基准冻结与差异盘点.md) | **R0 基准冻结与差异盘点（第三次整改后）** | 13 页/逐控件交互矩阵（228 条）、两版原型差异、当前实现与后端 API 权限/DTO/错误码/测试映射、差异根因、截图基线执行结果与阻塞清单、Owner 裁决清单；**R0 未通过 / 阻塞** |
 | [`docs/FastLedger-R0-收尾执行清单.md`](docs/FastLedger-R0-收尾执行清单.md) | **R0 收尾执行清单（2026-11-05）** | 统一区分 R0 审计门槛与后续业务实现；汇总 RV 状态、D-4/D-8 待补、Owner 决策、截图/运行时/API 测试缺口与最终放行条件 |
