@@ -917,8 +917,8 @@ D-3 / D-6 既定决策（已裁决，无需再次提交 Owner 选择题）
 | 需求复核报告 | `docs/FastLadger-UI-DESIGN-01独立复核报告.md`（结论 **PARTIAL / REVISE**，UI01-RV-01~11） |
 | 工作分支 | **`docs/homeledger-inspired-design-system`（PR #4 既有分支，本轮沿用，未新建 PR）** |
 | 分支起点 | `7e50fd9`（PR #4 当前 head，已含复核报告与 `6bd5496` 的 D-3/D-8 规范修订） |
-| 内容提交 | `__CONTENT_SHA__` |
-| 分支 HEAD | `__HEAD_SHA__` |
+| 内容提交 | **`425a93c`**（3 files changed, 628 insertions(+), 125 deletions(-)） |
+| 分支 HEAD | `425a93c` 之后的 SHA 回填提交（最终 HEAD 以 `git log -1 --format=%h docs/homeledger-inspired-design-system` 为准） |
 | PR 状态 | **PR #4 保持 Open / Draft，未合并；PR #3 `fix/r0-sixth-runtime-defects` 保持独立，未合并** |
 | 改动文件 | 见 §11.2 |
 
