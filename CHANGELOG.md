@@ -2,6 +2,18 @@
 
 本项目所有重要变更记录于此。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.86] - 2026-11-08
+
+### R0 第十二次独立复核：RV-14-T01 已关闭，R0 仍 BLOCK
+
+- 独立复核 PR #3 最新 HEAD `4318fd612c856218f6c903b7e3f3e5b5257cfa3a`。case-51 已由 OR 断言收紧为必须命中 `AUTH_HEADER`；新增 case-54 使用合法 PNG 魔数与 `Authori[NUL]zation` 隔离负载，不含 Bearer，要求真实扫描器 rc=2、命中 `AUTH_HEADER` 且不得命中 `BEARER_TOKEN`。
+- **RV-14-T01 PASS / FIXED**：源码路径检查确认二进制片段桥接后进入 `scanText`；最新 Artifact 原始日志显示旧扫描器 case-54 为 CLEAN(rc=0)，新扫描器为 BLOCKED(rc=2)，仅命中 `AUTH_HEADER`。case-51/54 专项断言均生效。
+- R0 E2E run `42262665584`：扫描器 54/54、RV-14 证据脚本 24/24；全仓 build/vet/test/race 与容器冒烟 run `42262672385` success；RV-15 正向 gate run `42262680160` success。
+- Artifact `13525746546` 与最新 HEAD 完全对应；102 个 ZIP 条目（101 个文件 + 根清单），SHA256SUMS 101/101 按实际字节匹配，0 missing / 0 mismatch / 0 嵌套清单，未发现 trace/HAR/network/DB/SQLite 归档。
+- **RV-13 PASS**；**RV-15 本轮正向回归 PASS**，三种真实负向 workflow 证据沿用前轮，本轮未重跑。复核未在本地重新执行 Node/Go 测试，结论基于源码、Actions 运行记录与下载 Artifact 的独立核查。
+- R0 仍 BLOCK：A05 慢网 pending 未断言 disabled；C=164/4/59/1；`OBS-ACCT-VIS-390` 仍 FAIL；t021 override 待 Owner；RV-05 仍 Owner ACTION REQUIRED。PR #3 OPEN、未合并，不授权 R1–R7/PWA。
+- 新增 [第十二次 RV-14-T01 独立复核报告](docs/FastLedger-R0-第十二次RV-14-T01独立复核.md)。**RV-14-T01 不再需要 WorkBuddy 修改**；后续只推进其余未关闭的 R0 阻塞项。
+
 ## [1.85] - 2026-11-07
 
 ### R0 第十一次独立复核：RV-14 指定 PNG/NUL 反例补齐仍有断言缺口
