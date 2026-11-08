@@ -8,7 +8,7 @@
 
 ## 1. 总结结论
 
-<badge>PARTIAL · 需补正后再采纳</badge>
+**复核状态：PARTIAL（需补正后再采纳）**
 
 WorkBuddy 本轮按要求只新增一份审计报告，没有改业务代码、测试、fixture 或 PRD；四条 C FAIL 的静态 runner 证据、邀请 API 路由事实、fixture 抽取脚本的竖线解析问题，整体方向基本成立。报告也正确声明本轮未运行测试，不把静态阅读包装成运行时验收。
 
