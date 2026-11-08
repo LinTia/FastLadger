@@ -1,0 +1,32 @@
+{
+  "suite": "a",
+  "startedAt": "2026-11-08T04:34:04.696Z",
+  "summary": {
+    "A:PASS": 11,
+    "total": 11
+  },
+  "statuses": {
+    "A01": "PASS",
+    "A02": "PASS",
+    "A03": "PASS",
+    "A04": "PASS",
+    "A05": "PASS",
+    "A06": "PASS",
+    "A07": "PASS",
+    "A08": "PASS",
+    "A09": "PASS",
+    "A10": "PASS",
+    "A11": "PASS"
+  },
+  "A05": {
+    "id": "A05",
+    "name": "慢速网络：800ms 延迟下 pending 仍可见，最终成功",
+    "status": "PASS",
+    "detail": "总耗时=1046ms（含 800ms 链路延迟）；中途按钮文案=「登录中…」；pendingDisabled=true；登录后 token 已写入=true",
+    "evidence": [
+      "A05/slow-network.png"
+    ],
+    "ms": 3705
+  },
+  "note": "脱敏摘录：源 report.json 的 server/env 段含本机临时路径与随机端口，未纳入；完整原始日志见同目录 console.log。"
+}

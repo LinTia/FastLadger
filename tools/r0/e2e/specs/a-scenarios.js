@@ -179,14 +179,18 @@ module.exports = [
         await page.fill('input[placeholder^="密码"]', data.password);
         const t0 = Date.now();
         await page.locator('button', { hasText: '登 录' }).first().click();
-        await page.waitForTimeout(500);
-        const midText = (await page.locator('button', { hasText: /登\s*录|登录中/ }).first().innerText().catch(() => '')).trim();
+        // 在 800ms 链路延迟窗口内轮询抓 pending 态（单点采样有竞态）。
+        // A01 的 disabled 断言不能替代 A05 慢网场景，故此处独立取回 { text, disabled }。
+        const pending = await page.waitForFunction(() => {
+          const b = [...document.querySelectorAll('#view button')].find((x) => /登录中/.test(x.textContent || ''));
+          return b ? { text: b.textContent.trim(), disabled: b.disabled } : false;
+        }, null, { timeout: 4000 }).then((h) => h.jsonValue()).catch(() => null);
         await page.waitForFunction(() => !!localStorage.getItem('fl_token'), { timeout: 30000 });
         const elapsed = Date.now() - t0;
         const shot = await runDir.screenshot(page, 'A05', 'slow-network');
         return {
-          status: elapsed >= 800 ? 'PASS' : 'FAIL',
-          detail: `总耗时=${elapsed}ms（含 800ms 链路延迟）；中途按钮文案=「${midText}」`,
+          status: elapsed >= 800 && !!pending && /登录中/.test(pending.text) && pending.disabled === true ? 'PASS' : 'FAIL',
+          detail: `总耗时=${elapsed}ms（含 800ms 链路延迟）；中途按钮文案=「${pending ? pending.text : '未捕获'}」；pendingDisabled=${pending ? pending.disabled : '未捕获'}；登录后 token 已写入=${await page.evaluate(() => !!localStorage.getItem('fl_token'))}`,
           evidence: [shot],
         };
       });

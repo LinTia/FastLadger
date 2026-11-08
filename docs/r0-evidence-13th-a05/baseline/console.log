@@ -1,0 +1,29 @@
+SERVER up http://127.0.0.1:63777 schema=8
+BROWSER playwright-core channel=msedge version=156.0.4314.58
+PASS    A01 pending：提交中按钮进入禁用 + 文案「登录中…」 (2197ms)
+        请求被延迟=true；pending 态={"text":"登录中…","disabled":true}；登录后 token 已写入=true
+PASS    A02 网络拒绝：请求 abort → 错误提示可见且留在登录页 (586ms)
+        toast=「✕ Failed to fetch」；仍在登录页=true；写入 token=false
+PASS    A03 HTTP 503：服务端 503 → 展示错误信息，不伪造成功 (479ms)
+        toast=「✕ 服务暂时不可用」；是否误写 token=false
+PASS    A04 恢复：一次失败后重试成功并可进入账本 (1282ms)
+        首次失败 toast=「✕ Failed to fetch」；重试后是否登录=true；token 已写入=true；hash=#books
+PASS    A05 慢速网络：800ms 延迟下 pending 仍可见，最终成功 (3727ms)
+        总耗时=1151ms（含 800ms 链路延迟）；中途按钮文案=「登录中…」
+PASS    A06 有数据：首页展示真实金额与交易条目 (1845ms)
+        页面含 ¥=true；含种子交易=true；API 交易数=3
+PASS    A07 空数据：空账本显示空态且不串数据 (1541ms)
+        API 交易数=0；页面残留他账本数据=[]；页面含「暂无」=false
+PASS    A08 权限不足：member 调管理接口被 403 拒绝且不泄露 (1536ms)
+        DELETE /books → 403；POST /members/invite → 403；成员页「邀请成员」按钮数=0（成员管理接口 403 校验通过；UI 入口可见性另由 D 套件 D-MEM-* 覆盖）；页面文本长度=164
+PASS    A09 多角色：owner/admin/member 三种会话看到不同能力 (4041ms)
+        owner: 成员数=3 邀请按钮=1；admin: 成员数=3 邀请按钮=1；member: 成员数=3 邀请按钮=0
+PASS    A10 离线 / 恢复：离线时报错，恢复网络后重试成功 (3947ms)
+        离线时 toast=「✕ Failed to fetch」视图文本长度=162；恢复后含金额=true 含种子=true
+PASS    A11 同步冲突：同一 clientUuid 重放不重复落账 (10ms)
+        首次 status=created，重放（金额改为 9999）status=conflict；交易数 3→4（应 +1）
+A 汇总：{"PASS":11}
+
+SUMMARY {"A:PASS":11,"total":11}
+ARTIFACTS \c\Users\47006\WorkBuddy\fastledger\repo_tmp\artifacts\a05-baseline\2026-11-07_17-22-20-4318fd6-a
+CHECKSUMS 30 files
