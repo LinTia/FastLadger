@@ -7,7 +7,7 @@
 ## 当前状态（2026-10-31 历史快照，部分已过时）
 
 > 下表是 2026-10-31 的历史快照。schema 版本、测试基线、阶段进度以 `docs/` 最新交付文档、`CHANGELOG.md` 与服务器实测为准；**R0（基准冻结与差异盘点）当前未通过 / 阻塞**，见 [R0 报告](docs/FastLedger-R0-基准冻结与差异盘点.md)。本表不作为 R0 验收依据。
-> **截至 [1.88] 的 R0 收尾状态（第十三次独立复核）**：PR #3 最新 HEAD 为 `ad34df1c`，仍 OPEN、未合并。RV-13 PASS（Artifact `13525746546` 根清单 101/101 字节校验通过）；RV-14-T01 PASS/FIXED；RV-15 本轮正向 gate PASS，前轮真实负向证据沿用。**A05 慢网 pending/disabled 断言缺口已 PASS**：独立断言要求捕获「登录中」按钮且 `disabled === true`；WorkBuddy 提交 baseline/after/negative/restored 四组本地运行证据，负向反置后 A05 单项 FAIL。该结论现有当前 HEAD 的 GitHub Actions 证据：R0 E2E run [42467412803](https://github.com/LinTia/FastLadger/actions/runs/42467412803)，A=11/11、D=39/39；Artifact [13611998704] 经独立下载后根清单 101/101 匹配。仍未在独立 clone 重跑或进行真机/人工视觉验收。C 为 **164/4/59/1**；B 的 t021 Owner 决策待确认；D 的 `OBS-ACCT-VIS-390` 仍 FAIL；RV-05 仍 **Owner ACTION REQUIRED**。**R0 继续 BLOCK，不授权 R1–R7 / PWA。** 详见 [第十三次 A05 独立复核](docs/FastLedger-R0-第十三次A05慢网断言独立复核.md)。
+> **截至 [1.89] 的 R0 收尾状态（第十三次复核后续）**：PR #3 最新 HEAD 为 `b613fd15`，仍 OPEN、未合并；分支与 main 已分叉（ahead 25 / behind 29）。A=11/11、D=39/39；C=164/4/59/1（报告型 step success 不代表 C 无 FAIL）。A05 慢网 pending/disabled 断言已由第十三次复核与当前 HEAD CI 证据支持；RV-13 / RV-14-T01 已关闭。WorkBuddy 新增的 C 四项 FAIL 需求与验收口径审计报告，经独立复核判为 **PARTIAL，需补正**：邀请链接注册、D-3 顶栏切换及测试验收口径需分层澄清；另发现首页“结余”实现仍与 Owner 已定口径不一致。R0 继续 BLOCK；RV-05 仍 Owner ACTION REQUIRED，t021 与 `OBS-ACCT-VIS-390` 等事项未关闭。**不授权合并 PR #3、R1–R7、UI-DESIGN-02 代码实施或 PWA。** 详见 [C 四项 FAIL 审计独立复核](docs/FastLedger-R0-C四项FAIL需求与验收口径审计-独立复核.md)。
 
 | 项 | 状态 |
 |---|---|
