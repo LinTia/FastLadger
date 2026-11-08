@@ -7,7 +7,7 @@
 - 独立复核 PR #3 从第十二次 HEAD `4318fd612c856218f6c903b7e3f3e5b5257cfa3a` 到新 HEAD `ad34df1c8854f792231ed5152b61e2e22d115e8b`：ahead 2、behind 0；12 个变更路径中，代码仅改 `tools/r0/e2e/specs/a-scenarios.js` 的 A05 块（+8/-4），其余 11 个为证据文件。
 - **A05 指定缺口 PASS（源码与已提交本地运行证据复核，未独立重跑）**：慢网下轮询捕获「登录中」按钮的 `{text, disabled}`，PASS 必须同时满足 pending 存在、文案匹配、`disabled === true`；随后等待 token 写入，超时不会 PASS。
 - 四段证据一致：baseline 旧断言未采 disabled；after 11/11 且 pendingDisabled=true；negative 将断言反置为 false 后 A05 单项 FAIL、采样值仍 true；restored 恢复 true 后 11/11。A01 与其他 A 场景未改。
-- 非阻断限制：负向变异脚本位于 gitignore 的 artifacts/ 未入库；未在独立 clone 重跑；本轮没有当前 HEAD 的 CI 证明（combined status 为空，PR-triggered run 查询为空）；未重跑 C/D。原始日志保留本机工作目录路径，未发现凭据值。
+- 非阻断限制：负向变异脚本位于 gitignore 的 artifacts/ 未入库；未在独立 clone 重跑；原始日志保留本机工作目录路径，未发现凭据值。复核报告初版时尚无当前 HEAD CI；随后在同一 HEAD 补跑 R0 E2E run [42467412803](https://github.com/LinTia/FastLadger/actions/runs/42467412803)，A=11/11、D=39/39、C=164/4/59/1。Artifact [13611998704] 独立下载后根清单 101/101 字节匹配，未发现 trace/HAR/DB/SQLite/嵌套 ZIP。未重跑全仓 Go race/容器构建。
 - **R0 仍 BLOCK**：C 仍 164 PASS / 4 FAIL / 59 BLOCKED / 1 N/A；`OBS-ACCT-VIS-390` 仍 FAIL；t021 Owner 裁决待定；RV-05 仍 Owner ACTION REQUIRED。PR #3 OPEN、未合并，不授权 R1–R7 / UI-DESIGN-02 代码实施 / PWA。
 - 新增 [第十三次 A05 慢网断言独立复核报告](docs/FastLedger-R0-第十三次A05慢网断言独立复核.md)。
 
