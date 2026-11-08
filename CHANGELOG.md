@@ -1,5 +1,14 @@
 # 更新日志（CHANGELOG）
 
+## [1.88] - 2026-11-08
+
+### R0 第十三次复核后续：当前 HEAD CI 与 Artifact 独立核验
+
+- 在 PR #3 HEAD `ad34df1c8854f792231ed5152b61e2e22d115e8b` 上取得 R0 E2E workflow_dispatch run [42467412803](https://github.com/LinTia/FastLadger/actions/runs/42467412803)，head_sha 精确匹配。
+- A=11/11 PASS（A05 日志明确 `pendingDisabled=true` 且最终 token=true）；D=39/39 PASS；C=164 PASS / 4 FAIL / 59 BLOCKED / 1 N/A。C 为报告型，job success 不代表 C 全部通过。
+- Artifact `13611998704` 独立下载检查：102 ZIP entries（根清单+101文件），SHA256SUMS 101/101 按实际字节匹配，0 missing / 0 mismatch；未发现 trace/HAR/DB/SQLite/嵌套 ZIP。
+- 未重跑全仓 Go race/容器构建；PR #3 仍 OPEN、未合并，R0 仍 BLOCK。
+
 ## [1.87] - 2026-11-08
 
 ### R0 第十三次独立复核：A05 慢网 pending / disabled 断言缺口通过，R0 仍 BLOCK
