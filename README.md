@@ -7,7 +7,7 @@
 ## 当前状态（2026-10-31 历史快照，部分已过时）
 
 > 下表是 2026-10-31 的历史快照。schema 版本、测试基线、阶段进度以 `docs/` 最新交付文档、`CHANGELOG.md` 与服务器实测为准；**R0（基准冻结与差异盘点）当前未通过 / 阻塞**，见 [R0 报告](docs/FastLedger-R0-基准冻结与差异盘点.md)。本表不作为 R0 验收依据。
-> **截至 [1.86] 的 R0 收尾状态（第十二次独立复核）**：PR #3 最新 HEAD 为 `4318fd61`，仍 OPEN、未合并。RV-13 PASS（Artifact `13525746546` 根清单 101/101 字节校验通过）；RV-14-T01 已 PASS/FIXED：case-51 强制命中 AUTH_HEADER，新增 case-54 隔离 Authorization 关键词桥接路径，必须命中 AUTH_HEADER 且不得命中 BEARER_TOKEN；54/54 扫描器测试、24/24 证据断言通过。RV-15 本轮正向 gate PASS，前轮真实负向证据沿用。A05 慢网 pending 仍未断言 disabled；C 为 **164/4/59/1**；B 的 t021 Owner 决策待确认；D 的 `OBS-ACCT-VIS-390` 仍 FAIL；RV-05 仍 **Owner ACTION REQUIRED**。**R0 继续 BLOCK，不授权 R1–R7 / PWA。** 详见 [第十二次 RV-14-T01 独立复核](docs/FastLedger-R0-第十二次RV-14-T01独立复核.md)。
+> **截至 [1.87] 的 R0 收尾状态（第十三次独立复核）**：PR #3 最新 HEAD 为 `ad34df1c`，仍 OPEN、未合并。RV-13 PASS（Artifact `13525746546` 根清单 101/101 字节校验通过）；RV-14-T01 PASS/FIXED；RV-15 本轮正向 gate PASS，前轮真实负向证据沿用。**A05 慢网 pending/disabled 断言缺口已 PASS**：独立断言要求捕获「登录中」按钮且 `disabled === true`；WorkBuddy 提交 baseline/after/negative/restored 四组本地运行证据，负向反置后 A05 单项 FAIL。该结论基于源码与提交证据复核，**未在独立环境重跑，当前 HEAD 未取得新的 CI 运行证明**。C 为 **164/4/59/1**；B 的 t021 Owner 决策待确认；D 的 `OBS-ACCT-VIS-390` 仍 FAIL；RV-05 仍 **Owner ACTION REQUIRED**。**R0 继续 BLOCK，不授权 R1–R7 / PWA。** 详见 [第十三次 A05 独立复核](docs/FastLedger-R0-第十三次A05慢网断言独立复核.md)。
 
 | 项 | 状态 |
 |---|---|
