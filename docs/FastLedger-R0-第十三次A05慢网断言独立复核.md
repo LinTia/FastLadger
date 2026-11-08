@@ -60,16 +60,16 @@ Playwright `waitForFunction` 的参数位置正确：第二个参数传 `null` �
 1. **负向变异脚本未入库**：`artifacts/_a05_negative.py` 位于被忽略的 `artifacts/`，没有随交付提交。负向运行日志与报告已入库，但第三方不能直接从仓库取得原脚本一键重放。WorkBuddy 已在证据 README §6 披露；本轮不将其作为 A05 断言缺口未修复的理由，但记为可复现性观察。
 2. **没有独立复跑**：本轮复核只读检查远端源码和已提交日志；没有独立 clone、没有本机 Playwright/Edge 重跑，也没有真机或人工视觉验收。
 3. **复核时点之后补齐 CI 证明**：首次撰写本报告时，针对 `ad34df1` 的 combined status 为空，PR-triggered run 查询也为空；因此当时未声称已有 CI 证明。随后 WorkBuddy 在同一 HEAD 上手动触发 R0 E2E，GitHub Actions run `42467412803`（`workflow_dispatch`，`head_sha=ad34df1c8854f792231ed5152b61e2e22d115e8b`）已完成。日志实际记录 A05 `pendingDisabled=true`、最终 token=true，A 汇总 11/11；D 汇总 39/39；C 仍为 164 PASS / 4 FAIL / 59 BLOCKED / 1 N/A。故本报告现补充确认：A05 不仅有本地四段证据，也有当前 HEAD 的 GitHub Actions A 套件运行证据；但仍未在独立 clone 复跑，也未进行真机/人工视觉验收。
-4. **其他测试包未重跑**：交付 README 明确未重跑 C（228 条）和 D 套件；本轮没有证据表明这些状态发生变化。
+4. **C/D 的复核时点差异**：交付 README 在提交前说明未重跑 C（228 条）和 D 套件；随后当前 HEAD 的 R0 E2E run `42467412803` 已实际执行两者，D=39/39 PASS，C=164 PASS / 4 FAIL / 59 BLOCKED / 1 N/A。
 5. **本机路径披露**：原始 console 日志保留了 `C:\\Users\\47006\\WorkBuddy\\fastledger\\repo_tmp` 工作目录与回环地址/随机端口。未见凭据值；但这些本机环境信息对复核断言并非必需，后续证据宜优先采用脱敏日志或结构化摘要，避免无必要暴露本机路径。
 
 ## 5. 结论与状态边界
 
 - **A05 指定缺口：PASS（源码断言完整，所提交的本地正向/负向/恢复证据相互一致）**。
-- 本 PASS 不等于独立 CI 验收，也不等于 A 包所有场景在当前 HEAD 已由第三方重跑。
+- 本 PASS 有当前 HEAD 的 GitHub Actions A 套件 11/11 运行证据，但不等于独立 clone 复跑、人工视觉验收或整个 R0 通过。
 - R0 仍 **BLOCK**。截至第十二次复核已知的其他阻塞项未因本次 A05 测试修改而自动关闭：C 仍为 164 PASS / 4 FAIL / 59 BLOCKED / 1 N/A；`OBS-ACCT-VIS-390` 仍 FAIL；t021 分类 override 仍待 Owner 裁决；RV-05 仍为 Owner ACTION REQUIRED。其他既有 R0 退出条件继续有效。
 - PR #3 保持 OPEN、未合并；不得将本轮 A05 局部 PASS 解释为允许合并、启动 R1–R7、UI-DESIGN-02 代码实施或 PWA。
-- 后续若需提高证据强度，可在该 HEAD 上运行 A 套件 CI，并由独立环境复跑；负向变异脚本可考虑作为脱敏、可重复的测试夹具纳入仓库。
+- 后续若需提高可复现性，可考虑将负向变异逻辑整理为脱敏、可重复的仓库内测试夹具；不得将当前 A05 CI PASS 扩张为整个 R0 通过。
 
 
 
