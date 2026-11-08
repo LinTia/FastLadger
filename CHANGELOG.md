@@ -1,5 +1,15 @@
 # 更新日志（CHANGELOG）
 
+## [1.89] - 2026-11-09
+
+### R0 C 套件四项 FAIL 审计报告：独立复核 PARTIAL，需补正
+
+- 复核 PR #3 新增审计报告提交 `b613fd15a5418a50f6be6c1549c5cb5c4bc30681`。本轮仅新增文档，无业务代码 / 测试 / fixture 修改；静态证据对四条 FAIL 的 runner 判定、邀请 API 路由与 fixture 抽取竖线解析风险基本成立。
+- 发现需补正的口径：将登录页邀请码控件与 PRD §12.1 已决定的邀请链接入户流程分开；D-3 顶栏账本切换已是 Owner 决策，当前 `#navBooks` 隐藏属于独立实现缺口，不应再问 Owner 是否需要；对未确认的密码显隐 / 首页内切换形态，不应预设未来必须通过存在性断言。
+- 补记范围外重要偏差：当前 `renderHome()` 仍将账户余额合计显示为首页“结余”，与 Owner 已决定的“本月收入 - 本月支出”口径不一致；本轮未修改业务代码。
+- 新增 [C 四项 FAIL 审计独立复核报告](docs/FastLedger-R0-C四项FAIL需求与验收口径审计-独立复核.md)。**总判定 PARTIAL，要求 WorkBuddy 仅修订原审计报告的分类 / 边界 / 方案表述**；不改业务代码、测试、fixture、PRD 或 D-3 决策。
+- PR #3 HEAD `b613fd15` 与 main `dff32746` 已分叉（ahead 25 / behind 29）；PR 仍 OPEN、未合并。R0 继续 BLOCK，不授权 R1–R7 / UI-DESIGN-02 / PWA。
+
 ## [1.88] - 2026-11-08
 
 ### R0 第十三次复核后续：当前 HEAD CI 与 Artifact 独立核验
