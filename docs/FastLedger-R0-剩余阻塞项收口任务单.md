@@ -7,7 +7,7 @@
 > - `origin/main` = `b4309dbd481423321f6740dfad5099ad037b0e10`（未变）。
 > - PR #3 `open / draft=false / merged=false / base=main / head=06e077f / commits=27`；PR #4 `open / draft=true / head=16705fd`。
 > - 仓库 `private=false` / `visibility=public`（Owner「改回 Private」决策**仍未执行**）。
-> - 旧提交 `259bd11` 匿名 `GET /commits/259bd11` 仍 **HTTP 200**；最近 15 条 CI runs 最新 success 为 `b4309db` 的 main push，**未见覆盖 `06e077f` / `ad34df1` 的 run**。
+> - 旧提交 `259bd11` 匿名 `GET /commits/259bd11` 仍 **HTTP 200**（本轮经 `api.github.com` 复核）；CI run `42467412803`（`head_sha=ad34df1`，success）覆盖的是含 A05 代码（`50d349e`）的 `ad34df1` 树；更晚 HEAD `06e077f` 无专属 CI run（纯文档提交，PR #3 push 不自动触发 CI）。
 > - **R0 仍为 BLOCK**；`docs/FastLedger-R0-收尾执行清单.md` §8「最终 R0 放行条件」9 条全部 `[ ]` 未勾选（L181–189）。
 
 ---
@@ -20,7 +20,7 @@
 | BLOCKER-02 | t021 分类覆盖无 Owner 裁决（WorkBuddy 自署） | `pending owner decision`；覆盖仍在 `category-overrides.json` | B |
 | BLOCKER-03 | OBS-ACCT-VIS-390：390px 账户名称列被 CSS 隐藏 | `FAIL / closed=false / 待 Owner 裁决`；清单外独立项 | B |
 | BLOCKER-04 | C 套件 4 FAIL / 59 BLOCKED（`164/4/59/1/228`） | 4 条 FAIL 均非可信运行时断言；I-LOGIN-10 漏计为 BLOCKED | A + B |
-| BLOCKER-05 | A05 代码整改 + CI 证据覆盖关系 | A05 代码 `ad34df1` 已 CI 覆盖（run `42467412803`，A 11/11）；最新 HEAD `06e077f` 仅文档、无新 CI | D + C |
+| BLOCKER-05 | A05 代码整改 + CI 证据覆盖关系 | A05 *代码* 整改提交 `50d349e`，经 CI run `42467412803`（head_sha=`ad34df1`，含 `50d349e` 代码）实测 success（A 11/11）；更晚 HEAD `06e077f` 仅文档、无新 CI | D + C |
 | BLOCKER-06 | D-4 期初余额：方案定稿、功能未实现 | 技术方案已确定；实施前需源码核对与测试设计 | B |
 | BLOCKER-07 | D-8 备份区块：方案定稿、功能未实现、保留策略冲突 | 技术方案已确定；保留 7 份 vs 14–30 份冲突待 Owner | B |
 | BLOCKER-08 | G-1 / G-2 / G-3 范围外已确认缺口（独立工作线） | 已登记、未实施、未授权验收 | B |
@@ -98,15 +98,17 @@
 
 ### BLOCKER-05 · A05 代码整改与 CI 证据覆盖
 
-1. **唯一编号与当前状态**：A05 慢网场景整改**已完成并 CI 验证**（代码 `ad34df1`，CI run `42467412803`，A 11/11 success）。当前 HEAD `06e077f` 仅为文档修订，**未改 A05 代码**，故无针对 `06e077f` 的新 CI 必要。
+> **勘误（2026-11-12）**：A05 *代码* 整改提交为 **`50d349e`**（非 `ad34df1`）；`ad34df1` 是 `50d349e` 之上的文档修订提交，亦是 CI run `42467412803` 实测的 `head_sha`。原稿误将代码提交写为 `ad34df1`、并误称「无覆盖 ad34df1 的 run」，已在本轮核查（git 历史 + GitHub API `head_sha` 核对）中更正，见要素 1/2/3。
+
+1. **唯一编号与当前状态**：A05 慢网场景整改**已完成并 CI 验证**。A05 *代码* 整改提交为 **`50d349e`**（在 `a-scenarios.js` 引入 `waitForFunction` 轮询 + `pending.disabled === true` 断言，并附四段证据）；CI run `42467412803` 以 `ad34df1` 为 `head_sha` 实测 success（A 11/11），而 `ad34df1` 包含 `50d349e` 的代码。当前 HEAD `06e077f` 仅为文档修订（C 套件审计报告），**未改 A05 代码**，故无针对 `06e077f` 的新 CI 必要。
 2. **对应需求条款、代码文件及具体行号**：
    - `tools/r0/e2e/specs/a-scenarios.js:168–194` — A05 块：`Network.emulateNetworkConditions` 设 `latency:800`；`:184–186` `page.waitForFunction(() => {...}, null, { timeout: 4000 })` 轮询取回 `{text, disabled}`；判定增 `pending.disabled === true`。
-   - 提交 `ad34df1c8854f792231ed5152b61e2e22d115e8b`（A05 块 `+8/−4`）。
-3. **当前问题的可核查证据**：CI run `42467412803` head=`ad34df1`，`SUMMARY {"A:PASS":11,"total":11}`；最近 15 条 CI runs 最新 success 为 `b4309db`（main push），**无覆盖 `06e077f`/`ad34df1` 的 run**——这是正常（06e077f 是纯文档提交）。**不得把 `ad34df1` 的 A 11/11 冒充为 `06e077f` 的验证**。
+   - A05 *代码* 整改提交 **`50d349e`**（`test(r0): A05 慢网场景补齐 pending/disabled 真实断言与四段本地证据`）：在 `a-scenarios.js` 引入 `waitForFunction(() => {...})` 轮询 + `pending.disabled === true` 断言，并附 `docs/r0-evidence-13th-a05/` 四段证据（baseline/after/negative/restored）。该代码自 `50d349e` 起经 `ad34df1` → `e82187c` → `b613fd1` → `06e077f` 一路**未改动**（`git log` 核验：中间均为 C 套件审计报告文档修订）。
+3. **当前问题的可核查证据**：CI run `42467412803`（`name=R0 E2E`，`head_branch=fix/r0-sixth-runtime-defects`）经 GitHub API 核实 `head_sha=ad34df1c8854f792231ed5152b61e2e22d115e8b`、`conclusion=success`、`SUMMARY {"A:PASS":11,"total":11}`。该 `head_sha=ad34df1` 是 `50d349e`（A05 代码）之上的文档修订提交，故 CI 实测覆盖的是「含 A05 代码改动的 `ad34df1` 树」。**不存在覆盖更晚 HEAD `06e077f` 的 CI run**（自 `ad34df1` 起的 `e82187c`/`b613fd1`/`06e077f` 均为纯文档提交，PR #3 push 不自动触发 CI，且无 A05 代码变更故无需新 CI）。**不得把 `ad34df1` 的 A 11/11 冒充为 `06e077f` 的专属验证**——A05 代码自 `50d349e` 起稳定，经 `ad34df1` CI 验证后沿用至 `06e077f`，逻辑上成立；但显式 CI 证据只锚定 `ad34df1`。
 4. **WorkBuddy 是否有权直接处理**：**是（代码与 CI 已落地）**；但「确认覆盖关系」需第三方复核背书（见 C 类）。
 5. **需 Owner 裁决的具体问题**：无——A05 代码整改与 CI 已闭环，仅待第三方复核确认。
-6. **最小修复方案**：无需修复；若需最新 HEAD CI 证据，可在 `ad34df1` 上派发 `r0-e2e.yml`（`workflow_dispatch`，`ref=fix/r0-sixth-runtime-defects`），回读 `run.head_sha` 校验。
-7. **可重复执行的验收步骤**：`git show ad34df1:tools/r0/e2e/specs/a-scenarios.js` 核对 A05 块；`GET /actions/runs/42467412803` 核对 `head_sha` + `conclusion=success`。
+6. **最小修复方案**：无需修复；若需对当前 HEAD 复跑 CI 证据，可在分支 `fix/r0-sixth-runtime-defects` 当前 HEAD（含 `50d349e` A05 代码）上派发 `r0-e2e.yml`（`workflow_dispatch`），回读 `run.head_sha` 校验（须等于该分支当前 HEAD）。
+7. **可重复执行的验收步骤**：`git show 50d349e:tools/r0/e2e/specs/a-scenarios.js` 核对 A05 块（`waitForFunction` + `pending.disabled === true`）；`GET /actions/runs/42467412803` 核对 `head_sha=ad34df1` + `conclusion=success`。
 8. **验收通过的客观标准**：A05 断言含 `pending.disabled === true` 真实轮询；CI run `conclusion=success` 且 `head_sha=ad34df1`；不把旧 CI 结果归属错误 HEAD。
 9. **需 ChatGPT 独立复核的内容**：A05 慢网断言缺口是否已实质闭合；CI 覆盖与代码提交对应关系。
 10. **对 R0 放行的影响**：A05 已闭环（属 §8 逐路由测试矩阵一部分）；不阻塞 R0，但复核确认前不得在报告中宣称「A 套件全绿即 R0 通过」。
@@ -188,7 +190,7 @@
 | **A · WorkBuddy 可直接执行** | 获书面授权后 WB 可动手，无需 Owner 新决策 | BLOCKER-04（runner 真实断言整改，动作本身 WB 可做，状态变更需裁决）、BLOCKER-09（截图基线/测试矩阵/报告草稿） |
 | **B · 必须 Owner 决策或操作** | 涉及产品语义/仓库安全/可见性/阶段划分，WB 无权自行决定 | BLOCKER-01（Private/历史清理）、BLOCKER-02（t021 meal/dinner）、BLOCKER-03（改 style.css 授权）、BLOCKER-06（D-4 阶段划分）、BLOCKER-07（D-8 策略/阶段）、BLOCKER-08（G-1/G-2/G-3 实施授权） |
 | **C · 必须第三方独立复核** | 状态变更/验收结论须 ChatGPT 等独立复核背书 | BLOCKER-04（状态变更复核）、BLOCKER-05（CI 覆盖复核）、BLOCKER-09（验收报告复核） |
-| **D · 证据足够，无需继续修改** | 现状证据已闭环，只需如实记录 | BLOCKER-05（A05 代码 `ad34df1` + CI run `42467412803` 已覆盖；`06e077f` 仅文档无新 CI 必要） |
+| **D · 证据足够，无需继续修改** | 现状证据已闭环，只需如实记录 | BLOCKER-05（A05 *代码* `50d349e` + CI run `42467412803` 以 `ad34df1` 为 head_sha 已覆盖；`06e077f` 仅文档无新 CI 必要） |
 
 ### 3.2 建议执行顺序与依赖
 
