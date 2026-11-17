@@ -1,30 +1,54 @@
-# FastLedger R0 剩余阻塞项收口任务单（第十五轮）
+# FastLedger R0 剩余阻塞项收口任务单（第十六轮修订版）
 
-> **本轮性质**：纯只读核查 + 收口任务单编写。**不改任何业务代码 / CSS / HTML / 数据库 / API / 测试判定 / fixture / C 套件统计 / PRD / Owner 决策 / 既有验收口径；不合并 PR #3 / PR #4；不 rebase、不 force-push、不改写历史；不启动 R1–R7 / UI-DESIGN-02 / PWA。**
+> **本轮性质**：纯文档修订——依据 ChatGPT 对第十五轮任务单的独立复核结论（**PARTIAL / REVISE**）修正分类与授权边界。**不改任何业务代码 / CSS / HTML / 数据库 / API / 测试判定 / fixture / runner / CI 工作流 / C 套件统计 / PRD / WBS / Owner 决策；不合并 PR #3 / PR #4；不 rebase、不 force-push、不改写历史；不启动 R1–R7 / UI-DESIGN-02 / PWA；不同步 README / CHANGELOG。**
 >
-> **当前基线（本轮重新 `fetch origin` 实测，不沿用旧报告）**：
-> - 分支 `fix/r0-sixth-runtime-defects`，HEAD = `06e077ff699b5ed74e532fcde28a6e2f9cf014`，工作区 clean。
+> **当前基线（本轮重新实测，不沿用旧报告）**：
+> - 工作分支 = `docs/r0-closure-tasklist`，HEAD（修订前）= `2ac0ebcd3bc69ba8adb2a1e2ddda24cb886b3aa5`，工作区 clean；远端该分支 head 与本地一致。
+> - PR #3 `fix/r0-sixth-runtime-defects` head = `06e077ff699b5ed74e532fcde28a6e2f9cf014`（open / 未合并）；PR #4 `docs/homeledger-inspired-design-system` head = `16705fdeafa0c4d07f6c089db7cbb38bb1ea7a11`（open / draft / 未合并）。
 > - `origin/main` = `b4309dbd481423321f6740dfad5099ad037b0e10`（未变）。
-> - PR #3 `open / draft=false / merged=false / base=main / head=06e077f / commits=27`；PR #4 `open / draft=true / head=16705fd`。
-> - 仓库 `private=false` / `visibility=public`（Owner「改回 Private」决策**仍未执行**）。
-> - 旧提交 `259bd11` 匿名 `GET /commits/259bd11` 仍 **HTTP 200**（本轮经 `api.github.com` 复核）；CI run `42467412803`（`head_sha=ad34df1`，success）覆盖的是含 A05 代码（`50d349e`）的 `ad34df1` 树；更晚 HEAD `06e077f` 无专属 CI run（纯文档提交，PR #3 push 不自动触发 CI）。
-> - **R0 仍为 BLOCK**；`docs/FastLedger-R0-收尾执行清单.md` §8「最终 R0 放行条件」9 条全部 `[ ]` 未勾选（L181–189）。
+> - 仓库仍 `public`（`private=false`）：旧提交 `259bd11` 匿名 `GET /commits/259bd11` 本轮经 `api.github.com` 复核仍 **HTTP 200**（RV-05 未关闭）。
+> - C 套件统计维持 **`164 PASS / 4 FAIL / 59 BLOCKED / 1 N/A / total 228`**；D 39/39；A 11/11（锚定 CI run `42467412803`，head_sha=`ad34df1`）。**R0 仍为 BLOCK**。
+>
+> **修订来源**：ChatGPT 第十五轮独立复核结论 PARTIAL / REVISE——主体证据整理基本可用，但存在「R0 阶段边界混淆 / Owner 决策重复提请 / C 套件硬编码 PASS 遗漏 / R0 放行条件状态表达不准确」四类问题。本轮据此修订 R16-01～R16-06 六项，其余结论保留不变。
+
+### 版本修订历史（保留，不删除）
+
+| 版本 | 提交 | 变更 |
+|---|---|---|
+| 第十五轮首版 | `ac61ebb` | 新建收口任务单，9 项 BLOCKER × 10 要素 + A/B/C/D 总表 |
+| 第十五轮勘误 | `2ac0ebc` | 修正 A05 代码提交归属（`50d349e`，非 `ad34df1`），消除 CI 覆盖自相矛盾表述 |
+| **第十六轮修订（本版）** | 本提交 | 依 PARTIAL 复核修订 R16-01～06；D-4/D-8 移出阻塞项转跟踪项；拆分 G-1/2/3；补 I-BOOKS-09/I-LOGIN-10 追踪；4 FAIL 逐条 8 项；§8 九项六维拆解 |
 
 ---
 
-## 1. 阻塞项总览（编号与状态）
+## 0. 本轮修订位置索引（R16-01～R16-06）
 
-| 编号 | 阻塞项 | 当前状态 | 主分类（详见 §3） |
+| 修订项 | 本文件中的位置 | 修订要点 |
+|---|---|---|
+| **R16-01** 重分类 D-4/D-8 | §1 总览（移出）、§4「后续实施跟踪项」（新建）、§8 分类总表 | D-4/D-8 从 BLOCKER-06/07 移出 → TRACK-01/02；不再要求 Owner 裁决是否纳入 R0；保留份数以 PRD 7 份为权威 |
+| **R16-02** 拆分 G-1/G-2/G-3 | §5「范围外确认缺口」（BLOCKER-08 拆分）、§8 分类总表 | G-1/2/3 独立小节；G-2/G-3 已裁决项从「待 Owner 裁决」中移出；仅 G-1 保留实施授权提请 |
+| **R16-03** I-BOOKS-09 硬编码 PASS | §3.1「I-BOOKS-09 测试质量追踪项」（新建） | 8 条要求逐项记录；标记为需第三方独立复核 |
+| **R16-04** I-LOGIN-10 统计归属 | §3.2「I-LOGIN-10 统计归属澄清」（新建）、§6.4 | 明确实际判定路径、计入 59 BLOCKED、「漏计」= fixture 字段污染（非计数遗漏） |
+| **R16-05** 四条 FAIL 归类 | §6「四条 FAIL 逐条归类」（重写 4 条 × 8 项） | 逐条 8 项；不以「硬编码/静态登记 FAIL」直接认定产品缺陷为零 |
+| **R16-06** §8 九项状态映射 | §7「R0 §8 九项放行条件六维拆解」（重写） | 每项六维（决策/文档/代码/运行时/CI/阻塞）；区分「Owner 决策已完成」与「整项完成」 |
+
+---
+
+## 1. 阻塞项总览（R16 修订后编号与状态）
+
+| 编号 | 阻塞项 | 当前状态 | 主分类（详见 §8） |
 |---|---|---|---|
 | BLOCKER-01 | RV-05 仓库公开 + 旧 SHA 历史凭证仍可读 | 当前树已脱敏但**历史对象仍公开可读**；Owner ACTION REQUIRED | B |
 | BLOCKER-02 | t021 分类覆盖无 Owner 裁决（WorkBuddy 自署） | `pending owner decision`；覆盖仍在 `category-overrides.json` | B |
 | BLOCKER-03 | OBS-ACCT-VIS-390：390px 账户名称列被 CSS 隐藏 | `FAIL / closed=false / 待 Owner 裁决`；清单外独立项 | B |
-| BLOCKER-04 | C 套件 4 FAIL / 59 BLOCKED（`164/4/59/1/228`） | 4 条 FAIL 均非可信运行时断言；I-LOGIN-10 漏计为 BLOCKED | A + B |
-| BLOCKER-05 | A05 代码整改 + CI 证据覆盖关系 | A05 *代码* 整改提交 `50d349e`，经 CI run `42467412803`（head_sha=`ad34df1`，含 `50d349e` 代码）实测 success（A 11/11）；更晚 HEAD `06e077f` 仅文档、无新 CI | D + C |
-| BLOCKER-06 | D-4 期初余额：方案定稿、功能未实现 | 技术方案已确定；实施前需源码核对与测试设计 | B |
-| BLOCKER-07 | D-8 备份区块：方案定稿、功能未实现、保留策略冲突 | 技术方案已确定；保留 7 份 vs 14–30 份冲突待 Owner | B |
-| BLOCKER-08 | G-1 / G-2 / G-3 范围外已确认缺口（独立工作线） | 已登记、未实施、未授权验收 | B |
-| BLOCKER-09 | R0 §8 整体放行条件 9 条全未勾选 | R0-E-35、截图基线、API/race 等门禁未闭环 | A + B + C |
+| BLOCKER-04 | C 套件 4 FAIL / 59 BLOCKED（`164/4/59/1/228`） | 4 条 FAIL 判果来源不可信（2 硬编码 + 2 静态登记）；I-LOGIN-10 为兜底 BLOCKED（详见 §3.2） | A + B + C |
+| BLOCKER-05 | A05 代码整改 + CI 证据覆盖关系 | A05 *代码* 提交 `50d349e`，经 CI run `42467412803`（head_sha=`ad34df1`）实测 success（A 11/11）；更晚 HEAD `06e077f` 仅文档、无新 CI | D + C |
+| BLOCKER-06 | R0 §8 整体放行条件（9 条逐项六维拆解） | 9 条 `[ ]` 未勾选；其中「Owner 决策」维度部分已完成（详见 §7），但整项未完成 → R0 BLOCK | A + B + C |
+
+> **R16 移出项**（不再是 R0 阻塞项，详见 §4 / §5）：
+> - 原 BLOCKER-06 D-4、原 BLOCKER-07 D-8 → **TRACK-01 / TRACK-02 后续实施跟踪项**（技术方案已定稿、功能未实现、无运行时验收，实现属 R 阶段）。
+> - 原 BLOCKER-08 G-1/G-2/G-3 → **§5 拆分**：G-2/G-3 产品决策已完成（非待裁决）；仅 G-1 保留实施授权提请。
+> - 新增 §3 测试质量追踪项：I-BOOKS-09（硬编码 PASS）、I-LOGIN-10（统计归属澄清）。
 
 ---
 
@@ -32,199 +56,365 @@
 
 ### BLOCKER-01 · RV-05 仓库公开与历史凭证暴露
 
-1. **唯一编号与当前状态**：`RV-05`（P0 安全事件残余）。当前树凭证已脱敏、`EBK_JWT_SECRET` 已轮换、本地历史已重写；但**旧提交 `259bd11` 仍匿名可读**（commit API / raw 均 HTTP 200），仓库仍 `private=false`。
+1. **唯一编号与当前状态**：`RV-05`（P0 安全事件残余）。当前树凭证已脱敏、`EBK_JWT_SECRET` 已轮换、本地历史已重写；但**旧提交 `259bd11` 仍匿名可读**（本轮 `api.github.com` 复核 HTTP 200），仓库仍 `private=false`。
 2. **对应需求条款、代码文件及具体行号**：
-   - `docs/FastLedger-R0-凭证安全核验记录.md:69–70` — 旧提交对象匿名 `GET /commits/259bd11` → HTTP 200；`raw.githubusercontent.com/.../259bd11/.../network-log.json` → HTTP 200，仍含 29 处凭证字面量。
-   - `docs/FastLedger-R0-收尾执行清单.md:34` —「RV-05 旧 Git 对象：P0 历史暴露风险仍待实际处置/验证」。
-   - `CHANGELOG.md:[1.69]`（L179）— Owner 裁决「将 GitHub 仓库由 Public 改回 Private」。
+   - `docs/FastLedger-R0-凭证安全核验记录.md:69–70` — 旧提交对象匿名 `GET /commits/259bd11` → HTTP 200；raw `network-log.json` → HTTP 200，仍含 29 处凭证字面量。
+   - `docs/FastLedger-R0-收尾执行清单.md:34` —「RV-05 旧 Git 对象：P0 历史暴露风险仍待实际处置/验证」；`:120` — Owner 执行/验证。
+   - `CHANGELOG.md:[1.69]`（L179）— Owner 裁决「将 GitHub 仓库由 Public 改回 Private」（**仅记录，未执行**）。
 3. **当前问题的可核查证据**：`GET /repos/LinTia/FastLadger/commits/259bd11` 匿名 HTTP 200（无活动分支/标签指向该 SHA，但悬空对象可达）；旧令牌受控验证已失效（HTTP 401）——**凭证值已无效，但明文历史记录仍公开**。
-4. **WorkBuddy 是否有权直接处理**：**否**。改仓库可见性、重写历史、删除远端 refs、联系 GitHub Support 均为 Owner 专属操作。CHANGELOG [1.69] L207 明确「远端历史对象清理需 Owner 明确批准」；本轮未执行任何此类动作。
-5. **需 Owner 裁决的具体问题**：① 是否在 GitHub 侧执行「改回 Private」；② 是否联系 GitHub Support 清除 `259bd11` 等悬空对象缓存；③ 改 Private ≠ 历史对象物理清除，是否需进一步历史清理评估。
-6. **最小修复方案（仅描述，需 Owner 操作）**：Owner 于 GitHub 将仓库设为 Private → 重新匿名请求 commit API / raw 应返回 404；若需彻底清除旧对象，Owner 决定是否联系 Support（提供影响面与回滚方案）。
-7. **可重复执行的验收步骤**：`curl -sS -o /dev/null -w '%{http_code}' https://api.github.com/repos/LinTia/FastLadger/commits/259bd11` 期望 404（Private 后）；`git ls-remote` 确认无活动 ref 指向 `259bd11`。
-8. **验收通过的客观标准**：匿名访问旧 SHA 与旧 `network-log.json` 均不可达（404）；仓库 `private=true`；在交付回执中如实记录「当前树脱敏」与「历史对象清理」是两件事。
-9. **需 ChatGPT 独立复核的内容**：历史暴露风险评估是否充分；「改 Private 即视为安全事件关闭」是否被错误表述（不得如此表述）。
-10. **对 R0 放行的影响**：属 §8 第 7 条「RV-05 分项如实记录」要求；不关闭则 R0 不得放行（L177：无未关闭门禁 + Owner 签字才建议 R1）。
+4. **WorkBuddy 是否有权直接处理**：**否**。改仓库可见性、重写历史、删除远端 refs、联系 GitHub Support 均为 Owner 专属操作。CHANGELOG [1.69] 明确「远端历史对象清理需 Owner 明确批准」；本轮未执行任何此类动作。
+5. **需 Owner 裁决/执行的具体问题**（保留不变）：① 是否在 GitHub 侧执行「改回 Private」；② 是否联系 GitHub Support 清除 `259bd11` 等悬空对象缓存；③ 改 Private ≠ 历史对象物理清除，是否需进一步历史清理评估。
+6. **最小修复方案（仅描述，需 Owner 操作）**：Owner 将仓库设为 Private → 重新匿名请求 commit API / raw 应返回 404；若需彻底清除旧对象，Owner 决定是否联系 Support。
+7. **可重复验收步骤**：`curl -sS -o /dev/null -w '%{http_code}' https://api.github.com/repos/LinTia/FastLadger/commits/259bd11` 期望 404（Private 后）；`git ls-remote` 确认无活动 ref 指向 `259bd11`。
+8. **验收客观标准**：匿名访问旧 SHA 与旧 `network-log.json` 均不可达（404）；仓库 `private=true`；如实记录「当前树脱敏」与「历史对象清理」是两件事。
+9. **需 ChatGPT 独立复核**：历史暴露风险评估是否充分；不得把「改 Private」表述为「安全事件已彻底关闭」。
+10. **对 R0 放行影响**：属 §8 第 7 条「RV-05 分项如实记录」；不关闭则 R0 不得放行（收尾清单 L177：无未关闭门禁 + Owner 签字才建议 R1）。
 
 ### BLOCKER-02 · t021 分类覆盖无 Owner 裁决
 
-1. **唯一编号与当前状态**：`t021`（数据集分类映射覆盖）。状态 `pending owner decision`；覆盖写入 `tools/r0/category-overrides.json`，`decidedBy` 为 WorkBuddy。
+1. **唯一编号与当前状态**：`t021`（数据集分类映射覆盖）。状态 `pending owner decision`；覆盖写入 `tools/r0/category-overrides.json`，`decidedBy` 为 WorkBuddy（本轮 Read 逐字复核：`categoryId:"dinner"`、`reason` 为「展示名餐饮-聚餐=dinner」、`decidedAt:"2026-11-05"`）。
 2. **对应需求条款、代码文件及具体行号**：
-   - `tools/r0/category-overrides.json` — `txId:"t021"`，`categoryId:"dinner"`，`decidedBy:"WorkBuddy（R0 第六次整改，分类解析补充整改）"`，`decidedAt:"2026-11-05"`。
-   - `docs/FastLedger-R0-第七次测试质量纠偏任务单.md:68–77` — 明确要求「暂不把 WorkBuddy 自行决定视为 Owner 决策；将 t021 设为 pending owner decision」。
-3. **当前问题的可核查证据**：覆盖把 `t021` 从原型 `categoryId=meal`（餐饮-聚餐）改判为 `dinner`；`decidedBy` 写为 WorkBuddy，**无 Owner 裁决证据**。第七次纠偏任务单判定此为 P1（需补 Owner 决策依据）。
+   - `tools/r0/category-overrides.json:5–11` — override 对象（`txId:"t021"` / `categoryId:"dinner"` / `decidedBy:"WorkBuddy（R0 第六次整改…）"` / `decidedAt:"2026-11-05"`）。
+   - `docs/FastLedger-R0-第七次测试质量纠偏任务单.md:68–77` — 「暂不把 WorkBuddy 自行决定视为 Owner 决策；将 t021 设为 pending owner decision」。
+3. **当前问题的可核查证据**：覆盖把 `t021` 从原型 `categoryId=meal` 改判为 `dinner`；PRD / 枚举字典对 meal/dinner 语义无定义；`decidedBy` 为 WorkBuddy，**无 Owner 裁决证据**。
 4. **WorkBuddy 是否有权直接处理**：**否**（裁决产品数据语义）。WorkBuddy 可建议、可记录冲突，但**不得替 Owner 选择 meal / dinner**。
-5. **需 Owner 裁决的具体问题**：选 `meal` → 原型可见分类与数据 ID 不同；选 `dinner` → 以展示名为准、改变原有数据映射。两种方案影响不同，需 Owner 一字/一句裁决（可在聊天中作出）。
-6. **最小修复方案（仅描述）**：Owner 裁决后，将 `decidedBy` 改为 Owner 并补 `reason`；或把覆盖移到不影响默认审计的候选文件；在裁决前保持 `pending owner decision` 标记。
-7. **可重复执行的验收步骤**：`grep -n t021 tools/r0/category-overrides.json` → 核对 `decidedBy` 是否为 Owner；`node -e` 加载 JSON 校验 schema（`$schema:"r0/category-overrides@1"`）。
-8. **验收通过的客观标准**：覆盖项 `decidedBy` 为 Owner 实名 + 日期；任务单 §4 P1 关闭；B 套件不再因该 override 维持 PARTIAL。
-9. **需 ChatGPT 独立复核的内容**：「以用户可见展示名为准」的判定逻辑是否合理；是否应保留 `meal` 原始记录与冲突日志。
-10. **对 R0 放行的影响**：影响第七次纠偏 B 套件 PARTIAL 状态；属 §8 文档一致性要求；不关闭则 B 维持 PARTIAL。
+5. **需 Owner 裁决的具体问题**（保留不变）：选 `meal` → 原型可见分类与数据 ID 不同；选 `dinner` → 以展示名为准、改变原有数据映射。两种方案影响不同，需 Owner 明确裁决。
+6. **最小修复方案（仅描述）**：Owner 裁决后将 `decidedBy` 改为 Owner 并补 `reason`；或把覆盖移到不影响默认审计的候选文件；裁决前保持 `pending owner decision`。
+7. **可重复验收步骤**：`grep -n t021 tools/r0/category-overrides.json` 核对 `decidedBy`；`node -e` 加载 JSON 校验 schema（`r0/category-overrides@1`）。
+8. **验收客观标准**：`decidedBy` 为 Owner 实名 + 日期；B 套件不再因该 override 维持 PARTIAL。
+9. **需 ChatGPT 独立复核**：「以用户可见展示名为准」判定逻辑是否合理；是否保留 `meal` 原始记录与冲突日志。
+10. **对 R0 放行影响**：影响第七次纠偏 B 套件 PARTIAL 状态；属 §8 文档一致性要求；不关闭则 B 维持 PARTIAL。
 
 ### BLOCKER-03 · OBS-ACCT-VIS-390 390px 账户名称列不可见
 
-1. **唯一编号与当前状态**：`OBS-ACCT-VIS-390`。`status=FAIL`、`closed=false`、`ownerDecision=待 Owner 裁决`；**清单外独立项，不占 228 编号、不写入 `R`**。
+1. **唯一编号与当前状态**：`OBS-ACCT-VIS-390`。`status=FAIL`、`closed=false`、`ownerDecision=待 Owner 裁决`；**清单外独立项，不占 228 编号、不写入 `R`**。（保留不变：仍为 FAIL，未经授权不得改 style.css L331。）
 2. **对应需求条款、代码文件及具体行号**：
-   - `server/web/dist/style.css:327–333` — `@media (max-width:640px)` 内 `th:nth-child(1), td:nth-child(1), ... { display: none; }`（行号核实：**L331**）。
-   - `server/web/dist/app.js:696` 账户表 4 列表头（`["账户","类型","余额","操作"]`）；`:701` / `:722` 首列 `tdN = a.name`（账户名称）。
+   - `server/web/dist/style.css:327–333` — `@media (max-width:640px)` 内 `:331` 裸全局 `th:nth-child(1), td:nth-child(1), th:nth-child(5), td:nth-child(5) { display: none; }`（本轮 sed 逐字复核）。
+   - `server/web/dist/app.js:696` 账户表 4 列表头 `["账户","类型","余额","操作"]`；`:701`/`:722` 首列 `tdN = a.name`（账户名称）。
    - `tools/r0/e2e/specs/c-controls.js:423–484` — 运行时断言 `firstTdDisplay` / `visibleInnerText` → 实测 `none` / `false`。
-3. **当前问题的可核查证据**：`docs/r0-evidence-7th-fix/p2/visibility-observation-independent.json` — `visibleInnerText:false`、`firstTdDisplay:"none"`、`postStatus:200`、`inDom:true`、`inApi:true`（数据链路正常，仅视觉不可见）。属**响应式样式问题**，非业务逻辑、非测试口径（历史曾有一次口径错位，已在第七次 P2 修正）。
+3. **当前问题的可核查证据**：`docs/r0-evidence-7th-fix/p2/visibility-observation-independent.json` — `visibleInnerText:false`、`firstTdDisplay:"none"`、`postStatus:200`、`inDom:true`、`inApi:true`（数据链路正常，仅视觉不可见）。属**响应式样式问题**，非业务逻辑、非测试口径。
 4. **WorkBuddy 是否有权直接处理**：**否**。跨多轮回执一致确认「未授权改 `style.css` L331」；状态始终 `FAIL / 待 Owner 裁决`。
-5. **需 Owner 裁决的具体问题**：① 是否将「窄屏账户名称必须可见」确立为产品要求（→ 确认为缺陷、需修）；② 是否授权改 `style.css:331`（推荐 `:has()` 收窄作用域方案）；③ 是否把其余 ≤640px 表格首列隐藏一并纳入排查。
-6. **最小修复方案（仅描述）**：将 `style.css:331` 裸全局选择器收窄为 `table:has(th:nth-child(5))`（账户表仅 4 列不匹配 → 首列恢复可见，交易表 8 列仍裁剪）；不动 `app.js` / `controls.json` / 运行器 / 228 计数。
-7. **可重复执行的验收步骤**：见 OBS 报告字段 7（390/641/1280 三视口对比 `getComputedStyle(td:first-child).display` 与 `innerText.includes(唯一账户名)`）。
-8. **验收通过的客观标准**：390px 下账户名称 `display=table-cell` 且 `innerText` 含唯一名、截图可读出；228 汇总仍为 `164/4/59/1/228`、`R` 中无 `OBS-*` key。
-9. **需 ChatGPT 独立复核的内容**：归类「响应式样式问题」是否成立；专属截图空白、证据质量是否需重采；其余表格首列是否同缺陷。
-10. **对 R0 放行的影响**：不占 228 计数，但属 §8「同视口同状态对照基线」缺口（390×844 下可见性偏差未闭环）；不影响放行计数但阻塞同视口截图基线达标。
+5. **需 Owner 裁决的具体问题**（保留不变）：① 是否将「窄屏账户名称必须可见」确立为产品要求；② 是否授权改 `style.css:331`；③ 是否把其余 ≤640px 表格首列隐藏一并排查。
+6. **最小修复方案（仅描述）**：将 `:331` 裸全局选择器收窄为 `table:has(th:nth-child(5))`（账户表 4 列不匹配 → 首列恢复可见，交易表 8 列仍裁剪）；不动 `app.js`/`controls.json`/运行器/228 计数。
+7. **可重复验收步骤**：390/641/1280 三视口对比 `getComputedStyle(td:first-child).display` 与 `innerText.includes(唯一账户名)`。
+8. **验收客观标准**：390px 下账户名称 `display=table-cell` 且 `innerText` 含唯一名；228 汇总仍为 `164/4/59/1/228`、`R` 中无 `OBS-*` key。
+9. **需 ChatGPT 独立复核**：归类「响应式样式问题」是否成立；专属截图空白是否需重采；其余表格首列是否同缺陷。
+10. **对 R0 放行影响**：不占 228 计数，但属 §8「同视口同状态对照基线」缺口；不影响放行计数但阻塞同视口截图基线达标。
 
 ### BLOCKER-04 · C 套件 4 FAIL / 59 BLOCKED（`164/4/59/1/228`）
 
-1. **唯一编号与当前状态**：`I-LOGIN-04` / `I-LOGIN-11` / `I-LOGIN-12` / `I-HOME-01` 均为 **FAIL**；`I-LOGIN-10` 为 **BLOCKED**（历史漏计）。统计基线 `164 PASS / 4 FAIL / 59 BLOCKED / 1 N/A / total 228` **原样保留**。
-2. **对应需求条款、代码文件及具体行号**：
-   - `tools/r0/e2e/specs/c-controls.js:106` — `R['I-LOGIN-04'] = bad(...)` 无条件硬编码。
-   - `:175` — `R['I-HOME-01'] = bad(...)` 无条件硬编码。
-   - `:78–85` — `classifyMissing()` 由 `controls.json.status` 静态登记 FAIL（I-LOGIN-11/12 走此路，`grep` 全文 `I-LOGIN-11|I-LOGIN-12` **0 命中**显式 `R[id]`）。
-   - `:163` — `R['I-BOOKS-09'] = ok(...)` 硬编码 PASS（零断言）。
-   - `:895–909` — 汇总循环；`:908` 兜底 BLOCKED（I-LOGIN-10 走此）。
-   - `tools/r0/e2e/fixtures/controls.json` — `I-LOGIN-04:74–88`、`I-LOGIN-10:170–184`、`I-LOGIN-11:186–200`、`I-LOGIN-12:202–216`、`I-HOME-01:442–456`（其中 I-LOGIN-04/10 因 `extract-controls.js:27` 裸 `split('|')` 未处理 `\|` 致 `evidence/status` 截断污染，只登记不修复）。
-3. **当前问题的可核查证据**：`artifacts/a05-r13-formal-ci/job.log:1070–1073` 与 runner 硬编码/静态模板**逐字一致** → 4 条 FAIL 均非浏览器观测结果；`job.log:1178` 仅 I-LOGIN-10 占位截图（4 条 FAIL 无专属截图/诊断）。注：该日志对应 `ad34df1` 旧基线 CI run `42467412803`，**非当前 HEAD 运行时**，本轮未复跑。
-4. **WorkBuddy 是否有权直接处理**：**部分**。WorkBuddy 可执行 runner 真实断言整改（把硬编码 `bad()` / `classifyMissing` 改为对原判定域的真实观测），但**状态变更（FAIL→N/A/PASS、计数调整）须 PM/Owner 书面裁决**；不得擅自放宽断言、删用例、改编号、硬编码结果制造 PASS，不得改 `164/4/59/1/228`。
-5. **需 Owner 裁决的具体问题**：I-LOGIN-04 是否将密码显隐正式纳入 PRD/规范（否则按 RV-04 同类移出 FAIL 计数）；I-LOGIN-11/12 登录页第三入口是否增控件；I-HOME-01 验收域是否由「首页本页内」改判（D-3 顶栏切换已裁决，不得重新裁决位置）。
+1. **唯一编号与当前状态**：`I-LOGIN-04` / `I-LOGIN-11` / `I-LOGIN-12` / `I-HOME-01` 均为 **FAIL**；`I-LOGIN-10` 为 **BLOCKED**（详见 §3.2）。统计基线 **`164 PASS / 4 FAIL / 59 BLOCKED / 1 N/A / total 228`** 原样保留，本轮不调整。
+2. **对应需求条款、代码文件及具体行号**（本轮 sed/grep 逐字复核）：
+   - `tools/r0/e2e/specs/c-controls.js:106` — `R['I-LOGIN-04'] = bad('浏览器中不存在「明文切换」控件（主报告登记缺失 R0-E-39）；DOM 无 eye/toggle 类元素')`：无条件硬编码 FAIL，零 DOM 查询。
+   - `:175` — `R['I-HOME-01'] = bad('本页无账本切换控件（主报告登记缺失 R0-E-01），顶部仅标题')`：无条件硬编码 FAIL，`:174` 的 `body` 未被消费。
+   - `:78–85` — `classifyMissing()`：`/缺失/` 或 `/^未实现/` → FAIL，`/待 Owner 裁决|待确认/` → N/A，`BLOCK_REASONS` → BLOCKED；`I-LOGIN-11/12` 走此静态登记路（全文无显式 `R['I-LOGIN-11'|'I-LOGIN-12']`）。
+   - `:163` — `R['I-BOOKS-09'] = ok('空态与新建后刷新已覆盖（空账本行为见 A07）')`：硬编码 PASS（详见 §3.1）。
+   - `:895–909` — 汇总循环：`:908` 兜底 `blocked('未提供可执行配方…')`（I-LOGIN-10 走此）。
+   - `tools/r0/e2e/fixtures/controls.json` — I-LOGIN-04 L74–88、I-LOGIN-10 L170–184、I-LOGIN-11 L186–200、I-LOGIN-12 L202–216、I-HOME-01 L442–456（I-LOGIN-04/10 因 `extract-controls.js:27` 裸 `split('|')` 未处理 `\|` 致 `evidence/status` 字段截断污染——I-LOGIN-10 的 `evidence` 被截为 `"缺失：app.js \`joinForm\\"`、`status` 被截为 `"joinLedger\\"`，只登记不修复）。
+3. **当前问题的可核查证据**：`artifacts/a05-r13-formal-ci/job.log:1063` `C 汇总：{"PASS":164,"FAIL":4,"BLOCKED":59,"N/A":1}`；`:1070–1073` 4 条 FAIL 明细与 runner 硬编码/静态模板**逐字一致** → 4 条均非浏览器观测结果；`:1178` 仅 `I-LOGIN-10.png` 占位截图（4 条 FAIL 无专属截图/诊断）。该日志对应 head=`ad34df1` 的 CI run `42467412803`，**非当前 HEAD 运行时**，本轮未复跑。
+4. **WorkBuddy 是否有权直接处理**：**部分**。WB 可执行 runner 真实断言整改（把硬编码 `bad()` / `classifyMissing` 改为对原判定域的真实观测），但**状态变更（FAIL→N/A/PASS、计数调整）须 PM/Owner 书面裁决**；不得放宽断言、删用例、改编号、硬编码制造 PASS，不得改 `164/4/59/1/228`。
+5. **需 Owner 裁决的具体问题**：见 §6 四条逐条「Owner 裁决问题」列（I-LOGIN-04 密码显隐是否入 PRD；I-LOGIN-11/12 登录页第三入口是否新增；I-HOME-01 验收域是否改判——D-3 顶栏位置已裁决不得重开）。
 6. **最小修复方案（仅描述）**：工作线 A——4 条判果改为对各自原判定域的真实 Playwright 观测，`detail` 实测拼装 + `shots` + 诊断；期望值与需求状态一致，不把未确认控件「存在」写成 PASS 条件；`controls.json` 逐字不变（含污染字段）。
-7. **可重复执行的验收步骤**：见 qa-r15-g1-scan 字段 7（git 状态 + wc -l + grep 关键行 + job.log 核对）。
-8. **验收通过的客观标准**：① 统计基线不变；② 判果来自真实观测、附诊断；③ 期望值与需求一致；④ 有授权链（PM/Owner 裁决 + 回归 + 第三方复核）；⑤ 零污染、G-1/G-2/G-3 不混入 C 套件。
-9. **需 ChatGPT 独立复核的内容**：4 条 FAIL 归类（需求待裁决 ×3 / 测试口径 ×1，产品缺陷 0）；「2 硬编码 + 2 静态登记」文档层结论与源码一致性；I-BOOKS-09 硬编码 PASS 使 `164` 含无断言项；工作线 A/B 隔离完整性。
-10. **对 R0 放行的影响**：**R0 仍 BLOCK**；4 条 FAIL 只能表述为「C 套件在现有 fixture+runner 登记口径下的 FAIL 条数」，不得表述为「产品缺陷 = 4」；G-1/G-2/G-3 不构成放行依据。
+7. **可重复验收步骤**：`git status` clean + `wc -l` + `grep` 关键行 + `job.log:1063/1070–1073` 核对（与 qa-r15-g1-scan 报告一致）。
+8. **验收客观标准**：①统计基线不变；②判果来自真实观测、附诊断；③期望值与需求一致；④有授权链（PM/Owner 裁决 + 回归 + 第三方复核）；⑤零污染、G-1/G-2/G-3 不混入 C 套件。
+9. **需 ChatGPT 独立复核**：4 条 FAIL 归类（详见 §6）；「2 硬编码 + 2 静态登记」文档层结论与源码一致性；I-BOOKS-09 硬编码 PASS 使 `164` 含无断言项（§3.1）；工作线 A/B 隔离完整性。
+10. **对 R0 放行影响**：**R0 仍 BLOCK**；4 条 FAIL 只能表述为「C 套件在现有 fixture+runner 登记口径下的 FAIL 条数」，不得表述为「产品缺陷 = 4」；G-1/G-2/G-3 不构成放行依据。
 
 ### BLOCKER-05 · A05 代码整改与 CI 证据覆盖
 
-> **勘误（2026-11-12）**：A05 *代码* 整改提交为 **`50d349e`**（非 `ad34df1`）；`ad34df1` 是 `50d349e` 之上的文档修订提交，亦是 CI run `42467412803` 实测的 `head_sha`。原稿误将代码提交写为 `ad34df1`、并误称「无覆盖 ad34df1 的 run」，已在本轮核查（git 历史 + GitHub API `head_sha` 核对）中更正，见要素 1/2/3。
+> **勘误保留（2026-11-12）**：A05 *代码* 整改提交为 **`50d349e`**（非 `ad34df1`）；`ad34df1` 是 `50d349e` 之上的文档修订提交，亦是 CI run `42467412803` 实测 `head_sha`。本轮不改动该锚点，仅按 R16「不夸大验证范围」保留原证据。
 
-1. **唯一编号与当前状态**：A05 慢网场景整改**已完成并 CI 验证**。A05 *代码* 整改提交为 **`50d349e`**（在 `a-scenarios.js` 引入 `waitForFunction` 轮询 + `pending.disabled === true` 断言，并附四段证据）；CI run `42467412803` 以 `ad34df1` 为 `head_sha` 实测 success（A 11/11），而 `ad34df1` 包含 `50d349e` 的代码。当前 HEAD `06e077f` 仅为文档修订（C 套件审计报告），**未改 A05 代码**，故无针对 `06e077f` 的新 CI 必要。
-2. **对应需求条款、代码文件及具体行号**：
-   - `tools/r0/e2e/specs/a-scenarios.js:168–194` — A05 块：`Network.emulateNetworkConditions` 设 `latency:800`；`:184–186` `page.waitForFunction(() => {...}, null, { timeout: 4000 })` 轮询取回 `{text, disabled}`；判定增 `pending.disabled === true`。
-   - A05 *代码* 整改提交 **`50d349e`**（`test(r0): A05 慢网场景补齐 pending/disabled 真实断言与四段本地证据`）：在 `a-scenarios.js` 引入 `waitForFunction(() => {...})` 轮询 + `pending.disabled === true` 断言，并附 `docs/r0-evidence-13th-a05/` 四段证据（baseline/after/negative/restored）。该代码自 `50d349e` 起经 `ad34df1` → `e82187c` → `b613fd1` → `06e077f` 一路**未改动**（`git log` 核验：中间均为 C 套件审计报告文档修订）。
-3. **当前问题的可核查证据**：CI run `42467412803`（`name=R0 E2E`，`head_branch=fix/r0-sixth-runtime-defects`）经 GitHub API 核实 `head_sha=ad34df1c8854f792231ed5152b61e2e22d115e8b`、`conclusion=success`、`SUMMARY {"A:PASS":11,"total":11}`。该 `head_sha=ad34df1` 是 `50d349e`（A05 代码）之上的文档修订提交，故 CI 实测覆盖的是「含 A05 代码改动的 `ad34df1` 树」。**不存在覆盖更晚 HEAD `06e077f` 的 CI run**（自 `ad34df1` 起的 `e82187c`/`b613fd1`/`06e077f` 均为纯文档提交，PR #3 push 不自动触发 CI，且无 A05 代码变更故无需新 CI）。**不得把 `ad34df1` 的 A 11/11 冒充为 `06e077f` 的专属验证**——A05 代码自 `50d349e` 起稳定，经 `ad34df1` CI 验证后沿用至 `06e077f`，逻辑上成立；但显式 CI 证据只锚定 `ad34df1`。
-4. **WorkBuddy 是否有权直接处理**：**是（代码与 CI 已落地）**；但「确认覆盖关系」需第三方复核背书（见 C 类）。
-5. **需 Owner 裁决的具体问题**：无——A05 代码整改与 CI 已闭环，仅待第三方复核确认。
-6. **最小修复方案**：无需修复；若需对当前 HEAD 复跑 CI 证据，可在分支 `fix/r0-sixth-runtime-defects` 当前 HEAD（含 `50d349e` A05 代码）上派发 `r0-e2e.yml`（`workflow_dispatch`），回读 `run.head_sha` 校验（须等于该分支当前 HEAD）。
-7. **可重复执行的验收步骤**：`git show 50d349e:tools/r0/e2e/specs/a-scenarios.js` 核对 A05 块（`waitForFunction` + `pending.disabled === true`）；`GET /actions/runs/42467412803` 核对 `head_sha=ad34df1` + `conclusion=success`。
-8. **验收通过的客观标准**：A05 断言含 `pending.disabled === true` 真实轮询；CI run `conclusion=success` 且 `head_sha=ad34df1`；不把旧 CI 结果归属错误 HEAD。
-9. **需 ChatGPT 独立复核的内容**：A05 慢网断言缺口是否已实质闭合；CI 覆盖与代码提交对应关系。
-10. **对 R0 放行的影响**：A05 已闭环（属 §8 逐路由测试矩阵一部分）；不阻塞 R0，但复核确认前不得在报告中宣称「A 套件全绿即 R0 通过」。
+1. **唯一编号与当前状态**：A05 慢网场景整改**已完成并 CI 验证**（代码 `50d349e`，CI run `42467412803` head_sha=`ad34df1`，A 11/11 success）。当前 HEAD `06e077f` 仅为文档修订，未改 A05 代码，无针对 `06e077f` 的新 CI 必要。
+2. **对应需求条款、代码文件及具体行号**：`tools/r0/e2e/specs/a-scenarios.js:168–194`（A05 块：`latency:800`、`:184–186` `page.waitForFunction(..., {timeout:4000})` 轮询 `{text,disabled}`、`:192` 判定含 `pending.disabled === true`）；代码提交 `50d349e`（`test(r0): A05 慢网场景补齐 pending/disabled 真实断言与四段本地证据`），证据 `docs/r0-evidence-13th-a05/`（baseline/after/negative/restored）。
+3. **当前问题的可核查证据**：CI run `42467412803`（`name=R0 E2E`，`head_branch=fix/r0-sixth-runtime-defects`）经 GitHub API 核实 `head_sha=ad34df1c8854f792231ed5152b61e2e22d115e8b`、`conclusion=success`、`SUMMARY {"A:PASS":11,"total":11}`。更晚 HEAD `06e077f` 无专属 CI run（纯文档、PR #3 push 不触发 CI）。**不得把 `ad34df1` 的 A 11/11 冒充为 `06e077f` 的专属验证**（不夸大验证范围）。
+4. **WorkBuddy 是否有权直接处理**：**是（代码与 CI 已落地）**；「确认覆盖关系」需第三方复核背书。
+5. **需 Owner 裁决的具体问题**：无。
+6. **最小修复方案**：无需修复；若需当前 HEAD 复跑，在 `fix/r0-sixth-runtime-defects` 当前 HEAD 派发 `r0-e2e.yml`（`workflow_dispatch`），回读 `run.head_sha` 校验。
+7. **可重复验收步骤**：`git show 50d349e:tools/r0/e2e/specs/a-scenarios.js` 核对 A05 块；`GET /actions/runs/42467412803` 核对 head_sha + conclusion。
+8. **验收客观标准**：A05 断言含 `pending.disabled === true` 真实轮询；CI run success 且 head_sha=`ad34df1`；不把旧 CI 结果归属错误 HEAD。
+9. **需 ChatGPT 独立复核**：A05 慢网断言缺口是否实质闭合；CI 覆盖与代码提交对应关系。
+10. **对 R0 放行影响**：A05 已闭环（属 §8 测试矩阵一部分）；不阻塞 R0，但复核确认前不得宣称「A 套件全绿即 R0 通过」。
 
-### BLOCKER-06 · D-4 期初余额（方案定稿、功能未实现）
+### BLOCKER-06 · R0 §8 整体放行条件（9 条，六维拆解见 §7）
 
-1. **唯一编号与当前状态**：`D-4`（期初余额技术模型）。`docs/FastLedger-R0-收尾执行清单.md:37` —「技术方案已确定；功能未实现；实施前需按 D-4 文档完成源码核对与测试设计」。
-2. **对应需求条款、代码文件及具体行号**：`docs/FastLedger-R0-D4-期初余额技术模型裁决草案.md`（Owner 已定稿）；收尾清单 L37、L132（`R0-E-06 期初余额：PRD 已要求；D-4 技术模型已定稿，但尚未实现`）、L158。
-3. **当前问题的可核查证据**：收尾清单 L20「R0 通过 ≠ 把所有 R0-E 功能全部开发完；期初余额…需在 R0 中完成准确取证、需求追溯、技术契约和后续实施拆分；业务实现按经批准的后续阶段执行」。
-4. **WorkBuddy 是否有权直接处理**：**否**（功能实现超出 R0 门禁范围，属后续阶段）。
-5. **需 Owner 裁决的具体问题**：是否将 D-4 实现纳入 R0 阶段，还是明确划为 R0 之后的后续阶段（当前文字倾向后者）。
-6. **最小修复方案（仅描述）**：若纳入 R0——按 D-4 文档补充 `opening_balance` + `opening_balance_at` 实现、跨时区/夏令时/边界测试；若划出——在收口文档明确「R0 不实现 D-4，仅完成技术契约冻结」。
-7. **可重复执行的验收步骤**：`grep -n "期初余额\|opening_balance" docs/FastLedger-R0-收尾执行清单.md` 核对状态记载。
-8. **验收通过的客观标准**：D-4 状态在文档中单一口径（已定稿 + 是否纳入 R0 实施），无「已实现」误导表述。
-9. **需 ChatGPT 独立复核的内容**：D-4 是否应作为 R0 阻塞项，还是技术契约冻结项。
-10. **对 R0 放行的影响**：若划出后续阶段，则不构成 R0 阻塞；若纳入，则需补实现与测试才放行。
-
-### BLOCKER-07 · D-8 备份区块（方案定稿、功能未实现、策略冲突）
-
-1. **唯一编号与当前状态**：`D-8`（服务器/备份区块）。收尾清单 L38「技术方案已确定；功能未实现；保留策略冲突待 Owner」；L121「保留策略暂按 PRD：每日 1 份、保留 7 份；与部署交接 14–30 份冲突，需单一权威口径；待 Owner 确认」。
-2. **对应需求条款、代码文件及具体行号**：`docs/FastLedger-R0-D8-服务器备份区块裁决草案.md`；收尾清单 L77–90（§3.2 D-8 纠正「已部署」与保留策略冲突）；L38、L121。
-3. **当前问题的可核查证据**：D-8 文档 §7.1 曾把 cron `sqlite3 .backup` 写成「已部署」；PRD §12 决策「每日 1 份、保留 7 份」与部署交接 §7.2「14–30 份」冲突；真实 manifest / integrity_check / SHA-256 / 原子发布 / failed 记录 / restore drill 均未真实部署验证。
-4. **WorkBuddy 是否有权直接处理**：**否**（功能实现 + 真实部署验证超出 R0 门禁）。
-5. **需 Owner 裁决的具体问题**：① 保留份数单一权威口径（7 vs 14–30）；② 是否将 D-8 实现纳入 R0。
-6. **最小修复方案（仅描述）**：以 PRD §12 为当前权威（每日 1 份、保留 7 份）；若改 14–30 须先修订 PRD 并同步 D-8 / 部署交接；真实 manifest 与恢复演练按后续阶段。
-7. **可重复执行的验收步骤**：`grep -n "保留\|份\|backup" docs/FastLedger-R0-收尾执行清单.md docs/FastLedger-R0-D8-*.md` 核对口径一致性。
-8. **验收通过的客观标准**：PRD / D-8 / 部署交接三处保留策略一致；D-8 §7.1 不得写「已部署」无证据。
-9. **需 ChatGPT 独立复核的内容**：D-8 是否应作为 R0 阻塞项。
-10. **对 R0 放行的影响**：同 BLOCKER-06；属「方案定稿未实现」，按 Owner 裁决划阶段。
-
-### BLOCKER-08 · G-1 / G-2 / G-3 范围外已确认缺口（独立工作线）
-
-1. **唯一编号与当前状态**：三条**范围外已确认缺口**，独立工作线 B，只登记、未实施、未授权验收：
-   - `G-1`：PRD §12.1 `[1.12]`（`PRD.md:581–587`）邀请链接入户注册流程 Web 0 实现。
-   - `G-2`：D-3 顶栏账本切换器（`#navBooks` 永久 hidden，收尾清单 L115 已裁决，但未落实）。
-   - `G-3`：首页「结余」用账户余额合计作「净资产」（与 Owner 已定「本月收入−本月支出」不符，PR #4 `16705fd` 已确认口径）。
-2. **对应需求条款、代码文件及具体行号**：
-   - `docs/FastLedger-R0-C套件剩余4条FAIL-需求与验收口径独立审计报告.md` §0.8.1（工作线 B 表）、§3.10（`G1-V-01..11` / `G1-R-01/02`）、§6.1.1（`G2-V-01..03` / `G2-R-01`）。
-   - 后端 `join` 路由 `server/internal/api/router.go:128` 公开；前端未接（审计报告取证）。
-3. **当前问题的可核查证据**：审计报告 §0.8.1「工作线 B **独立编号** `G1-V-*`/`G2-V-*`；**严禁借用任何 `I-*` 用例 ID**；不写入 `c-controls.js`、不改 `controls.json`」。`grep` 在 `controls.json`/`c-controls.js` 中 `G1-V-|G2-V-` 均为 **0 命中**（隔离成立）。
-4. **WorkBuddy 是否有权直接处理**：**否**（实现与验收须另行书面授权）。本轮只登记。
-5. **需 Owner 裁决的具体问题**：是否授权 G-1/G-2/G-3 的实现与独立验收（独立脚本 + 独立证据目录 + 独立留痕）。
-6. **最小修复方案（仅描述）**：另行授权后，按审计报告 §3.10 / §6.1.1 的独立编号与验收表实施；不与 C 套件 4 FAIL 混用编号、不抵消、不合并。
-7. **可重复执行的验收步骤**：`grep -c "G1-V-\|G2-V-" tools/r0/e2e/fixtures/controls.json tools/r0/e2e/specs/c-controls.js` 期望 0（确认不混入 C 套件）。
-8. **验收通过的客观标准**：G-1/G-2/G-3 各自独立验收通过、独立留痕；C 汇总 `164/4/59/1/228` 不受影响；两线不共用编号/结果。
-9. **需 ChatGPT 独立复核的内容**：工作线 B 隔离完整性；G-3 首页结余口径偏差是否应 upgrade 为 BLOCKER。
-10. **对 R0 放行的影响**：范围外缺口说明「4 条 FAIL 不是产品状态上界」，但**不构成 R0 可放行依据**；其实施须授权后单独闭环。
-
-### BLOCKER-09 · R0 §8 整体放行条件（9 条全未勾选）
-
-1. **唯一编号与当前状态**：`R0-RELEASE-GATE`。收尾清单 L179–191「最终 R0 放行条件」9 条全部 `[ ]` 未勾选；结论「**仍为 BLOCK**」。
-2. **对应需求条款、代码文件及具体行号**：`docs/FastLedger-R0-收尾执行清单.md:181–189`：
-   - [ ] 13 个原型页面逐页证据/差异/映射
-   - [ ] 228 条控件逐项可观察结果证据
-   - [ ] prototype 与实现同视口同状态对照基线（normal/loading/empty/error/success/permission/offline/conflict）
-   - [ ] R0-E-35 经 Owner/CI 独立复跑并修复/风险接受
-   - [ ] API 权限/DTO/错误/测试矩阵完整 + race 结果可追溯
-   - [ ] D-3/D-5/D-6 等决策已由 Owner 明确（D-2 PWA OCR 已排除）
-   - [ ] RV-05 分项如实记录
-   - [ ] README/CHANGELOG/主报告/D-4/D-8/截图索引/回执状态一致
-   - [ ] Owner 审阅最终验收报告并明确授权 R1
-3. **当前问题的可核查证据**：L191「2026-11-05 已关闭 D-3/D-5/D-6/D-2/RV-04 的 Owner 决策项；这不代表截图、逐控件运行时、R0-E-35、API/race 测试等 R0 门禁已完成」。
+1. **唯一编号与当前状态**：`R0-RELEASE-GATE`。收尾清单 L179–191「最终 R0 放行条件」9 条全部 `[ ]` 未勾选；L191 明确「**当前结论：仍为 BLOCK**」，同时说明「2026-11-05 已关闭 D-3/D-5/D-6/D-2（当前 Web R0 范围）/RV-04 的 Owner 决策项；这不代表截图、逐控件运行时、R0-E-35、API/race 测试等 R0 门禁已完成」。**R16 修正**：9 条中第 6 条的「Owner 决策」维度已完成，但整项（含文档一致/运行时/CI 证据）未完成——不得写成「9 条全部等待 Owner 决策」。逐项六维见 §7。
+2. **对应需求条款、代码文件及具体行号**：`docs/FastLedger-R0-收尾执行清单.md:181–189`（9 条），`:191`（结论 + 决策已关闭说明），`:111–121`（§5 Owner 决策清单：D-3/D-5/D-6/D-2/RV-04 均「已裁决」，RV-05「Owner 执行/验证」，D-8「待 Owner 确认」——R16-01 已把 D-8 移出阻塞项、7 份以 PRD 为权威）。
+3. **当前问题的可核查证据**：见 §7 每项「证据」列。核心：决策完成 ≠ 整项完成；9 条均无「整项完成」证据。
 4. **WorkBuddy 是否有权直接处理**：**部分**。WB 可执行截图基线补齐、写验收报告草稿、补 API/race 测试（需授权）；Owner 签字与决策不可替代。
-5. **需 Owner 裁决的具体问题**：上述 9 条中哪些可在 R0 内闭环、哪些明确 defer 到后续阶段；最终是否签字放行 R1。
-6. **最小修复方案（仅描述）**：逐条对照 §8 清单，能由 WB 执行的（截图基线、测试矩阵、报告草稿）先执行并留证；需 Owner 的（决策确认、签字）单独提请。
-7. **可重复执行的验收步骤**：`grep -n -E '^\- \[ \]' docs/FastLedger-R0-收尾执行清单.md` 列出未勾选项；逐项核对证据目录。
-8. **验收通过的客观标准**：9 条中 R0 范围内项全部 `[x]` 且有证据；Owner 签字；无未关闭门禁、无未裁决业务阻塞。
-9. **需 ChatGPT 独立复核的内容**：放行条件完整性；是否遗漏本任务单 BLOCKER-01~08 之外的项。
-10. **对 R0 放行的影响**：**直接决定 R0 是否放行**；当前 9 条全未勾选 → R0 BLOCK。
+5. **需 Owner 裁决/执行的具体问题**：§7 表中标「仍阻塞且需 Owner」的维度（RV-05 执行、最终签字放行 R1）；**不含已裁决的 D-3/D-5/D-6/D-2/RV-04**。
+6. **最小修复方案（仅描述）**：逐条对照 §7，WB 可执行的（截图基线、测试矩阵、报告草稿）先执行留证；需 Owner 的（RV-05、签字）单独提请。
+7. **可重复验收步骤**：`grep -n -E '^\- \[ \]' docs/FastLedger-R0-收尾执行清单.md` 列未勾选项；对照 §7 六维表逐项核对证据目录。
+8. **验收客观标准**：9 条中 R0 范围内项全部 `[x]` 且有证据；Owner 签字；无未关闭门禁、无未裁决业务阻塞。**本轮不勾选原始清单任何项**。
+9. **需 ChatGPT 独立复核**：§7 六维状态映射是否准确；是否遗漏 BLOCKER-01～05 之外的项。
+10. **对 R0 放行影响**：**直接决定 R0 是否放行**；当前 9 条整项全未完成 → R0 BLOCK。
 
 ---
 
-## 3. 分类总表、执行顺序与依赖
+## 3. 测试质量独立追踪项（R16-03 / R16-04 新增）
 
-### 3.1 A / B / C / D 分类
+> 两项均为**测试质量问题**，不是产品缺陷判定；不修改 `controls.json` / `c-controls.js` / runner / fixture / `164/4/59/1/228`；均标记为需第三方独立复核。
 
-| 分类 | 含义 | 包含阻塞项 |
+### 3.1 I-BOOKS-09 硬编码 PASS 风险（R16-03）
+
+1. **唯一编号与状态**：`I-BOOKS-09`（C 套件 164 条 PASS 之一）。runner 判果为 PASS，但为**硬编码、零断言**；状态保留 PASS，不改判 FAIL/BLOCKED/N/A。
+2. **代码位置（逐字复核）**：`tools/r0/e2e/specs/c-controls.js:163` — `R['I-BOOKS-09'] = ok('空态与新建后刷新已覆盖（空账本行为见 A07）');`。该语句仅返回字符串字面量，**无 locator / click / innerText / 数据回读 / screenshot 调用**。
+3. **对照 `controls.json`**：I-LOGIN 同段（约 L394–408）审计已记 I-BOOKS-09 的 `control: 顶栏「账本」`、`status: 已实现｜截图已见｜R0-E-01`，而 head 中 `#navBooks` 永久 hidden、runner 断言的却是「空态与新建后刷新」——存在**编号/定义漂移**（审计 §5.4 L808–811）。
+4. **R16-03 要求的 8 项逐项落实**：
+   - **(1) 核对 PRD/原型要求**：`controls.json` 中 I-BOOKS-09 定义为「顶栏『账本』」入口（R0-E-01）；D-3 已裁决账本切换置于顶栏（收尾清单 L115）。PRD 层面未单独规定「空态与新建后刷新」为该用例判据——需第三方复核确认判据来源。
+   - **(2) 核对当前代码是否真正执行**：`showNav()`（app.js:120）、`#navBooks`（app.js:236 仅 `classList.add("active")`）等未见 `#navBooks` 由 hidden 变可见的稳定入口；runner 该条**没有执行任何账本切换操作**。
+   - **(3) 核对可观察结果/失败断言/数据回读/截图**：`ok()` 默认 `shots=[]`；该条无 `shots`、无失败断言、无数据回读、无专属截图（`job.log:1109–1203` 上传清单无 I-BOOKS-09.png）。
+   - **(4) 明确硬编码 PASS ≠ 真实验收通过**：PASS 来自字符串字面量，非浏览器观测；`164` 应表述为「登记口径下的 PASS 条数，至少含 1 条无断言硬编码 PASS」，不得表述为「164 条独立运行时通过」（审计 §5.4 L810）。
+   - **(5) 最小真实断言整改方案（仅描述）**：对待测对象按真实判定域补 Playwright 观测（DOM 可见性/点击/回读/截图 + detail 实测拼装），具体判据待 (1) 确认后定；不得只把 `ok()` 换成另一字符串。
+   - **(6) 不自改状态**：不得自行把 PASS 改 FAIL/BLOCKED/其他；状态变更须书面裁决 + 真实断言 + 全量回归。
+   - **(7) 不改计数/编号**：不改 228 条清单、控件编号、`164/4/59/1/228`。
+   - **(8) 第三方复核标记**：**需 ChatGPT 独立复核**（判据来源、`164` 口径表述、整改方案）。
+5. **WorkBuddy 权限边界**：本轮仅登记与描述，**不得修改 runner**；真实断言整改须后续明确书面授权（属 C 套件 runner 整改工作线 A 的同类测试质量问题）。
+6. **对 R0 放行影响**：不改变统计，但说明 `164` 含无断言项 → `164 PASS` 不得作为「逐控件运行时验收已完成」的依据（关联 §7 第 2 条）。
+
+### 3.2 I-LOGIN-10 统计归属澄清（R16-04）
+
+1. **唯一编号与状态**：`I-LOGIN-10`（登录·加入账本入口）。当前 runner 判果 **BLOCKED**（非 4 条 FAIL 之一），**计入 59 条 BLOCKED**。
+2. **(1) 当前实际判定路径**（本轮源码 + 报告逐字复核）：
+   - `controls.json:170–184` 该条 `input/success/fail/data/target` 均为「未实现」、`action:"应存在第三入口"`；`evidence` 被裸 `split('|')` 截为 `"缺失：app.js \`joinForm\\"`、`status` 被截为 `"joinLedger\\"`（污染字段）。
+   - `c-controls.js` **无显式 `R['I-LOGIN-10']`**（grep 0 命中）；`classifyMissing()` 不触发（污染后 status 不含 `缺失`、action 以「应」开头不匹配 `/^未实现/`）；BLOCK_REASONS 不命中 → 落到汇总循环 `:908` 兜底 `blocked('未提供可执行配方：该控件的交互目标未以稳定选择器出现在页面')`。
+   - 审计报告 §1.4（L176）、§3.6（L494）均记「`classifyMissing` 返回 null → `c-controls.js:908` BLOCKED；维持 BLOCKED，不改判 PASS」。
+3. **(2) 是否计入 59 BLOCKED**：**是**。`:908` 的 `row(c,'BLOCKED',...)` 进入 `results`，由汇总 `tally`（`:911` 起）计入 BLOCKED；`job.log:1063` 的 `BLOCKED:59` 包含该条。本轮不改此计数。
+4. **(3)「漏计」的准确含义（消歧，不推断）**：
+   - **不是「总数计算遗漏」**：228 条总数、59 BLOCKED 计数均含 I-LOGIN-10（见 (2)）。
+   - **不是「当前报告状态遗漏」**：当前报告已登记该条为 BLOCKED（审计 §1.4/§3.6、`job.log:1178` 占位截图）。
+   - **是「fixture 字段抽取缺陷导致的需求/状态登记遗漏」**：`extract-controls.js:27` 裸 `split('|')` 未处理 Markdown 转义 `\|`，把 `controls.json` 中该条的 `evidence`/`status` 字段截断污染，使原始 PRD 需求文字（「缺失：app.js joinForm / joinLedger / 应存在第三入口」）在结构化字段中丢失，runner 无法据其分类，只能兜底 BLOCKED。审计中「`FAIL 4→5`」仅为**静态因果推断预测值**（若字段未污染则按 `/缺失/` 规则会走 FAIL），**非实测**、本轮不采信为事实。
+5. **WorkBuddy 权限边界**：仅澄清归属，**不得改统计、不得改判 BLOCKED→PASS/FAIL、不得改 fixture**。
+6. **需 ChatGPT 独立复核**：判定路径（兜底 BLOCKED）与「漏计」三层消歧是否准确；`FAIL 4→5` 是否始终标注为静态推断而非实测。
+7. **对 R0 放行影响**：不改变 `164/4/59/1/228`；I-LOGIN-10 维持 BLOCKED，与 G-1（PRD §12.1 邀请流程）为不同对象，不得混同（审计 §3.6/§5.2）。
+
+---
+
+## 4. 后续实施跟踪项（R16-01：D-4 / D-8 移出 R0 阻塞项）
+
+> **R16-01 依据**：收尾清单 §0（L14–23）明确「R0 通过不等于把所有 R0-E 功能全部开发完……业务实现按经批准的后续阶段执行」；D-4 文档 L3/L17/L238、D-8 文档 L3/L17/L192 均写「**技术方案已确定、功能未实现、无运行时验收；实现属 R 阶段**」。因此 D-4/D-8 **不构成 R0 门禁阻塞**，转为「后续实施跟踪项」；**不再要求 Owner 重新裁决是否纳入 R0**（此为第十五轮 R16-01 要纠正的重复提请）。本轮未修改 D-4/D-8 原始裁决文档、PRD、WBS 或业务代码。
+
+### TRACK-01 · D-4 期初余额（后续实施跟踪项，非 R0 阻塞）
+
+1. **编号与状态**：`TRACK-01`（原 BLOCKER-06）。技术方案已定稿、功能未实现、无运行时验收；实现属 R 阶段（收尾清单 L37/L132/L158；D-4 文档 L3/L238）。
+2. **需求条款/文件行号**：`docs/FastLedger-R0-D4-期初余额技术模型裁决草案.md`（Owner 定稿）；关联 R0-E-06；PRD §4.5/§6.3/§10.1；`account.go`/`tx.go`/`model/ledger.go`/`sync.go`（D-4 文档 §2）。
+3. **可核查证据**：D-4 文档 L3「技术方案已确定、功能未实现、无运行时验收」；L238「功能仍未实现，无运行时验收；实现属 R 阶段」；收尾清单 L20「业务实现按经批准的后续阶段执行」。
+4. **WB 是否有权直接处理**：**否**（功能实现属 R 阶段，超出 R0 门禁范围）。
+5. **Owner 裁决问题**：**无**（是否纳入 R0 已由收尾清单 §0/§6 明确为后续阶段，不再提请）。剩余的是 D-4 文档 §14 的「未决技术问题」（时区来源、基线精度等）——属**实现前技术收敛**，非 Owner 产品裁决。
+6. **最小修复方案（仅描述，供后续阶段）**：按 D-4 文档落地 `opening_balance` + `opening_balance_at` + `balance` 物化、迁移 0009 + 三道守卫、跨时区/夏令时/边界测试。
+7. **可重复验收步骤**：`grep -n "期初余额\|opening_balance" docs/FastLedger-R0-收尾执行清单.md docs/FastLedger-R0-D4-*.md` 核对状态单一口径。
+8. **验收客观标准**：文档中 D-4 状态单一口径（已定稿 + R 阶段实现），无「已实现」误导表述。
+9. **需 ChatGPT 独立复核**：D-4 作为「后续实施跟踪项（非 R0 阻塞）」的分类是否成立。
+10. **对 R0 放行影响**：**不构成 R0 阻塞**（技术契约已在 R0 完成取证与冻结）；实现与验收按后续阶段另行授权。
+
+### TRACK-02 · D-8 服务器/备份区块（后续实施跟踪项，非 R0 阻塞）
+
+1. **编号与状态**：`TRACK-02`（原 BLOCKER-07）。技术方案已定稿、功能未实现、**真实备份执行未验证**；实现属 R 阶段（收尾清单 L38/L90；D-8 文档 L3/L192）。
+2. **需求条款/文件行号**：`docs/FastLedger-R0-D8-服务器备份区块裁决草案.md`；收尾清单 §3.2（L77–90）；PRD §4.12/§12；关联 R0-E-17、I-SET-12。
+3. **可核查证据**：D-8 文档 L3/L192「技术方案已确定、功能未实现、无运行时验收」；L118「cron 备份：部署方案/示例已定义；真实服务器配置与执行未验证」；L123「尚未取得生产服务器 crontab/timer/执行日志或备份 manifest……完整性检查与恢复演练未验证」。
+4. **保留份数权威口径（R16-01 明确）**：**以 PRD 的「每日 1 份、滚动保留 7 份」为当前权威口径**（PRD.md:557「【决策】备份：每日生成 1 份备份，滚动保留最近 7 份」；D-8 文档 §9.6 L172「当前以 PRD 为权威」；收尾清单 L89「保留策略以 PRD §12 为当前权威：每日 1 份、保留 7 份」）。
+5. **14–30 份冲突的处置（R16-01 关键修正）**：部署交接 §7.2 的「14~30 份」与 PRD 7 份冲突，作为**文档一致性待修订项**记录（由后续文档维护者在部署交接文档中向 PRD 口径对齐），**不再要求 Owner 在两个方案之间重新裁决**。**只有未来需要修改「7 份」这一口径时，才走 Owner / PRD 正式变更流程**（D-8 文档 L172、收尾清单 L89 同源口径）。
+6. **WB 是否有权直接处理**：**否**（功能实现 + 真实部署验证属 R 阶段；本轮不改任何文档正文）。
+7. **Owner 裁决问题**：**无**（保留口径已定，冲突为文档一致性修订项）。
+8. **最小修复方案（仅描述，供后续阶段）**：按 D-8 文档落地 `system/info` / `system/backup/status`（实例管理员）、真实 manifest（Online Backup + integrity_check + SHA-256/大小/schemaVersion + 原子发布）、failed 记录、restore drill 分离；首期不开放 Web 恢复/删备/改目录/整库下载/手动触发。
+9. **需 ChatGPT 独立复核**：D-8 作为「后续实施跟踪项（非 R0 阻塞）」分类是否成立；「7 份权威 + 14–30 为文档一致性项、不再提请 Owner」的表述是否准确。
+10. **对 R0 放行影响**：**不构成 R0 阻塞**；技术方案已冻结，功能与真实部署验收按后续阶段另行授权。
+
+---
+
+## 5. 范围外确认缺口（R16-02：G-1 / G-2 / G-3 拆分）
+
+> 三项保持**独立编号**，不写入 `tools/r0/e2e/fixtures/controls.json` 或 `c-controls.js`，不相互抵消/合并/共用编号（`grep -c "G1-V-\|G2-V-"` 在上述两文件应为 0）。本轮只登记，不实施、不改动任何产品决策。
+
+### 5.1 G-1 · 邀请链接入户注册流程（PRD 已定需求，Web 0 实现）
+
+1. **编号与状态**：`G-1`（确认缺口，范围外工作线 B）。PRD 需求已定、Web 实现缺口存在、独立验收工作线已设计；**实施需后续阶段授权**。
+2. **PRD 需求（逐字引用）**：`docs/FastLedger-产品需求文档-PRD.md:581–587` 【决策】`[1.12]`——「邀请与公开注册解耦……邀请是关闭注册后的唯一入户通道」；L585「**注册流程：访问邀请链接 → 展示账本名与邀请人 → 设置用户名 / 密码 → 原子建 `user` + `book_members`**」；另含 TTL 默认 7 天、单次使用、限流、全生命周期审计（本轮不改动这些规则）。
+3. **Web 实现缺口**：`app.js` 对 `members/join` / `redeem` / 邀请链接 0 命中（审计 §5.2 L212）；后端公开 `POST /api/v1/books/:id/members/join`（`router.go:128`）与 A 套件 invitation 兑换已存在——非产品能力整体缺失，而是**特定链接落地 UI 流程未接**。
+4. **独立验收工作线**：审计报告 §3.10 `G1-V-01..11` / `G1-R-01/02`；独立脚本 + 独立证据目录 + 独立留痕；不借用 `I-*` 编号。
+5. **WB 是否有权直接处理**：**否**（实现与验收须后续书面授权）。
+6. **Owner 裁决问题（保留，唯一属 G-1 的提请）**：是否授权 G-1 的实现与独立验收（独立脚本/证据目录/留痕），及纳入 R0 还是后续阶段。**注意**：此提请是「实施授权」，**不是**「邀请流程是否需要」的裁决——后者已由 PRD [1.12] 定稿。
+7. **最小修复方案（仅描述）**：授权后按 §3.10 独立编号实现链接落地注册 UI + 独立验收；不与 C 套件 4 FAIL 混用编号/结果。
+8. **验收标准**：G1-V-* 全通过 + 独立留痕；C 汇总 `164/4/59/1/228` 不受影响。
+9. **需 ChatGPT 独立复核**：G-1 为「PRD 已定需求 + 实施授权待定」的分类是否准确。
+10. **对 R0 放行影响**：范围外缺口，说明「4 条 FAIL 不是产品状态上界」，但不构成 R0 放行依据。
+
+### 5.2 G-2 · D-3 顶栏账本切换器（产品决策已完成，实现未完成）
+
+1. **编号与状态**：`G-2`（确认缺口，范围外工作线 B）。**D-3 产品导航决策已完成**（Owner 2026-11-05，收尾清单 L115：「移动端 4 Tab；桌面端 5 项顶部导航；账本切换置于顶栏」）——**不再要求 Owner 决定导航位置**（R16-02 关键修正）。
+2. **产品决策已完成 vs 实际实现未完成（须区分）**：
+   - 决策层：`D-3` 已裁决「账本切换置于顶栏」，`#brand → #books` 只是「回列表再选」，**不能替代**顶栏切换器（审计 §4.3/§4.8/L661、P1-2）。
+   - 实现层：`#navBooks` 永久 hidden（`showNav` 从不移除 hidden，head 中实际路径为 `#brand → #books`，app.js:156）；顶栏切换控件未落实 → 确认缺口 G-2。
+3. **独立验收工作线**：审计报告 §6.1.1 `G2-V-01..03` / `G2-R-01`（从 `V-H-*` 剥离的 G-2 顶栏验收，独立编号）。
+4. **WB 是否有权直接处理**：**否**（实现与验收须后续书面授权）；本轮只登记。
+5. **Owner 裁决问题**：**导航位置不再提请**（已裁决）。若授权实施，Owner 仅需裁「具体 UI 实施方案/范围」（控件形态、与 I-BOOKS-09 口径同步、是否纳入 R0 排期），**不涉及是否需要顶栏切换**（审计 L718/L722）。
+6. **最小修复方案（仅描述）**：授权后按 D-3 落实顶栏可见账本切换器（候选 B：`index.html` + `showNav` + `style.css`），同步 I-BOOKS-09 口径；属工作线 B，与 I-HOME-01 整改无编号/计数关系。
+7. **验收标准**：G2-V-* 全通过（`#navBooks` 可见、可直接选目标账本）；C 汇总不变；D-3 决策不被重开。
+8. **需 ChatGPT 独立复核**：G-2 作为「产品决策已完成 + 实现未完成」的分类是否准确；是否仍残留「请 Owner 决定导航位置」表述（应为零）。
+9. **对 R0 放行影响**：范围外缺口，不构成放行依据；顶栏切换器须按 D-3 落实，不得再问「是否需要」。
+
+### 5.3 G-3 · 首页结余口径偏差（Owner 已定口径，不得再列为待裁决）
+
+1. **编号与状态**：`G-3`（确认缺口，范围外工作线 B）。**Owner 已明确采用「本月收入 − 本月支出」口径**（2026-11-07）——**不得再将该口径列为待 Owner 裁决事项**（R16-02 关键修正）。
+2. **Owner 权威口径（逐字引用）**：PR #4 `16705fd` 的 `docs/FastLedger-产品需求文档-PRD.md:194`「**首页"结余"统一定义为本月收入 − 本月支出**，只统计当前账本、本月的收入与支出交易；不等于全部资金账户余额合计，也不等于投资页"净资产"。转账不计入收入或支出」；视觉规范 `docs/FastLadger-Web-PWA视觉设计规范.md:114` 同口径（「已由 Owner 于 2026-11-07 确认……不得用全部账户余额合计或投资净资产替代」）。
+   - **版本差异如实记录**：当前 PR #3 分支与 `origin/main` 的 PRD §4.2 L194 仍只有旧的一行「顶部展示本月支出、本月收入、结余」，**未写结余定义**（审计 §0 L115 三 ref 逐字比对）。本任务单按 Owner 已确认口径登记偏差，**不修改任何 PRD/规范**。
+3. **当前实现偏差 + 代码位置（本轮 grep 复核）**：`server/web/dist/app.js:1997` — `mkCard("结余", "¥" + cents2str(balance), "accent", "净资产")`：用账户余额合计（`balance`）作「结余」并副文案标「净资产」，与 Owner 口径不符；同区 `:1995`/`:1996` 已有 `cur.income`/`cur.expense`（本月收入/支出）可用。投资页净资产（app.js:1305/1309）走独立口径，不得互相替代。
+4. **WB 是否有权直接处理**：**否**（实现须后续书面授权；本轮不改 app.js）。
+5. **Owner 裁决问题**：**口径不再提请**（已定）。若授权实施，仅涉及「修复排期/范围」，不涉及口径选择。
+6. **最小修复方案（仅描述）**：授权后把首页「结余」卡改为 `cur.income − cur.expense`（转账不计），副文案不再写「净资产」；投资页净资产保持独立口径；补独立验收。
+7. **验收标准**：首页结余 = 本月收入 − 本月支出（有交易/无交易/转账场景均正确）；投资页净资产不受影响；独立留痕。
+8. **需 ChatGPT 独立复核**：G-3 作为「Owner 口径已定 + 实现偏差」的分类是否准确；是否仍残留把该口径列为待裁决的表述（应为零）。
+9. **对 R0 放行影响**：范围外缺口，不构成放行依据；口径已定不得重开。
+
+---
+
+## 6. 四条 FAIL 逐条归类（R16-05：每条 8 项）
+
+> **方法声明（回应 R16-05）**：不得仅凭「硬编码 FAIL」或「静态登记 FAIL」就直接认定产品缺陷为零。硬编码/静态登记只说明**判果来源不可信**（非浏览器观测），既不等于产品无缺陷也不等于有缺陷；必须回到 PRD/原型要求本身判断。下列每条按 8 项列证，证据均引自仓库内可回查文件与行号；本轮无运行时复验。
+
+### 6.1 I-LOGIN-04（密码明文切换，R0-E-39）
+
+1. **PRD/原型原始要求**：审计报告 §2.1/附录 A 逐字取证——PRD、Web 设计规范、两版原型**均无「密码显隐切换」明确要求**；R0-E-39 在基准冻结文档登记为「**缺失**」。按 RV-04 同类口径，「无明确需求条款」不等于缺陷。
+2. **对应控件及代码位置**：登录密码框 `input[placeholder^="密码"]`（c-controls.js groupLogin）；前端 `dist` 对窄词族（密码显隐 toggle）**0 命中**；宽词族命中（明文 3 处均为 API Token 一次性展示、toggle 16 处为 `classList.toggle`）与密码显隐无关（审计 §2.1 口径澄清 L260）。
+3. **runner 实际判定方式**：`c-controls.js:106` 无条件 `R['I-LOGIN-04'] = bad(...)`，零 DOM 查询。
+4. **FAIL 直接原因**：硬编码 `bad()`——判果来自 runner 模板，非浏览器观测。
+5. **归类**：`需求待 Owner 裁决`（是否将密码显隐纳入 PRD/规范，否则按 RV-04 移出 FAIL 计数）+ `测试口径问题`（硬编码，需独立整改，不因待裁决而搁置）。**不是已确认产品缺陷**；也不因硬编码就直接判「缺陷为零」——需 Owner 先定需求。
+6. **WB 有权执行的最小动作**：把 `:106` 改为对登录页密码框的真实观测（DOM/类型/切换控件存在性），期望值按 Owner 裁决结果设定；不擅自把未确认控件设为存在性必过项。
+7. **需 Owner 裁决的具体问题**：是否将密码显隐切换正式纳入 PRD/设计规范；若不纳入，是否按 RV-04 同类移出 FAIL 计数（须书面裁决）。
+8. **独立验收标准**：真实断言 + detail 实测 + 截图/诊断；期望值与裁决一致；统计变更须书面裁决 + 回归 + 第三方复核。
+
+### 6.2 I-LOGIN-11（邀请码输入/提交，R0-E-38）
+
+1. **PRD/原型原始要求**：PRD §12.1 `[1.12]`（L581–587）已定「邀请链接直达注册流程」；**登录页第三入口/邀请码输入框未由 PRD 明确规定**；`基准冻结.md:163/164` 把「应存在第三入口/应输入邀请码并兑换」记为盘点者假设（审计 §3.2/§3.6）。
+2. **对应控件及代码位置**：登录页无邀请码输入/提交控件；前端对 `members/join` 0 调用（审计 §5.2 L212）。后端 `join` API 已存在。
+3. **runner 实际判定方式**：`c-controls.js:78–86` `classifyMissing()` 由 `controls.json.status` 的「缺失｜R0-E-38」静态登记 FAIL（全文无显式 `R['I-LOGIN-11']`）。
+4. **FAIL 直接原因**：静态登记（fixture 状态模板），非浏览器观测。
+5. **归类**：`需求待 Owner 裁决`（**仅限登录页控件形态**：是否新增第三入口）+ `测试口径问题`（验收域与 PRD §12.1 已定流程错位 + 静态登记）。**PRD 已定的邀请链接流程本身不是待裁决项**（已按 G-1 登记为确认缺口）。
+6. **WB 有权执行的最小动作**：把静态登记改为对登录页的真实观测；期望值按 Owner 对「登录页入口形态」的裁决设定；不得以「必须存在第三入口」为默认通过条件。
+7. **需 Owner 裁决的具体问题**：是否在登录页新增第三入口/邀请码输入框。若裁决「沿用 [1.12]、不新增登录页入口」，则两条历史 FAIL 验收域按 §1.6 改判为测试口径问题（本报告不代为改判）。
+8. **独立验收标准**：真实断言 + 诊断；与 G-1 验收严格分离（不借用 `I-*` 编号、不混入 C 计数）；状态变更须书面裁决链。
+
+### 6.3 I-LOGIN-12（邀请失效/异常反馈，R0-E-38）
+
+1. **PRD/原型原始要求**：同 6.2；「失效/异常反馈 UI」未由 PRD 单独规定；`基准冻结.md:165` 写「依赖 I-LOGIN-11」。
+2. **对应控件及代码位置**：无失效/异常反馈 UI；与 I-LOGIN-11 本质为同一流程的失败分支，审计 §1.4 明确「不删不合并」。
+3. **runner 实际判定方式**：同 6.2，`classifyMissing()` 静态登记 FAIL。
+4. **FAIL 直接原因**：静态登记 + 粒度拆分（11 的失败分支）。
+5. **归类**：同 6.2——`需求待 Owner 裁决`（登录页控件形态）+ `测试口径问题`（验收域错位 + 静态登记 + 拆分粒度）。不是已确认产品缺陷。
+6. **WB 有权执行的最小动作**：同 6.2，改真实观测、期望值随裁决；保留用例不删不合并。
+7. **需 Owner 裁决的具体问题**：同 6.2（登录页入口形态）；如裁决新增入口，还须明确 11/12/10 三者的验收标准与依赖链（当前 §基准冻结.md:165「12 依赖 11」与 :163「10 独立新增」口径不一致）。
+8. **独立验收标准**：同 6.2；状态与计数维持，变更须书面裁决链。
+
+### 6.4 I-HOME-01（首页本页账本切换控件，R0-E-01）
+
+1. **PRD/原型原始要求**：D-3 已裁决「账本切换置于**顶栏**」（收尾清单 L115，Owner 2026-11-05）；**PRD/原型未要求首页 `#view` 内容区内重复放置账本切换 select**。审计 §1.4 主分类即「`测试口径问题`」。
+2. **对应控件及代码位置**：首页 `#view` 内无 select；`app.js:1997` 等首页卡片区；顶栏 `#navBooks` 永久 hidden（G-2）。
+3. **runner 实际判定方式**：`c-controls.js:175` 无条件 `R['I-HOME-01'] = bad('本页无账本切换控件…')`，零 DOM 查询（`:174` 的 `body` 未被消费）。
+4. **FAIL 直接原因**：硬编码 `bad()` + 验收域与已裁决 D-3 冲突（把「首页本页内」当判定域）。
+5. **归类**：`测试口径问题`（主分类）；DOM 事实为首页本页内无 select，但 D-3 已把切换器定位在顶栏 → 该判定域本身与已裁决口径冲突。**不是已确认产品缺陷**。
+6. **WB 有权执行的最小动作**：把 `:175` 改为对首页 `#view` 内容区 select 存在性的真实观测，但**期望值必须与 D-3 一致**（不把「首页本页内存在 select」设为必过项）；仅提请验收域改判，由 PM/Owner 裁决。
+7. **需 Owner 裁决的具体问题**：I-HOME-01 的验收域是否由「首页本页内」改判为「顶栏切换器（G-2）」。**D-3 顶栏位置已裁决，不得重开**。
+8. **独立验收标准**：真实断言 + 诊断；G-2 落实后的顶栏验收走 §6.1.1 `G2-V-*` 独立编号，不占 `V-H-*`、不并 I-HOME-01；A 11/11、D 39/39 不回归；维持 FAIL 不改判（审计 V-H-9）。
+
+> **四条归类汇总**（回应 R16-05「不得仅凭硬编码/静态登记就认定缺陷为零」）：I-LOGIN-04/11/12 主分类为「需求待 Owner 裁决（限登录页控件形态）」+ 备注层「测试口径问题」；I-HOME-01 主分类为「测试口径问题」。「确认缺陷 = 0 条」**仅就四条 FAIL 所指的具体控件形态而言**，不覆盖 G-1/G-2/G-3 确认缺口、59 BLOCKED、1 N/A、164 中至少 1 条无断言 PASS（审计 §1.3）。四条 FAIL 全部维持，统计不变。
+
+---
+
+## 7. R0 §8 九项放行条件六维拆解（R16-06）
+
+> **方法声明**：每项按六维判断——① Owner 决策是否完成；② 文档是否一致；③ 代码是否实现；④ 运行时是否验收；⑤ CI 是否有当前有效证据；⑥ 是否仍阻塞 R0。
+> **核心纠正**：**「Owner 决策已完成」≠「整个验收项已完成」**；**不得把「决策已完成」继续写成「等待 Owner 决策」**。收尾清单 L191 与 §5（L111–121）明确 D-3/D-5/D-6/D-2/RV-04 的 Owner 决策已于 2026-11-05 关闭。本轮**只在任务单修正状态映射，不勾选原始清单任何项**。
+
+| §8 项 | ① Owner 决策 | ② 文档一致 | ③ 代码实现 | ④ 运行时验收 | ⑤ CI 当前有效证据 | ⑥ 仍阻塞 R0 | 证据位置 |
+|---|---|---|---|---|---|---|---|
+| 1. 13 页面逐页证据/差异/映射 | 不适用 | 部分（盘点报告 R1 已 PASS，但逐页证据未齐） | 不适用 | **未完成**（逐页证据缺） | 无 | **是** | 收尾清单 L39/L98、L181 |
+| 2. 228 条控件逐项可观察结果 | 不适用 | 部分（controls.json 有静态映射） | 部分（有大量未验证） | **未完成**（C 报告型：59 BLOCKED + 4 FAIL + 无断言 PASS） | 有但非通过（job.log:1063） | **是** | L40/L104/L182、§3 本任务单 |
+| 3. 同视口同状态对照基线 | 不适用 | 部分（截图 README 缺口矩阵） | 不适用 | **未完成**（缺成功/失败/权限/离线/冲突/原型对照；OBS-ACCT-VIS-390 偏差） | 无 | **是** | L39/L98–103/L183、BLOCKER-03 |
+| 4. R0-E-35 独立复跑/修复/风险接受 | 未做风险接受 | 部分（本机证据 + 隔离截图） | 否（缺陷未关闭） | **未完成**（本机复现失败，Owner/CI 未独立复跑） | 无 | **是** | L29/L55/L106/L184、L177 |
+| 5. API 权限/DTO/错误/测试矩阵 + race | 不适用 | 部分（§5.3 静态矩阵） | 部分 | **未完成**（未覆盖项 + race 缺） | 部分（历史 go test；无当前基准 race） | **是** | L41/L105/L185 |
+| 6. D-3/D-5/D-6 决策明确；D-2 排除 | **已完成**（2026-11-05，L115–118/L191） | 是（主报告/清单/导读已同步，L161） | 部分（D-3 顶栏、D-5 页未完全实现，属 G-2/G-3） | 不适用（决策项） | 不适用 | **否（决策维度）**；实现缺口按 G-2/G-3 跟踪，不阻塞决策项 | L115–118/L161/L186 |
+| 7. RV-05 分项如实记录 | **记录已完成**（CHANGELOG [1.69]），**执行/验证未完成** | 部分（当前树脱敏已记；可见性/旧对象风险待验） | 不适用 | **未完成**（259bd11 仍 HTTP 200） | 无 | **是**（BLOCKER-01） | L33–34/L57/L120/L187 |
+| 8. README/CHANGELOG/主报告/D-4/D-8/截图索引/回执一致 | 不适用 | **部分**（本任务单为 WorkBuddy 文档；README/CHANGELOG 本轮按任务要求不同步，待复核通过后决定） | 不适用 | 不适用 | 无 | **是**（状态一致性未闭环） | L42/L159/L188 |
+| 9. Owner 审阅最终验收报告并授权 R1 | **未完成**（尚未提交最终报告） | 不适用 | 不适用 | 不适用 | 无 | **是**（最终门禁） | L177/L189 |
+
+**关键状态映射结论**：
+- 第 6 项「Owner 决策」维度**已完成**（D-3/D-5/D-6/D-2/RV-04 已裁决），但整项仍因实现缺口（G-2/G-3，范围外跟踪）不写为「已完成」；**不得再写成「等待 Owner 决策」**。
+- 第 7 项 RV-05 的「记录」维度已完成、「执行/验证」维度未完成——**不得混写为「RV-05 未记录」或「RV-05 已关闭」**。
+- 其余各项六维状态详见上表；9 条整项均未勾选 → **R0 仍 BLOCK**。
+- 本轮未勾选 §8 原始清单任何 `[ ]`（`grep -n -E '^\- \[ \]'` 仍为 9 条）。
+
+---
+
+## 8. 分类总表、执行顺序与依赖（R16 修订后）
+
+### 8.1 A / B / C / D 分类
+
+| 分类 | 含义 | 包含项（R16 修订后） |
 |---|---|---|
-| **A · WorkBuddy 可直接执行** | 获书面授权后 WB 可动手，无需 Owner 新决策 | BLOCKER-04（runner 真实断言整改，动作本身 WB 可做，状态变更需裁决）、BLOCKER-09（截图基线/测试矩阵/报告草稿） |
-| **B · 必须 Owner 决策或操作** | 涉及产品语义/仓库安全/可见性/阶段划分，WB 无权自行决定 | BLOCKER-01（Private/历史清理）、BLOCKER-02（t021 meal/dinner）、BLOCKER-03（改 style.css 授权）、BLOCKER-06（D-4 阶段划分）、BLOCKER-07（D-8 策略/阶段）、BLOCKER-08（G-1/G-2/G-3 实施授权） |
-| **C · 必须第三方独立复核** | 状态变更/验收结论须 ChatGPT 等独立复核背书 | BLOCKER-04（状态变更复核）、BLOCKER-05（CI 覆盖复核）、BLOCKER-09（验收报告复核） |
-| **D · 证据足够，无需继续修改** | 现状证据已闭环，只需如实记录 | BLOCKER-05（A05 *代码* `50d349e` + CI run `42467412803` 以 `ad34df1` 为 head_sha 已覆盖；`06e077f` 仅文档无新 CI 必要） |
+| **A · WB 可直接执行** | 获书面授权后 WB 可动手，无需 Owner 新决策 | BLOCKER-04（runner 真实断言整改，动作 WB 可做，状态变更需裁决）、BLOCKER-06/§7 中 WB 可执行的截图基线/测试矩阵/报告草稿 |
+| **B · 必须 Owner 决策或操作** | 涉及产品语义/仓库安全/可见性，WB 无权自行决定 | BLOCKER-01（RV-05 Private/历史清理）、BLOCKER-02（t021 meal/dinner）、BLOCKER-03（style.css 授权）；**G-1 实施授权**（§5.1）；§7 第 9 项 Owner 签字。**已移出**：D-4/D-8（不再要求 Owner 裁决是否纳入 R0）、G-2/G-3（产品决策已完成）、§7 第 6 项（Owner 决策已完成） |
+| **C · 必须第三方独立复核** | 状态变更/验收结论须 ChatGPT 等独立复核背书 | BLOCKER-04（归类与整改）、BLOCKER-05（CI 覆盖）、BLOCKER-06/§7（六维映射与放行报告）、§3.1（I-BOOKS-09）、§3.2（I-LOGIN-10）、§4（D-4/D-8 分类）、§5（G-1/2/3 分类）、§6（4 FAIL 归类） |
+| **D · 证据足够，无需继续修改** | 现状证据已闭环，只需如实记录 | BLOCKER-05（A05 代码 `50d349e` + CI run `42467412803` head_sha=`ad34df1` 已覆盖；`06e077f` 仅文档无新 CI 必要） |
 
-### 3.2 建议执行顺序与依赖
+### 8.2 建议执行顺序与依赖
 
 ```
-阶段 0（当前）：R0 BLOCK，本任务单已落盘。所有 BLOCKER 状态如实登记。
+阶段 0（当前）：R0 BLOCK；R16 修订版任务单已落盘。所有项状态如实登记。
 
-阶段 1 · Owner 决策（B 类，无依赖，可并行提请）：
+阶段 1 · Owner 决策/操作（B 类，无依赖，可并行提请）：
   BLOCKER-01 → Owner 改 Private + 评估历史清理
   BLOCKER-02 → Owner 裁 t021（meal/dinner）
   BLOCKER-03 → Owner 裁是否修 style.css:331
-  BLOCKER-06 → Owner 裁 D-4 是否纳入 R0
-  BLOCKER-07 → Owner 裁 D-8 保留策略 + 是否纳入 R0
-  BLOCKER-08 → Owner 裁 G-1/G-2/G-3 实施授权
-  （以上任一项无 Owner 裁决，对应项保持原状态，不得 WB 自决）
+  G-1        → Owner 授权邀请流程实现与独立验收（仅实施授权）
+  §7 第 9 项 → Owner 审阅并签字放行 R1（最终门禁）
+  （不再提请：D-4/D-8 是否纳入 R0、G-2 导航位置、G-3 结余口径——均已完成）
 
 阶段 2 · WorkBuddy 执行（A 类，依赖阶段 1 授权）：
-  BLOCKER-04 → 获书面授权后改 runner 真实断言（不碰计数/状态）
-  BLOCKER-09 → 补截图基线、API/race 测试、写验收报告草稿
+  BLOCKER-04 → 授权后改 runner 真实断言（不碰计数/状态）+ I-BOOKS-09 真实断言整改
+  §7         → 补截图基线、API/race 测试、写验收报告草稿
 
 阶段 3 · 第三方独立复核（C 类，依赖阶段 2 产出）：
-  BLOCKER-04 / 05 / 09 → ChatGPT 复核断言整改、CI 覆盖、放行报告
+  ChatGPT 复核：4 FAIL 归类、I-BOOKS-09/I-LOGIN-10、CI 覆盖、六维映射、放行报告
 
-阶段 4 · 放行（依赖全部阶段 1–3 闭环 + Owner 签字）：
-  BLOCKER-09 第 9 条 Owner 签字 → 建议 R1
+阶段 4 · 放行（依赖阶段 1–3 闭环 + Owner 签字）：
+  §7 第 9 项 Owner 签字 → 建议 R1
 ```
 
-**关键依赖**：B 类是所有进展的前置（Owner 不裁决则 A/C 无授权基础）；A 类产出是 C 类输入；C 类通过 + Owner 签字是放行唯一条件。**R0 不在任何单条 BLOCKER 闭环后自动放行**——须 §8 九条全满足且 Owner 签字。
+**关键依赖**：B 类（剩余 4 项）是进展前置；A 类产出是 C 类输入；C 类通过 + Owner 签字是放行唯一条件。**R0 不在任何单项闭环后自动放行**——须 §8 九条整项全满足且 Owner 签字。
 
 ---
 
-## 4. 边界与诚实声明
+## 9. 保留不变事项、边界与交付对照
 
-- 本轮**仅重新核查、整理证据、编写本任务单**。未修改任何业务代码 / CSS / HTML / 数据库 / API / 测试判定 / fixture / `controls.json` / `c-controls.js` / PRD / Owner 决策 / 既有验收口径 / `164/4/59/1/228` 统计。
-- 未合并 PR #3 / PR #4；未 rebase、未 force-push、未改写历史；未启动 R1–R7 / UI-DESIGN-02 / PWA。
-- 所有「运行时」结论均引自仓库内**历史已落盘证据**或**本轮只读源码/文档/CI REST 核验**，未启动浏览器/服务做新增运行时验证（OBS-ACCT-VIS-390 专属截图证据质量不足项已如实标注，待重采）。
-- **R0 仍为 BLOCK**；本任务单使剩余阻塞项清晰、可执行、可验收，但**不构成 R0 通过依据**，亦不得由 WB 自行宣布 R0 通过。
-- 待 ChatGPT 独立复核本任务单后，再按结论决定下一步；G-1/G-2/G-3 实施、C 套件状态变更、style.css 修改等均须后续明确书面授权。
+### 9.1 保留不变（R16 不得弱化或改变）
+
+1. **R0 仍为 BLOCK**；不自行宣布通过，停止等待 ChatGPT 独立复核。
+2. **RV-05** 仍需 Owner 处理仓库可见性与历史对象风险（BLOCKER-01）。
+3. **t021** 仍需 Owner 对 meal / dinner 作出明确裁决（BLOCKER-02）。
+4. **OBS-ACCT-VIS-390** 仍为 FAIL；未经授权不得修改 `style.css:331`（BLOCKER-03）。
+5. **C 套件统计维持 `164 PASS / 4 FAIL / 59 BLOCKED / 1 N/A / 228 total`**；4 FAIL 与 I-LOGIN-10 BLOCKED 原样保留。
+6. **A05** 代码修复与 CI 覆盖关系保留原证据锚点（`50d349e` / run `42467412803` / head_sha=`ad34df1`），不夸大验证范围（BLOCKER-05）。
+7. **G-1/G-2/G-3 与 C 套件保持独立**（独立编号 / 独立脚本 / 独立证据目录 / 独立留痕，不写入 controls.json / c-controls.js，不相互抵消）。
+8. **不合并 PR #3 / PR #4**。
+9. **不启动 R1–R7 / UI-DESIGN-02 / PWA 业务代码实施**。
+
+### 9.2 本轮边界（诚实声明）
+
+- 本轮**仅修订本任务单文件**：`docs/FastLedger-R0-剩余阻塞项收口任务单.md`。**不同步 README / CHANGELOG**（待 ChatGPT 独立复核通过后再决定）。
+- 未修改任何业务代码 / CSS / HTML / 数据库 / API / 测试判定 / `controls.json` / `c-controls.js` / runner / fixture / CI 工作流 / C 套件统计 / PRD / WBS / Owner 决策 / 既有验收口径。
+- 所有「运行时」结论均引自仓库内**历史已落盘证据**或**本轮只读源码/文档/CI REST 核验**；本轮未启动浏览器/服务做新增运行时验证。
+- 未合并 PR；未 rebase / force-push / 改写历史；未改仓库可见性、refs。
+
+### 9.3 交付要求对照（R16 交付清单逐项回执）
+
+| # | 交付要求 | 本文件位置 |
+|---|---|---|
+| 1 | 新提交 SHA | 交付回执（提交后回填，见下） |
+| 2 | 修改文件清单 | 仅 `docs/FastLedger-R0-剩余阻塞项收口任务单.md`（本 §9.2） |
+| 3 | R16-01～06 修订位置 | §0 索引表 + 各对应章节 |
+| 4 | 修改前后分类差异 | §1 总览（移出说明）+ §4/§5/§8.1（分类变化） |
+| 5 | 仍需 Owner 决策事项及明确问题 | §8.2 阶段 1 + 各 BLOCKER 要素 5 + §5.1（G-1 授权） |
+| 6 | WB 可执行事项及权限边界 | §8.1 A 类 + 各章节「WB 是否有权」要素 |
+| 7 | 需 ChatGPT 独立复核事项 | §8.1 C 类 + 各章节要素 9 |
+| 8 | 当前 R0 阻塞状态与统计口径 | 页首基线 + §7 + §9.1 第 1/5 条 |
+
+> **停止条件**：本轮完成后停止，等待 ChatGPT 第三方独立复核。**不得自行宣布 R0 通过**。
