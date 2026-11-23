@@ -113,9 +113,9 @@
 
 | 表 | 入口 | 展开/弹窗 | 允许的验收动作 | 明确禁止 |
 |---|---|---|---|---|
-| T6 标的库 | 「编辑」按钮（`app.js:1404` 附近） | `openInstrumentDialog` | 点击 → 弹窗出现 → 关闭/取消 | 不得填写并保存任何字段 |
-| T6 标的库 | 「删除」按钮 | `confirmDialog`（标题「删除标的」） | 点击 → 确认框出现（核标题与描述文案）→ 点 `#cCancel` 取消 | **不得点击确认按钮，不得发出 `DELETE /books/:id/instruments/:id`** |
-| T7 API Token | 「撤销」按钮（`app.js:1626` 附近） | `confirmDialog`（标题「撤销 Token」） | 点击 → 确认框出现（核标题与描述文案）→ 点 `#cCancel` 取消 | **不得点击确认按钮，不得发出 `DELETE /users/me/tokens/:id`** |
+| T6 标的库 | 「编辑」按钮（`app.js:1405–1406`） | `openInstrumentDialog` | 点击 → 弹窗出现 → 关闭/取消 | 不得填写并保存任何字段 |
+| T6 标的库 | 「删除」按钮（`app.js:1407–1409`） | `confirmDialog`（标题「删除标的」，`:1409`） | 点击 → 确认框出现（核标题与描述文案）→ 点 `#cCancel` 取消 | **不得点击确认按钮，不得发出 `DELETE /books/:id/instruments/:id`** |
+| T7 API Token | 「撤销」按钮（`app.js:1628–1631`） | `confirmDialog`（标题「撤销 Token」，`:1631`） | 点击 → 确认框出现（核标题与描述文案）→ 点 `#cCancel` 取消 | **不得点击确认按钮，不得发出 `DELETE /users/me/tokens/:id`** |
 
 - **说明**：确认框取消按钮为 `#cCancel`（`app.js:36` `confirmDialog` 内 `resolve(false)`），取消不产生任何写请求。验收须记录「点击前 token 状态 / 记录条数」与「取消后一致」。
 - **硬约束**：本项验收**只允许打开后取消**；任何实际删除、撤销、保存操作均超出本文件授权范围，属破坏性操作，禁止执行。
