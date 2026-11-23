@@ -1,6 +1,6 @@
 # FastLedger R0 Owner 决策与 WorkBuddy 执行准备清单（第三版 · 依第二轮独立检查核对，并补 B6-a 专项台账与授权归属）
 
-> **文件路径**：`docs/FastLedger-R0-Owner决策与WorkBuddy执行准备清单.md`（第一版新增，第二版修订）
+> **文件路径**：`docs/FastLedger-R0-Owner决策与WorkBuddy执行准备清单.md`（第一版新增，第二版修订，第三版核对）
 > **文档性质**：**盘点 + 建议**。本文件不含、也不代表任何需 Owner 授权的执行动作；所有「建议」为待决提案，「授权范围」为**待填写模板**，非已生效授权。
 > **审查基线**：分支 `docs/r0-closure-tasklist`，本轮修订基线 HEAD `14be7c67d57fffb3d060f65f81086d5cdc44ff59`（B3–B6 草案集终版）。第一版基线为 `a5ee4e5e3586facaf7cf009d642e8f393ec11ed0`，两版行号不可混用。
 > **行号口径（重要）**：本文件所有 `文件:行号` 均指**本分支 `docs/r0-closure-tasklist` 在上述基线 SHA 时的文件内容**，**不是 `main` / `origin/main` 的行号**。若要拿行号去比对 `main`，须先按同一 SHA 检出，否则会错位。
