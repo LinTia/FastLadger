@@ -35,7 +35,7 @@
 
 **行号口径**：本文档所引 `文件:行号` 均指**本版基线 `0eee084` 时的文件内容**。因本地与远端此刻完全一致，不存在版本偏移；`p2/…` 为 `docs/r0-evidence-7th-fix/p2/` 的缩写。
 
-**自指说明**：上表「本地工作区 HEAD」「领先/落后」为**核验时点快照**。本文档自身的交付提交会使分支 HEAD 前移（**仅文档**），因此复核时 `git rev-parse HEAD` 可能比表中值多 1–2 个提交；判据是 `git diff --name-only` 只含 `docs/`，且 `git rev-list --count ad34df1..HEAD -- server/ tools/r0/ server/web/dist/ .github/workflows/` 仍为 **0**。
+**自指说明**：上表「本地工作区 HEAD」「领先/落后」「`ad34df1..HEAD` 提交数」均为**核验时点快照**。本文档自身的交付提交会使这些数值前移（**仅文档**），因此复核时 `git rev-parse HEAD` 与提交数可能比表中值多 2–4 个；**验收锚点是不变量而非总数**——`git diff --name-only` 只含 `docs/`，且 `git rev-list --count ad34df1..HEAD -- server/ tools/r0/ server/web/dist/ .github/workflows/` 恒为 **0**。
 
 **本轮核验方法（如实声明）**：
 
