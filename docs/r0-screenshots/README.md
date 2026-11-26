@@ -136,6 +136,9 @@
 | 页面 | 16 个目录：`home` 5；`login`、`accounts`、`add-transaction`、`settings` 各 4；其余 11 个各 2 |
 | 状态 × 页面 | `home` 是唯一同时有 `empty`(4) 与 `error`(1) 的页面；`error` 全库仅 1 张 |
 | 合计 | 43 张 / 1,630,964 字节；43 张 PNG 魔数均为 `89504e470d0a1a0a` |
+| 全量口径（本索引不重复编号） | 仓库 `docs/r0-screenshots/` PNG 共 **152** = 本索引 **43** + `runtime/` **5** + `pairs/` **104**（52 原型 + 52 实现）；**109 = 5 + 104** 为另册差额，本索引不重复编号 |
+
+> **全量口径书面边界**：本 README **仅索引 R0 基线批次的 43 张**（上表）。`runtime/` 5 张（首页隔离）另册见 `runtime/README.md`；`pairs/` 104 张（52 原型 + 52 实现，历史成对图）另册见 `pairs/README.md`、`pairs/manifest-prototype.json`、`pairs/manifest-impl.json`。`109 = 5 + 104`，为未被本索引纳入编号的另册差额，不得据另册截图替代 §4 未覆盖项。
 
 ---
 
