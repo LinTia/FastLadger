@@ -1335,7 +1335,7 @@ ledger.your-domain.com {
 
 ## 8.3 备份与恢复
 
-- **每日备份**：定时任务复制 `data/*.db`（SQLite 用 `.backup` 或 `VACUUM INTO` 保证一致性），保留 14~30 份。
+- **每日备份**：定时任务复制 `data/*.db`（SQLite 用 `.backup` 或 `VACUUM INTO` 保证一致性），每日 1 份、滚动保留最近 7 份。
 - 配置和 Caddy 数据一并备份。
 - 恢复：停容器 → 替换 db 文件 → **递增 `data/instance.meta` 的 `restore_epoch`（该文件不随备份恢复，详见指南 §26.1）** → 启动。
 - 客户端发现 `restore_epoch` 变化后停止旧游标增量同步，全量重建本地库，并逐条核对离线队列（R10），避免恢复后被旧缓存覆盖或重复。
@@ -1436,4 +1436,3 @@ ledger.your-domain.com {
 2. **同步 spike**：最小 WebSocket 双通道 + 离线队列幂等，确认实时与离线模型成立。
 
 这两个验证通过，整个方案的技术风险就基本解除，其余都是确定性的业务开发。
-
