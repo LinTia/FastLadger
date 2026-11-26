@@ -3,7 +3,7 @@
 > 性质：**有限范围缺陷修复**，不是进入下一开发阶段；**R0 仍 BLOCK**，不授权 R1–R7，不启动 PWA。
 > 分支：`fix/r0-sixth-runtime-defects`（独立分支，**未合并 main**）。
 > 开工基准：重新 `fetch` 后 `origin/main` = **`dadc9a3b9c567cad2bbad7e47361fb774365b949`**（`[1.81]` 第七次测试质量纠偏任务单，5 个文档类提交）。本地 `48d0fc4` 已快进，工作树干净后才建分支。
-> 交付 commit：见文末「提交与 CI」小节（PR 创建后回填）。
+> 交付 commit：见文末「提交与 CI」小节（当前 HEAD = **`2182a58`**）。PR 状态与 R0 门禁无关；R0 收口与门禁以 [`FastLedger-R0-收口总任务单-2026-11-25.md`](FastLedger-R0-收口总任务单-2026-11-25.md) 为唯一权威，本回执不代签 R0 放行。
 > 全部证据：`docs/r0-evidence-7th-fix/`（本轮新建；`docs/r0-evidence-6th/` 及更早证据**未改动、未覆盖**）。
 
 ---
