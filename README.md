@@ -127,3 +127,4 @@ python3 -m http.server 8765
 ---
 
 *本仓库同时承载**设计文档**（`docs/`、`workbuddy/`、`gpt/`）、**可交互原型**（`prototype/`）与**已实现的 Go 后端**（`server/`，阶段 0–4）。后端当前状态与验收口径见上方「当前状态」，部署相关一律以 `docs/FastLedger-部署交接-腾讯云轻量应用服务器.md` 为准。*
+
