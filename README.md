@@ -44,6 +44,7 @@
 | [`docs/FastLedger-原型还原与PWA分阶段实施总方案.md`](docs/FastLedger-原型还原与PWA分阶段实施总方案.md) | **原型还原与 PWA 分阶段实施总方案** | R0–R7 总路线、原型差异盘点、AI 分批实施纪律、移动端/PWA/离线/备份验收门禁 |
 | [`docs/FastLedger-R0-基准冻结与差异盘点.md`](docs/FastLedger-R0-基准冻结与差异盘点.md) | **R0 基准冻结与差异盘点（第三次整改后）** | 13 页/逐控件交互矩阵（228 条）、两版原型差异、当前实现与后端 API 权限/DTO/错误码/测试映射、差异根因、截图基线执行结果与阻塞清单、Owner 裁决清单；**R0 未通过 / 阻塞** |
 | [`docs/FastLedger-R0-收尾执行清单.md`](docs/FastLedger-R0-收尾执行清单.md) | **R0 收尾执行清单（2026-11-05）** | 统一区分 R0 审计门槛与后续业务实现；汇总 RV 状态、D-4/D-8 待补、Owner 决策、截图/运行时/API 测试缺口与最终放行条件 |
+| [`docs/FastLedger-R0-收口总任务单-2026-11-25.md`](docs/FastLedger-R0-收口总任务单-2026-11-25.md) | **R0 收口总任务单（第五版 · 窄口修订）** | 25 项 R0 收口任务（九条放行条件 → R0-T01…T25）、授权矩阵、逐项 10 要素台账与验收命令；**R0 仍 BLOCK，不授权 R1–R7** |
 | [`docs/FastLedger-R0-第四次证据补齐任务单.md`](docs/FastLedger-R0-第四次证据补齐任务单.md) | **R0 第四次证据补齐任务单（WorkBuddy）** | R0-E-35 独立复验、13 页同视口对照、228 条控件运行时验收、API/race 测试证据；不授权业务代码修改或启动 R1–R7 |
 | [`docs/FastLedger-R0-第五次最小整改任务单.md`](docs/FastLedger-R0-第五次最小整改任务单.md) | **R0 第五次最小整改任务单（WorkBuddy）** | 第四次独立复核纠偏：A/C BLOCKED、B/D PARTIAL；分类映射、角色/状态证据、CI 元数据、未覆盖路由与 RV-05 Owner 安全动作；不授权业务代码修改或启动 R1–R7 |
 | [`docs/FastLedger-R0-第四次证据补齐-执行回执.md`](docs/FastLedger-R0-第四次证据补齐-执行回执.md) | **R0 第四次证据补齐 · 执行回执（历史记录，已被第五次复核纠偏）** | 原文写 B/D 为 PASS，**第五次复核改判 B = PARTIAL、D = PARTIAL**（见文件开头「第三方独立复核纠偏」小节）；A/C 仍 BLOCKED；历史执行事实保留 |
@@ -126,4 +127,3 @@ python3 -m http.server 8765
 ---
 
 *本仓库同时承载**设计文档**（`docs/`、`workbuddy/`、`gpt/`）、**可交互原型**（`prototype/`）与**已实现的 Go 后端**（`server/`，阶段 0–4）。后端当前状态与验收口径见上方「当前状态」，部署相关一律以 `docs/FastLedger-部署交接-腾讯云轻量应用服务器.md` 为准。*
-
