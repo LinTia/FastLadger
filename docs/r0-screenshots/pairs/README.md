@@ -24,9 +24,9 @@
 > `git diff --stat bff6a2b..HEAD -- server/` → `server/web/dist/app.js` **+43 / −9（52 行）**，唯一提交 `0472484`（2026-11-05 18:18，`fix(r0): 有限范围修复第六次验收 4 项业务缺陷 + 独立回归门禁`）。
 > 本目录采集时间为 2026-11-05 13:38（`manifest-impl.json` → `capturedAt` 2026-11-05T05:38Z），**早于该修复**，故：
 > - `add-transaction` 与 `members` 两页的图记录的是**修复前**状态，不得作为当前实现的验收基线；
-> - 具体地，`add-transaction__impl__*` 在「类型=支出」下「分类」显示「工资」（收入类），而 `0472484` 的 `refillCategories()`（`app.js:560–576`）已按时收支过滤该下拉；
-> - 其余页面的代码路径未被 `0472484` 触及，但基准 SHA 仍应在本目录下次复采时统一刷新为当次 HEAD。
-> 本更正只改事实声明，**不改动任何 PNG**；证据张数与哈希未变。
+> - 具体地，`add-transaction__impl__*` 在「类型=支出」下「分类」显示「工资」（收入类），而 `0472484` 的 `refillCategories()`（`app.js:560–571`；`:572` 起为 `syncFormFields`）已按收支类型过滤该下拉；
+> - 除上述两页外，`0472484` 还改了 `renderTxns`（交易总表，非 13 页矩阵对象，`app.js:383`、`:397–423`）；13 页范围内其余页面的代码路径未被触及。基准 SHA 仍应在本目录下次复采时统一刷新为当次 HEAD。
+> 本更正只改事实声明，**不改动任何 PNG**；104 张 PNG 的张数与哈希未变，**本文件自身哈希已随声明更新**（见下）。
 >
 > **校验文件说明**：`SHA256SUMS.txt:108` 与 `SHA256SUMS-4th-round.txt:108` 记录的是更正前的本文件哈希（`c329854f…` / `43123890…`）。本次更正后两者不再一致——这是**声明文件被更新**所致，不是图片变化。本文件无法内嵌自身的最终哈希（自指），实测值请用 `sha256sum docs/r0-screenshots/pairs/README.md` 取得。剔除 README 一行后，其余 108 条仍全部通过：
 >
@@ -179,6 +179,6 @@ R0_BOOK_ID=1 R0_TX_ID=1 \
 | `manifest-impl.json` | 实现侧逐张元数据：同上 + `hasToken`/`action`/`actionMeta`（弹层尺寸与打开状态）/`role`（API 读取的真实角色） |
 | `seed-manifest.json` | 数据集映射（原型 id → 实现 id）、余额回填值、字段差异清单、22 笔分类映射审计（`categoryAudit`） |
 | `SHA256SUMS-4th-round.txt` | 第四次重采（分类映射修复前）的校验和，仅作历史对照 |
-| `SHA256SUMS.txt` | 上述全部文件校验和（108 行） |
+| `SHA256SUMS.txt` | 上述全部文件校验和（109 行 = 108 条证据 + 本文件） |
 
 > **校验和说明**：`SHA256SUMS.txt` 基于 LF 工作树计算。Windows 上 `core.autocrlf=true` 的 clone 会把 `*.json` / `*.md` / `*.txt` 检出为 CRLF，文本文件哈希据此不同（**PNG 哈希不受影响**）；这是行尾规范化，不是内容篡改。需要逐字节复核时用 `git -c core.autocrlf=false clone`。
