@@ -10,7 +10,7 @@
 | 项 | 值 |
 |---|---|
 | 浏览器 | Microsoft Edge `Edg/156.0.4314.58`（headless + CDP），Node `v22.22.2`，DPR 1 |
-| 业务代码基准 | `bff6a2b351bf5a039cdf7c762ec2693fb330cd00`（`server/` 自该提交起零改动） |
+| 业务代码基准 | `bff6a2b351bf5a039cdf7c762ec2693fb330cd00`（采集时点基准）。**此后 `server/` 并非零改动**，见下方「基准更正（2026-11-27）」 |
 | 视口 | `360×800` / `390×844` / `430×932` / `1280×800`（4 档） |
 | 页面 | 13 页（见 §3），每页每视口各 1 张 |
 | 张数 | 原型 **52** + 实现 **52** = **104** PNG |
@@ -19,6 +19,24 @@
 | 错误 | 两侧 `errors = 0`、`skipped = 0` |
 | 采集时间 | 2026-11-05（`manifest-*.json` 逐张记录 `capturedAt`） |
 | 轮次 | **第五次整改重采**（分类映射修复后）；上一轮产物保留为 `SHA256SUMS-4th-round.txt` |
+
+> **基准更正（2026-11-27）**：本目录原写「`server/` 自 `bff6a2b` 起零改动」，与事实不符。
+> `git diff --stat bff6a2b..HEAD -- server/` → `server/web/dist/app.js` **+43 / −9（52 行）**，唯一提交 `0472484`（2026-11-05 18:18，`fix(r0): 有限范围修复第六次验收 4 项业务缺陷 + 独立回归门禁`）。
+> 本目录采集时间为 2026-11-05 13:38（`manifest-impl.json` → `capturedAt` 2026-11-05T05:38Z），**早于该修复**，故：
+> - `add-transaction` 与 `members` 两页的图记录的是**修复前**状态，不得作为当前实现的验收基线；
+> - 具体地，`add-transaction__impl__*` 在「类型=支出」下「分类」显示「工资」（收入类），而 `0472484` 的 `refillCategories()`（`app.js:560–576`）已按时收支过滤该下拉；
+> - 其余页面的代码路径未被 `0472484` 触及，但基准 SHA 仍应在本目录下次复采时统一刷新为当次 HEAD。
+> 本更正只改事实声明，**不改动任何 PNG**；证据张数与哈希未变。
+>
+> **校验文件说明**：`SHA256SUMS.txt:108` 与 `SHA256SUMS-4th-round.txt:108` 记录的是更正前的本文件哈希（`c329854f…` / `43123890…`）。本次更正后两者不再一致——这是**声明文件被更新**所致，不是图片变化。本文件无法内嵌自身的最终哈希（自指），实测值请用 `sha256sum docs/r0-screenshots/pairs/README.md` 取得。剔除 README 一行后，其余 108 条仍全部通过：
+>
+> ```bash
+> cd docs/r0-screenshots/pairs
+> grep -v "README.md" SHA256SUMS.txt > /tmp/sums_no_readme.txt
+> sha256sum -c /tmp/sums_no_readme.txt --quiet   # rc=0，无输出
+> ```
+>
+> 未改写 `SHA256SUMS*.txt` 本身：证据清单属既有归档，本轮只做声明更正，不擅自重签哈希。
 
 ## 2. 同一数据集（关键）
 
