@@ -430,7 +430,7 @@ rc：0
 
 - 页 4 `POST /transactions`：`common.go:51`（引用已删账户/分类，`tx.go:469`、`tx.go:492`）、`common.go:62`（同 `clientUuid` 不完整回执）。
 - 页 5 `PUT /transactions/:id`：`common.go:62`、`:49`（`tx_update.go:107`、`:163`、`:206`、`:230`、`:233`）；目标已删时返回 **404**（见实现缺口第 4 条）。
-- 页 5 `DELETE /transactions/:id`：`common.go:49`（`tx.go:976` 同 clientUuid 不同内容）、`:62`（`tx.go:836` 回执不完整）、`:54`（`tx.go:864` 转账缺方向）、`:59`（`tx.go:844` → `tx.go:1077` 等转账组不完整）。
+- 页 5 `DELETE /transactions/:id`：`common.go:49`（`tx.go:976` 同 clientUuid 不同内容）、`common.go:62`（`tx.go:836` 回执不完整）、`common.go:54`（`tx.go:864` 转账缺方向）、`common.go:59`（`tx.go:844` → `tx.go:1077` 等转账组不完整）。
 - 页 6 `DELETE /accounts/:id`：`common.go:100`（账户仍有交易）、`:102`（仍有子账户）。
 - 页 7 `DELETE /categories/:id`：`common.go:105`（分类仍有交易）、`:107`（仍有子分类）。
 - 页 8 `DELETE /instruments/:id`：`common.go:80`（仍有持仓，已并入上表）。
