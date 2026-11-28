@@ -194,7 +194,7 @@
 | 30 | 导出 | offline | R07 | 三要素同 §3.1；导出为只读拉取（`GET /transactions` `:1064`） | §5.2；§5.5 第 11 行 |
 | 31 | 导出 | conflict | R08-11 | 导出页只读（`:1064`），无写调用 | §5.5 第 11 行 |
 | 32 | 家庭成员 | offline | R07 | 三要素同 §3.1；邀请/改角色/移除均为在线直调 | §5.2；§5.5 第 12 行 |
-| 33 | 家庭成员 | conflict | R08-12 | 邀请 `:1689`、改角色 `:1761`/`:1771`、移除 `:1786` 均不传版本；`common.go:115` 的 409 是成员上限 20（容量类），非版本冲突 | §5.5 第 12 行 |
+| 33 | 家庭成员 | conflict | R08-12 | 邀请 `:1689`、改角色 `:1761`/`:1771`、移除 `:1786` 均不传版本；409 分三类：invite 账本已删 → `common.go:51–53`；改角色/移除 0 行 → `common.go:64–65`；账本已删则 403 `common.go:43–46`。`common.go:115` 的成员上限 409 仅由 Web 未调用的 `members/join` 产生，非版本冲突 | §5.5 第 12 行；§5.5.1 |
 | 34 | 我的设置 | empty | R06 | 设置页为固定表单（Token 增删等区块），无集合空态 | `r0-page-mapping-13.md:43`；`app.js:1549` |
 | 35 | 我的设置 | offline | R07 | 三要素同 §3.1；Token 增删（`:1574`、`:1636`）为在线直调 | §5.2；§5.5 第 13 行 |
 | 36 | 我的设置 | conflict | R08-13 | Token 增删与 `PUT /users/me` 均不传版本；`common.go:90` 的 409 仅来自 13a 的 `PUT /users/me`（邮箱占用），非实体版本 | §5.5 第 13 行 |
@@ -249,7 +249,7 @@
 | `pairs` 采集时点基准 | `bff6a2b351bf5a039cdf7c762ec2693fb330cd00`（2026-11-04 13:45），`pairs/README.md:13` |
 | `pairs` 采集时间 | 2026-11-05 13:38（`manifest-impl.json` → `capturedAt` 2026-11-05T05:38Z） |
 | 之后 `server/` **并非零改动** | `git diff --stat bff6a2b..HEAD -- server/` → `app.js` **+43 / −9（52 行）**，唯一提交 `0472484`（2026-11-05 18:18） |
-| `0472484` 改了三处 | ① `renderTxns` 挂载 + 加载失败反馈（`app.js:383`、`:397–423`）；② `openTxForm` 分类按类型过滤 + 「（暂无可选分类）」（hunk `:550–578`，函数体 `refillCategories()` 在 `:560–571`）；③ `renderMembers` 邀请入口角色门控（`:1706–1741`） |
+| `0472484` 改了三处 | ① `renderTxns` 挂载 + 加载失败反馈（改动行 `:386`、`:400–420`）；② `openTxForm` 分类按类型过滤 + 「（暂无可选分类）」（hunk `:559–571`，含 `refillCategories()` 函数体 `:560–571`；另 `:576` 调用 `syncFormFields()`、`:599` 兜底提示）；③ `renderMembers` 邀请入口角色门控（`:1709`、`:1715–1718`、`:1744`） |
 | **E4 图直接显示已修缺陷** | `add-transaction/390x844/normal.png`（画面日期 2026/11/04）与 `pairs/impl/add-transaction__impl__390x844.png`（2026/11/05）在「类型=支出」下「分类」均显示 **「工资」**（收入类）；`0472484` 的 `refillCategories()` 已修此缺陷 → **E4 与 pairs add-transaction 图基准过期，需复采** |
 | 成员页（E12）需复核 | `renderMembers` 邀请入口改为按 `myRole` 门控（`0472484`），members 图早于该改动 → **需复核后决定是否复采** |
 | 页面级 43 张无 manifest | `capture.js` 未入库（`截图README:14`），**无法给出精确基准 SHA**；只能按入库提交 `575eae3`（2026-11-04）推定早于 `0472484`；git 不保存 mtime，本机 mtime 仅为 checkout 时间，不作依据；精确代码 SHA 不可得 |
@@ -410,18 +410,18 @@ rc：0
 
 | 页 | 页面 | 前端写调用 | 携带 `baseVersion` | 409 来源 | 409 语义 | 判定 |
 |---|---|---|---|---|---|---|
-| 1 | 登录 | `POST /auth/login` `:193`、`:209` | — | 401 为主 | 密码错 / 锁定 | N/A R08-01 |
+| 1 | 登录 | `POST /auth/login` `:193`、`:209`；条件注册 `POST /auth/register` `:192`（需 `EBK_ENABLE_REGISTER=true`，`auth_handler.go:51–53`） | — | 登录：401 为主；注册：`common.go:109–110`（仅开启注册且用户名重复时） | 密码错 / 锁定；用户名已存在（默认关闭注册时返回 403） | N/A R08-01 |
 | 2 | 首页账单 | 无写（只读 `GET /transactions` `:1912`） | — | 无写 | — | N/A R08-02 |
 | 3 | 截图识别 | 无路由 | — | — | — | N/A R01 |
 | 4 | 手动记账 | `POST /transactions` `:603` | 否（body `:586–595` 无该字段） | `common.go:49` | 同 `clientUuid` 不同内容（幂等防御） | N/A R08-04 |
-| 5 | 交易详情/编辑 | `PUT /transactions/:id` `:664` | **是**（`:655`） | `tx_update.go:130–135` → `common.go:64` | **版本冲突（PRD 要求三选一）** | **缺（有版本冲突载体）** |
+| 5 | 交易详情/编辑 | `PUT /transactions/:id` `:664`、`DELETE /transactions/:id` `:2054`（`renderTxDetail`） | **是**（`:655`） | PUT：`tx_update.go:130–135` → `common.go:64`；DELETE：`common.go:49`、`:62`、`:54`、`:59`（见 §5.5.1） | **版本冲突（PRD 要求三选一）**；DELETE 另有幂等/回执/转账方向类 409 | **缺（有版本冲突载体）** |
 | 6 | 账户 | `PUT /accounts/:id` `:772` | 否 | `account.go:238–240` → `common.go:64` | 更新命中 0 行（行已删/不存在） | N/A R08-06 |
 | 7 | 两级分类 | `PUT /categories/:id` `:2082` | 否 | `category.go:233–235` → `common.go:64` | 更新命中 0 行 | N/A R08-07 |
 | 8 | 投资资产 | `PUT /instruments/:id` `:1480`、`PUT /holdings/:id` `:1523`、`DELETE /instruments/:id` `:1412` | 否 | `common.go:80`（仅 DELETE 标的时） | 该标的下仍有持仓（业务约束） | N/A R08-08 |
 | 9 | 预算 | `PUT /budgets/:id` `:1251`、`POST /budgets` `:1257` | 否（表无 `sync_version`，`budget.go:22`） | `common.go:85` | 预算唯一性（总预算/分类预算重复） | N/A R08-09 |
 | 10 | 报表 | 无写（`GET` `:862`、`:902`） | — | 无写 | — | N/A R08-10 |
 | 11 | 导出 | 无写（`GET /transactions` `:1064`） | — | 无写 | — | N/A R08-11 |
-| 12 | 家庭成员 | `POST members/invite` `:1689`、`PUT members/:uid` `:1761`/`:1771`、`DELETE` `:1786` | 否 | `common.go:115` | 成员上限 20（容量类） | N/A R08-12 |
+| 12 | 家庭成员 | `POST members/invite` `:1689`、`PUT members/:uid` `:1761`/`:1771`、`DELETE members/:uid` `:1786` | 否 | invite：`member.go:377`→`:234`→`common.go:51–53`；PUT/DELETE：`member.go:284`/`:332`→`common.go:64–65`；账本已删：`guard.go:39`→`common.go:43–46`（403） | invite：账本已删/不可用（409）；PUT/DELETE：目标成员已被移除（409）；账本已删：无权限（403，不暴露账本状态）；`common.go:115` 成员上限仅 join（Web 未调用） | N/A R08-12 |
 | 13 | 我的设置 | `POST /users/me/tokens` `:1574`、`DELETE /users/me/tokens/:id` `:1636`、`PUT /users/me` `:2206`（13a 我的视图） | 否 | `common.go:90`（仅 `PUT /users/me`；Token 增删不产生该 409） | 邮箱已被占用（账号类） | N/A R08-13 |
 
 **完整性声明**：上表只登记每页最可能触发的 409 分支，**不保证穷举**；§5.5.1 另行登记本轮已核到的其他可达 409，仍未列尽的不再声称「完整」。
@@ -430,12 +430,16 @@ rc：0
 
 - 页 4 `POST /transactions`：`common.go:51`（引用已删账户/分类，`tx.go:469`、`tx.go:492`）、`common.go:62`（同 `clientUuid` 不完整回执）。
 - 页 5 `PUT /transactions/:id`：`common.go:62`、`:49`（`tx_update.go:107`、`:163`、`:206`、`:230`、`:233`）；目标已删时返回 **404**（见实现缺口第 4 条）。
+- 页 5 `DELETE /transactions/:id`：`common.go:49`（`tx.go:976` 同 clientUuid 不同内容）、`:62`（`tx.go:836` 回执不完整）、`:54`（`tx.go:864` 转账缺方向）、`:59`（`tx.go:844` → `tx.go:1077` 等转账组不完整）。
 - 页 6 `DELETE /accounts/:id`：`common.go:100`（账户仍有交易）、`:102`（仍有子账户）。
 - 页 7 `DELETE /categories/:id`：`common.go:105`（分类仍有交易）、`:107`（仍有子分类）。
 - 页 8 `DELETE /instruments/:id`：`common.go:80`（仍有持仓，已并入上表）。
-- 页 12 `PUT` / `DELETE members/:uid`：`common.go:51`（账本已删/不可用，`member.go:234`）。
+- 页 12 `POST members/invite`：`common.go:51–53`（账本已删/不可用，`member.go:377`→`:234`）。
+- 页 12 `PUT` / `DELETE members/:uid`：`common.go:64–65`（目标成员已被移除，`member.go:284`/`:332`）；账本已删时由 `guard.go:39` 的 JOIN 拦为 **403** `common.go:43–46`，不是 409。
+- 页 12 `common.go:115–117`（`ErrBookFull`）仅由 `POST members/join`（`router.go:128`）产生，Web 前端零调用，不构成页 12 的 409。
 - 页 13 `PUT /users/me`：`common.go:90`（邮箱占用，已并入上表）。
-- 页 1/2/3/10/11 无写路径，无其他 409。
+- 页 2/3/10/11 无写路径，无其他 409。
+- 页 1 有 `POST /auth/login`（`:193`、`:209`）与条件可达的 `POST /auth/register`（`:192`；需 `EBK_ENABLE_REGISTER=true`，`auth_handler.go:51–53` 默认 403；开启后重复用户名 → `common.go:109–110` 409）；conflict 仍判 `N/A R08-01`。
 - 上述仅为本轮已核对项，未逐条穷举 `service` 全部错误分支。
 
 **同一 `ErrConcurrentConflict` 的两种语义必须区分**：页 5 是**版本比对失败**（`tx_update.go:130–135` 显式比对 `SyncVersion`）；页 6/7 是**更新影响行数为 0**（`account.go:238–240`、`category.go:233–235` 复用同一错误值）。二者在 API 层都回 409，但产品含义不同——把后两者写成「并发冲突」是错的，把页 5 写成「无载体」也是错的。
@@ -707,7 +711,7 @@ python3 /tmp/v10_check.py docs/r0-status-matrix-13x8.md
 8. **未逐张打开全部 56 张证据**：本轮实际打开 **16 张**——`home/390x844/empty.png`（E2）、`home/390x844/error.png`（旧 E3，已弃用）、`runtime/01`、`02`、`03`、`04`（E3/E15）、`add-transaction/390x844/normal.png`（E4）、`accounts/390x844/normal.png`（E6）、`categories/390x844/normal.png`（E7）、`budget/390x844/empty.png`（E9）、`pairs/impl/{add-transaction,home,budget,report,invest,members}__impl__390x844.png`（E4/E12/E14/E16/E17 及投资待冻结项）；其余按「路径可解析 + 目录名/README 定义 + 采集批次」采信，**未逐张视觉复核**。逐张视觉复核仍属第 3 条后续工作。
 9. **未运行任何测试**：统计数字为只读引用，未跑 C 套件、未起服务、未做浏览器实测。
 10. **非原型三页（books/transactions/recycle）未入矩阵**：`books` 2 张、`recycle` 2 张、`transactions` 2 张合计 6 张仅用于 §4 张数对账，不计入 104 格；三页归属待 P2 裁决。
-11. **`pairs/README.md` 的哈希在 `SHA256SUMS.txt` 中已过期**：本轮更正了该 README 的「零改动」事实声明，导致归档清单第 108 行失配（原 `c329854f…`，实测现为 `eda61aee70a6d8a51bf2bce558e9b00a7e6869f2b862492af95079f4b051539c`）。**未改写 `SHA256SUMS*.txt`**（属既有归档，不擅自重签）；剔除该行后 108 条证据仍全部通过校验（`sha256sum -c` rc=0），验证命令已写入 `pairs/README.md`。README 无法内嵌自身最终哈希（自指），故完整值登记在此处。
+11. **`pairs/README.md` 的哈希在 `SHA256SUMS.txt` 中已过期（声明文件自指问题）**：该 README 经多轮声明更正，按提交版本（LF blob）为——`3999cee` 版 `eda61aee70a6d8a51bf2bce558e9b00a7e6869f2b862492af95079f4b051539c`；`2363cdc` 版 `6ecb6789932756ecd5dce8088ace69bda3e7765881a5d155b6fc93f32bfe71ed`；`fd4a9a7` 版 `987409085f3af142935c265a131cfcf20271a0d66f11beee7ec4445f517bf30f`；本轮 R-1～R-6 修复提交版 `3f058d77418948ccfce5136cd4eb2661e919936bb31ccebfdc0026aacf6ed967`。复现命令：`git show <commit>:docs/r0-screenshots/pairs/README.md | sha256sum`（输出为 LF blob 哈希；工作树若为 CRLF 则另值，见 `pairs/README.md` 的「校验和说明」）。**未改写 `SHA256SUMS.txt` / `SHA256SUMS-4th-round.txt`**（保留历史归档，不重签、不改写）；剔除 README 一行后，其余 108 条证据仍通过校验（`sha256sum -c` rc=0）。
 
 ---
 

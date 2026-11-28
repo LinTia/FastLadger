@@ -24,11 +24,11 @@
 > `git diff --stat bff6a2b..HEAD -- server/` → `server/web/dist/app.js` **+43 / −9（52 行）**，唯一提交 `0472484`（2026-11-05 18:18，`fix(r0): 有限范围修复第六次验收 4 项业务缺陷 + 独立回归门禁`）。
 > 本目录采集时间为 2026-11-05 13:38（`manifest-impl.json` → `capturedAt` 2026-11-05T05:38Z），**早于该修复**，故：
 > - `add-transaction` 与 `members` 两页的图记录的是**修复前**状态，不得作为当前实现的验收基线；
-> - 具体地，`add-transaction__impl__*` 在「类型=支出」下「分类」显示「工资」（收入类），而 `0472484` 的 `refillCategories()`（`app.js:560–571`；`:572` 起为 `syncFormFields`）已按收支类型过滤该下拉；
-> - 除上述两页外，`0472484` 还改了 `renderTxns`（交易总表，非 13 页矩阵对象，`app.js:383`、`:397–423`）；13 页范围内其余页面的代码路径未被触及。基准 SHA 仍应在本目录下次复采时统一刷新为当次 HEAD。
+> - 具体地，`add-transaction__impl__*` 在「类型=支出」下「分类」显示「工资」（收入类），而 `0472484` 在 `openTxForm` 内新增 `refillCategories()`（hunk `app.js:559–571`，函数体 `:560–571`；另 `:576` 为 `syncFormFields()` 调用、`:599` 为「请选择账户与分类」兜底提示）已按收支类型过滤该下拉；
+> - 除上述两页外，`0472484` 还改了 `renderTxns`（交易总表，非 13 页矩阵对象，改动行 `app.js:386`、`:400–420`）；13 页范围内其余页面的代码路径未被触及。基准 SHA 仍应在本目录下次复采时统一刷新为当次 HEAD。
 > 本更正只改事实声明，**不改动任何 PNG**；104 张 PNG 的张数与哈希未变；本文件因声明修改而产生新哈希，`SHA256SUMS*.txt` 中的旧值按下方「校验文件说明」处理，本轮不重签。
 >
-> **校验文件说明**：`SHA256SUMS.txt:108` 与 `SHA256SUMS-4th-round.txt:108` 记录的是更正前的本文件哈希（`c329854f…` / `43123890…`）。本次更正后两者不再一致——这是**声明文件被更新**所致，不是图片变化。本文件无法内嵌自身的最终哈希（自指），实测值请用 `sha256sum docs/r0-screenshots/pairs/README.md` 取得。剔除 README 一行后，其余 108 条仍全部通过：
+> **校验文件说明**：`SHA256SUMS.txt:108` 与 `SHA256SUMS-4th-round.txt:108` 记录的是更正前的本文件哈希（`c329854f…` / `43123890…`）。本次更正后两者不再一致——这是**声明文件被更新**所致，不是图片变化。本文件无法内嵌自身的最终哈希（自指）。按提交取 LF blob 的复现命令为 `git show HEAD:docs/r0-screenshots/pairs/README.md | sha256sum`；工作树若被 CRLF 检出（`core.autocrlf=true`），`sha256sum docs/r0-screenshots/pairs/README.md` 会得到另一个值，见下方「校验和说明」。各提交版本哈希登记在 `docs/r0-status-matrix-13x8.md` §9 第 11 条。剔除 README 一行后，其余 108 条仍全部通过：
 >
 > ```bash
 > cd docs/r0-screenshots/pairs
